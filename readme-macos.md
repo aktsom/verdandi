@@ -37,9 +37,23 @@ device, maiden is the editor, the REPLs (matron :5555, sclang :5556) and the scr
 catalog (install / update). unlike the device everything listens on 127.0.0.1 only:
 the REPLs run arbitrary code, and a laptop is on networks a norns is not.
 
-the window is the norns screen. its left / middle / right third is K1+E1 / K2+E2 / K3+E3:
-click = key (held while the mouse button is held), scroll = encoder. while the window has
-focus the computer keyboard is the norns usb keyboard.
+the window is the norns screen (resizable). controls:
+
+| keys (window focused)      | norns                          |
+|----------------------------|--------------------------------|
+| ⌥1 ⌥2 ⌥3                   | K1 K2 K3 (held while held)     |
+| ⌥Q / ⌥W                    | E1 left / right                |
+| ⌥A / ⌥S, ⌥↑ / ⌥↓           | E2 left / right                |
+| ⌥Z / ⌥X, ⌥← / ⌥→           | E3 left / right                |
+| ⇧ added                    | 5 steps; holding a key keeps turning |
+| ⌥Esc                       | norns mode on/off: the same keys without ⌥ (title "norns · keys") |
+| everything else            | the norns usb keyboard (scripts, text entry, F1-F5 menu keys) |
+
+mouse: the left / middle / right third of the window is K1+E1 / K2+E2 / K3+E3; click =
+key, scroll = encoder.
+
+the key mapping is plain C (`matron/src/platform/macos/window_keys.c`) with scenario tests:
+`cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt`
 
 ## what is different from the device
 

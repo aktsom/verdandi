@@ -71,6 +71,12 @@ postInlineWarnings: false
 EOF
 fi
 
+# one norns at a time: a second one finds the OSC / REPL ports taken
+if pgrep -f "$REPO/build/norns/norns" >/dev/null; then
+    echo "norns.sh: norns is already running (close its window first)"
+    exit 1
+fi
+
 # processes we started (bash 3.2: no negative indices, no empty arrays under set -u)
 PIDS=""
 cleanup() {

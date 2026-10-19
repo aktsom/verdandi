@@ -157,6 +157,7 @@ def build(bld):
             '../matron/src/platform/macos/hardware_null.cc',
             '../matron/src/platform/macos/sdl_bridge.cc',
             '../matron/src/platform/macos/stat_macos.cc',
+            '../matron/src/platform/macos/window_keys.c',
         ]
         linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
         matron_use = [u for u in matron_use if u not in linux_only]

@@ -6,7 +6,11 @@
  * window controls: the left / middle / right third of the window is K1+E1 / K2+E2 / K3+E3.
  * a mouse click there presses the key (held while the button is held, so K1 + turn works),
  * the wheel turns the encoder. the window is resizable; the 128x64 frame is drawn at the
- * largest integer scale that fits (crisp pixels), centered on black. the computer keyboard is not mapped to keys/encs: while the
+ * largest integer scale that fits (crisp pixels), centered on black.
+ *
+ * keyboard: see window_keys.h. Option + 1 2 3 / QW AS ZX / arrows are K1-3 / E1-3,
+ * Option+Esc toggles "norns mode" (same keys without Option); everything else is the
+ * norns usb keyboard. the computer keyboard is not mapped to keys/encs: while the
  * window has focus it is the norns usb keyboard (virtual hid device, linux key codes), as
  * on hardware.
  */
@@ -20,6 +24,7 @@
 #include "events.h"
 
 #include "device_monitor_macos.h"
+#include "window_keys.h"
 #include "sdl_bridge.h"
 
 typedef enum {
@@ -151,10 +156,34 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
     }
 }
 
+static window_keys_t keys;
+
 static void handle_key(const SDL_KeyboardEvent *k) {
-    // SDL scancodes are USB HID keyboard usages; evdev reports autorepeat as value 2
-    int value = k->type == SDL_KEYUP ? 0 : (k->repeat ? 2 : 1);
-    macos_hid_keyboard_event((uint16_t)k->keysym.scancode, value);
+    window_key_event_t out;
+    int option = (k->keysym.mod & KMOD_ALT) != 0;
+    int shift = (k->keysym.mod & KMOD_SHIFT) != 0;
+    // SDL scancodes are USB HID keyboard usages
+    if (!window_keys_process(&keys, (int)k->keysym.scancode, k->type == SDL_KEYDOWN, k->repeat, option, shift, &out)) {
+        return;
+    }
+    switch (out.kind) {
+    case WK_KEY:
+        post_key(out.n, out.value);
+        break;
+    case WK_ENC:
+        post_enc(out.n, out.value);
+        break;
+    case WK_HID:
+        macos_hid_keyboard_event((uint16_t)out.n, out.value);
+        break;
+    case WK_MODE: {
+        SDL_Window *window = SDL_GetWindowFromID(k->windowID);
+        if (window != NULL) {
+            SDL_SetWindowTitle(window, out.value ? "norns \u00b7 keys" : "norns");
+        }
+        break;
+    }
+    }
 }
 
 static void handle_wheel(const SDL_MouseWheelEvent *w) {
@@ -170,6 +199,7 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
 
 void sdl_bridge_init(void) {
     main_thread = pthread_self();
+    window_keys_init(&keys);
     // keep default SIGINT/SIGTERM behaviour (terminate), as on linux; SDL would otherwise
     // swallow them as SDL_QUIT
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
