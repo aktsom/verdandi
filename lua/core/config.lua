@@ -3,6 +3,9 @@
 -- add some stuff to package.path
 -- this consists of search patterns lua will use for require('foo')
 
+-- where HOME is not /home/we (the macOS port), lua sees a virtual /home/we
+dofile(os.getenv('HOME')..'/norns/lua/core/virtual_home.lua')
+
 local home = os.getenv('HOME')
 local norns = home..'/norns/lua'
 local sys = norns..'/?.lua;'
