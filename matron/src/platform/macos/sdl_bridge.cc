@@ -5,7 +5,8 @@
  *
  * window controls: the left / middle / right third of the window is K1+E1 / K2+E2 / K3+E3.
  * a mouse click there presses the key (held while the button is held, so K1 + turn works),
- * the wheel turns the encoder. the computer keyboard is not mapped to keys/encs: while the
+ * the wheel turns the encoder. the window is resizable; the 128x64 frame is drawn at the
+ * largest integer scale that fits (crisp pixels), centered on black. the computer keyboard is not mapped to keys/encs: while the
  * window has focus it is the norns usb keyboard (virtual hid device, linux key codes), as
  * on hardware.
  */
@@ -39,24 +40,54 @@ typedef struct {
 static Uint32 bridge_event_type = (Uint32)-1;
 static pthread_t main_thread;
 
+// last presented frame, redrawn when the window is resized (main thread only)
+static SDL_Window *last_window = NULL;
+static SDL_Surface *last_src = NULL;
+
+static void present(SDL_Window *window, SDL_Surface *src) {
+    SDL_Surface *dst = SDL_GetWindowSurface(window);
+    if (dst == NULL || src == NULL) {
+        return;
+    }
+    int k = dst->w / src->w < dst->h / src->h ? dst->w / src->w : dst->h / src->h;
+    SDL_Rect r;
+    if (k >= 1) {
+        r.w = src->w * k;
+        r.h = src->h * k;
+    } else {
+        // smaller than 1:1: keep the aspect ratio
+        double f = (double)dst->w / src->w < (double)dst->h / src->h ? (double)dst->w / src->w : (double)dst->h / src->h;
+        r.w = (int)(src->w * f);
+        r.h = (int)(src->h * f);
+    }
+    r.x = (dst->w - r.w) / 2;
+    r.y = (dst->h - r.h) / 2;
+    SDL_FillRect(dst, NULL, SDL_MapRGB(dst->format, 0, 0, 0));
+    SDL_BlitScaled(src, NULL, dst, &r);
+    SDL_UpdateWindowSurface(window);
+    last_window = window;
+    last_src = src;
+}
+
 static void bridge_do(bridge_req_t *req) {
     switch (req->op) {
     case BRIDGE_CREATE_WINDOW:
         req->window = SDL_CreateWindow(req->title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, req->w, req->h,
-                                       SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+                                       SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
         if (req->window == NULL) {
             fprintf(stderr, "sdl_bridge: SDL_CreateWindow failed: %s\n", SDL_GetError());
+        } else {
+            SDL_SetWindowMinimumSize(req->window, 256, 128);
         }
         break;
-    case BRIDGE_PRESENT: {
-        SDL_Surface *dst = SDL_GetWindowSurface(req->window);
-        if (dst != NULL) {
-            SDL_BlitScaled(req->src, NULL, dst, NULL);
-            SDL_UpdateWindowSurface(req->window);
-        }
+    case BRIDGE_PRESENT:
+        present(req->window, req->src);
         break;
-    }
     case BRIDGE_DESTROY_WINDOW:
+        if (last_window == req->window) {
+            last_window = NULL;
+            last_src = NULL;
+        }
         SDL_DestroyWindow(req->window);
         break;
     }
@@ -176,6 +207,11 @@ void sdl_bridge_run(void) {
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
             handle_button(&ev.button);
+            break;
+        case SDL_WINDOWEVENT:
+            if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED && last_window != NULL) {
+                present(last_window, last_src);
+            }
             break;
         default:
             break;
