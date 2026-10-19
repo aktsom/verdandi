@@ -46,3 +46,4 @@ maiden-repl/maiden-repl
 # macOS metadata (exFAT / network volumes)
 ._*
 .DS_Store
+dist/

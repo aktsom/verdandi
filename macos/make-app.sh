@@ -16,7 +16,8 @@ P="${NORNS_DEPS:-$d/deps/prefix}"
 BREW="${HOMEBREW_PREFIX:-/opt/homebrew}"
 # built on APFS: codesign trips over the xattr files exFAT and similar volumes keep
 OUT="${NORNS_APP_OUT:-${TMPDIR:-/tmp}/norns-app}"
-DIST="$REPO/build/dist"
+# outside build/: waf clean empties that
+DIST="$REPO/dist"
 APP="$OUT/norns.app"
 R="$APP/Contents/Resources"
 VERSION="$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo dev)"
