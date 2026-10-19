@@ -94,12 +94,18 @@ EXT="$NORNS_HOME/Library/Application Support/SuperCollider/Extensions"
 if [ ! -d "$EXT/SC3plugins" ]; then
     cd "$SRC"
     [ -d sc3-plugins ] || git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/supercollider/sc3-plugins.git
+    # `0<=bufnum<= n` is always true, and clang 21 rejects it; the intended bounds check
+    sed -i '' 's/	if(0<=bufnum<= world->mNumSndBufs) {/	if(bufnum < (int)world->mNumSndBufs) {/' \
+        sc3-plugins/source/NCAnalysisUGens/SMS.cpp
     cmake -S sc3-plugins -B sc3-plugins/build -DSC_PATH="$SRC/supercollider" -DCMAKE_BUILD_TYPE=Release \
-        -DSUPERNOVA=OFF -DQUARKS=OFF -DSCX=ON -DCMAKE_INSTALL_PREFIX="$DEPS/sc3-plugins-install" -DCMAKE_PREFIX_PATH="$BREW"
+        -DSUPERNOVA=OFF -DQUARKS=OFF -DSCX=ON -DCMAKE_PREFIX_PATH="$BREW"
     cmake --build sc3-plugins/build -j "$J"
+    # on macOS the install step always lands in build/SC3plugins
     cmake --install sc3-plugins/build
     mkdir -p "$EXT"
-    cp -R "$(find "$DEPS/sc3-plugins-install" -maxdepth 4 -type d -name SC3plugins | head -1)" "$EXT/"
+    cp -R sc3-plugins/build/SC3plugins "$EXT/"
+    # help files are most of the size and unused at runtime
+    find "$EXT/SC3plugins" -type d -name HelpSource -prune -exec rm -rf {} +
 fi
 
 echo "== done. build norns: cd $REPO && python3 $DEPS/bin/waf configure && python3 $DEPS/bin/waf"

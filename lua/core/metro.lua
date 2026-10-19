@@ -164,7 +164,8 @@ end
 -- callback on metro tick from C.
 _norns.metro = function(idx, stage)
   local m = Metro.metros[idx]
-  if m then
+  -- ticks already queued when the metro was stopped (e.g. freed on script change) are dropped
+  if m and m.is_running then
     if m.event then
       m.event(stage)
     end
