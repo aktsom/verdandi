@@ -83,7 +83,8 @@ the first start takes a little longer: macOS checks the bundled libraries once.<
   <tr><td><code>~/norns/norns</code></td><td>a link into the app (the norns core); do not edit</td></tr>
   <tr><td><code>~/norns/*.log</code></td><td>logs, see <a href="#files">files and logs</a></td></tr>
 </table>
-<p>to stop norns, close its window (or quit it from the Dock). only one norns runs at a time.</p>
+<p>to stop norns, close its window, quit it from the Dock, or choose SLEEP in the norns menu.
+only one norns runs at a time.</p>
 
 <h2 id="controls">4. controls</h2>
 <h3>keyboard</h3>
@@ -201,8 +202,11 @@ your scripts and audio are untouched.</p>
 
 <h2 id="diff">12. differences from the device</h2>
 <ul>
-  <li>no battery, OLED settings, Wi-Fi or update menu: the Mac handles those.</li>
-  <li>the system menu's network and update pages do not apply; scripts are updated in maiden.</li>
+  <li>SYSTEM shows DEVICES, MODS, SETTINGS and RESTART. Wi-Fi is the Mac's job, scripts are
+      updated in maiden, and norns itself with a new version of the app.</li>
+  <li>SYSTEM &rarr; RESTART restarts norns and SuperCollider; SLEEP quits norns (it does not put
+      the Mac to sleep).</li>
+  <li>no battery or screen settings: there is no battery, and the screen is a window.</li>
   <li>audio device and sample rate come from macOS (see <a href="#audio">audio</a>).</li>
   <li>maiden and the consoles are local-only (127.0.0.1); OSC (port 10111) is reachable on your
       network, so phone controllers like TouchOSC work as on the device.</li>
