@@ -88,8 +88,10 @@ EOF
 [ -f "$REPO/macos/norns.icns" ] && cp "$REPO/macos/norns.icns" "$R/" &&
     /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string norns" "$APP/Contents/Info.plist"
 
-# no extended attributes (quarantine, provenance, finder info) in a signed bundle
+# no extended attributes (quarantine, provenance, finder info) in a signed bundle, and
+# normal permissions (sources on exFAT and similar volumes come out as rwx------)
 xattr -cr "$APP"
+chmod -R u+rwX,go+rX,go-w "$APP"
 
 echo "== libraries"
 python3 -I "$REPO/macos/bundle_dylibs.py" "$R" "$R/deps/lib"
@@ -118,6 +120,8 @@ if [ "${1:-}" = "--dmg" ]; then
     ln -s /Applications "$STAGE/Applications"
     [ -f "$REPO/macos/manual/norns-macos-manual.pdf" ] && cp "$REPO/macos/manual/norns-macos-manual.pdf" "$STAGE/Manual.pdf"
     [ -f "$REPO/macos/manual/manual.html" ] && cp "$REPO/macos/manual/manual.html" "$STAGE/Manual.html"
+    chmod 644 "$STAGE"/Manual.* 2>/dev/null
+    xattr -c "$STAGE"/Manual.* 2>/dev/null
     hdiutil create -volname norns -srcfolder "$STAGE" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$OUT/norns.dmg" >/dev/null
     rm -rf "$STAGE"
     mkdir -p "$DIST"
