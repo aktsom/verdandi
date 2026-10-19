@@ -3,6 +3,9 @@
 community port of norns to macOS (Apple Silicon). not affiliated with monome.
 scripts from the norns catalog are meant to run unchanged: all compatibility lives here.
 
+users: get `norns.dmg` and read the manual (`macos/manual/manual.html`, also in the dmg).
+this file is for building and changing the port.
+
 ## layout
 
 the norns home is a folder with the same layout as `/home/we` on the device; norns runs
@@ -24,6 +27,22 @@ macos/setup-deps.sh                      # homebrew packages + lua 5.3, nng 1.x,
 python3 <deps>/bin/waf configure         # darwin is detected; always a desktop build
 python3 <deps>/bin/waf
 ```
+
+## app, dmg, AUv3
+
+```
+macos/make-app.sh --dmg      # build/dist/norns.dmg: norns.app (+ AUv3) and the manual
+```
+
+the app bundles everything (jackd, SuperCollider, sc3-plugins, GNU tools, maiden, all
+dylibs rewritten to @rpath, see `macos/bundle_dylibs.py`) and is ad-hoc signed. its
+launcher (`macos/app-launcher.sh`) uses `~/norns` as the norns home.
+
+the AUv3 (`macos/auv3/`, type `aumf`, subtype `nrns`, manufacturer `Nrns`) is a sandboxed
+extension inside the app. it sends the DAW's audio and MIDI over UDP on 127.0.0.1 to
+`auv3_bridge`, a jack client next to norns that resamples between the two clocks (jack's
+adapter) and takes over crone's main in/out while the plugin renders. check it with
+`auval -v aumf nrns Nrns`.
 
 ## run
 
@@ -66,6 +85,18 @@ key, scroll = encoder.
 
 the key mapping is plain C (`matron/src/platform/macos/window_keys.c`) with scenario tests:
 `cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt`
+
+## tests
+
+```
+cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c \
+   matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt
+NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
+d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
+macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it
+```
+
+`macos/docs/` has the notes behind the port (linux inventory, catalog scan).
 
 ## what is different from the device
 
