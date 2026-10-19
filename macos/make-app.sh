@@ -30,7 +30,7 @@ mkdir -p "$APP/Contents/MacOS" "$R/norns/build/norns" "$R/norns/build/ws-wrapper
 for f in lua sc resources doc matronrc.lua LICENSE.txt readme-macos.md; do
     cp -R "$REPO/$f" "$R/norns/"
 done
-cp "$REPO/macos/norns.sh" "$R/norns/macos/"
+cp "$REPO/macos/norns.sh" "$REPO/macos/norns-icon.png" "$R/norns/macos/"
 cp "$REPO/build/norns/norns" "$R/norns/build/norns/"
 cp "$REPO/build/ws-wrapper/ws-wrapper" "$R/norns/build/ws-wrapper/"
 cp "$REPO"/build/macos/jack_wait "$REPO"/build/macos/jack_connect "$REPO"/build/macos/jack_disconnect \

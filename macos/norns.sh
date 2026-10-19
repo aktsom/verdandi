@@ -59,6 +59,10 @@ export JACK_NO_START_SERVER=1
 # no norns hardware: the keyboard drives K1-3 / E1-3 when nothing else wants the keys
 # (lua/core/keyboard.lua)
 export NORNS_HARDWARE_KEYS=1
+# the lua core hides device-only menus (wifi, update)
+export NORNS_PLATFORM=macos
+# dock icon of the norns window
+export NORNS_ICON="$REPO/macos/norns-icon.png"
 cd "$NORNS_HOME"
 
 mkdir -p dust/code dust/audio dust/data
@@ -93,11 +97,34 @@ fi
 
 # processes we started (bash 3.2: no negative indices, no empty arrays under set -u)
 PIDS=""
+
+# a process and everything below it (ws-wrapper -> sclang -> scsynth), children first.
+# by parent pid, so a SuperCollider of your own is never touched
+tree() {
+    local c
+    for c in $(pgrep -P "$1" 2>/dev/null); do tree "$c"; done
+    echo "$1"
+}
+
+kill_tree() {
+    local all p n=0
+    all="$(tree "$1")"
+    for p in $all; do kill "$p" 2>/dev/null; done
+    while :; do
+        local alive=""
+        for p in $all; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done
+        [ -z "$alive" ] && return
+        n=$((n + 1))
+        if [ $n -gt 25 ]; then
+            for p in $alive; do kill -9 "$p" 2>/dev/null; done
+            return
+        fi
+        sleep 0.2
+    done
+}
+
 cleanup() {
-    for p in $PIDS; do kill "$p" 2>/dev/null; done
-    # sclang (under ws-wrapper) and its scsynth are not our direct children
-    pkill -f "$SC_BIN/sclang" 2>/dev/null
-    pkill -f "$SC_BIN/scsynth" 2>/dev/null
+    for p in $PIDS; do kill_tree "$p"; done
     wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
@@ -113,29 +140,41 @@ if ! "$JACK_WAIT" 0 2>/dev/null; then
 fi
 
 WS="$REPO/build/ws-wrapper/ws-wrapper"
-if [ $TERMINAL -eq 1 ]; then
-    # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin,
-    # which would leave matron's lua REPL without input
-    "$REPO/build/norns/norns" <&0 &
-else
-    "$WS" "ws://127.0.0.1:5555" "$REPO/build/norns/norns" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
-fi
-NORNS_PID=$!
-PIDS="$PIDS $NORNS_PID"
-# sclang wires scsynth into crone's jack ports, so wait for crone
-n=0
-until jack_lsp 2>/dev/null | grep -q '^crone:input_5$'; do
-    n=$((n + 1))
-    if [ $n -gt 50 ] || ! kill -0 "$NORNS_PID" 2>/dev/null; then
-        echo "norns.sh: crone did not come up, sclang not started"
-        break
+# SYSTEM > RESTART (matron/src/system_cmd.cc) leaves this and quits norns
+RESTART_MARK="$NORNS_HOME/.norns-restart"
+rm -f "$RESTART_MARK"
+
+start_norns() {
+    if [ $TERMINAL -eq 1 ]; then
+        # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin,
+        # which would leave matron's lua REPL without input
+        "$REPO/build/norns/norns" <&0 &
+    else
+        "$WS" "ws://127.0.0.1:5555" "$REPO/build/norns/norns" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
     fi
-    sleep 0.2
-done
-if jack_lsp 2>/dev/null | grep -q '^crone:input_5$'; then
+    NORNS_PID=$!
+    PIDS="$PIDS $NORNS_PID"
+    # sclang wires scsynth into crone's jack ports, so wait for crone
+    local n=0
+    until jack_lsp 2>/dev/null | grep -q '^crone:input_5$'; do
+        n=$((n + 1))
+        if [ $n -gt 50 ] || ! kill -0 "$NORNS_PID" 2>/dev/null; then
+            echo "norns.sh: crone did not come up, sclang not started"
+            return
+        fi
+        sleep 0.2
+    done
     "$WS" "ws://127.0.0.1:5556" "$SC_BIN/sclang" -i maiden < /dev/null > "$NORNS_HOME/sclang.log" 2>&1 &
-    PIDS="$PIDS $!"
-fi
+    SCLANG_PID=$!
+    PIDS="$PIDS $SCLANG_PID"
+}
+
+# the new sclang must get the old one's OSC port (57120): stop the whole old tree first
+stop_sclang() {
+    [ -n "${SCLANG_PID:-}" ] && kill_tree "$SCLANG_PID"
+}
+
+start_norns
 
 # the norns side of the AUv3: idle until the plugin renders in a DAW
 if [ -x "$REPO/build/macos/auv3_bridge" ]; then
@@ -157,4 +196,11 @@ if [ -x "$MAIDEN/maiden" ]; then
 fi
 [ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_HOME/norns.log (close the norns window or ctrl-c to stop)"
 
-wait "$NORNS_PID"
+while :; do
+    wait "$NORNS_PID"
+    [ -f "$RESTART_MARK" ] || break
+    rm -f "$RESTART_MARK"
+    echo "norns.sh: restarting norns and sclang"
+    stop_sclang
+    start_norns
+done

@@ -142,11 +142,22 @@ typedef struct {
     const char *unit;
 } system_action_t;
 
+#ifdef __APPLE__
+// macOS (macos/norns.sh supervises norns): SLEEP quits norns, it does not power off the Mac;
+// RESTART leaves a marker so norns.sh starts norns and sclang again. (pkill -a: macOS pkill
+// spares its own ancestors by default, and norns is one of them)
+static const system_action_t system_actions[] = {
+    {"shutdown", "sleep 0.5; pkill -TERM -a -x norns", "norns-shutdown"},
+    {"reset", "touch \"$HOME/.norns-restart\"; sleep 0.5; pkill -TERM -a -x norns", "norns-reset"},
+    {"update", "echo 'norns for macOS: update scripts in maiden, norns itself with a new app'", "norns-update"},
+};
+#else
 static const system_action_t system_actions[] = {
     {"shutdown", "sleep 0.5; sudo shutdown now", "norns-shutdown"},
     {"reset", "sudo systemctl restart norns-sclang.service norns-main.service", "norns-reset"},
     {"update", NULL, "norns-update"},
 };
+#endif
 
 static void build_update_cmd(char *buf, size_t len) {
     const char *home = getenv("HOME");

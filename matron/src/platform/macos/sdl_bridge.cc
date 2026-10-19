@@ -16,6 +16,7 @@
  * on hardware.
  */
 
+#include <cairo.h>
 #include <dispatch/dispatch.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -75,6 +76,26 @@ static void present(SDL_Window *window, SDL_Surface *src) {
     last_src = src;
 }
 
+// dock icon from the png in NORNS_ICON (set by macos/norns.sh)
+static void set_icon(SDL_Window *window) {
+    const char *path = getenv("NORNS_ICON");
+    if (path == NULL) {
+        return;
+    }
+    cairo_surface_t *img = cairo_image_surface_create_from_png(path);
+    if (cairo_surface_status(img) == CAIRO_STATUS_SUCCESS) {
+        // cairo ARGB32 is native-endian ARGB, which is SDL's ARGB8888
+        SDL_Surface *s = SDL_CreateRGBSurfaceWithFormatFrom(
+            cairo_image_surface_get_data(img), cairo_image_surface_get_width(img), cairo_image_surface_get_height(img),
+            32, cairo_image_surface_get_stride(img), SDL_PIXELFORMAT_ARGB8888);
+        if (s != NULL) {
+            SDL_SetWindowIcon(window, s);
+            SDL_FreeSurface(s);
+        }
+    }
+    cairo_surface_destroy(img);
+}
+
 static void bridge_do(bridge_req_t *req) {
     switch (req->op) {
     case BRIDGE_CREATE_WINDOW:
@@ -84,6 +105,7 @@ static void bridge_do(bridge_req_t *req) {
             fprintf(stderr, "sdl_bridge: SDL_CreateWindow failed: %s\n", SDL_GetError());
         } else {
             SDL_SetWindowMinimumSize(req->window, 256, 128);
+            set_icon(req->window);
         }
         break;
     case BRIDGE_PRESENT:

@@ -4,6 +4,12 @@ local m = {
   pages = {"DEVICES", "WIFI", "MODS", "SETTINGS", "RESTART", "UPDATE"}
 }
 
+-- on a computer (NORNS_PLATFORM set by the launcher) the OS owns wifi and updates
+if os.getenv("NORNS_PLATFORM") ~= nil then
+  m.list = {"DEVICES > ", "MODS >", "SETTINGS >", "RESTART"}
+  m.pages = {"DEVICES", "MODS", "SETTINGS", "RESTART"}
+end
+
 m.key = function(n,z)
   if n==2 and z==1 then
     _menu.set_page("HOME")

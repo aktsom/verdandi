@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>norns for macOS — manual</title>
+<style>
+  :root { --ink: #1b1b1b; --dim: #5f5f5f; --rule: #dcdcdc; --code: #f3f3f3; --accent: #000; }
+  @page { size: A4; margin: 18mm 18mm 20mm 18mm; }
+  html { font: 10.5pt/1.5 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+  body { max-width: 46em; margin: 2.5em auto; padding: 0 1.2em; }
+  h1 { font-size: 2.1em; margin: 0 0 .1em; letter-spacing: -.01em; }
+  .sub { color: var(--dim); margin: 0 0 2em; }
+  h2 { font-size: 1.3em; margin: 2.2em 0 .5em; padding-top: .4em; border-top: 1px solid var(--rule); break-after: avoid; }
+  h3 { font-size: 1.05em; margin: 1.5em 0 .3em; break-after: avoid; }
+  p, ul, ol, table { margin: .5em 0 .8em; }
+  li { margin: .15em 0; }
+  code, kbd { font: .92em/1.3 ui-monospace, "SF Mono", Menlo, monospace; background: var(--code); padding: .08em .3em; border-radius: 3px; }
+  kbd { border: 1px solid #ccc; border-bottom-width: 2px; background: #fafafa; }
+  pre { font: .9em/1.45 ui-monospace, "SF Mono", Menlo, monospace; background: var(--code); padding: .7em .9em; border-radius: 4px; overflow-x: auto; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; padding: .35em .6em; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 600; background: #f7f7f7; }
+  .note { border-left: 3px solid var(--accent); padding: .3em .9em; background: #f8f8f8; break-inside: avoid; }
+  .toc { columns: 2; column-gap: 2em; padding-left: 1.2em; }
+  .small { color: var(--dim); font-size: .92em; }
+</style>
+</head>
+<body>
+
+<h1>norns for macOS</h1>
+<p class="sub">a community port of norns to the Mac: standalone app, AUv3 plugin, script catalog.
+not affiliated with monome. free software under the GPL-3.0.</p>
+
+<ol class="toc">
+  <li><a href="#about">what this is</a></li>
+  <li><a href="#install">installing</a></li>
+  <li><a href="#first">first start</a></li>
+  <li><a href="#controls">controls</a></li>
+  <li><a href="#audio">audio</a></li>
+  <li><a href="#maiden">maiden and the script catalog</a></li>
+  <li><a href="#scripts">scripts</a></li>
+  <li><a href="#devices">MIDI, grid, arc, crow, gamepads</a></li>
+  <li><a href="#auv3">the AUv3 plugin</a></li>
+  <li><a href="#files">files and logs</a></li>
+  <li><a href="#trouble">troubleshooting</a></li>
+  <li><a href="#diff">differences from the device</a></li>
+  <li><a href="#uninstall">uninstalling</a></li>
+  <li><a href="#source">source and licenses</a></li>
+</ol>
+
+<h2 id="about">1. what this is</h2>
+<p>norns is a sound computer by monome: a small box running Lua scripts, a SuperCollider audio
+engine and the softcut sample looper, with a 128&times;64 screen, three keys and three encoders.
+this port runs the same software natively on macOS. the screen becomes a window, the keys and
+encoders are on the computer keyboard and the mouse, and the community scripts run unchanged.</p>
+<p>everything that makes a norns a norns is here: matron (scripts, screen, devices), crone and
+softcut (audio routing, loopers, tape), SuperCollider with the sc3-plugins, and maiden (the web
+editor with the script catalog). in addition the app installs an AUv3 plugin that puts norns
+into a DAW track.</p>
+
+<h2 id="install">2. installing</h2>
+<p><b>requirements:</b> a Mac with Apple silicon (M1 or later), macOS 13 Ventura or newer.</p>
+<ol>
+  <li>open <code>norns.dmg</code> and drag <b>norns</b> onto <b>Applications</b>.</li>
+  <li>the app is not notarized by Apple (it is ad-hoc signed, without a developer identity). the
+      first time, <b>right-click norns.app &rarr; Open</b> and confirm. if macOS still refuses, open
+      <i>System Settings &rarr; Privacy &amp; Security</i> and click <b>Open Anyway</b>.</li>
+  <li>when norns asks for the microphone, allow it: that is the audio input for softcut, tape
+      and engines. (you can change it later under <i>Privacy &amp; Security &rarr; Microphone</i>.)</li>
+</ol>
+
+<h2 id="first">3. first start</h2>
+<p>norns starts its audio server, the SuperCollider engine and maiden, then opens the norns window.
+the first start takes a little longer: macOS checks the bundled libraries once.</p>
+<p>your norns lives in the folder <code>~/norns</code> in your home folder, laid out like
+<code>/home/we</code> on the device:</p>
+<table>
+  <tr><th>path</th><th>contents</th></tr>
+  <tr><td><code>~/norns/dust/code</code></td><td>installed scripts</td></tr>
+  <tr><td><code>~/norns/dust/audio</code></td><td>samples, tape recordings (<code>audio/tape</code>)</td></tr>
+  <tr><td><code>~/norns/dust/data</code></td><td>script data, PSETs, system settings</td></tr>
+  <tr><td><code>~/norns/norns</code></td><td>a link into the app (the norns core); do not edit</td></tr>
+  <tr><td><code>~/norns/*.log</code></td><td>logs, see <a href="#files">files and logs</a></td></tr>
+</table>
+<p>to stop norns, close its window (or quit it from the Dock). only one norns runs at a time.</p>
+
+<h2 id="controls">4. controls</h2>
+<h3>keyboard</h3>
+<p>while the norns window is in front, the keyboard is the norns hardware:</p>
+<table>
+  <tr><th>keys</th><th>norns</th></tr>
+  <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>K1 K2 K3 (held while you hold the key, so K1&nbsp;+&nbsp;turn works)</td></tr>
+  <tr><td><kbd>Q</kbd> / <kbd>W</kbd></td><td>E1 left / right</td></tr>
+  <tr><td><kbd>A</kbd> / <kbd>S</kbd></td><td>E2 left / right (in scripts also <kbd>&uarr;</kbd> / <kbd>&darr;</kbd>)</td></tr>
+  <tr><td><kbd>Z</kbd> / <kbd>X</kbd></td><td>E3 left / right (in scripts also <kbd>&larr;</kbd> / <kbd>&rarr;</kbd>)</td></tr>
+  <tr><td>with <kbd>&#8679;</kbd></td><td>5 steps at once; holding a key keeps turning</td></tr>
+  <tr><td><kbd>F1</kbd>&ndash;<kbd>F4</kbd>, <kbd>F5</kbd></td><td>menu pages MIX, TAPE, HOME, PARAMS; F5 toggles the menu</td></tr>
+</table>
+<p>this works wherever nothing else wants the keys. when a text entry is open (naming a file,
+searching), you type. scripts that use the keyboard themselves (live coding, keyboard
+instruments, about 14 of the 350 catalog scripts) get the keys; there, hold <kbd>&#8997;</kbd>
+(Option) with the keys above, or press <kbd>&#8997;</kbd><kbd>Esc</kbd> to force hardware keys
+on or off (the window title then reads <i>norns &middot; keys</i>).</p>
+<h3>mouse</h3>
+<p>the window is split into thirds: left = K1/E1, middle = K2/E2, right = K3/E3. click to press
+the key (held while the button is held), scroll to turn the encoder.</p>
+<h3>window</h3>
+<p>the window can be resized; the screen is always drawn with sharp pixels.</p>
+
+<h2 id="audio">5. audio</h2>
+<p>norns uses the Mac's <b>default input and output</b> (<i>System Settings &rarr; Sound</i>) at
+48&nbsp;kHz. choose your interface there <b>before</b> starting norns; to switch while norns
+runs, quit and restart it. a mono microphone (like the built-in one) feeds both norns inputs.</p>
+<p>levels, monitoring, reverb and compressor are in the norns MIX menu, as on the device.</p>
+<div class="note">for lower latency or a different sample rate, start from Terminal:
+<code>NORNS_JACK_PERIOD=128 /Applications/norns.app/Contents/MacOS/norns</code>
+(the default period is 256 frames, about 5&nbsp;ms).</div>
+
+<h2 id="maiden">6. maiden and the script catalog</h2>
+<p>maiden is norns' web editor. with norns running, open
+<b><code>http://127.0.0.1:5000/maiden</code></b> in your browser.</p>
+<ul>
+  <li><b>project manager</b> (the box icon): browse the community catalog, install and update
+      scripts. installed scripts appear in the norns SELECT menu.</li>
+  <li><b>editor</b>: edit everything in <code>dust</code>.</li>
+  <li><b>REPL</b>: the matron (Lua) and SuperCollider consoles; errors from scripts show up here.</li>
+</ul>
+<p>unlike on the device, maiden and the consoles only answer on this Mac (127.0.0.1), not on
+your network: the consoles can run any code.</p>
+
+<h2 id="scripts">7. scripts</h2>
+<p>scripts run unchanged. the port takes care of what differs from the device:</p>
+<ul>
+  <li>scripts see the usual <code>/home/we/dust/&hellip;</code> paths; norns maps them to <code>~/norns</code>.</li>
+  <li>the sc3-plugins (Decimator, MoogLadder, Greyhole, &hellip;) are built in.</li>
+  <li><code>require "cjson"</code> uses the built-in JSON library.</li>
+  <li>shell commands find the same GNU tools as on the device.</li>
+</ul>
+<p>scripts that bring compiled Linux programs or Linux-only UGens, or that install software with
+<code>apt</code>, can fail in those parts; everything else in them still works. an engine that
+fails to load blocks later engine loads until you restart norns (as on the device).</p>
+<p>new engines are compiled when norns starts: after installing a script with its own engine,
+restart norns (or use SYSTEM &rarr; RESTART in the menu).</p>
+
+<h2 id="devices">8. MIDI, grid, arc, crow, gamepads</h2>
+<ul>
+  <li><b>MIDI</b>: class-compliant USB MIDI devices and network/IAC ports appear in
+      SYSTEM &rarr; DEVICES &rarr; MIDI. norns also creates a virtual port <b>norns</b> that other
+      apps (a DAW) can send to and receive from.</li>
+  <li><b>grid and arc</b>: plug them in; no serialosc needed.</li>
+  <li><b>crow</b>: plug it in; it appears like on the device.</li>
+  <li><b>gamepads / joysticks</b>: USB and Bluetooth controllers work with scripts that support
+      them.</li>
+  <li><b>keyboard</b>: the Mac keyboard is the norns keyboard (see <a href="#controls">controls</a>).</li>
+</ul>
+
+<h2 id="auv3">9. the AUv3 plugin</h2>
+<p>the app installs an Audio Unit called <b>norns</b> (a music effect: audio in, audio out, MIDI
+in). it puts norns into a DAW track: the track's audio goes into norns, and norns' output comes
+back into the track.</p>
+<ol>
+  <li>start <b>norns.app</b> (the plugin talks to it; norns keeps running in its own window).</li>
+  <li>in your DAW, insert <b>norns</b> on a track &mdash; in Logic as an Audio FX or
+      MIDI-controlled effect, in Ableton Live / Bitwig / Reaper from the Audio Unit plugins.</li>
+  <li>press play. the plugin window shows <i>connected</i>. while the DAW plays through the
+      plugin, norns hears the track instead of your audio interface and plays into the track
+      instead of your speakers. when the DAW stops, norns goes back to the interface.</li>
+  <li>MIDI sent to the plugin track reaches norns as the MIDI device <b>norns AUv3</b>
+      (choose it in a script's MIDI settings or in SYSTEM &rarr; DEVICES).</li>
+</ol>
+<p class="small">latency: about 8&nbsp;ms, reported to the DAW so it compensates. norns follows the
+DAW's clock and sample rate (it resamples internally). use one norns plugin at a time. if norns
+is not running, the plugin passes audio through unchanged.</p>
+<p class="small">if the plugin does not show up: start norns.app once from Applications, then
+rescan plugins in the DAW (Logic: Plug-in Manager &rarr; Reset &amp; Rescan).</p>
+
+<h2 id="files">10. files and logs</h2>
+<table>
+  <tr><th>file</th><th>what</th></tr>
+  <tr><td><code>~/norns/norns.log</code></td><td>matron and crone (Lua errors, devices)</td></tr>
+  <tr><td><code>~/norns/sclang.log</code></td><td>SuperCollider (engines, UGens)</td></tr>
+  <tr><td><code>~/norns/jackd.log</code></td><td>audio server</td></tr>
+  <tr><td><code>~/norns/maiden.log</code></td><td>maiden</td></tr>
+  <tr><td><code>~/norns/auv3_bridge.log</code></td><td>the AUv3 connection</td></tr>
+</table>
+<p>to reset norns' settings, quit norns and delete <code>~/norns/dust/data/system.*</code>.
+your scripts and audio are untouched.</p>
+
+<h2 id="trouble">11. troubleshooting</h2>
+<table>
+  <tr><th>problem</th><th>what to do</th></tr>
+  <tr><td>"norns cannot be opened"</td><td>right-click &rarr; Open, or <i>Privacy &amp; Security &rarr; Open Anyway</i> (see <a href="#install">installing</a>).</td></tr>
+  <tr><td>SUPERCOLLIDER FAIL on the first start</td><td>macOS was still checking the bundled libraries; quit and start norns again.</td></tr>
+  <tr><td>no sound</td><td>check the default output in System Settings &rarr; Sound, the levels in the MIX menu, and <code>jackd.log</code>.</td></tr>
+  <tr><td>no input</td><td>allow the microphone for norns (Privacy &amp; Security &rarr; Microphone); check the input level in MIX.</td></tr>
+  <tr><td>"norns is already running"</td><td>only one norns at a time; close the other window first.</td></tr>
+  <tr><td>a script misbehaves</td><td>open maiden's REPL or <code>norns.log</code> for the error.</td></tr>
+  <tr><td>maiden does not load</td><td>use <code>http://127.0.0.1:5000/maiden</code> (not <code>localhost</code>), with norns running.</td></tr>
+</table>
+
+<h2 id="diff">12. differences from the device</h2>
+<ul>
+  <li>no battery, OLED settings, Wi-Fi or update menu: the Mac handles those.</li>
+  <li>the system menu's network and update pages do not apply; scripts are updated in maiden.</li>
+  <li>audio device and sample rate come from macOS (see <a href="#audio">audio</a>).</li>
+  <li>maiden and the consoles are local-only (127.0.0.1); OSC (port 10111) is reachable on your
+      network, so phone controllers like TouchOSC work as on the device.</li>
+</ul>
+
+<h2 id="uninstall">13. uninstalling</h2>
+<p>delete <code>/Applications/norns.app</code>. your norns folder <code>~/norns</code> (scripts,
+audio, data) stays; delete it too if you no longer need it.</p>
+
+<h2 id="source">14. source and licenses</h2>
+<p>norns for macOS is free software. the app contains, each under its own license:
+norns (GPL-3.0, monome and contributors), maiden (GPL-3.0), SuperCollider (GPL-3.0),
+sc3-plugins (GPL-2.0 or later), JACK (GPL-2.0 / LGPL-2.1), Lua (MIT), lua-cjson (MIT),
+liblo (LGPL-2.1), libmonome (ISC), cairo (LGPL-2.1 / MPL-1.1), SDL (zlib), libsndfile (LGPL-2.1),
+libsamplerate (BSD-2), nng (MIT), Boost (BSL-1.0), yaml-cpp (MIT), GNU coreutils, findutils,
+sed and grep (GPL-3.0), and their dependencies. the complete source of the port, with build
+instructions (<code>readme-macos.md</code>, <code>macos/setup-deps.sh</code>,
+<code>macos/make-app.sh</code>), is published with each release; GPL-3.0 grants you the right
+to get, study, change and share it.</p>
+<p class="small">norns and monome are names of monome; this port is an independent community
+project and is not endorsed by or affiliated with monome.</p>
+
+</body>
+</html>

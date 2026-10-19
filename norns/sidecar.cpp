@@ -308,11 +308,19 @@ static void sidecar_server_detach_cmd(nng_socket sock, const char *unit, const c
         snprintf(group_prop, sizeof(group_prop), "Group=%u", (unsigned)getgid());
     }
 
+#ifdef __APPLE__
+    // no systemd: the macOS actions (system_cmd.cc) only signal norns.sh, a plain shell will do
+    (void)unit_arg;
+    (void)user_prop;
+    (void)group_prop;
+    const char *argv[] = {"/bin/sh", "-c", cmd, NULL};
+#else
     const char *argv[] = {
         "/usr/bin/sudo", "-n", "/usr/bin/env", "SYSTEMD_LOG_COLOR=0",
         "systemd-run", "--no-block", "--collect", unit_arg,
         "-p", user_prop, "-p", group_prop, "--service-type=oneshot",
         "/bin/sh", "-c", cmd, NULL};
+#endif
 
     int fds[2];
     if (pipe(fds) != 0) {
