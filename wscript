@@ -1,3 +1,6 @@
+import os
+import sys
+
 from waflib.Build import BuildContext
 from waflib.Tools import waf_unit_test
 
@@ -60,16 +63,22 @@ def configure(conf):
     conf.env.append_unique('CXXFLAGS', ['-std=c++14', '-faligned-new'])
     conf.define('_GNU_SOURCE', 1)
 
-    conf.check_cfg(package='alsa', args=['--cflags', '--libs'])
-    conf.check_cfg(package='libudev', args=['--cflags', '--libs'])
-    conf.check_cfg(package='libevdev', args=['--cflags', '--libs'])
-    conf.check_cfg(package='libgpiod', args=['--cflags', '--libs'])
+    conf.env.NORNS_MACOS = sys.platform == 'darwin'
+    if conf.env.NORNS_MACOS:
+        configure_macos(conf)
+    else:
+        conf.check_cfg(package='alsa', args=['--cflags', '--libs'])
+        conf.check_cfg(package='libudev', args=['--cflags', '--libs'])
+        conf.check_cfg(package='libevdev', args=['--cflags', '--libs'])
+        conf.check_cfg(package='libgpiod', args=['--cflags', '--libs'])
     conf.check_cfg(package='liblo', args=['--cflags', '--libs'])
     conf.check_cfg(package='cairo', args=['--cflags', '--libs'])
     conf.check_cfg(package='cairo-ft', args=['--cflags', '--libs'])
     conf.check_cfg(package='lua53', args=['--cflags', '--libs'])
 
-    conf.check_cfg(package='avahi-compat-libdns_sd', args=['--cflags', '--libs'])
+    if not conf.env.NORNS_MACOS:
+        # macOS has dns_sd in libSystem
+        conf.check_cfg(package='avahi-compat-libdns_sd', args=['--cflags', '--libs'])
     conf.check_cfg(package='sndfile', args=['--cflags', '--libs'])
     conf.check_cfg(package='jack', args=['--cflags', '--libs'])
 
@@ -87,11 +96,12 @@ def configure(conf):
         header_name='nng/nng.h',
         uselib_store='NNG')
 
-    conf.check_cc(msg='Checking for atomic',
-        define_name='HAVE_ATOMIC',
-        mandatory=True,
-        lib='atomic',
-        uselib_store='ATOMIC')
+    if not conf.env.NORNS_MACOS:
+        conf.check_cc(msg='Checking for atomic',
+            define_name='HAVE_ATOMIC',
+            mandatory=True,
+            lib='atomic',
+            uselib_store='ATOMIC')
 
     if conf.options.desktop:
         conf.check_cfg(package='sdl2', args=['--cflags', '--libs'])
@@ -117,13 +127,30 @@ def configure(conf):
 
     conf.recurse('maiden-repl')
 
+def configure_macos(conf):
+    # the macOS port is always a desktop build (screen:sdl)
+    conf.options.desktop = True
+    # extra dependency prefix (lua 5.3, nng 1.x, libmonome); see readme-macos.md
+    deps = os.environ.get('NORNS_DEPS', os.path.join(conf.path.abspath(), '..', 'deps', 'prefix'))
+    brew = os.environ.get('HOMEBREW_PREFIX', '/opt/homebrew')
+    pkg = [os.path.join(deps, 'lib', 'pkgconfig'), os.path.join(brew, 'lib', 'pkgconfig')]
+    if os.environ.get('PKG_CONFIG_PATH'):
+        pkg.append(os.environ['PKG_CONFIG_PATH'])
+    os.environ['PKG_CONFIG_PATH'] = ':'.join(pkg)
+    conf.env.append_value('INCLUDES', [os.path.join(deps, 'include'), os.path.join(brew, 'include')])
+    conf.env.append_value('LIBPATH', [os.path.join(deps, 'lib'), os.path.join(brew, 'lib')])
+    conf.env.append_value('RPATH', [os.path.join(deps, 'lib')])
+    conf.msg('macOS dependency prefix', deps)
+
 def build(bld):
     #bld.recurse('matron')
     bld.recurse('maiden-repl')
     bld.recurse('ws-wrapper')
     #bld.recurse('crone')
     bld.recurse('third-party')
-    bld.recurse('watcher')
+    if not bld.env.NORNS_MACOS:
+        # pi-only: watches the hardware power/keys
+        bld.recurse('watcher')
     bld.recurse('norns')
 
 def test(bld):

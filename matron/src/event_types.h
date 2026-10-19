@@ -4,8 +4,13 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#ifdef __APPLE__
+// homebrew ships liblo >= 0.32, which declares lo_message as a typed pointer
+#include <lo/lo_types.h>
+#else
 // lo_message is opaque here. files using it include oracle.h for the full definition.
 typedef void *lo_message;
+#endif
 
 // NOTE: new event types *must* be added to the end of the enum in the order
 // maintain ABI compatibility with compiled modules which interact with the

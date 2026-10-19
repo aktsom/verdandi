@@ -68,7 +68,12 @@ int dev_serial_init(void *self, lua_State *l) {
     lua_setfield(l, -2, CFLAG);
     lua_pushinteger(l, d->oldtio.c_lflag);
     lua_setfield(l, -2, LFLAG);
+#ifdef __APPLE__
+    // darwin termios has no line discipline field
+    lua_pushinteger(l, 0);
+#else
     lua_pushinteger(l, d->oldtio.c_line);
+#endif
     lua_setfield(l, -2, LINE);
 
     lua_createtable(l, NCCS, 0);
@@ -124,9 +129,11 @@ int dev_serial_init(void *self, lua_State *l) {
     lua_pop(l, 1);
 
     lua_getfield(l, -1, LINE);
+#ifndef __APPLE__
     if (!lua_isnil(l, -1)) {
         d->newtio.c_line = lua_tointeger(l, -1);
     }
+#endif
     lua_pop(l, 1);
 
     lua_getfield(l, -1, CC);

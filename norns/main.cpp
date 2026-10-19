@@ -2,7 +2,12 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef __APPLE__
+#include <pthread.h>
+#include <sys/event.h>
+#else
 #include <sys/prctl.h>
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -11,6 +16,37 @@
 #include "matron_main.h"
 
 #include "sidecar.h"
+
+#ifdef __APPLE__
+#include "platform/macos/sdl_bridge.h"
+
+static int norns_argc;
+static char **norns_argv;
+
+// darwin has no PR_SET_PDEATHSIG: the sidecar watches its parent with kqueue instead
+static void *watch_parent(void *p) {
+    (void)p;
+    int kq = kqueue();
+    struct kevent ke;
+    EV_SET(&ke, getppid(), EVFILT_PROC, EV_ADD, NOTE_EXIT, 0, NULL);
+    if (kq < 0 || kevent(kq, &ke, 1, NULL, 0, NULL) < 0 || kevent(kq, NULL, 0, &ke, 1, NULL) >= 0) {
+        _exit(0);
+    }
+    return NULL;
+}
+
+// matron and crone run off the main thread; the main thread belongs to cocoa (sdl_bridge)
+static void *norns_thread(void *p) {
+    (void)p;
+    crone_main();
+    matron_main(norns_argc, norns_argv);
+    matron_cleanup();
+    crone_cleanup();
+    sidecar_client_cleanup();
+    exit(0);
+    return NULL;
+}
+#endif
 
 int main(int argc, char **argv) {
     // update.sh gates the final reboot on this. exiting 0 before any
@@ -33,6 +69,11 @@ int main(int argc, char **argv) {
 
         strncpy(argv[0], "sidecar [norns]", exec_name_size);
 
+#ifdef __APPLE__
+        pthread_setname_np(pthread_self(), "sidecar");
+        pthread_t watcher;
+        pthread_create(&watcher, NULL, watch_parent, NULL);
+#else
         // child, set the thread name to sidecar for added clarity in gdb
         if (prctl(PR_SET_NAME, (unsigned long)"sidecar") < 0) {
             perror("prctl(PR_SET_NAME)");
@@ -42,6 +83,7 @@ int main(int argc, char **argv) {
         if (prctl(PR_SET_PDEATHSIG, SIGHUP) < 0) {
             perror("prctl(PR_SET_PDEATHSIG)");
         }
+#endif
 
         // detach this processes stdin from parent
         int fd = open("/dev/null", O_RDONLY);
@@ -59,6 +101,14 @@ int main(int argc, char **argv) {
         // parent
         sidecar_client_init();
 
+#ifdef __APPLE__
+        norns_argc = argc;
+        norns_argv = argv;
+        sdl_bridge_init();
+        pthread_t tid;
+        pthread_create(&tid, NULL, norns_thread, NULL);
+        sdl_bridge_run();
+#endif
         crone_main();
         matron_main(argc, argv);
 

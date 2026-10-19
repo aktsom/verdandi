@@ -18,7 +18,7 @@ def build_link(bld):
             '-Wno-psabi',
         ],
         defines=[
-            'LINK_PLATFORM_LINUX'
+            'LINK_PLATFORM_MACOSX' if bld.env.NORNS_MACOS else 'LINK_PLATFORM_LINUX'
         ],
         name='LIBLINK_C')
 
@@ -36,7 +36,9 @@ def build_cjson(bld):
         cflags=[
             '-O3',
             '-Wall',
+        ] + (['-Wno-error'] if bld.env.NORNS_MACOS else [
             '-Wimplicit-fallthrough=0', # NOTE: GCC7+ warns by default which results in Werror build failures
+        ]) + [
             '-pedantic',
         ],
         defines=[

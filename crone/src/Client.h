@@ -115,8 +115,8 @@ class Client {
         for (int i = 0; i < NumIns; ++i) {
             std::ostringstream os;
             os << "input_" << (i + 1);
-            const char *name = os.str().c_str();
-            inPort[i] = jack_port_register(client, name,
+            const std::string name = os.str();
+            inPort[i] = jack_port_register(client, name.c_str(),
                                            JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
             if (inPort[i] == nullptr) {
                 throw std::runtime_error("no inputs available");
@@ -126,8 +126,8 @@ class Client {
         for (int i = 0; i < NumOuts; ++i) {
             std::ostringstream os;
             os << "output_" << (i + 1);
-            const char *name = os.str().c_str();
-            outPort[i] = jack_port_register(client, name,
+            const std::string name = os.str();
+            outPort[i] = jack_port_register(client, name.c_str(),
                                             JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
             if (outPort[i] == nullptr) {
                 os << " failed to connect";

@@ -4,7 +4,9 @@
 #include <stdint.h>
 
 #include "device_common.h"
+#ifndef __APPLE__
 #include <libevdev/libevdev.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +20,14 @@ typedef uint16_t dev_code_t;
 
 struct dev_hid {
     struct dev_common base;
+#ifdef __APPLE__
+    // IOHIDDeviceRef (retained by the device monitor), see platform/macos/device_hid_iohid.cc
+    void *dev;
+    // primary usage of the device (keyboard, mouse, joystick, gamepad); selects button codes
+    uint32_t app_usage;
+#else
     struct libevdev *dev;
+#endif
     // identifiers
     dev_vid_t vid;
     dev_pid_t pid;

@@ -139,12 +139,42 @@ def build(bld):
     norns_libs = [
     ]
 
+    if bld.env.NORNS_MACOS:
+        # pi hardware and the linux device layer are replaced by platform/macos
+        replaced = [
+            '../matron/src/device/device_hid.cc',
+            '../matron/src/device/device_monitor.cc',
+            '../matron/src/hardware/battery.cc',
+            '../matron/src/hardware/i2c.cc',
+            '../matron/src/hardware/screen/ssd1322.cc',
+            '../matron/src/hardware/input/gpio.cc',
+        ]
+        matron_sources = [f for f in matron_sources if f not in replaced] + [
+            '../matron/src/platform/macos/device_hid_iohid.cc',
+            '../matron/src/platform/macos/device_monitor_macos.cc',
+            '../matron/src/platform/macos/device_runloop.cc',
+            '../matron/src/platform/macos/hardware_null.cc',
+            '../matron/src/platform/macos/sdl_bridge.cc',
+        ]
+        linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
+        matron_use = [u for u in matron_use if u not in linux_only]
+        crone_use = [u for u in crone_use if u not in linux_only]
+        matron_includes += ['../matron/src/platform/macos/include']
+
     norns_sources = norns_sources + matron_sources + crone_sources
     norns_includes = ['.'] + matron_includes + crone_includes
     norns_use = matron_use + crone_use
     norns_libs = norns_libs + matron_libs + crone_libs
     norns_cxxflags = ['-O3', '-Wall', '-mfpu=neon']
     norns_ldflags = ['-Wl,-export-dynamic']
+    norns_frameworks = []
+
+    if bld.env.NORNS_MACOS:
+        compat = bld.path.find_node('../matron/src/platform/macos/compat.h').abspath()
+        norns_cxxflags = ['-O3', '-Wall', '-include', compat]
+        # darwin executables export their symbols by default (lua c modules resolve against them)
+        norns_ldflags = []
+        norns_frameworks = ['CoreFoundation', 'CoreMIDI', 'IOKit']
 
     if bld.env.NORNS_PROFILE:
         norns_cxxflags += ['-pg']
@@ -164,6 +194,12 @@ def build(bld):
             '-fgcse-sm',
         ]
 
+    if bld.env.NORNS_MACOS:
+        # compat.h is force-included, so the dependency scanner never sees it
+        compat_node = bld.path.find_node('../matron/src/platform/macos/compat.h')
+        for src in norns_sources:
+            bld.add_manual_dependency(bld.path.find_node(src), compat_node)
+
     bld.program(features='c cprogram cxx cxxprogram',
         target='norns',
         source=norns_sources,
@@ -171,4 +207,5 @@ def build(bld):
         use=norns_use,
         lib=norns_libs,
         cxxflags=norns_cxxflags,
-        ldflags=norns_ldflags)
+        ldflags=norns_ldflags,
+        framework=norns_frameworks)

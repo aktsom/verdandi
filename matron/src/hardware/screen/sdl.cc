@@ -9,6 +9,10 @@
 #include "hardware/io.h"
 #include "hardware/screen/screens.h"
 
+#ifdef __APPLE__
+#include "platform/macos/sdl_bridge.h"
+#endif
+
 typedef struct _screen_sdl_priv {
     SDL_Window *window;
     SDL_Surface *window_surface;
@@ -67,10 +71,14 @@ static void screen_sdl_destroy(matron_io_t *io) {
 }
 
 static void screen_sdl_paint(matron_fb_t *fb) {
-    screen_sdl_priv_t *priv = fb->io.data;
+    screen_sdl_priv_t *priv = (screen_sdl_priv_t *)fb->io.data;
     cairo_paint(fb->cairo);
+#ifdef __APPLE__
+    sdl_bridge_present(priv->window, priv->draw_surface);
+#else
     SDL_BlitScaled(priv->draw_surface, NULL, priv->window_surface, &windowSize);
     SDL_UpdateWindowSurface(priv->window);
+#endif
 }
 
 static void screen_sdl_bind(matron_fb_t *fb, cairo_surface_t *surface) {
@@ -79,24 +87,34 @@ static void screen_sdl_bind(matron_fb_t *fb, cairo_surface_t *surface) {
 }
 
 static void screen_sdl_surface_destroy(void *data) {
-    screen_sdl_priv_t *priv = data;
+    screen_sdl_priv_t *priv = (screen_sdl_priv_t *)data;
 
     if (priv == NULL) {
         return;
     }
     SDL_FreeSurface(priv->draw_surface);
+#ifdef __APPLE__
+    sdl_bridge_destroy_window(priv->window);
+#else
     SDL_DestroyWindow(priv->window);
+#endif
     free(priv);
 }
 
 static cairo_surface_t *screen_sdl_surface_create(screen_sdl_priv_t *priv) {
     cairo_surface_t *surface;
 
+#ifdef __APPLE__
+    // SDL is initialized on the main thread by sdl_bridge_init()
+    priv->window = sdl_bridge_create_window("norns", windowSize.w, windowSize.h);
+    priv->window_surface = NULL;
+#else
     SDL_Init(SDL_INIT_VIDEO);
     priv->window = SDL_CreateWindow("matron",
                                     SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, windowSize.w, windowSize.h,
                                     SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
     priv->window_surface = SDL_GetWindowSurface(priv->window);
+#endif
     priv->draw_surface = SDL_CreateRGBSurface(0,
                                               128, 64,
                                               16, 0xf800, 0x000007e0, 0x0000001f,

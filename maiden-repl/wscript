@@ -7,11 +7,16 @@ def configure(conf):
     conf.load('compiler_c compiler_cxx')
 
     # libraries with full pkg-config data
-    conf.check_cfg(package='ncursesw', args=['--cflags', '--libs'])
-    conf.check_cfg(package='panel', args=['--cflags', '--libs'])
-    conf.check_cfg(package='readline', args=['--cflags', '--libs'])
+    # optional on macOS (homebrew ncurses/readline are keg-only); matron works without it
+    mandatory = not conf.env.NORNS_MACOS
+    ok = conf.check_cfg(package='ncursesw', args=['--cflags', '--libs'], mandatory=mandatory)
+    ok = conf.check_cfg(package='panel', args=['--cflags', '--libs'], mandatory=mandatory) and ok
+    ok = conf.check_cfg(package='readline', args=['--cflags', '--libs'], mandatory=mandatory) and ok
+    conf.env.HAVE_MAIDEN_REPL = bool(ok)
 
 def build(bld):
+    if bld.env.NORNS_MACOS and not bld.env.HAVE_MAIDEN_REPL:
+        return
     maiden_repl_sources = [
         'src/io.c',
         'src/msg_queue.c',
