@@ -1,0 +1,29 @@
+diff --git a/cmd/server.go b/cmd/server.go
+index 28a9051..e3fec8c 100644
+--- a/cmd/server.go
++++ b/cmd/server.go
+@@ -24,6 +24,7 @@ import (
+ 
+ var (
+ 	httpPort int
++	httpHost string
+ 	httpFD   int
+ 
+ 	dataDir string
+@@ -44,6 +45,7 @@ var serverCmd = &cobra.Command{
+ 
+ func init() {
+ 	serverCmd.Flags().IntVar(&httpPort, "port", 5000, "HTTP `port`")
++	serverCmd.Flags().StringVar(&httpHost, "host", "", "`address` to listen on (default: all interfaces)")
+ 	serverCmd.Flags().IntVar(&httpFD, "fd", 0, "file `descriptor` on which to serve HTTP (overrides -port)")
+ 
+ 	serverCmd.Flags().StringVar(&dataDir, "data", "data/", "`path` to user data directory (dust)")
+@@ -148,7 +150,7 @@ func serverRun() {
+ 	if httpFD > 0 {
+ 		l, err = net.FileListener(os.NewFile(uintptr(httpFD), "http"))
+ 	} else {
+-		l, err = net.Listen("tcp", fmt.Sprintf(":%d", httpPort))
++		l, err = net.Listen("tcp", fmt.Sprintf("%s:%d", httpHost, httpPort))
+ 	}
+ 	if err != nil {
+ 		log.Fatalf("listen error: %v", err)

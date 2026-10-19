@@ -8,10 +8,18 @@
 #
 #   <norns home>/Library/Application Support/SuperCollider   sclang config + extensions
 #
-# usage: macos/norns.sh
-#   matron's lua REPL is this terminal; sclang's REPL is ws://localhost:5556 (maiden).
+#   <norns home>/maiden         maiden (web editor, REPLs, catalog), if installed
+#
+# usage: macos/norns.sh [--terminal]
+#   default: like the device, matron and sclang REPLs are websockets (127.0.0.1:5555/5556)
+#            used by maiden at http://127.0.0.1:5000/maiden; matron logs to norns.log
+#   --terminal: matron's lua REPL and log are this terminal
+#   everything listens on 127.0.0.1 only: these REPLs run arbitrary code.
 
 set -u
+
+TERMINAL=0
+[ "${1:-}" = "--terminal" ] && TERMINAL=1
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 NORNS_HOME="$(dirname "$REPO")"
@@ -84,9 +92,14 @@ if ! "$JACK_WAIT" 0 2>/dev/null; then
     "$JACK_WAIT" 10 || { echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"; exit 1; }
 fi
 
-# explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin,
-# which would leave matron's lua REPL without input
-"$REPO/build/norns/norns" <&0 &
+WS="$REPO/build/ws-wrapper/ws-wrapper"
+if [ $TERMINAL -eq 1 ]; then
+    # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin,
+    # which would leave matron's lua REPL without input
+    "$REPO/build/norns/norns" <&0 &
+else
+    "$WS" "ws://127.0.0.1:5555" "$REPO/build/norns/norns" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
+fi
 NORNS_PID=$!
 PIDS="$PIDS $NORNS_PID"
 # sclang wires scsynth into crone's jack ports, so wait for crone
@@ -100,8 +113,22 @@ until jack_lsp 2>/dev/null | grep -q '^crone:input_5$'; do
     sleep 0.2
 done
 if jack_lsp 2>/dev/null | grep -q '^crone:input_5$'; then
-    "$REPO/build/ws-wrapper/ws-wrapper" "ws://*:5556" "$SC_BIN/sclang" -i maiden < /dev/null > "$NORNS_HOME/sclang.log" 2>&1 &
+    "$WS" "ws://127.0.0.1:5556" "$SC_BIN/sclang" -i maiden < /dev/null > "$NORNS_HOME/sclang.log" 2>&1 &
     PIDS="$PIDS $!"
 fi
+
+MAIDEN="$NORNS_HOME/maiden"
+if [ -x "$MAIDEN/maiden" ]; then
+    # first start: the catalog sources maiden installs scripts from (tool/project-setup.sh)
+    if [ ! -d dust/data/sources ]; then
+        mkdir -p dust/data/sources dust/data/catalogs
+        cp "$MAIDEN"/dist/sources/*.json dust/data/sources/ 2>/dev/null
+    fi
+    (cd "$MAIDEN" && exec ./maiden server --host 127.0.0.1 --port 5000 --app ./app/build \
+        --data "$NORNS_HOME/dust" --doc "$NORNS_HOME/norns/doc" < /dev/null > "$NORNS_HOME/maiden.log" 2>&1) &
+    PIDS="$PIDS $!"
+    echo "norns.sh: maiden at http://127.0.0.1:5000/maiden"
+fi
+[ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_HOME/norns.log (close the norns window or ctrl-c to stop)"
 
 wait "$NORNS_PID"

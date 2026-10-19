@@ -3,7 +3,7 @@
 #
 # result: <deps>/prefix (lua 5.3, nng 1.x, libmonome, SuperCollider.app with the jack
 # backend), <deps>/bin/waf (waf 2.1; the bundled waf 2.0 needs python's removed `imp`)
-# and sc3-plugins in the norns home's SuperCollider extensions.
+# sc3-plugins in the norns home's SuperCollider extensions, and maiden in <norns home>/maiden.
 #
 # usage: macos/setup-deps.sh [deps dir, default: <norns home>/../../deps]
 # paths must not contain spaces (lua's makefile); use a symlink if the disk name has one.
@@ -22,13 +22,15 @@ LUA_VERSION=5.3.6
 LUA_SHA256=fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60
 WAF_VERSION=2.1.9
 SC_TAG=Version-3.14.1
+# maiden's web app (react-scripts 1.x) needs the node its own tooling pins
+NODE_VERSION=v16.20.2
 
 case "$DEPS" in *" "*) echo "setup-deps: '$DEPS' contains a space"; exit 1 ;; esac
 mkdir -p "$P/lib/pkgconfig" "$SRC" "$DEPS/bin"
 
 echo "== homebrew packages"
 brew install cairo boost cmake pkgconf readline jack liblo libsndfile sdl2 fftw yaml-cpp \
-    coreutils findutils gnu-sed grep gawk
+    coreutils findutils gnu-sed grep gawk go
 
 echo "== waf $WAF_VERSION"
 [ -x "$DEPS/bin/waf" ] || { curl -sSfL -o "$DEPS/bin/waf" "https://waf.io/waf-$WAF_VERSION" && chmod +x "$DEPS/bin/waf"; }
@@ -106,6 +108,29 @@ if [ ! -d "$EXT/SC3plugins" ]; then
     cp -R sc3-plugins/build/SC3plugins "$EXT/"
     # help files are most of the size and unused at runtime
     find "$EXT/SC3plugins" -type d -name HelpSource -prune -exec rm -rf {} +
+fi
+
+echo "== maiden"
+M="$NORNS_HOME/maiden"
+if [ ! -x "$M/maiden" ]; then
+    cd "$SRC"
+    if [ ! -x node16/bin/node ]; then
+        F="node-$NODE_VERSION-darwin-arm64.tar.gz"
+        curl -sSfLO "https://nodejs.org/dist/$NODE_VERSION/$F"
+        curl -sSfL "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt" | grep " $F\$" | shasum -a 256 -c -
+        mkdir -p node16 && tar xzf "$F" -C node16 --strip-components 1 && rm "$F"
+    fi
+    [ -d maiden ] || git clone -q --depth 1 https://github.com/monome/maiden.git
+    # --host: listen on 127.0.0.1 only (maiden edits files and fronts code-running REPLs)
+    git -C maiden apply --check "$REPO/macos/patches/maiden-host-flag.patch" 2>/dev/null &&
+        git -C maiden apply "$REPO/macos/patches/maiden-host-flag.patch"
+    (cd maiden && GOFLAGS=-mod=mod go build -ldflags="-X github.com/monome/maiden/cmd.version=$(git describe --tags 2>/dev/null || echo head)-macos" -o maiden .)
+    (cd maiden/web && PATH="$SRC/node16/bin:$PATH" npx -y yarn@1.22.22 install --frozen-lockfile &&
+        PATH="$SRC/node16/bin:$PATH" npx -y yarn@1.22.22 build)
+    mkdir -p "$M/app" "$M/dist/sources"
+    cp maiden/maiden maiden/maiden.yaml "$M/"
+    rm -rf "$M/app/build" && cp -R maiden/web/build "$M/app/"
+    cp maiden/sources/*.json "$M/dist/sources/"
 fi
 
 echo "== done. build norns: cd $REPO && python3 $DEPS/bin/waf configure && python3 $DEPS/bin/waf"

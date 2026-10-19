@@ -107,6 +107,8 @@ void *loop_tx(void *p) {
         if (nb > 0) {
             buf[nb] = '\0';
             printf("%s", buf);
+            // stdout is often a log file (fully buffered); keep it current
+            fflush(stdout);
             if ((rv = nng_send(sock_ws, buf, nb, 0)) != 0) {
                 // TODO: handle error?
             }
