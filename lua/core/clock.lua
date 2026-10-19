@@ -58,6 +58,10 @@ end
 -- todo: use c api instead
 clock.resume = function(coro_id, ...)
   local coro = clock.threads[coro_id]
+  -- a resume already queued when the coroutine was cancelled (e.g. on script change)
+  if coro == nil then
+    return
+  end
 
   local result, mode, time, offset = coroutine.resume(coro, ...)
 
