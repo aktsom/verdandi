@@ -4,7 +4,8 @@ def build(bld):
     bld.program(features='c cprogram',
         source='jack_wait.c',
         target='jack_wait',
-        use=['JACK'])
+        use=['JACK'],
+        ldflags=['-Wl,-headerpad_max_install_names'])
 
     # one source, three tools (argv[0] selects); norns.sh puts this dir on PATH
     for i, tool in enumerate(['jack_connect', 'jack_disconnect', 'jack_lsp']):
@@ -12,4 +13,15 @@ def build(bld):
             source='jack_tools.c',
             target=tool,
             idx=i + 2,
-            use=['JACK'])
+            use=['JACK'],
+            ldflags=['-Wl,-headerpad_max_install_names'])
+
+    # norns side of the AUv3 (see auv3/auv3_bridge.c)
+    bld.program(features='c cprogram',
+        source='auv3/auv3_bridge.c',
+        target='auv3_bridge',
+        includes=['auv3'],
+        use=['JACK'],
+        lib=['jacknet'],
+        framework=['CoreMIDI', 'CoreFoundation'],
+        ldflags=['-Wl,-headerpad_max_install_names'])

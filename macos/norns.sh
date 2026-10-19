@@ -39,10 +39,21 @@ SC_BIN="$DEPS/SuperCollider/SuperCollider.app/Contents/MacOS"
 # gnubin: the norns core and scripts shell out to GNU tools (find -printf, stat -c, sed -i,
 # sha256sum, timeout, shuf ...), as on the device; only norns' own processes see them.
 GNUBIN=""
-for f in coreutils findutils gnu-sed grep; do
-    [ -d "$BREW/opt/$f/libexec/gnubin" ] && GNUBIN="$GNUBIN$BREW/opt/$f/libexec/gnubin:"
-done
-export PATH="$REPO/build/macos:$GNUBIN$DEPS/bin:$BREW/bin:$PATH"
+if [ -d "$DEPS/gnubin" ]; then
+    GNUBIN="$DEPS/gnubin:" # app bundle
+else
+    for f in coreutils findutils gnu-sed grep; do
+        [ -d "$BREW/opt/$f/libexec/gnubin" ] && GNUBIN="$GNUBIN$BREW/opt/$f/libexec/gnubin:"
+    done
+fi
+# bundled jack drivers (app bundle); homebrew's jackd knows its own
+[ -d "$DEPS/lib/jack" ] && export JACK_DRIVER_DIR="$DEPS/lib/jack"
+if [ -d "$DEPS/gnubin" ]; then
+    # app bundle: only what it brings (and the system)
+    export PATH="$REPO/build/macos:$GNUBIN$DEPS/bin:$PATH"
+else
+    export PATH="$REPO/build/macos:$GNUBIN$DEPS/bin:$BREW/bin:$PATH"
+fi
 # we start jackd ourselves; clients must not autostart a second server
 export JACK_NO_START_SERVER=1
 # no norns hardware: the keyboard drives K1-3 / E1-3 when nothing else wants the keys
@@ -75,7 +86,7 @@ EOF
 fi
 
 # one norns at a time: a second one finds the OSC / REPL ports taken
-if pgrep -f "$REPO/build/norns/norns" >/dev/null; then
+if pgrep -x norns >/dev/null; then
     echo "norns.sh: norns is already running (close its window first)"
     exit 1
 fi
@@ -126,7 +137,13 @@ if jack_lsp 2>/dev/null | grep -q '^crone:input_5$'; then
     PIDS="$PIDS $!"
 fi
 
-MAIDEN="$NORNS_HOME/maiden"
+# the norns side of the AUv3: idle until the plugin renders in a DAW
+if [ -x "$REPO/build/macos/auv3_bridge" ]; then
+    "$REPO/build/macos/auv3_bridge" < /dev/null > "$NORNS_HOME/auv3_bridge.log" 2>&1 &
+    PIDS="$PIDS $!"
+fi
+
+MAIDEN="${NORNS_MAIDEN:-$NORNS_HOME/maiden}"
 if [ -x "$MAIDEN/maiden" ]; then
     # first start: the catalog sources maiden installs scripts from (tool/project-setup.sh)
     if [ ! -d dust/data/sources ]; then

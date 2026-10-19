@@ -175,8 +175,9 @@ def build(bld):
     if bld.env.NORNS_MACOS:
         compat = bld.path.find_node('../matron/src/platform/macos/compat.h').abspath()
         norns_cxxflags = ['-O3', '-Wall', '-include', compat]
-        # darwin executables export their symbols by default (lua c modules resolve against them)
-        norns_ldflags = []
+        # darwin executables export their symbols by default (lua c modules resolve against them);
+        # header padding lets macos/make-app.sh rewrite library paths
+        norns_ldflags = ['-Wl,-headerpad_max_install_names']
         norns_frameworks = ['CoreFoundation', 'CoreMIDI', 'IOKit']
 
     if bld.env.NORNS_PROFILE:
