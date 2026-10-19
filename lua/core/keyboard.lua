@@ -88,9 +88,66 @@ end
 keyboard.state = {}
 
 -- clear callbacks
+local function noop() end
+
 function keyboard.clear()
-  keyboard.code = function() end
-  keyboard.char = function() end
+  keyboard.code = noop
+  keyboard.char = noop
+end
+
+--- hardware keys.
+-- on computers without norns hardware (env NORNS_HARDWARE_KEYS=1, set by the macOS
+-- launcher) the keyboard drives the keys and encoders whenever nothing else wants it:
+-- 1 2 3 = K1 K2 K3, Q/W A/S Z/X = E1 E2 E3 (left/right), shift = 5 steps, and in
+-- scripts the arrows are E2 (up/down) and E3 (left/right); in the menu the arrows keep
+-- their menu bindings. text entry, and scripts that set keyboard.code / keyboard.char,
+-- get the keys as before.
+keyboard.hardware_keys = os.getenv("NORNS_HARDWARE_KEYS") == "1"
+
+local hw_key = {['1']=1, ['2']=2, ['3']=3}
+local hw_enc = {Q={1,-1}, W={1,1}, A={2,-1}, S={2,1}, Z={3,-1}, X={3,1}}
+local hw_arrow = {UP={2,-1}, DOWN={2,1}, LEFT={3,-1}, RIGHT={3,1}}
+-- keys whose press went to the hardware: code -> {key=n} or {enc=n, dir=d}
+local hw_down = {}
+
+local function script_wants_keyboard()
+  return (keyboard.code ~= nil and keyboard.code ~= noop) or (keyboard.char ~= nil and keyboard.char ~= noop)
+end
+
+local function hw_turn(h)
+  _norns.enc(h.enc, h.dir * (keyboard.shift() and 5 or 1))
+end
+
+-- returns true if the event was used as norns hardware
+local function hardware(c, value)
+  local h = hw_down[c]
+  -- releases and autorepeats go where the press went
+  if value == 0 then
+    if h == nil then return false end
+    hw_down[c] = nil
+    if h.key then _norns.key(h.key, 0) end
+    return true
+  end
+  if h ~= nil then
+    if value == 2 and h.enc then hw_turn(h) end
+    return true
+  end
+  if value ~= 1 or not keyboard.hardware_keys then return false end
+  if te_kbd_cb.code or te_kbd_cb.char then return false end
+  if not _menu.mode and script_wants_keyboard() then return false end
+
+  if hw_key[c] then
+    hw_down[c] = {key=hw_key[c]}
+    _norns.key(hw_key[c], 1)
+    return true
+  end
+  local e = hw_enc[c] or ((not _menu.mode) and hw_arrow[c])
+  if e then
+    hw_down[c] = {enc=e[1], dir=e[2]}
+    hw_turn(hw_down[c])
+    return true
+  end
+  return false
 end
 
 --- key code callback, script should redefine.
@@ -136,6 +193,10 @@ function keyboard.process(type,code,value)
     return
   end
   screen.ping()
+  if hardware(c, value) then
+    keyboard.state[c] = value>0
+    return
+  end
   -- textentry keycode
   if te_kbd_cb.code then
     te_kbd_cb.code(c,value)

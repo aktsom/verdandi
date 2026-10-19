@@ -8,9 +8,10 @@
  * the wheel turns the encoder. the window is resizable; the 128x64 frame is drawn at the
  * largest integer scale that fits (crisp pixels), centered on black.
  *
- * keyboard: see window_keys.h. Option + 1 2 3 / QW AS ZX / arrows are K1-3 / E1-3,
- * Option+Esc toggles "norns mode" (same keys without Option); everything else is the
- * norns usb keyboard. the computer keyboard is not mapped to keys/encs: while the
+ * keyboard: plain keys go to norns as the usb keyboard, where lua/core/keyboard.lua turns
+ * 1 2 3 / QW AS ZX into K1-3 / E1-3 when nothing else wants them. window_keys.h adds the
+ * overrides for scripts that use the keyboard: Option + those keys, and Option+Esc to force
+ * them without Option. the computer keyboard is not mapped to keys/encs: while the
  * window has focus it is the norns usb keyboard (virtual hid device, linux key codes), as
  * on hardware.
  */

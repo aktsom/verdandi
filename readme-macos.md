@@ -39,15 +39,27 @@ the REPLs run arbitrary code, and a laptop is on networks a norns is not.
 
 the window is the norns screen (resizable). controls:
 
-| keys (window focused)      | norns                          |
-|----------------------------|--------------------------------|
-| ⌥1 ⌥2 ⌥3                   | K1 K2 K3 (held while held)     |
-| ⌥Q / ⌥W                    | E1 left / right                |
-| ⌥A / ⌥S, ⌥↑ / ⌥↓           | E2 left / right                |
-| ⌥Z / ⌥X, ⌥← / ⌥→           | E3 left / right                |
-| ⇧ added                    | 5 steps; holding a key keeps turning |
-| ⌥Esc                       | norns mode on/off: the same keys without ⌥ (title "norns · keys") |
-| everything else            | the norns usb keyboard (scripts, text entry, F1-F5 menu keys) |
+| keys (window focused) | norns                                  |
+|----------------------|----------------------------------------|
+| 1 2 3                | K1 K2 K3 (held while held)             |
+| Q / W                | E1 left / right                        |
+| A / S                | E2 left / right (in scripts also ↑ / ↓) |
+| Z / X                | E3 left / right (in scripts also ← / →) |
+| ⇧ added              | 5 steps; holding a key keeps turning   |
+
+this works wherever nothing else wants the keys: in the menu (arrows keep their menu
+bindings, F1-F5 the menu pages) and in every script that does not use the keyboard itself.
+text entry types as usual, and scripts with their own `keyboard.code` / `keyboard.char`
+(14 of the 351 catalog scripts) get the keyboard; there:
+
+| keys               | norns                                         |
+|--------------------|-----------------------------------------------|
+| ⌥ + the keys above | always K / E                                  |
+| ⌥Esc               | force hardware keys on/off (title "norns · keys") |
+
+the automatic part is `lua/core/keyboard.lua` (enabled by `NORNS_HARDWARE_KEYS=1`, which
+`macos/norns.sh` sets; off on the device), tests: `NORNS_HARDWARE_KEYS=1 <lua 5.3>
+macos/tests/keyboard_hardware_test.lua`.
 
 mouse: the left / middle / right third of the window is K1+E1 / K2+E2 / K3+E3; click =
 key, scroll = encoder.

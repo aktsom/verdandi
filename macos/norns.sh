@@ -45,13 +45,16 @@ done
 export PATH="$REPO/build/macos:$GNUBIN$DEPS/bin:$BREW/bin:$PATH"
 # we start jackd ourselves; clients must not autostart a second server
 export JACK_NO_START_SERVER=1
+# no norns hardware: the keyboard drives K1-3 / E1-3 when nothing else wants the keys
+# (lua/core/keyboard.lua)
+export NORNS_HARDWARE_KEYS=1
 cd "$NORNS_HOME"
 
 mkdir -p dust/code dust/audio dust/data
 if [ ! -f matronrc.lua ]; then
     cat > matronrc.lua <<'EOF'
--- macOS desktop: the norns window (screen:sdl). keys/encoders: click / scroll in the
--- left, middle, right third of the window. the computer keyboard is the norns keyboard.
+-- macOS desktop: the norns window (screen:sdl). keys/encoders: 1 2 3 and QW AS ZX on the
+-- keyboard (see readme-macos.md), or click / scroll in the left, middle, right third.
 _boot.add_io('screen:sdl', {})
 EOF
 fi
