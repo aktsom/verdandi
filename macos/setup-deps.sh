@@ -26,6 +26,8 @@ SC_TAG=Version-3.14.1
 NODE_VERSION=v16.20.2
 
 case "$DEPS" in *" "*) echo "setup-deps: '$DEPS' contains a space"; exit 1 ;; esac
+# keep build paths (they contain the user name) out of the binaries
+MAP="-ffile-prefix-map=$DEPS=/build/deps -ffile-prefix-map=$NORNS_HOME=/build/home"
 mkdir -p "$P/lib/pkgconfig" "$SRC" "$DEPS/bin"
 
 echo "== homebrew packages"
@@ -68,8 +70,9 @@ if [ ! -f "$P/include/monome.h" ]; then
     cd "$SRC"
     [ -d libmonome ] || git clone -q --depth 1 https://github.com/monome/libmonome.git
     cd libmonome
-    CFLAGS="-I$BREW/include" LDFLAGS="-L$BREW/lib" PKG_CONFIG_PATH="$P/lib/pkgconfig:$BREW/lib/pkgconfig" \
-        python3 ./waf configure --prefix="$P"
+    # embedded protocols: otherwise libmonome dlopens them from this build's absolute prefix
+    CFLAGS="-I$BREW/include $MAP" LDFLAGS="-L$BREW/lib" PKG_CONFIG_PATH="$P/lib/pkgconfig:$BREW/lib/pkgconfig" \
+        python3 ./waf configure --prefix="$P" --enable-embedded-protos
     python3 ./waf
     python3 ./waf install
 fi
@@ -84,7 +87,8 @@ if [ ! -x "$SC_APP/MacOS/sclang" ]; then
     cmake -S supercollider -B supercollider/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$P" \
         -DAUDIOAPI=jack -DSC_QT=OFF -DSC_IDE=OFF -DSUPERNOVA=OFF -DSC_EL=OFF -DSC_VIM=OFF -DSC_ED=OFF \
         -DNO_X11=ON -DSC_ABLETON_LINK=OFF -DINSTALL_HELP=OFF -DENABLE_TESTSUITE=OFF \
-        -DSYSTEM_BOOST=ON -DSYSTEM_YAMLCPP=ON -DCMAKE_PREFIX_PATH="$BREW;$BREW/opt/readline"
+        -DSYSTEM_BOOST=ON -DSYSTEM_YAMLCPP=ON -DCMAKE_PREFIX_PATH="$BREW;$BREW/opt/readline" \
+        -DCMAKE_C_FLAGS="$MAP" -DCMAKE_CXX_FLAGS="$MAP"
     cmake --build supercollider/build -j "$J"
     cmake --install supercollider/build
 fi
@@ -100,7 +104,8 @@ if [ ! -d "$EXT/SC3plugins" ]; then
     sed -i '' 's/	if(0<=bufnum<= world->mNumSndBufs) {/	if(bufnum < (int)world->mNumSndBufs) {/' \
         sc3-plugins/source/NCAnalysisUGens/SMS.cpp
     cmake -S sc3-plugins -B sc3-plugins/build -DSC_PATH="$SRC/supercollider" -DCMAKE_BUILD_TYPE=Release \
-        -DSUPERNOVA=OFF -DQUARKS=OFF -DSCX=ON -DCMAKE_PREFIX_PATH="$BREW"
+        -DSUPERNOVA=OFF -DQUARKS=OFF -DSCX=ON -DCMAKE_PREFIX_PATH="$BREW" \
+        -DCMAKE_C_FLAGS="$MAP" -DCMAKE_CXX_FLAGS="$MAP"
     cmake --build sc3-plugins/build -j "$J"
     # on macOS the install step always lands in build/SC3plugins
     cmake --install sc3-plugins/build
@@ -124,7 +129,7 @@ if [ ! -x "$M/maiden" ]; then
     # --host: listen on 127.0.0.1 only (maiden edits files and fronts code-running REPLs)
     git -C maiden apply --check "$REPO/macos/patches/maiden-host-flag.patch" 2>/dev/null &&
         git -C maiden apply "$REPO/macos/patches/maiden-host-flag.patch"
-    (cd maiden && GOFLAGS=-mod=mod go build -ldflags="-X github.com/monome/maiden/cmd.version=$(git describe --tags 2>/dev/null || echo head)-macos" -o maiden .)
+    (cd maiden && GOFLAGS=-mod=mod go build -trimpath -ldflags="-X github.com/monome/maiden/cmd.version=$(git describe --tags 2>/dev/null || echo head)-macos" -o maiden .)
     (cd maiden/web && PATH="$SRC/node16/bin:$PATH" npx -y yarn@1.22.22 install --frozen-lockfile &&
         PATH="$SRC/node16/bin:$PATH" npx -y yarn@1.22.22 build)
     mkdir -p "$M/app" "$M/dist/sources"

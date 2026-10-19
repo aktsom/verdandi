@@ -146,6 +146,9 @@ def configure_macos(conf):
     conf.env.append_value('INCLUDES', [os.path.join(deps, 'include'), os.path.join(brew, 'include')])
     conf.env.append_value('LIBPATH', [os.path.join(deps, 'lib'), os.path.join(brew, 'lib')])
     conf.env.append_value('RPATH', [os.path.join(deps, 'lib')])
+    # keep build paths (they contain the user name) out of the binaries
+    for flags in ('CFLAGS', 'CXXFLAGS'):
+        conf.env.append_value(flags, ['-ffile-prefix-map=%s=/build/norns' % conf.path.abspath()])
     conf.msg('macOS dependency prefix', deps)
 
 def build(bld):
