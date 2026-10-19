@@ -148,6 +148,7 @@ def build(bld):
             '../matron/src/hardware/i2c.cc',
             '../matron/src/hardware/screen/ssd1322.cc',
             '../matron/src/hardware/input/gpio.cc',
+            '../matron/src/hardware/stat.cc',
         ]
         matron_sources = [f for f in matron_sources if f not in replaced] + [
             '../matron/src/platform/macos/device_hid_iohid.cc',
@@ -155,6 +156,7 @@ def build(bld):
             '../matron/src/platform/macos/device_runloop.cc',
             '../matron/src/platform/macos/hardware_null.cc',
             '../matron/src/platform/macos/sdl_bridge.cc',
+            '../matron/src/platform/macos/stat_macos.cc',
         ]
         linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
         matron_use = [u for u in matron_use if u not in linux_only]

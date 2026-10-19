@@ -92,6 +92,8 @@ void events_init(void) {
     evq.size = 0;
     evq.head = NULL;
     evq.tail = NULL;
+    // a zeroed pthread_mutex_t is a valid unlocked mutex on glibc only; macOS needs init
+    pthread_mutex_init(&evq.lock, NULL);
     pthread_cond_init(&evq.nonempty, NULL);
 }
 

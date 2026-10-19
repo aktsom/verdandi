@@ -28,6 +28,8 @@ void clock_crow_in_div(int div) {
 }
 
 void clock_crow_init() {
+    // a zeroed pthread_mutex_t is a valid unlocked mutex on glibc only; macOS needs init
+    pthread_mutex_init(&crow_in_div_lock, NULL);
     clock_crow_counter = 0;
     clock_crow_last_time_set = false;
     mean_sum = 0;

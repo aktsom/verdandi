@@ -139,6 +139,9 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
 
 void sdl_bridge_init(void) {
     main_thread = pthread_self();
+    // keep default SIGINT/SIGTERM behaviour (terminate), as on linux; SDL would otherwise
+    // swallow them as SDL_QUIT
+    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "sdl_bridge: SDL_Init failed: %s\n", SDL_GetError());
     }
@@ -159,7 +162,10 @@ void sdl_bridge_run(void) {
         }
         switch (ev.type) {
         case SDL_QUIT:
-            exit(0);
+            // window closed: let matron leave its event loop; the norns thread cleans up
+            // and exits the process
+            event_post(event_data_new(EVENT_QUIT));
+            break;
         case SDL_KEYDOWN:
         case SDL_KEYUP:
             handle_key(&ev.key);

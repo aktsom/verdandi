@@ -167,11 +167,16 @@ class Client {
             throw std::runtime_error("no ADC ports found");
         }
 
+        // a mono device (e.g. a laptop microphone) has one physical port: feed it to both
+        int count = 0;
+        while (ports[count] != nullptr) {
+            ++count;
+        }
         for (int i = 0; i < NumIns; ++i) {
             if (i > 1) {
                 break;
             }
-            if (jack_connect(client, ports[i], jack_port_name(inPort[i]))) {
+            if (jack_connect(client, ports[i % count], jack_port_name(inPort[i]))) {
 
                 std::cerr << "failed to connect input port " << i << std::endl;
                 throw std::runtime_error("connectAdcPorts() failed");
@@ -188,11 +193,16 @@ class Client {
             throw std::runtime_error("no DAC ports found");
         }
 
+        // a mono device has one physical port: both channels go to it
+        int count = 0;
+        while (ports[count] != nullptr) {
+            ++count;
+        }
         for (int i = 0; i < NumOuts; ++i) {
             if (i > 1) {
                 break;
             }
-            if (jack_connect(client, jack_port_name(outPort[i]), ports[i])) {
+            if (jack_connect(client, jack_port_name(outPort[i]), ports[i % count])) {
                 std::cerr << "failed to connect output port " << i << std::endl;
                 throw std::runtime_error("failed to connect output port");
             }

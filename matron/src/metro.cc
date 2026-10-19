@@ -63,6 +63,9 @@ static void metro_cancel(struct metro *t);
 
 void metros_init(void) {
     for (int i = 0; i < MAX_NUM_METROS_OK; i++) {
+        // a zeroed pthread_mutex_t is a valid unlocked mutex on glibc only; macOS needs init
+        pthread_mutex_init(&metros[i].stage_lock, NULL);
+        pthread_mutex_init(&metros[i].status_lock, NULL);
         metros[i].status = METRO_STATUS_STOPPED;
         metros[i].seconds = 1.0;
     }

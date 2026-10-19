@@ -131,7 +131,13 @@ def configure_macos(conf):
     # the macOS port is always a desktop build (screen:sdl)
     conf.options.desktop = True
     # extra dependency prefix (lua 5.3, nng 1.x, libmonome); see readme-macos.md
-    deps = os.environ.get('NORNS_DEPS', os.path.join(conf.path.abspath(), '..', 'deps', 'prefix'))
+    deps = os.environ.get('NORNS_DEPS')
+    if not deps:
+        # nearest deps/prefix above the source tree
+        d = conf.path.abspath()
+        while d != os.path.dirname(d) and not os.path.isdir(os.path.join(d, 'deps', 'prefix')):
+            d = os.path.dirname(d)
+        deps = os.path.join(d, 'deps', 'prefix')
     brew = os.environ.get('HOMEBREW_PREFIX', '/opt/homebrew')
     pkg = [os.path.join(deps, 'lib', 'pkgconfig'), os.path.join(brew, 'lib', 'pkgconfig')]
     if os.environ.get('PKG_CONFIG_PATH'):
@@ -148,7 +154,9 @@ def build(bld):
     bld.recurse('ws-wrapper')
     #bld.recurse('crone')
     bld.recurse('third-party')
-    if not bld.env.NORNS_MACOS:
+    if bld.env.NORNS_MACOS:
+        bld.recurse('macos')
+    else:
         # pi-only: watches the hardware power/keys
         bld.recurse('watcher')
     bld.recurse('norns')

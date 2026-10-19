@@ -98,6 +98,8 @@ static void *clock_link_run(void *p) {
 }
 
 void clock_link_init() {
+    // a zeroed pthread_mutex_t is a valid unlocked mutex on glibc only; macOS needs init
+    pthread_mutex_init(&clock_link_shared_data.lock, NULL);
     clock_link = abl_link_create(120);
     clock_reference_init(&clock_link_reference);
 }

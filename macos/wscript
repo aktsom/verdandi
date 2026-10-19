@@ -1,0 +1,15 @@
+top = '..'
+
+def build(bld):
+    bld.program(features='c cprogram',
+        source='jack_wait.c',
+        target='jack_wait',
+        use=['JACK'])
+
+    # one source, three tools (argv[0] selects); norns.sh puts this dir on PATH
+    for i, tool in enumerate(['jack_connect', 'jack_disconnect', 'jack_lsp']):
+        bld.program(features='c cprogram',
+            source='jack_tools.c',
+            target=tool,
+            idx=i + 2,
+            use=['JACK'])

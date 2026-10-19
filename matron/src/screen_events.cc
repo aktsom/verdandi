@@ -33,6 +33,8 @@ static pthread_cond_t screen_q_nonempty;
 static void screen_events_emergency_clear();
 
 void screen_events_init() {
+    // a zeroed pthread_mutex_t is a valid unlocked mutex on glibc only; macOS needs init
+    pthread_mutex_init(&screen_q_lock, NULL);
     pthread_cond_init(&screen_q_nonempty, NULL);
     if (pthread_create(&screen_event_thread, NULL, screen_event_loop, 0)) {
         fprintf(stderr, "SCREEN: error creating thread\n");

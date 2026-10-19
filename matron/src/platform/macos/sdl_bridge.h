@@ -16,7 +16,7 @@ extern "C" {
 
 // main thread only
 extern void sdl_bridge_init(void);
-extern void sdl_bridge_run(void); // does not return; window close exits the process
+extern void sdl_bridge_run(void); // does not return; window close quits matron
 
 // any thread; blocks until the main thread has done the work
 extern SDL_Window *sdl_bridge_create_window(const char *title, int w, int h);
