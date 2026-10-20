@@ -9,7 +9,7 @@ this document covers:
 - advanced patterns (mocking c dependencies, helper files, test seams)
 - comprehensive examples and reference material
 
-for a quick start guide to writing your first test, see [CONTRIBUTING.md](../CONTRIBUTING.md#testing-cc-code).
+for a quick start guide to writing your first test, see [contributing-norns.md](../contributing-norns.md#testing-cc-code).
 
 all c/c++ components share one test runner system. `tests/wscript` discovers `test_*.cpp` files, links matching system sources, and builds one test binary per subdirectory. no manual configuration required.
 
