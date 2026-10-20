@@ -21,6 +21,36 @@ m.enc = function(n,d)
   end
 end
 
+-- macOS: the mouse on the screen (lua/core/menu.lua _norns.screen_mouse). the six
+-- columns out in mon eng cut tp are 22 pixels wide, their level bars 48 pixels high from y 55:
+-- pressing a column selects its pair, dragging sets its level, the wheel steps it
+local mouse_ch = {"output_level", "input_level", "monitor_level", "engine_level", "softcut_level", "tape_level"}
+
+local function mouse_column(x)
+  return util.clamp(math.floor(x / 22) + 1, 1, 6)
+end
+
+local function mouse_level(col, y)
+  params:set_raw(mouse_ch[col], util.clamp((55.5 - y) / 48, 0, 1))
+end
+
+m.mouse = function(x, y, kind, value)
+  if kind == "down" then
+    m.drag = mouse_column(x)
+    m.sel = math.ceil(m.drag / 2)
+    mouse_level(m.drag, y)
+  elseif kind == "drag" and m.drag then
+    mouse_level(m.drag, y)
+  elseif kind == "up" then
+    m.drag = nil
+  elseif kind == "wheel" then
+    local col = mouse_column(x)
+    m.sel = math.ceil(col / 2)
+    params:delta(mouse_ch[col], value)
+  end
+  _menu.redraw()
+end
+
 m.gamepad_axis = function (_sensor_axis,_value)
   if gamepad.left() then
     _menu.key(2,1)

@@ -10,7 +10,19 @@
 
 #include "window_keys.h"
 
-enum { U_A = 0x04, U_Q = 0x14, U_W = 0x1a, U_X = 0x1b, U_1 = 0x1e, U_3 = 0x20, U_ESC = 0x29, U_DOWN = 0x51, U_LALT = 0xe2 };
+enum {
+    U_A = 0x04,
+    U_Q = 0x14,
+    U_W = 0x1a,
+    U_X = 0x1b,
+    U_1 = 0x1e,
+    U_3 = 0x20,
+    U_ENTER = 0x28,
+    U_ESC = 0x29,
+    U_SPACE = 0x2c,
+    U_DOWN = 0x51,
+    U_LALT = 0xe2
+};
 
 static int failures = 0;
 
@@ -42,6 +54,9 @@ int main(void) {
     expect(&wk, "q up", U_Q, 0, 0, 0, 0, WK_HID, U_Q, 0);
     expect(&wk, "1 down", U_1, 1, 0, 0, 0, WK_HID, U_1, 1);
     expect(&wk, "1 up", U_1, 0, 0, 0, 0, WK_HID, U_1, 0);
+    // plain enter goes on as a keyboard key (lua's keyboard makes it K3 when nothing else wants it)
+    expect(&wk, "enter down", U_ENTER, 1, 0, 0, 0, WK_HID, U_ENTER, 1);
+    expect(&wk, "enter up", U_ENTER, 0, 0, 0, 0, WK_HID, U_ENTER, 0);
 
     // option + 1 holds K1 until 1 is released, even if option goes first (K1 + turn)
     window_keys_init(&wk);
@@ -79,6 +94,11 @@ int main(void) {
     expect(&wk, "3 in norns mode", U_3, 1, 0, 0, 0, WK_KEY, 3, 1);
     expect(&wk, "3 up", U_3, 0, 0, 0, 0, WK_KEY, 3, 0);
     expect(&wk, "q in norns mode", U_Q, 1, 0, 0, 0, WK_ENC, 1, -1);
+    expect(&wk, "q up", U_Q, 0, 0, 0, 0, -1, 0, 0);
+    expect(&wk, "enter in norns mode confirms", U_ENTER, 1, 0, 0, 0, WK_KEY, 3, 1);
+    expect(&wk, "enter up", U_ENTER, 0, 0, 0, 0, WK_KEY, 3, 0);
+    expect(&wk, "space in norns mode confirms", U_SPACE, 1, 0, 0, 0, WK_KEY, 3, 1);
+    expect(&wk, "space up", U_SPACE, 0, 0, 0, 0, WK_KEY, 3, 0);
     expect(&wk, "esc alone still types", U_ESC, 1, 0, 0, 0, WK_HID, U_ESC, 1);
     expect(&wk, "esc up", U_ESC, 0, 0, 0, 0, WK_HID, U_ESC, 0);
     expect(&wk, "opt+esc again", U_ESC, 1, 0, 1, 0, WK_MODE, 0, 0);

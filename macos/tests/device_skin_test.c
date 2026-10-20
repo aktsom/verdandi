@@ -70,6 +70,30 @@ static void test_geom(int w, int h) {
     }
     // the screen, the empty top and the outside are no control
     CHECK(skin_hit(&g, px(&g, 280), py(&g, 460)) == SKIN_NONE, "%dx%d: screen hits a control", w, h);
+
+    // the OUT fader right of E3 (x 913, 196 top = 1, 486 bottom = 0) and MUTE under it
+    CHECK(skin_hit(&g, px(&g, 913), py(&g, 340)) == SKIN_FADER, "%dx%d: fader middle", w, h);
+    CHECK(skin_hit(&g, px(&g, 913), py(&g, 190)) == SKIN_FADER && skin_hit(&g, px(&g, 913), py(&g, 495)) == SKIN_FADER,
+          "%dx%d: fader ends (the cap sticks out)", w, h);
+    CHECK(skin_hit(&g, px(&g, 913), py(&g, 537)) == SKIN_MUTE, "%dx%d: mute", w, h);
+    CHECK(skin_hit(&g, px(&g, 870), py(&g, 420)) == SKIN_E3, "%dx%d: E3's rim is still E3", w, h);
+    CHECK(fabs(skin_fader_value(&g, py(&g, 196)) - 1) < 1e-6 && fabs(skin_fader_value(&g, py(&g, 486))) < 1e-6,
+          "%dx%d: fader top 1, bottom 0", w, h);
+    CHECK(fabs(skin_fader_value(&g, py(&g, 341)) - 0.5) < 1e-6, "%dx%d: fader middle 0.5", w, h);
+    CHECK(skin_fader_value(&g, py(&g, 100)) == 1 && skin_fader_value(&g, py(&g, 600)) == 0, "%dx%d: fader clamps", w, h);
+
+    // oled pixels under the mouse
+    int ox = -1, oy = -1;
+    CHECK(skin_oled_pixel(&g, g.oled_x + 0.5, g.oled_y + 0.5, &ox, &oy) && ox == 0 && oy == 0, "%dx%d: oled 0,0", w, h);
+    CHECK(skin_oled_pixel(&g, g.oled_x + 127.5 * g.oled_px, g.oled_y + 63.5 * g.oled_px, &ox, &oy) && ox == 127 &&
+              oy == 63,
+          "%dx%d: oled 127,63 (%d,%d)", w, h, ox, oy);
+    CHECK(skin_oled_pixel(&g, g.oled_x + 30.5 * g.oled_px, g.oled_y + 10.5 * g.oled_px, &ox, &oy) && ox == 30 &&
+              oy == 10,
+          "%dx%d: oled 30,10", w, h);
+    CHECK(!skin_oled_pixel(&g, g.oled_x - 1, g.oled_y + 5, &ox, &oy) &&
+              !skin_oled_pixel(&g, g.oled_x + 5, g.oled_y + 64 * g.oled_px, &ox, &oy),
+          "%dx%d: off the oled", w, h);
     CHECK(skin_hit(&g, px(&g, 500), py(&g, 170)) == SKIN_NONE, "%dx%d: top hits a control", w, h);
     CHECK(skin_hit(&g, 1, 1) == SKIN_NONE, "%dx%d: corner hits a control", w, h);
     // the button row: pages, mic, grid, arc, keys, maiden, manual, left to right
@@ -292,7 +316,7 @@ int main(int argc, char **argv) {
         test_geom(sizes[i][0], sizes[i][1]);
     }
     if (argc > 1) {
-        skin_state_t idle = {.hover = SKIN_NONE, .input = SKIN_INPUT_MIC, .button_down = SKIN_NONE};
+        skin_state_t idle = {.hover = SKIN_NONE, .input = SKIN_INPUT_MIC, .button_down = SKIN_NONE, .out_level = 0.6};
         skin_state_t used = {.key_down = {0, 1, 0},
                              .enc_ticks = {0, 3, -5},
                              .hover = SKIN_E1,
@@ -301,8 +325,14 @@ int main(int argc, char **argv) {
                              .keys_open = 1,
                              .button_down = SKIN_MAIDEN,
                              .recording = 1,
+                             .out_level = 0.8,
                              .toast = "REC  GIF · \u21e7\u2318G stops"};
-        skin_state_t toast = {.hover = SKIN_NONE, .input = SKIN_INPUT_SYSTEM, .arc_open = 1, .toast = "3 files \u2192 dust/audio"};
+        skin_state_t toast = {.hover = SKIN_NONE,
+                              .input = SKIN_INPUT_SYSTEM,
+                              .arc_open = 1,
+                              .toast = "3 files \u2192 dust/audio",
+                              .out_level = 0.3,
+                              .out_muted = 1};
         render(argv[1], 1984, 1324, &idle, "");
         render(argv[1], 1984, 1324, &used, "_used");
         render(argv[1], 992, 662, &idle, "");

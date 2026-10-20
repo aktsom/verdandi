@@ -39,6 +39,8 @@ enum {
     SKIN_KEYS = 14,
     SKIN_MAIDEN = 15,
     SKIN_MANUAL = 16,
+    SKIN_FADER = 17, // the OUT fader right of E3 (not on the device): norns' output level
+    SKIN_MUTE = 18,  // under it: output off and back
 };
 
 // the MIC button: what reaches norns' input. lit unless OFF
@@ -61,6 +63,8 @@ typedef struct {
     int button_down;  // button held by the mouse, SKIN_NONE if none
     int recording;    // a gif of the screen is being recorded
     const char *toast; // a short message on the box (import, screenshot), NULL for none
+    double out_level;  // the OUT fader, 0-1 (the output level's place on its scale)
+    int out_muted;     // MUTE is on
 } skin_state_t;
 
 typedef struct {
@@ -78,6 +82,12 @@ extern int skin_hit(const skin_geom_t *g, double x, double y);
 
 // centre of the encoder nearest to device pixel x/y: 1-3
 extern int skin_nearest_enc(const skin_geom_t *g, double x, double y);
+
+// the OUT fader's value (0-1) for the pointer at device pixel height y
+extern double skin_fader_value(const skin_geom_t *g, double y);
+
+// the oled pixel (0-127, 0-63) under device pixel x/y; false if it is not on the oled
+extern int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy);
 
 // background, box, bezel and labels: everything that only changes with the size
 extern void skin_draw_static(cairo_t *cr, const skin_geom_t *g);

@@ -18,6 +18,10 @@ static const pt_t enc_pos[3] = {{216, 252}, {672, 420}, {827, 420}};
 static const double key_r = 31;
 static const double enc_r = 38; // washer; the knob itself is 31
 static const double bezel_x = 77, bezel_y = 356, bezel_w = 417, bezel_h = 220;
+// the OUT fader and MUTE, right of E3
+static const double fader_x = 913, fader_top = 196, fader_bottom = 486;
+static const double fader_cap_w = 34, fader_cap_h = 18;
+static const double mute_x = 886, mute_y = 520, mute_w = 54, mute_h = 34;
 static const double bezel_pad = 14;
 
 // the button row along the top: menu pages on the left, tools on the right
@@ -79,7 +83,28 @@ int skin_hit(const skin_geom_t *g, double x, double y) {
             return SKIN_E1 + i;
         }
     }
+    if (fabs(p.x - fader_x) <= fader_cap_w / 2 + 6 && p.y >= fader_top - fader_cap_h && p.y <= fader_bottom + fader_cap_h) {
+        return SKIN_FADER;
+    }
+    if (p.x >= mute_x - 3 && p.x <= mute_x + mute_w + 3 && p.y >= mute_y - 3 && p.y <= mute_y + mute_h + 3) {
+        return SKIN_MUTE;
+    }
     return SKIN_NONE;
+}
+
+double skin_fader_value(const skin_geom_t *g, double y) {
+    double v = (fader_bottom - (y - g->oy) / g->s) / (fader_bottom - fader_top);
+    return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy) {
+    int px = (int)floor((x - g->oled_x) / g->oled_px), py = (int)floor((y - g->oled_y) / g->oled_px);
+    if (px < 0 || px > 127 || py < 0 || py > 63) {
+        return 0;
+    }
+    *ox = px;
+    *oy = py;
+    return 1;
 }
 
 int skin_nearest_enc(const skin_geom_t *g, double x, double y) {
@@ -481,6 +506,104 @@ static void draw_toast(cairo_t *cr, const char *text, int recording) {
     cairo_restore(cr);
 }
 
+// the OUT fader: a slot, the level lit up to the cap, the cap; MUTE under it
+static void draw_fader(cairo_t *cr, const skin_state_t *st) {
+    double v = st->out_level < 0 ? 0 : st->out_level > 1 ? 1 : st->out_level;
+    double cy = fader_bottom - v * (fader_bottom - fader_top);
+    int hover = st->hover == SKIN_FADER;
+
+    // label, engraved like the others
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 15);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, "OUT", &te);
+    double lx = fader_x - te.width / 2 - te.x_bearing, ly = fader_top - fader_cap_h / 2 - 12;
+    cairo_move_to(cr, lx + 0.6, ly + 1.4);
+    cairo_set_source_rgba(cr, 1, 1, 1, 0.55);
+    cairo_show_text(cr, "OUT");
+    cairo_move_to(cr, lx, ly);
+    hex(cr, "4a4d52", 0.75);
+    cairo_show_text(cr, "OUT");
+
+    // scale marks
+    cairo_set_line_width(cr, 1);
+    for (int i = 0; i <= 8; i++) {
+        double y = fader_top + i * (fader_bottom - fader_top) / 8;
+        double w = i % 4 == 0 ? 9 : 5;
+        cairo_move_to(cr, fader_x - 11 - w, y + 0.5);
+        cairo_line_to(cr, fader_x - 11, y + 0.5);
+        cairo_move_to(cr, fader_x + 11, y + 0.5);
+        cairo_line_to(cr, fader_x + 11 + w, y + 0.5);
+    }
+    hex(cr, "7d8086", 0.8);
+    cairo_stroke(cr);
+
+    // slot
+    rounded_rect(cr, fader_x - 4, fader_top - 3, 8, fader_bottom - fader_top + 6, 4);
+    hex(cr, "1a1b1d", 1);
+    cairo_fill(cr);
+    // the level, unless muted
+    if (!st->out_muted && v > 0) {
+        rounded_rect(cr, fader_x - 2, cy, 4, fader_bottom - cy + 1, 2);
+        hex(cr, "ffb04a", 0.85);
+        cairo_fill(cr);
+    }
+
+    // cap
+    double x = fader_x - fader_cap_w / 2, y = cy - fader_cap_h / 2;
+    rounded_rect(cr, x, y + 2, fader_cap_w, fader_cap_h, 4);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.25);
+    cairo_fill(cr);
+    rounded_rect(cr, x, y, fader_cap_w, fader_cap_h, 4);
+    cairo_pattern_t *p = cairo_pattern_create_linear(0, y, 0, y + fader_cap_h);
+    stop(p, 0, "5b5e63", 1);
+    stop(p, 1, "26272a", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+    cairo_move_to(cr, x + 5, cy + 0.5);
+    cairo_line_to(cr, x + fader_cap_w - 5, cy + 0.5);
+    hex(cr, "c3c6cb", 0.9);
+    cairo_stroke(cr);
+    if (hover) {
+        rounded_rect(cr, x, y, fader_cap_w, fader_cap_h, 4);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.08);
+        cairo_fill(cr);
+    }
+
+    // MUTE: a small button, lit while muted
+    int down = st->button_down == SKIN_MUTE;
+    double dy = down ? 1.2 : 0;
+    rounded_rect(cr, mute_x - 2.5, mute_y - 2.5, mute_w + 5, mute_h + 5, 9);
+    p = cairo_pattern_create_linear(0, mute_y - 2.5, 0, mute_y + mute_h + 2.5);
+    stop(p, 0, "8e9196", 1);
+    stop(p, 1, "e3e5e8", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+    rounded_rect(cr, mute_x, mute_y + dy, mute_w, mute_h, 7);
+    p = cairo_pattern_create_linear(0, mute_y + dy, 0, mute_y + dy + mute_h);
+    stop(p, 0, down ? "232427" : "3d3f43", 1);
+    stop(p, 1, down ? "17181a" : "232427", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+    if (st->hover == SKIN_MUTE && !down) {
+        rounded_rect(cr, mute_x, mute_y, mute_w, mute_h, 7);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.07);
+        cairo_fill(cr);
+    }
+    double mid = mute_y + dy + mute_h / 2;
+    draw_led(cr, mute_x + 10, mid, st->out_muted);
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 10);
+    cairo_text_extents(cr, "MUTE", &te);
+    double area = mute_x + 17, area_w = mute_w - 19;
+    cairo_move_to(cr, area + (area_w - te.width) / 2 - te.x_bearing, mid - te.height / 2 - te.y_bearing);
+    hex(cr, st->out_muted ? "ffffff" : "c3c6cb", 1);
+    cairo_show_text(cr, "MUTE");
+}
+
 void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st) {
     cairo_save(cr);
     cairo_translate(cr, g->ox, g->oy);
@@ -495,6 +618,7 @@ void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *s
         draw_key(cr, key_pos[i], st->key_down[i], st->hover == SKIN_K1 + i);
         draw_knob(cr, enc_pos[i], st->enc_ticks[i], st->hover == SKIN_E1 + i);
     }
+    draw_fader(cr, st);
     cairo_restore(cr);
 }
 

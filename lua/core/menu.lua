@@ -277,6 +277,62 @@ function _menu.check_mic()
 end
 hook.system_post_startup:register("menu-mic", _menu.check_mic)
 
+-- the OUT fader and MUTE right of E3 on the window: output_level, as on the MIX page.
+-- MUTE keeps the level it had and gives it back; the level saved for the next start is that
+-- one, not silence
+local out_unmuted = nil
+
+local function show_output()
+  if _norns.show_control and params.lookup["output_level"] then
+    _norns.show_control(5, math.floor(params:get_raw("output_level") * 1000 + 0.5), out_unmuted and 1 or 0)
+  end
+end
+
+-- output_level changed (its action, lua/core/audio.lua)
+function _menu.output_changed(db)
+  if out_unmuted then
+    if db == -math.huge then
+      norns.state.mix.output = out_unmuted
+    else
+      -- turned up while muted: no longer muted
+      out_unmuted = nil
+    end
+  end
+  show_output()
+end
+
+_norns.output_fader = function(raw)
+  out_unmuted = nil
+  params:set_raw("output_level", tonumber(raw) or 0)
+end
+
+_norns.output_step = function(d)
+  params:delta("output_level", tonumber(d) or 0)
+end
+
+_norns.output_mute = function()
+  if out_unmuted then
+    local db = out_unmuted
+    out_unmuted = nil
+    params:set("output_level", db)
+  else
+    out_unmuted = params:get("output_level")
+    params:set("output_level", -math.huge)
+  end
+  show_output()
+end
+
+hook.system_post_startup:register("menu-out", show_output)
+
+-- the mouse on the oled (x 0-127, y 0-63; kind "down", "drag", "up", "wheel" with its
+-- steps), for the menu page that takes it (MIX)
+_norns.screen_mouse = function(x, y, kind, value)
+  local page = _menu.mode and m[_menu.page]
+  if page and page.mouse then
+    page.mouse(tonumber(x), tonumber(y), kind, tonumber(value) or 0)
+  end
+end
+
 -- 1-4: menu page (clicking the page that is up goes back to the script), 5: the manual of
 -- norns for macOS, 6: the next audio input (MIC > SYS > OFF)
 _norns.window_button = function(n)

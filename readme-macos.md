@@ -120,6 +120,11 @@ app but norns' own processes (`--system`) or the chosen one (Core Audio process 
 while tapped) through a private aggregate device and plays it into crone:input_1/2. it ends
 with norns (parent watch), with jack or on SIGTERM.
 
+OUT fader and MUTE (right of E3, `device_skin.c`): `_norns.output_fader` / `output_step` /
+`output_mute` (lua/core/menu.lua) set output_level, whose action shows it back
+(`SDL_BRIDGE_SHOW_OUT`). the mouse on the oled on the MIX page goes to lua as
+`_norns.screen_mouse(x, y, kind, value)`, oled pixels, for the page's `mouse` handler.
+
 a script's file: lua's fileselect also opens the Finder's open panel (`_norns.choose_file`,
 `mac_menu.m`); the choice, or a sample dropped on the window while the browser is up, comes
 back as `_norns.file_chosen` / `file_dropped` (audio from outside dust linked in first).
@@ -156,6 +161,7 @@ NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 <lua 5.3> macos/tests/menu_pages_test.lua
 <lua 5.3> macos/tests/input_modes_test.lua
 <lua 5.3> macos/tests/fileselect_finder_test.lua
+<lua 5.3> macos/tests/output_fader_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
 macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it
 ```

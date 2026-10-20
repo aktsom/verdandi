@@ -1740,6 +1740,8 @@ static void button_action(int control) {
         toggle_arc();
     } else if (control == SKIN_KEYS) {
         toggle_keys();
+    } else if (control == SKIN_MUTE) {
+        call_lua("output_mute", {});
     }
 }
 
@@ -1757,6 +1759,8 @@ static void to_pixels(Uint32 window_id, int x, int y, double *px, double *py) {
 
 static int held_key = 0; // key held by the mouse, 1-3
 static int drag_enc = 0; // knob turned by the mouse, 1-3
+static bool drag_fader = false; // the OUT fader held by the mouse
+static bool drag_oled = false;  // pressed on the oled on the MIX page (lua/core/menu/mix.lua)
 static double drag_acc = 0;
 static int drag_x, drag_y;
 // mouse travel per detent, in layout units; with shift 4x finer, with command 4x faster
@@ -1782,6 +1786,30 @@ static void set_hover(int control) {
     redraw(true);
 }
 
+// the OUT fader to the pointer: shown at once, the level set by lua (output_level)
+static void fader_to(double py) {
+    skin.out_level = skin_fader_value(&geom, py);
+    skin.out_muted = 0;
+    redraw(true);
+    call_lua("output_fader", {std::to_string(skin.out_level)});
+}
+
+// the mouse on the oled, as oled pixels, for the menu page (MIX only: its levels)
+static bool mouse_on_mix(void) {
+    return skin.page == 1;
+}
+
+static void oled_mouse(double px, double py, const char *kind, int value) {
+    int ox, oy;
+    if (!skin_oled_pixel(&geom, px, py, &ox, &oy)) {
+        // dragged off the oled: the nearest pixel on it
+        double fx = (px - geom.oled_x) / geom.oled_px, fy = (py - geom.oled_y) / geom.oled_px;
+        ox = fx < 0 ? 0 : fx > 127 ? 127 : (int)fx;
+        oy = fy < 0 ? 0 : fy > 63 ? 63 : (int)fy;
+    }
+    call_lua("screen_mouse", {std::to_string(ox), std::to_string(oy), kind, std::to_string(value)});
+}
+
 static void handle_button(const SDL_MouseButtonEvent *b) {
     if (b->button != SDL_BUTTON_LEFT) {
         return;
@@ -1789,11 +1817,20 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
     double px, py;
     to_pixels(b->windowID, b->x, b->y, &px, &py);
     if (b->type == SDL_MOUSEBUTTONDOWN) {
-        if (held_key != 0 || drag_enc != 0 || skin.button_down != SKIN_NONE) {
+        if (held_key != 0 || drag_enc != 0 || drag_fader || drag_oled || skin.button_down != SKIN_NONE) {
             return;
         }
         int c = skin_hit(&geom, px, py);
-        if (c >= SKIN_PAGE1) {
+        int ox, oy;
+        if (c == SKIN_FADER) {
+            drag_fader = true;
+            SDL_CaptureMouse(SDL_TRUE);
+            fader_to(py);
+        } else if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
+            drag_oled = true;
+            SDL_CaptureMouse(SDL_TRUE);
+            oled_mouse(px, py, "down", 0);
+        } else if (c >= SKIN_PAGE1) {
             // buttons act on release over the same button, like any mac button
             skin.button_down = c;
             redraw(true);
@@ -1825,10 +1862,29 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
             drag_enc = 0;
             SDL_CaptureMouse(SDL_FALSE);
         }
+        if (drag_fader) {
+            drag_fader = false;
+            SDL_CaptureMouse(SDL_FALSE);
+        }
+        if (drag_oled) {
+            drag_oled = false;
+            SDL_CaptureMouse(SDL_FALSE);
+            oled_mouse(px, py, "up", 0);
+        }
     }
 }
 
 static void handle_motion(const SDL_MouseMotionEvent *m) {
+    if (drag_fader || drag_oled) {
+        double px, py;
+        to_pixels(m->windowID, m->x, m->y, &px, &py);
+        if (drag_fader) {
+            fader_to(py);
+        } else {
+            oled_mouse(px, py, "drag", 0);
+        }
+        return;
+    }
     if (drag_enc != 0) {
         // up and right turn clockwise
         double px0, py0, px1, py1;
@@ -1862,8 +1918,18 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
     double px, py;
     to_pixels(w->windowID, mx, my, &px, &py);
     int c = skin_hit(&geom, px, py);
-    int n = c >= SKIN_E1 && c <= SKIN_E3 ? c - SKIN_E1 + 1 : skin_nearest_enc(&geom, px, py);
     int delta = w->direction == SDL_MOUSEWHEEL_FLIPPED ? -w->y : w->y;
+    int ox, oy;
+    // over the fader: the output level a step; over the oled on the MIX page: the level there
+    if (c == SKIN_FADER || c == SKIN_MUTE) {
+        call_lua("output_step", {std::to_string(delta)});
+        return;
+    }
+    if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
+        oled_mouse(px, py, "wheel", delta);
+        return;
+    }
+    int n = c >= SKIN_E1 && c <= SKIN_E3 ? c - SKIN_E1 + 1 : skin_nearest_enc(&geom, px, py);
     post_enc(n, delta);
 }
 
@@ -1907,6 +1973,15 @@ static void handle_show(int kind, int n, int value) {
         mac_menu_set_input(n);
         if (skin.input != n) {
             skin.input = n;
+            redraw(true);
+        }
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_OUT) {
+        // while the mouse holds the fader it is where the mouse is
+        if (!drag_fader) {
+            skin.out_level = n / 1000.0;
+            skin.out_muted = value != 0;
             redraw(true);
         }
         return;

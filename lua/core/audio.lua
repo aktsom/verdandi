@@ -620,6 +620,8 @@ function Audio.add_params()
     function(x) 
       audio.level_dac(util.dbamp(x))
       norns.state.mix.output = x
+      -- macOS: the OUT fader on the window follows (lua/core/menu.lua)
+      if _menu and _menu.output_changed then _menu.output_changed(x) end
     end)
   params:set_save("output_level", false)
   params:add_control("input_level", "input",

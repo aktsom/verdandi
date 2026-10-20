@@ -29,6 +29,7 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ENC 2
 #define SDL_BRIDGE_SHOW_PAGE 3 // n = menu page 1-4, 0 = script
 #define SDL_BRIDGE_SHOW_MIC 4  // n = what the input hears: SKIN_INPUT_* (0 off, 1 mic, 2 system, 3 app)
+#define SDL_BRIDGE_SHOW_OUT 5  // n = the output level's place on its scale x 1000, value = muted
 extern void sdl_bridge_show_control(int kind, int n, int value);
 
 // any thread, does not block: open or close a virtual device window

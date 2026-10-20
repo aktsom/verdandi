@@ -17,11 +17,14 @@ enum {
     U_1 = 0x1e,
     U_2 = 0x1f,
     U_3 = 0x20,
+    U_ENTER = 0x28,
     U_ESC = 0x29,
+    U_SPACE = 0x2c,
     U_RIGHT = 0x4f,
     U_LEFT = 0x50,
     U_DOWN = 0x51,
     U_UP = 0x52,
+    U_KP_ENTER = 0x58,
 };
 
 static int control_key(int usage) {
@@ -29,6 +32,10 @@ static int control_key(int usage) {
     case U_1: return 1;
     case U_2: return 2;
     case U_3: return 3;
+    // confirm
+    case U_ENTER: return 3;
+    case U_KP_ENTER: return 3;
+    case U_SPACE: return 3;
     default: return 0;
     }
 }
