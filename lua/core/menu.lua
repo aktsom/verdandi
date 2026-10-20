@@ -164,6 +164,49 @@ _norns.key = function(n, z)
 end
 
 -- _menu.set mode
+--- macOS window (matron/src/platform/macos/sdl_bridge.cc): the device has a button row
+-- with the four pages, GRID, MAIDEN and MANUAL; the page buttons light up
+local function show_page()
+  if _norns.show_control then
+    local p = 0
+    if _menu.mode then p = tab.key(_menu.panels, _menu.page) or _menu.panel end
+    _norns.show_control(3, p, 0)
+  end
+end
+
+-- the docs of the script that is running: catalog entry by project (folder) name
+local function script_docs()
+  local project = norns.state.script and norns.state.script:match("/code/([^/]+)/")
+  if project == nil then return nil end
+  for _, f in ipairs(util.scandir(_path.data .. "catalogs/") or {}) do
+    local fd = io.open(_path.data .. "catalogs/" .. f)
+    if fd then
+      local ok, cat = pcall(json.decode, fd:read("a"))
+      fd:close()
+      for _, e in ipairs(ok and type(cat) == "table" and cat.entries or {}) do
+        if e.project_name == project then
+          return e.documentation_url or e.discussion_url or e.project_url
+        end
+      end
+    end
+  end
+end
+
+-- 1-4: menu page (clicking the page that is up goes back to the script), 5: manual
+_norns.window_button = function(n)
+  if n >= 1 and n <= 4 then
+    if _menu.mode and _menu.page == _menu.panels[n] and not _menu.locked then
+      _menu.set_mode(false)
+    else
+      if not _menu.mode then _menu.set_mode(true) end
+      _menu.goto_panel(n)
+    end
+  elseif n == 5 and _norns.open_url then
+    local url = script_docs() or os.getenv("NORNS_MANUAL")
+    if url then _norns.open_url(url) end
+  end
+end
+
 _menu.set_mode = function(mode)
   if mode == false then -- ACTIVATE PLAY MODE
     if _menu.mode == true then _norns.screen_restore() end
@@ -195,6 +238,7 @@ _menu.set_mode = function(mode)
     norns.encoders.set_sens(3,2)
     _menu.set_page(_menu.page)
   end
+  show_page()
 end
 
 -- set page
@@ -213,6 +257,13 @@ _menu.set_page = function(page)
   _menu.custom_gamepad_analog = m[page].gamepad_analog
   m[page].init()
   _menu.redraw()
+  show_page()
+end
+
+-- go to one of the four pages (MIX TAPE HOME PARAMS), keeping E1 in step
+function _menu.goto_panel(n)
+  _menu.panel = n
+  _menu.set_page(_menu.panels[n])
 end
 
 -- draw panel indicator
@@ -234,16 +285,16 @@ function _menu.keycode(c,value)
   -- those are globals and can't be overriden by a sub-menu
   if value>0 then
     if c=="F1" then
-      _menu.set_page("MIX")
+      _menu.goto_panel(1)
       return
     elseif c=="F2" then
-      _menu.set_page("TAPE")
+      _menu.goto_panel(2)
       return
     elseif c=="F3" then
-      _menu.set_page("HOME")
+      _menu.goto_panel(3)
       return
     elseif c=="F4" then
-      _menu.set_page("PARAMS")
+      _menu.goto_panel(4)
       return
     end
   end

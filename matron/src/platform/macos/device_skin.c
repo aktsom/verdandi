@@ -19,6 +19,18 @@ static const double enc_r = 38; // washer; the knob itself is 31
 static const double bezel_x = 77, bezel_y = 356, bezel_w = 417, bezel_h = 220;
 static const double bezel_pad = 14;
 
+// the button row along the top: menu pages on the left, tools on the right
+typedef struct {
+    double x;
+    const char *label;
+} button_t;
+static const button_t buttons[] = {
+    {77, "MIX"},   {181, "TAPE"},   {285, "HOME"},   {389, "PARAMS"}, // SKIN_PAGE1..4
+    {561, "GRID"}, {665, "MAIDEN"}, {769, "MANUAL"},                  // SKIN_GRID..MANUAL
+};
+#define NBUTTONS ((int)(sizeof buttons / sizeof buttons[0]))
+static const double button_y = 70, button_w = 96, button_h = 40;
+
 // the knobs are endless encoders: no pointer, only the knurl moves. one detent turns it by
 // a third of the knurl spacing, so it always visibly moves the right way
 #define KNURLS 60
@@ -51,6 +63,12 @@ static double dist(pt_t a, pt_t b) {
 
 int skin_hit(const skin_geom_t *g, double x, double y) {
     pt_t p = to_units(g, x, y);
+    for (int i = 0; i < NBUTTONS; i++) {
+        if (p.x >= buttons[i].x - 3 && p.x <= buttons[i].x + button_w + 3 && p.y >= button_y - 3 &&
+            p.y <= button_y + button_h + 3) {
+            return SKIN_PAGE1 + i;
+        }
+    }
     for (int i = 0; i < 3; i++) {
         if (dist(p, key_pos[i]) <= key_r + 6) {
             return SKIN_K1 + i;
@@ -328,10 +346,98 @@ static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
     }
 }
 
+// a lit (amber) or dark led
+static void draw_led(cairo_t *cr, double x, double y, int on) {
+    if (on) {
+        cairo_pattern_t *p = cairo_pattern_create_radial(x, y, 0, x, y, 11);
+        stop(p, 0, "ffb04a", 0.55);
+        stop(p, 1, "ffb04a", 0);
+        cairo_set_source(cr, p);
+        circle(cr, x, y, 11);
+        cairo_fill(cr);
+        cairo_pattern_destroy(p);
+    }
+    circle(cr, x, y, 3.6);
+    hex(cr, on ? "ffc46b" : "3b3c40", 1);
+    cairo_fill(cr);
+}
+
+// "opens elsewhere": a small arrow up and right
+static void draw_out_arrow(cairo_t *cr, double x, double y) {
+    cairo_set_line_width(cr, 1.6);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to(cr, x - 3.5, y + 3.5);
+    cairo_line_to(cr, x + 3.5, y - 3.5);
+    cairo_move_to(cr, x - 1, y - 3.5);
+    cairo_line_to(cr, x + 3.5, y - 3.5);
+    cairo_line_to(cr, x + 3.5, y + 1);
+    hex(cr, "8d9096", 1);
+    cairo_stroke(cr);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+}
+
+static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
+    const button_t *b = &buttons[i];
+    int id = SKIN_PAGE1 + i;
+    int down = st->button_down == id;
+    int lit = (id <= SKIN_PAGE4 && st->page == i + 1) || (id == SKIN_GRID && st->grid_open);
+    double x = b->x, y = button_y, dy = down ? 1.2 : 0;
+
+    // well
+    rounded_rect(cr, x - 2.5, y - 2.5, button_w + 5, button_h + 5, 10);
+    cairo_pattern_t *p = cairo_pattern_create_linear(0, y - 2.5, 0, y + button_h + 2.5);
+    stop(p, 0, "8e9196", 1);
+    stop(p, 1, "e3e5e8", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+
+    // face
+    rounded_rect(cr, x, y + dy, button_w, button_h, 8);
+    p = cairo_pattern_create_linear(0, y + dy, 0, y + dy + button_h);
+    stop(p, 0, down ? "232427" : "3d3f43", 1);
+    stop(p, 1, down ? "17181a" : "232427", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+    cairo_set_line_width(cr, 1);
+    rounded_rect(cr, x + 0.5, y + dy + 0.5, button_w - 1, button_h - 1, 7.5);
+    p = cairo_pattern_create_linear(0, y + dy, 0, y + dy + button_h);
+    stop(p, 0, "ffffff", down ? 0.06 : 0.22);
+    stop(p, 0.5, "ffffff", 0);
+    cairo_set_source(cr, p);
+    cairo_stroke(cr);
+    cairo_pattern_destroy(p);
+    if (st->hover == id && !down) {
+        rounded_rect(cr, x, y, button_w, button_h, 8);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.07);
+        cairo_fill(cr);
+    }
+
+    // led or arrow on the left, label in the rest
+    double mid = y + dy + button_h / 2;
+    if (id <= SKIN_GRID) {
+        draw_led(cr, x + 15, mid, lit);
+    } else {
+        draw_out_arrow(cr, x + 15, mid);
+    }
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 13);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, b->label, &te);
+    double area = x + 26, area_w = button_w - 30;
+    cairo_move_to(cr, area + (area_w - te.width) / 2 - te.x_bearing, mid - te.height / 2 - te.y_bearing);
+    hex(cr, lit ? "ffffff" : "c3c6cb", 1);
+    cairo_show_text(cr, b->label);
+}
+
 void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st) {
     cairo_save(cr);
     cairo_translate(cr, g->ox, g->oy);
     cairo_scale(cr, g->s, g->s);
+    for (int i = 0; i < NBUTTONS; i++) {
+        draw_button(cr, i, st);
+    }
     for (int i = 0; i < 3; i++) {
         draw_key(cr, key_pos[i], st->key_down[i], st->hover == SKIN_K1 + i);
         draw_knob(cr, enc_pos[i], st->enc_ticks[i], st->hover == SKIN_E1 + i);

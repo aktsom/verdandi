@@ -117,6 +117,8 @@ typedef enum {
     EVENT_TAPE_RECORD_CLOSE,
     // detached system action launch result
     EVENT_SYSTEM_CMD_DONE,
+    // macOS window: a button on the device was clicked (uses struct event_key, n = button)
+    EVENT_WINDOW_BUTTON,
 } event_t;
 
 // a data structure for twelve volume levels

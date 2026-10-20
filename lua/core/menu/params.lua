@@ -49,12 +49,13 @@ end
 local function build_page()
   page = {}
   local i = 1
-  repeat
+  -- while, not repeat: with no params yet (PARAMS opened during startup) there is no index 1
+  while i <= params.count do
     if params:visible(i) then table.insert(page, i) end
     if params:t(i) == params.tGROUP then
       i = i + params:get(i) + 1
     else i = i + 1 end
-  until i > params.count
+  end
 end
 
 local function build_sub(sub)

@@ -230,6 +230,9 @@ static void handle_event(union event_data *ev) {
     case EVENT_ENC:
         w_handle_enc(ev->enc.n, ev->enc.delta);
         break;
+    case EVENT_WINDOW_BUTTON:
+        w_handle_window_button(ev->key.n);
+        break;
     case EVENT_BATTERY:
         w_handle_battery(ev->battery.percent, ev->battery.current);
         break;

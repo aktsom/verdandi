@@ -219,6 +219,9 @@ function keyboard.process(type,code,value)
     -- toggle menu with F5
   elseif (c=="F5" and value==1) then 
     _menu.set_mode(not _menu.mode)
+    -- macOS: F6 opens / closes the virtual grid window
+  elseif (c=="F6" and value==1 and _norns.grid_window) then
+    _norns.grid_window()
     -- menu keycode
   elseif _menu.mode then _menu.keycode(c,value)
     -- script keycode

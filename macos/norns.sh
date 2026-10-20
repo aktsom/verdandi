@@ -63,6 +63,8 @@ export NORNS_HARDWARE_KEYS=1
 export NORNS_PLATFORM=macos
 # dock icon of the norns window
 export NORNS_ICON="$REPO/macos/norns-icon.png"
+# the MANUAL button when the running script has no docs in the catalog
+export NORNS_MANUAL="$REPO/macos/manual/manual.html"
 cd "$NORNS_HOME"
 
 mkdir -p dust/code dust/audio dust/data

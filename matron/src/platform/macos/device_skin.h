@@ -22,19 +22,28 @@ extern "C" {
 #define SKIN_H 630
 #define SKIN_MARGIN 16
 
-// controls: 1-3 = K1-K3, 4-6 = E1-E3
+// controls: 1-3 = K1-K3, 4-6 = E1-E3, then the button row along the top (not on the
+// device): the menu pages MIX TAPE HOME PARAMS, GRID (virtual grid window), MAIDEN, MANUAL
 enum {
     SKIN_NONE = 0,
     SKIN_K1 = 1,
     SKIN_K3 = 3,
     SKIN_E1 = 4,
     SKIN_E3 = 6,
+    SKIN_PAGE1 = 7,
+    SKIN_PAGE4 = 10,
+    SKIN_GRID = 11,
+    SKIN_MAIDEN = 12,
+    SKIN_MANUAL = 13,
 };
 
 typedef struct {
     int key_down[3];  // K1-K3 held
     int enc_ticks[3]; // E1-E3 turned so far, sets the knob angle
     int hover;        // control under the mouse, SKIN_NONE if none
+    int page;         // menu page shown (1-4: MIX TAPE HOME PARAMS), 0 = script
+    int grid_open;    // virtual grid window open
+    int button_down;  // button held by the mouse, SKIN_NONE if none
 } skin_state_t;
 
 typedef struct {

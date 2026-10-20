@@ -10,6 +10,11 @@
  * receives, whatever sent it (mouse, keyboard, midi mapping): matron reports every
  * key/enc event back through sdl_bridge_show_control().
  *
+ * the button row above the device opens the menu pages, maiden, the manual and the virtual
+ * grid: a second window that libmonome sees as a usb grid (vgrid_device.h). click a key to
+ * press it, drag across keys to play them in turn, right-click (or ctrl-click) to latch a
+ * key down, for chords.
+ *
  * keyboard: plain keys go to norns as the usb keyboard, where lua/core/keyboard.lua turns
  * 1 2 3 / QW AS ZX into K1-3 / E1-3 when nothing else wants them. window_keys.h adds the
  * overrides for scripts that use the keyboard: Option + those keys, and Option+Esc to force
@@ -28,8 +33,14 @@
 #include "event_types.h"
 #include "events.h"
 
+#include "device.h"
+#include "device_list.h"
 #include "device_monitor_macos.h"
+#include "device_runloop.h"
 #include "device_skin.h"
+#include "open_url.h"
+#include "vgrid_device.h"
+#include "vgrid_skin.h"
 #include "window_keys.h"
 #include "sdl_bridge.h"
 
@@ -50,6 +61,7 @@ typedef struct {
 
 static Uint32 bridge_event_type = (Uint32)-1;
 static Uint32 show_event_type = (Uint32)-1;
+static Uint32 grid_event_type = (Uint32)-1;
 static pthread_t main_thread;
 
 //--- drawing (main thread only)
@@ -231,6 +243,202 @@ static void bridge_call(bridge_req_t *req) {
     dispatch_release(req->done);
 }
 
+//--- virtual grid window (main thread, except grid_changed)
+
+static vgrid_device_t *vgrid = NULL;
+static SDL_Window *grid_window = NULL;
+static vgrid_geom_t grid_geom = {};
+static int grid_w = 0, grid_h = 0;
+static cairo_surface_t *grid_canvas = NULL;
+static SDL_Surface *grid_canvas_sdl = NULL;
+static uint8_t grid_held[VGRID_ROWS][VGRID_COLS];
+static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
+static int grid_pending = 0;
+
+// device thread: leds changed; one redraw request at a time
+static void grid_changed(void *ctx) {
+    (void)ctx;
+    if (__atomic_exchange_n(&grid_pending, 1, __ATOMIC_ACQ_REL) == 0) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = grid_event_type;
+        SDL_PushEvent(&ev);
+    }
+}
+
+static void grid_free_canvas(void) {
+    if (grid_canvas_sdl != NULL) {
+        SDL_FreeSurface(grid_canvas_sdl);
+        grid_canvas_sdl = NULL;
+    }
+    if (grid_canvas != NULL) {
+        cairo_surface_destroy(grid_canvas);
+        grid_canvas = NULL;
+    }
+    grid_w = grid_h = 0;
+}
+
+static void grid_redraw(void) {
+    __atomic_store_n(&grid_pending, 0, __ATOMIC_RELEASE);
+    if (grid_window == NULL || vgrid == NULL) {
+        return;
+    }
+    SDL_Surface *dst = SDL_GetWindowSurface(grid_window);
+    if (dst == NULL) {
+        return;
+    }
+    if (grid_canvas == NULL || grid_w != dst->w || grid_h != dst->h) {
+        grid_free_canvas();
+        grid_canvas = cairo_image_surface_create(CAIRO_FORMAT_RGB24, dst->w, dst->h);
+        grid_canvas_sdl = SDL_CreateRGBSurfaceWithFormatFrom(cairo_image_surface_get_data(grid_canvas), dst->w, dst->h,
+                                                             32, cairo_image_surface_get_stride(grid_canvas),
+                                                             SDL_PIXELFORMAT_RGB888);
+        if (grid_canvas_sdl == NULL) {
+            grid_free_canvas();
+            return;
+        }
+        SDL_SetSurfaceBlendMode(grid_canvas_sdl, SDL_BLENDMODE_NONE);
+        grid_w = dst->w;
+        grid_h = dst->h;
+        vgrid_skin_geom(grid_w, grid_h, &grid_geom);
+    }
+    uint8_t level[VGRID_ROWS][VGRID_COLS];
+    int intensity;
+    vgrid_levels(vgrid, level, &intensity);
+    cairo_t *cr = cairo_create(grid_canvas);
+    vgrid_skin_draw(cr, &grid_geom, grid_w, grid_h, level, intensity, grid_held);
+    cairo_destroy(cr);
+    cairo_surface_flush(grid_canvas);
+    SDL_BlitSurface(grid_canvas_sdl, NULL, dst, NULL);
+    SDL_UpdateWindowSurface(grid_window);
+}
+
+static void redraw(bool full);
+
+static void toggle_grid(void) {
+    if (vgrid != NULL) {
+        // matron closes its side first (dev_delete -> monome_close), then the pty goes
+        const char *path = vgrid_path(vgrid);
+        device_runloop_sync(^{
+          dev_list_remove(DEV_TYPE_MONOME, path);
+        });
+        vgrid_close(vgrid);
+        vgrid = NULL;
+        SDL_DestroyWindow(grid_window);
+        grid_window = NULL;
+        grid_free_canvas();
+        memset(grid_held, 0, sizeof grid_held);
+        grid_mouse_c = grid_mouse_r = -1;
+        skin.grid_open = 0;
+        redraw(true);
+        return;
+    }
+    vgrid = vgrid_open("virtual grid", grid_changed, NULL);
+    if (vgrid == NULL) {
+        fprintf(stderr, "sdl_bridge: virtual grid failed\n");
+        return;
+    }
+    // under the norns window if there is room
+    int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
+    if (the_window != NULL) {
+        int wx, wy, ww, wh;
+        SDL_Rect usable;
+        SDL_GetWindowPosition(the_window, &wx, &wy);
+        SDL_GetWindowSize(the_window, &ww, &wh);
+        if (SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(the_window), &usable) == 0 &&
+            wy + wh + 40 + VGRID_SKIN_H <= usable.y + usable.h) {
+            x = wx + (ww - VGRID_SKIN_W) / 2;
+            y = wy + wh + 40;
+        }
+    }
+    grid_window = SDL_CreateWindow("grid", x, y, VGRID_SKIN_W, VGRID_SKIN_H,
+                                   SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+    if (grid_window != NULL) {
+        SDL_SetWindowMinimumSize(grid_window, VGRID_SKIN_W / 2, VGRID_SKIN_H / 2);
+        set_icon(grid_window);
+    }
+    const char *path = vgrid_path(vgrid);
+    device_runloop_sync(^{
+      dev_list_add(DEV_TYPE_MONOME, path, strdup("virtual grid"), NULL);
+    });
+    // libmonome has it open now: no files are left behind, whatever happens later
+    vgrid_unlink(vgrid);
+    skin.grid_open = 1;
+    redraw(true);
+    grid_redraw();
+}
+
+static bool is_grid_window(Uint32 window_id) {
+    return grid_window != NULL && window_id == SDL_GetWindowID(grid_window);
+}
+
+static bool grid_key_at(Uint32 window_id, int x, int y, int *c, int *r) {
+    int ww = 1, wh = 1;
+    SDL_GetWindowSize(SDL_GetWindowFromID(window_id), &ww, &wh);
+    double k = grid_w > 0 ? (double)grid_w / ww : 1;
+    return vgrid_skin_hit(&grid_geom, x * k, y * k, c, r);
+}
+
+static void grid_press(int c, int r) {
+    if (grid_held[r][c] == 0) {
+        vgrid_key(vgrid, c, r, 1);
+    }
+}
+
+// the left button lets go of c,r: up unless it is latched
+static void grid_let_go(int c, int r) {
+    grid_held[r][c] &= ~VGRID_HELD_MOUSE;
+    if (grid_held[r][c] == 0) {
+        vgrid_key(vgrid, c, r, 0);
+    }
+}
+
+static void grid_button(const SDL_MouseButtonEvent *b) {
+    int c, r;
+    bool hit = grid_key_at(b->windowID, b->x, b->y, &c, &r);
+    bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
+    if (b->button == SDL_BUTTON_LEFT && !ctrl) {
+        if (b->type == SDL_MOUSEBUTTONDOWN) {
+            if (!hit || grid_mouse_c >= 0) {
+                return;
+            }
+            // a latched key taken by the left button is let go on release
+            grid_press(c, r);
+            grid_held[r][c] = VGRID_HELD_MOUSE;
+            grid_mouse_c = c;
+            grid_mouse_r = r;
+        } else if (grid_mouse_c >= 0) {
+            grid_let_go(grid_mouse_c, grid_mouse_r);
+            grid_mouse_c = grid_mouse_r = -1;
+        }
+    } else if ((b->button == SDL_BUTTON_RIGHT || ctrl) && b->type == SDL_MOUSEBUTTONDOWN && hit) {
+        if (grid_held[r][c] & VGRID_HELD_LATCH) {
+            grid_held[r][c] &= ~VGRID_HELD_LATCH;
+            if (grid_held[r][c] == 0) {
+                vgrid_key(vgrid, c, r, 0);
+            }
+        } else {
+            grid_press(c, r);
+            grid_held[r][c] |= VGRID_HELD_LATCH;
+        }
+    }
+    grid_redraw();
+}
+
+static void grid_motion(const SDL_MouseMotionEvent *m) {
+    int c, r;
+    if (grid_mouse_c < 0 || !grid_key_at(m->windowID, m->x, m->y, &c, &r) || (c == grid_mouse_c && r == grid_mouse_r)) {
+        return;
+    }
+    // dragging across keys plays them one after the other
+    grid_let_go(grid_mouse_c, grid_mouse_r);
+    grid_press(c, r);
+    grid_held[r][c] |= VGRID_HELD_MOUSE;
+    grid_mouse_c = c;
+    grid_mouse_r = r;
+    grid_redraw();
+}
+
 //--- input
 
 static void post_key(int n, int z) {
@@ -245,6 +453,26 @@ static void post_enc(int n, int delta) {
     ev->enc.n = n;
     ev->enc.delta = delta;
     event_post(ev);
+}
+
+// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual
+static void post_window_button(int n) {
+    union event_data *ev = event_data_new(EVENT_WINDOW_BUTTON);
+    ev->key.n = n;
+    ev->key.val = 1;
+    event_post(ev);
+}
+
+static void button_action(int control) {
+    if (control >= SKIN_PAGE1 && control <= SKIN_PAGE4) {
+        post_window_button(control - SKIN_PAGE1 + 1);
+    } else if (control == SKIN_MANUAL) {
+        post_window_button(5);
+    } else if (control == SKIN_MAIDEN) {
+        macos_open_url("http://127.0.0.1:5000/maiden");
+    } else if (control == SKIN_GRID) {
+        toggle_grid();
+    }
 }
 
 // window points -> window surface pixels (retina)
@@ -263,8 +491,19 @@ static int held_key = 0; // key held by the mouse, 1-3
 static int drag_enc = 0; // knob turned by the mouse, 1-3
 static double drag_acc = 0;
 static int drag_x, drag_y;
-// mouse travel per detent, in layout units
+// mouse travel per detent, in layout units; with shift 4x finer, with command 4x faster
 #define DRAG_STEP 5.0
+
+static double drag_step(void) {
+    SDL_Keymod mod = SDL_GetModState();
+    if (mod & KMOD_SHIFT) {
+        return DRAG_STEP * 4;
+    }
+    if (mod & KMOD_GUI) {
+        return DRAG_STEP / 4;
+    }
+    return DRAG_STEP;
+}
 
 static SDL_Cursor *cursor_hand = NULL;
 static SDL_Cursor *cursor_arrow = NULL;
@@ -286,14 +525,18 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
     if (b->button != SDL_BUTTON_LEFT) {
         return;
     }
+    double px, py;
+    to_pixels(b->windowID, b->x, b->y, &px, &py);
     if (b->type == SDL_MOUSEBUTTONDOWN) {
-        if (held_key != 0 || drag_enc != 0) {
+        if (held_key != 0 || drag_enc != 0 || skin.button_down != SKIN_NONE) {
             return;
         }
-        double px, py;
-        to_pixels(b->windowID, b->x, b->y, &px, &py);
         int c = skin_hit(&geom, px, py);
-        if (c >= SKIN_K1 && c <= SKIN_K3) {
+        if (c >= SKIN_PAGE1) {
+            // buttons act on release over the same button, like any mac button
+            skin.button_down = c;
+            redraw(true);
+        } else if (c >= SKIN_K1 && c <= SKIN_K3) {
             held_key = c - SKIN_K1 + 1;
             post_key(held_key, 1);
         } else if (c >= SKIN_E1 && c <= SKIN_E3) {
@@ -305,6 +548,14 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
             SDL_CaptureMouse(SDL_TRUE);
         }
     } else {
+        if (skin.button_down != SKIN_NONE) {
+            int c = skin.button_down;
+            skin.button_down = SKIN_NONE;
+            redraw(true);
+            if (skin_hit(&geom, px, py) == c) {
+                button_action(c);
+            }
+        }
         if (held_key != 0) {
             post_key(held_key, 0);
             held_key = 0;
@@ -325,14 +576,15 @@ static void handle_motion(const SDL_MouseMotionEvent *m) {
         drag_x = m->x;
         drag_y = m->y;
         drag_acc += ((px1 - px0) - (py1 - py0)) / (geom.s > 0 ? geom.s : 1);
-        int ticks = (int)(drag_acc / DRAG_STEP);
+        double step = drag_step();
+        int ticks = (int)(drag_acc / step);
         if (ticks != 0) {
-            drag_acc -= ticks * DRAG_STEP;
+            drag_acc -= ticks * step;
             post_enc(drag_enc, ticks);
         }
         return;
     }
-    if (held_key != 0) {
+    if (held_key != 0 || skin.button_down != SKIN_NONE) {
         return;
     }
     double px, py;
@@ -386,6 +638,13 @@ static void handle_key(const SDL_KeyboardEvent *k) {
 
 // a key/enc event reached norns: move the control on screen
 static void handle_show(int kind, int n, int value) {
+    if (kind == SDL_BRIDGE_SHOW_PAGE) {
+        if (n >= 0 && n <= 4 && n != skin.page) {
+            skin.page = n;
+            redraw(true);
+        }
+        return;
+    }
     if (n < 1 || n > 3) {
         return;
     }
@@ -408,8 +667,11 @@ void sdl_bridge_init(void) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "sdl_bridge: SDL_Init failed: %s\n", SDL_GetError());
     }
-    bridge_event_type = SDL_RegisterEvents(2);
+    // right button on a trackpad: ctrl-click
+    SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
+    bridge_event_type = SDL_RegisterEvents(3);
     show_event_type = bridge_event_type + 1;
+    grid_event_type = bridge_event_type + 2;
 }
 
 void sdl_bridge_show_control(int kind, int n, int value) {
@@ -422,6 +684,17 @@ void sdl_bridge_show_control(int kind, int n, int value) {
     ev.user.code = kind;
     ev.user.data1 = (void *)(intptr_t)n;
     ev.user.data2 = (void *)(intptr_t)value;
+    SDL_PushEvent(&ev);
+}
+
+void sdl_bridge_toggle_grid(void) {
+    if (grid_event_type == (Uint32)-1) {
+        return;
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = grid_event_type;
+    ev.user.code = 1;
     SDL_PushEvent(&ev);
 }
 
@@ -441,6 +714,14 @@ void sdl_bridge_run(void) {
             handle_show(ev.user.code, (int)(intptr_t)ev.user.data1, (int)(intptr_t)ev.user.data2);
             continue;
         }
+        if (ev.type == grid_event_type) {
+            if (ev.user.code == 1) {
+                toggle_grid();
+            } else {
+                grid_redraw();
+            }
+            continue;
+        }
         switch (ev.type) {
         case SDL_QUIT:
             // window closed: let matron leave its event loop; the norns thread cleans up
@@ -452,17 +733,39 @@ void sdl_bridge_run(void) {
             handle_key(&ev.key);
             break;
         case SDL_MOUSEWHEEL:
-            handle_wheel(&ev.wheel);
+            if (!is_grid_window(ev.wheel.windowID)) {
+                handle_wheel(&ev.wheel);
+            }
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
-            handle_button(&ev.button);
+            if (is_grid_window(ev.button.windowID)) {
+                grid_button(&ev.button);
+            } else {
+                handle_button(&ev.button);
+            }
             break;
         case SDL_MOUSEMOTION:
-            handle_motion(&ev.motion);
+            if (is_grid_window(ev.motion.windowID)) {
+                grid_motion(&ev.motion);
+            } else {
+                handle_motion(&ev.motion);
+            }
             break;
         case SDL_WINDOWEVENT:
-            if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
+            if (is_grid_window(ev.window.windowID)) {
+                if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
+                    toggle_grid();
+                } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                           ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
+                    grid_redraw();
+                }
+                break;
+            }
+            if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
+                // with the grid open, closing the norns window is no SDL_QUIT
+                event_post(event_data_new(EVENT_QUIT));
+            } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
                 redraw(true);
             } else if (ev.window.event == SDL_WINDOWEVENT_LEAVE && held_key == 0 && drag_enc == 0) {
                 set_hover(SKIN_NONE);

@@ -67,6 +67,7 @@ extern void w_handle_engine_load_done();
 
 //--- gpio handler
 extern void w_handle_key(const int n, const int val);
+extern void w_handle_window_button(const int n);
 extern void w_handle_enc(const int n, const int delta);
 
 //--- system/battery

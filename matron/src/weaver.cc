@@ -54,6 +54,7 @@
 #include "weaver.h"
 
 #ifdef __APPLE__
+#include "platform/macos/open_url.h"
 #include "platform/macos/sdl_bridge.h"
 #endif
 
@@ -348,6 +349,8 @@ static int _platform_factory(lua_State *l);
 static int _platform_shield(lua_State *l);
 #ifdef __APPLE__
 static int _show_control(lua_State *l);
+static int _open_url(lua_State *l);
+static int _grid_window(lua_State *l);
 #endif
 
 // boilerplate: push a lua function to the lua stack, from named field in global 'norns'
@@ -680,6 +683,8 @@ void w_init(void) {
     lua_register_norns("platform_shield", &_platform_shield);
 #ifdef __APPLE__
     lua_register_norns("show_control", &_show_control);
+    lua_register_norns("open_url", &_open_url);
+    lua_register_norns("grid_window", &_grid_window);
 #endif
 
     // name global extern table
@@ -2750,6 +2755,19 @@ void w_handle_key(const int n, const int val) {
     l_report(lvm, l_docall(lvm, 2, 0));
 }
 
+// macOS window: a button on the device (lua/core/menu.lua _norns.window_button)
+void w_handle_window_button(const int n) {
+    lua_getglobal(lvm, "_norns");
+    lua_getfield(lvm, -1, "window_button");
+    lua_remove(lvm, -2);
+    if (!lua_isfunction(lvm, -1)) {
+        lua_pop(lvm, 1);
+        return;
+    }
+    lua_pushinteger(lvm, n);
+    l_report(lvm, l_docall(lvm, 1, 0));
+}
+
 // gpio handler
 void w_handle_enc(const int n, const int delta) {
 #ifdef __APPLE__
@@ -3582,6 +3600,27 @@ int _platform_shield(lua_State *l) {
 int _show_control(lua_State *l) {
     lua_check_num_args(3);
     sdl_bridge_show_control((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2), (int)luaL_checkinteger(l, 3));
+    return 0;
+}
+
+/***
+ * macOS: open a web page (http/https) or a local file in its default app
+ * @function open_url
+ * @tparam string url
+ */
+int _open_url(lua_State *l) {
+    lua_check_num_args(1);
+    lua_pushboolean(l, macos_open_url(luaL_checkstring(l, 1)) == 0);
+    return 1;
+}
+
+/***
+ * macOS: open or close the virtual grid window
+ * @function grid_window
+ */
+int _grid_window(lua_State *l) {
+    lua_check_num_args(0);
+    sdl_bridge_toggle_grid();
     return 0;
 }
 #endif

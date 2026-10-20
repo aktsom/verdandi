@@ -27,7 +27,11 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 // norns; the window moves the control to match
 #define SDL_BRIDGE_SHOW_KEY 1
 #define SDL_BRIDGE_SHOW_ENC 2
+#define SDL_BRIDGE_SHOW_PAGE 3 // n = menu page 1-4, 0 = script
 extern void sdl_bridge_show_control(int kind, int n, int value);
+
+// any thread, does not block: open or close the virtual grid window
+extern void sdl_bridge_toggle_grid(void);
 
 #ifdef __cplusplus
 }

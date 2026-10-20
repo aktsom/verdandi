@@ -1,0 +1,43 @@
+/*
+ * vgrid_device.h
+ *
+ * the virtual grid as a serial device: a pseudo terminal that speaks the grid's side of
+ * the mext protocol (vgrid_proto.h). libmonome opens it like a usb grid, so matron's
+ * grid code and the scripts see a 16x8 varibright grid.
+ *
+ * libmonome on macOS takes the serial number from the device path (after the first
+ * '-'), so the pty is reached through a link <private tmp dir>/grid-m<digits>.
+ */
+
+#pragma once
+
+#include <stdint.h>
+
+#include "vgrid_proto.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct vgrid_device vgrid_device_t;
+
+// on_change runs on the device thread whenever the leds changed
+extern vgrid_device_t *vgrid_open(const char *id, void (*on_change)(void *ctx), void *ctx);
+extern void vgrid_close(vgrid_device_t *g);
+
+// the path to hand to libmonome / dev_list_add
+extern const char *vgrid_path(const vgrid_device_t *g);
+
+// once libmonome has the device open, the link and its directory can go (the path stays
+// valid as a name for dev_list_remove); vgrid_close does it too
+extern void vgrid_unlink(vgrid_device_t *g);
+
+// a key went down (1) or up (0)
+extern void vgrid_key(vgrid_device_t *g, int x, int y, int down);
+
+// the current leds (0-15) and intensity
+extern void vgrid_levels(vgrid_device_t *g, uint8_t level[VGRID_ROWS][VGRID_COLS], int *intensity);
+
+#ifdef __cplusplus
+}
+#endif
