@@ -96,6 +96,7 @@ cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c \
 cc -std=c11 -I matron/src/platform/macos $(pkg-config --cflags --libs cairo) \
    macos/tests/device_skin_test.c matron/src/platform/macos/device_skin.c -o /tmp/dst && /tmp/dst [png_dir]
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
+<lua 5.3> macos/tests/menu_pages_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
 macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it
 ```

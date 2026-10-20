@@ -19,8 +19,10 @@ static const double enc_r = 38; // washer; the knob itself is 31
 static const double bezel_x = 77, bezel_y = 356, bezel_w = 417, bezel_h = 220;
 static const double bezel_pad = 14;
 
-// one knob turn: 24 detents
-#define TICK_ANGLE (2 * M_PI / 24)
+// the knobs are endless encoders: no pointer, only the knurl moves. one detent turns it by
+// a third of the knurl spacing, so it always visibly moves the right way
+#define KNURLS 60
+#define KNURL_STEP (2 * M_PI / KNURLS / 3)
 
 void skin_geom(int w, int h, skin_geom_t *g) {
     g->w = w;
@@ -282,7 +284,7 @@ static void draw_key(cairo_t *cr, pt_t c, int down, int hover) {
 
 static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
     const double r = 31, top = 25;
-    double a = -M_PI / 2 + ticks * TICK_ANGLE;
+    double a = ticks * KNURL_STEP;
 
     // shadow on the washer
     circle(cr, c.x + 2, c.y + 4, r + 1);
@@ -298,8 +300,8 @@ static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
     cairo_fill(cr);
     cairo_pattern_destroy(p);
     cairo_set_line_width(cr, 1.1);
-    for (int i = 0; i < 60; i++) {
-        double t = a + i * (2 * M_PI / 60);
+    for (int i = 0; i < KNURLS; i++) {
+        double t = a + i * (2 * M_PI / KNURLS);
         cairo_move_to(cr, c.x + cos(t) * (top + 1.5), c.y + sin(t) * (top + 1.5));
         cairo_line_to(cr, c.x + cos(t) * (r - 0.5), c.y + sin(t) * (r - 0.5));
     }
@@ -318,15 +320,6 @@ static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
     circle(cr, c.x, c.y, top);
     cairo_set_source_rgba(cr, 0, 0, 0, 0.22);
     cairo_stroke(cr);
-
-    // indicator
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-    cairo_set_line_width(cr, 3.4);
-    cairo_move_to(cr, c.x + cos(a) * 9, c.y + sin(a) * 9);
-    cairo_line_to(cr, c.x + cos(a) * (top - 4), c.y + sin(a) * (top - 4));
-    hex(cr, "2a2b2e", 1);
-    cairo_stroke(cr);
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
 
     if (hover) {
         circle(cr, c.x, c.y, r);

@@ -111,10 +111,20 @@ end
 
 -- input redirection
 
+-- the next menu page for E1 / L1 R1. on a computer the encoders are endless knobs
+-- without stops, so the pages go round (PARAMS -> MIX); on the device they stop at the ends
+local wrap_panels = os.getenv("NORNS_PLATFORM") ~= nil
+local function next_panel(delta)
+  if wrap_panels then
+    return (_menu.panel - 1 + delta) % #_menu.panels + 1
+  end
+  return util.clamp(_menu.panel+delta,1,4)
+end
+
 _menu.enc = function(n, delta)
   if n==1 and _menu.alt == false then
     --mix:delta("output",delta)
-    local c = util.clamp(_menu.panel+delta,1,4)
+    local c = next_panel(delta)
     if c ~= _menu.panel then
       _menu.shownav = true
       _menu.panel = c
@@ -303,7 +313,7 @@ function _menu.gamepad_button(b,value)
 
   if value == 1 and (b == "L1" or b == "R1") then
     local delta = b == "R1" and 1 or -1
-    local c = util.clamp(_menu.panel+delta,1,4)
+    local c = next_panel(delta)
     if c ~= _menu.panel then
       _menu.shownav = true
       _menu.panel = c
