@@ -1,8 +1,9 @@
 #!/bin/bash
 # make-app.sh: build a self-contained norns.app (and a .dmg) from this checkout.
 #
-# needs what macos/setup-deps.sh provides, a norns build (waf), and homebrew's jack and GNU
-# tools to copy from. the app is ad-hoc signed (no developer identity).
+# needs what macos/setup-deps.sh provides (with homebrew's packages built for the oldest
+# macOS the app runs on, macos/MACOS_MIN) and a norns build (waf). the app is ad-hoc signed
+# (no developer identity).
 #
 # usage: macos/make-app.sh [--dmg]
 
@@ -13,7 +14,19 @@ NORNS_HOME="$(dirname "$REPO")"
 d="$REPO"
 while [ "$d" != "/" ] && [ ! -d "$d/deps/prefix" ]; do d="$(dirname "$d")"; done
 P="${NORNS_DEPS:-$d/deps/prefix}"
-BREW="${HOMEBREW_PREFIX:-/opt/homebrew}"
+MIN="$(cat "$REPO/macos/MACOS_MIN")"
+# homebrew's jack, SDL3, GNU tools and libraries built for that macOS (macos/fetch_bottles.py):
+# the installed ones are built for the running macOS and need it
+BOTTLES="$(python3 -I "$REPO/macos/fetch_bottles.py" --where "$(dirname "$P")/bottles")"
+if [ ! -d "$BOTTLES" ]; then
+    echo "make-app: no homebrew bottles for macOS $MIN in $BOTTLES (run macos/setup-deps.sh)"
+    exit 1
+fi
+# a package's folder in the bottles
+bottle() {
+    local d
+    for d in "$BOTTLES/$1"/*/; do echo "$d"; return; done
+}
 # built on APFS: codesign trips over the xattr files exFAT and similar volumes keep
 OUT="${NORNS_APP_OUT:-${TMPDIR:-/tmp}/norns-app}"
 # outside build/: waf clean empties that
@@ -44,14 +57,15 @@ cp "$REPO"/build/macos/jack_wait "$REPO"/build/macos/jack_connect "$REPO"/build/
     "$REPO"/build/macos/app_input "$R/norns/build/macos/"
 
 # jack server and the drivers norns uses
-cp "$(readlink -f "$BREW/bin/jackd")" "$R/deps/bin/jackd"
+JACK="$(bottle jack)"
+cp "${JACK}bin/jackd" "$R/deps/bin/jackd"
 for drv in jack_coreaudio jack_coremidi jack_dummy jack_loopback; do
-    cp "$BREW/opt/jack/lib/jack/$drv.so" "$R/deps/lib/jack/"
+    cp "${JACK}lib/jack/$drv.so" "$R/deps/lib/jack/"
 done
 
 # GNU userland under the plain names (scripts call find -printf, sed -i, stat -c ...)
 for pkg in coreutils findutils gnu-sed grep; do
-    for t in "$BREW/opt/$pkg/libexec/gnubin/"*; do
+    for t in "$(bottle "$pkg")libexec/gnubin/"*; do
         [ -f "$(readlink -f "$t")" ] || continue
         cp "$(readlink -f "$t")" "$R/deps/gnubin/$(basename "$t")"
     done
@@ -64,7 +78,7 @@ cp -R "$SC3" "$R/deps/SC3plugins"
 find "$R/deps/SC3plugins" -type d -name HelpSource -prune -exec rm -rf {} +
 
 # sdl2-compat loads SDL3 from next to itself at runtime
-cp "$(readlink -f "$BREW/opt/sdl3/lib/libSDL3.0.dylib")" "$R/deps/lib/libSDL3.dylib"
+cp "$(readlink -f "$(bottle sdl3)lib/libSDL3.0.dylib")" "$R/deps/lib/libSDL3.dylib"
 
 # maiden
 cp -R "$NORNS_HOME/maiden" "$R/maiden"
@@ -85,7 +99,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
-    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>LSMinimumSystemVersion</key><string>$MIN</string>
     <key>LSUIElement</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>norns records and processes audio input (softcut, tape, engines).</string>
     <key>NSAudioCaptureUsageDescription</key><string>Devices &gt; Audio Input from App plays the sound of the app you choose into norns' input.</string>
@@ -102,7 +116,7 @@ xattr -cr "$APP"
 chmod -R u+rwX,go+rX,go-w "$APP"
 
 echo "== libraries"
-python3 -I "$REPO/macos/bundle_dylibs.py" "$R" "$R/deps/lib"
+NORNS_BOTTLES="$BOTTLES" python3 -I "$REPO/macos/bundle_dylibs.py" "$R" "$R/deps/lib"
 
 echo "== AUv3"
 mkdir -p "$APP/Contents/PlugIns"
@@ -113,11 +127,27 @@ codesign --force --sign - "$APP"
 echo "== check: nothing may point outside the app"
 bad=0
 while IFS= read -r f; do
-    if otool -L "$f" 2>/dev/null | tail -n +2 | grep -E '/opt/homebrew|/usr/local|/Users/' >/dev/null; then
+    if otool -L "$f" 2>/dev/null | tail -n +2 | grep -E '/opt/homebrew|/usr/local|/Users/|@@HOMEBREW' >/dev/null; then
         echo "  external reference: ${f#$APP/}"; bad=1
     fi
 done < <(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.so' -o -name '*.scx' \))
 [ $bad -eq 0 ] && echo "  ok"
+
+echo "== check: everything runs on macOS $MIN"
+newer=0
+while IFS= read -r f; do
+    m="$(otool -l "$f" 2>/dev/null | awk '/LC_BUILD_VERSION/ {b = 1} b && /minos/ {print $2; exit}')"
+    [ -n "$m" ] || continue
+    if [ "$m" != "$MIN" ] && [ "$(printf '%s\n%s\n' "$m" "$MIN" | sort -V | tail -1)" = "$m" ]; then
+        [ $newer -lt 10 ] && echo "  needs macOS $m: ${f#$APP/}"
+        newer=$((newer + 1))
+    fi
+done < <(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.so' -o -name '*.scx' \))
+if [ $newer -gt 0 ]; then
+    echo "  $newer files need a newer macOS than $MIN"
+    exit 1
+fi
+echo "  ok"
 
 if [ "${1:-}" = "--dmg" ]; then
     echo "== dmg"

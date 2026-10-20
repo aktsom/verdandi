@@ -26,6 +26,8 @@ SC_TAG=Version-3.14.1
 NODE_VERSION=v16.20.2
 
 case "$DEPS" in *" "*) echo "setup-deps: '$DEPS' contains a space"; exit 1 ;; esac
+# the oldest macOS the app runs on: clang and cmake take it from here
+export MACOSX_DEPLOYMENT_TARGET="$(cat "$REPO/macos/MACOS_MIN")"
 # keep build paths (they contain the user name) out of the binaries
 MAP="-ffile-prefix-map=$DEPS=/build/deps -ffile-prefix-map=$NORNS_HOME=/build/home"
 mkdir -p "$P/lib/pkgconfig" "$SRC" "$DEPS/bin"
@@ -33,6 +35,18 @@ mkdir -p "$P/lib/pkgconfig" "$SRC" "$DEPS/bin"
 echo "== homebrew packages"
 brew install cairo boost cmake pkgconf readline jack liblo libsndfile sdl2 fftw yaml-cpp \
     coreutils findutils gnu-sed grep gawk go
+
+echo "== homebrew bottles for macOS $MACOSX_DEPLOYMENT_TARGET (what make-app.sh bundles)"
+python3 -I "$REPO/macos/fetch_bottles.py" "$DEPS/bottles"
+
+# built for another oldest macOS: build it again
+STAMP="$P/.macos-min"
+if [ "$(cat "$STAMP" 2>/dev/null)" != "$MACOSX_DEPLOYMENT_TARGET" ]; then
+    echo "== oldest macOS is now $MACOSX_DEPLOYMENT_TARGET: rebuilding lua, nng, libmonome, SuperCollider, sc3-plugins"
+    rm -rf "$P/lib/liblua.a" "$P/lib/libnng.a" "$P/include/monome.h" "$P/SuperCollider" \
+        "$SRC/lua-$LUA_VERSION" "$SRC/nng/build" "$SRC/libmonome/build" "$SRC/supercollider/build" \
+        "$SRC/sc3-plugins/build" "$NORNS_HOME/Library/Application Support/SuperCollider/Extensions/SC3plugins"
+fi
 
 echo "== waf $WAF_VERSION"
 [ -x "$DEPS/bin/waf" ] || { curl -sSfL -o "$DEPS/bin/waf" "https://waf.io/waf-$WAF_VERSION" && chmod +x "$DEPS/bin/waf"; }
@@ -43,7 +57,7 @@ if [ ! -f "$P/lib/liblua.a" ]; then
     curl -sSfLO "https://www.lua.org/ftp/lua-$LUA_VERSION.tar.gz"
     echo "$LUA_SHA256  lua-$LUA_VERSION.tar.gz" | shasum -a 256 -c -
     tar xzf "lua-$LUA_VERSION.tar.gz"
-    make -C "lua-$LUA_VERSION" macosx MYCFLAGS="-fPIC"
+    make -C "lua-$LUA_VERSION" macosx MYCFLAGS="-fPIC -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
     make -C "lua-$LUA_VERSION" install INSTALL_TOP="$P"
 fi
 cat > "$P/lib/pkgconfig/lua53.pc" <<EOF
@@ -138,4 +152,5 @@ if [ ! -x "$M/maiden" ]; then
     cp maiden/sources/*.json "$M/dist/sources/"
 fi
 
+echo "$MACOSX_DEPLOYMENT_TARGET" > "$STAMP"
 echo "== done. build norns: cd $REPO && python3 $DEPS/bin/waf configure && python3 $DEPS/bin/waf"

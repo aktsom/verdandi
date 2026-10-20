@@ -4,6 +4,10 @@ into <libdir>, point all references at @rpath/<name>, give each file a relative 
 <libdir>, drop absolute rpaths, and ad-hoc sign everything.
 
 usage: python3 -I bundle_dylibs.py <bundle root> <libdir inside it>
+
+with NORNS_BOTTLES set (macos/fetch_bottles.py's folder), a library found there by name is
+taken from there instead of from where the file was linked against (homebrew's bottles
+for the running macOS): the same package built for the oldest macOS the app runs on.
 """
 import os
 import shutil
@@ -14,6 +18,22 @@ ROOT = os.path.abspath(sys.argv[1])
 LIBDIR = os.path.abspath(sys.argv[2])
 SYSTEM = ('/usr/lib/', '/System/')
 MACHO_MAGIC = {b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xfe\xed\xfa\xcf', b'\xce\xfa\xed\xfe'}
+
+
+def bottle_index():
+    """library name -> file, in the bottles"""
+    index, top = {}, os.environ.get('NORNS_BOTTLES')
+    if not top:
+        return index
+    for d, _, names in os.walk(top):
+        for n in names:
+            p = os.path.join(d, n)
+            if '.dylib' in n or n.endswith('.so'):
+                index.setdefault(n, os.path.realpath(p))
+    return index
+
+
+BOTTLES = bottle_index()
 
 
 def run(*args):
@@ -44,7 +64,15 @@ def rpaths(path):
 
 
 def resolve(name, origin):
-    """real file for an install name as seen from origin (the file that references it)"""
+    """real file for an install name as seen from origin (the file that references it): one
+    in the bundle, else the bottle of that name, else where it was linked"""
+    found = resolve_linked(name, origin)
+    if found is not None and found.startswith(ROOT + '/'):
+        return found
+    return BOTTLES.get(os.path.basename(name), found)
+
+
+def resolve_linked(name, origin):
     base = os.path.dirname(origin)
     if name.startswith('@loader_path/') or name.startswith('@executable_path/'):
         return os.path.realpath(os.path.join(base, name.split('/', 1)[1]))

@@ -149,6 +149,13 @@ def configure_macos(conf):
     # keep build paths (they contain the user name) out of the binaries
     for flags in ('CFLAGS', 'CXXFLAGS'):
         conf.env.append_value(flags, ['-ffile-prefix-map=%s=/build/norns' % conf.path.abspath()])
+    # the oldest macOS the app runs on (macos/MACOS_MIN, also used by setup-deps.sh and
+    # make-app.sh)
+    with open(os.path.join(conf.path.abspath(), 'macos', 'MACOS_MIN')) as f:
+        conf.env.MACOS_MIN = f.read().strip()
+    for flags in ('CFLAGS', 'CXXFLAGS', 'LINKFLAGS'):
+        conf.env.append_value(flags, ['-mmacosx-version-min=' + conf.env.MACOS_MIN])
+    conf.msg('oldest macOS', conf.env.MACOS_MIN)
     conf.msg('macOS dependency prefix', deps)
 
 def build(bld):

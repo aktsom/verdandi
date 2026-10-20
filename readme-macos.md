@@ -1,6 +1,7 @@
 # norns on macOS
 
-community port of norns to macOS (Apple Silicon). not affiliated with monome.
+community port of norns to macOS (Apple Silicon, macOS 15 or newer: `macos/MACOS_MIN`). not
+affiliated with monome.
 scripts from the norns catalog are meant to run unchanged: all compatibility lives here.
 
 users: get `norns.dmg` and read the manual (`macos/manual/manual.html`, also in the dmg).
@@ -150,6 +151,13 @@ NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
 macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it
 ```
+
+oldest macOS: `macos/MACOS_MIN`. waf builds norns for it, `setup-deps.sh` builds lua, nng,
+libmonome and SuperCollider for it, and `fetch_bottles.py` fetches homebrew's bottles of the
+bundled packages built for it (homebrew installs the ones for the running macOS, which need
+that macOS); `make-app.sh` bundles those and stops if any file needs a newer macOS. 15:
+homebrew no longer builds bottles for 14 (cairo, SDL3, readline ... would have to be built
+from source).
 
 `macos/docs/` has the notes behind the port (linux inventory, catalog scan).
 

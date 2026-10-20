@@ -175,7 +175,8 @@ static NSArray<NSNumber *> *app_processes(void) {
     return found;
 }
 
-static void teardown(void) {
+// process taps: macOS 14.2
+API_AVAILABLE(macos(14.2)) static void teardown(void) {
     if (io_proc != NULL) {
         AudioDeviceStop(aggregate, io_proc);
         AudioDeviceDestroyIOProcID(aggregate, io_proc);
@@ -211,7 +212,7 @@ static void set_adapter(double rate) {
     }
 }
 
-static BOOL build_tap(NSArray<NSNumber *> *procs) {
+API_AVAILABLE(macos(14.2)) static BOOL build_tap(NSArray<NSNumber *> *procs) {
     CATapDescription *desc = [[CATapDescription alloc] initStereoMixdownOfProcesses:procs];
     desc.name = @"norns app input";
     desc.privateTap = YES;
@@ -265,7 +266,7 @@ static BOOL build_tap(NSArray<NSNumber *> *procs) {
 }
 
 // the app's processes changed (it started playing, quit, opened a helper): a new tap
-static void follow(void) {
+API_AVAILABLE(macos(14.2)) static void follow(void) {
     NSArray<NSNumber *> *procs = app_processes();
     if ([procs isEqualToArray:tapped ?: @[]]) {
         return;
@@ -278,18 +279,9 @@ static void follow(void) {
     }
 }
 
-int main(int argc, char **argv) {
+API_AVAILABLE(macos(14.2)) static int run(const char *app) {
     @autoreleasepool {
-        if (argc < 2) {
-            fprintf(stderr, "usage: app_input <bundle id>\n");
-            return 2;
-        }
-        if (@available(macOS 14.2, *)) {
-        } else {
-            fprintf(stderr, "app_input: macOS 14.2 or later taps apps\n");
-            return 1;
-        }
-        bundle = @(argv[1]);
+        bundle = @(app);
         pid_t parent = getppid();
 
         jack_status_t status;
@@ -343,4 +335,16 @@ int main(int argc, char **argv) {
         dispatch_resume(timer);
         dispatch_main();
     }
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "usage: app_input <bundle id>\n");
+        return 2;
+    }
+    if (@available(macOS 14.2, *)) {
+        return run(argv[1]);
+    }
+    fprintf(stderr, "app_input: macOS 14.2 or later taps apps\n");
+    return 1;
 }
