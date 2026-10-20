@@ -34,9 +34,21 @@ export MACOSX_DEPLOYMENT_TARGET="$(cat "$REPO/macos/MACOS_MIN")"
 MAP="-ffile-prefix-map=$DEPS=/build/deps -ffile-prefix-map=$NORNS_HOME=/build/home"
 mkdir -p "$P/lib/pkgconfig" "$SRC" "$DEPS/bin"
 
-echo "== homebrew packages"
-brew install cairo boost cmake pkgconf readline jack liblo libsndfile sdl2 fftw yaml-cpp \
-    coreutils findutils gnu-sed grep gawk go
+if [ -z "${NORNS_NEUTRAL_ENV:-}" ]; then
+    echo "== homebrew packages"
+    brew install cairo boost cmake pkgconf readline jack liblo libsndfile sdl2 fftw yaml-cpp \
+        coreutils findutils gnu-sed grep gawk go
+    # the rest in a neutral environment: build tools write their environment (home, user name,
+    # PATH, every variable) into their logs and caches, and git writes its identity into the
+    # clones' reflogs, all inside this folder
+    NEUTRAL_HOME="$DEPS/.home"
+    mkdir -p "$NEUTRAL_HOME"
+    exec env -i NORNS_NEUTRAL_ENV=1 HOME="$NEUTRAL_HOME" PATH="$BREW/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+        TMPDIR="${TMPDIR:-/tmp}" LANG=en_US.UTF-8 TERM="${TERM:-dumb}" \
+        GIT_AUTHOR_NAME="norns-macos contributors" GIT_AUTHOR_EMAIL="noreply@norns-macos.invalid" \
+        GIT_COMMITTER_NAME="norns-macos contributors" GIT_COMMITTER_EMAIL="noreply@norns-macos.invalid" \
+        HOMEBREW_PREFIX="$BREW" /bin/bash "$0" "$DEPS"
+fi
 
 echo "== homebrew bottles for macOS $MACOSX_DEPLOYMENT_TARGET (what make-app.sh bundles)"
 python3 -I "$REPO/macos/fetch_bottles.py" "$DEPS/bottles"
@@ -179,4 +191,4 @@ if [ ! -x "$M/maiden" ]; then
 fi
 
 echo "$MACOSX_DEPLOYMENT_TARGET" > "$STAMP"
-echo "== done. build norns: cd $REPO && python3 $DEPS/bin/waf configure && python3 $DEPS/bin/waf"
+echo "== done. build norns: $REPO/macos/build.sh"

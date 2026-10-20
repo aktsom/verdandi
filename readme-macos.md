@@ -24,10 +24,15 @@ with `HOME` set to it, so the lua core, sclang and scripts find everything where
 
 ```
 macos/setup-deps.sh                      # homebrew packages + lua 5.3, nng 1.x, libmonome,
-                                         # SuperCollider (jack backend), sc3-plugins, waf 2.1
-python3 <deps>/bin/waf configure         # darwin is detected; always a desktop build
-python3 <deps>/bin/waf
+                                         # SuperCollider (jack backend), sc3-plugins, waf 2.1, jack
+macos/build.sh                           # waf configure (first time) + build; darwin is detected
 ```
+
+both run the build tools in a neutral environment (`env -i`, home in `deps/.home`, an
+anonymous git identity): waf, cmake and git otherwise write the builder's home, user name,
+PATH and git identity into caches, logs and reflogs inside the folder. build from a path
+without the user name in it, e.g. a link `/Users/Shared/norns-dev` to the folder (a path
+with a space breaks lua's makefile).
 
 ## app, dmg, AUv3
 

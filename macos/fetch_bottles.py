@@ -94,11 +94,24 @@ def fetch(name, out, t):
     return dest, True
 
 
+LICENSE_NAMES = ('copying', 'license', 'licence', 'copyright', 'notice', 'lgpl', 'gpl', 'unlicense')
+
+
+def is_license(name):
+    return name.lower().startswith(LICENSE_NAMES)
+
+
 def prune(dest):
     """only what make-app.sh bundles: dylibs, programs (headers, docs, static libraries and
     the many small files with them would only take room: on exFAT a file takes 1 MB)"""
     for sub in ('include', 'share', 'etc', 'var', 'Frameworks'):
         shutil.rmtree(os.path.join(dest, sub), ignore_errors=True)
+    # of the files at the top only the licenses (make-app.sh bundles them): AUTHORS, README,
+    # ChangeLog ... name people who have nothing to do with this
+    for f in os.listdir(dest):
+        p = os.path.join(dest, f)
+        if os.path.isfile(p) and not is_license(f):
+            os.remove(p)
     lib = os.path.join(dest, 'lib')
     for d, dirs, files in os.walk(lib, topdown=True):
         for x in ('cmake', 'pkgconfig', 'python3', 'girepository-1.0', 'gio', 'glib-2.0'):
