@@ -178,8 +178,16 @@ run_jackd() {
     jackd "${args[@]}" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
     JACK_PID=$!
     PIDS="$PIDS $JACK_PID"
-    # 30 s: the first start after an install is slow while macOS checks the new binaries
-    "$JACK_WAIT" 30
+    # as long as jackd is alive: the first start after an install is slow while macOS checks
+    # the new binaries, and jackd waits while macOS asks for the microphone (every new
+    # build of an ad-hoc signed app is asked again). at most 5 minutes
+    local n=0
+    while [ $n -lt 150 ]; do
+        "$JACK_WAIT" 2 2>/dev/null && return 0
+        kill -0 "$JACK_PID" 2>/dev/null || return 1
+        n=$((n + 1))
+    done
+    return 1
 }
 start_jackd() {
     read_audio_conf
