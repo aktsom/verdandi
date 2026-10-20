@@ -17,7 +17,9 @@ BREW="${HOMEBREW_PREFIX:-/opt/homebrew}"
 # built on APFS: codesign trips over the xattr files exFAT and similar volumes keep
 OUT="${NORNS_APP_OUT:-${TMPDIR:-/tmp}/norns-app}"
 # outside build/: waf clean empties that
-DIST="$REPO/dist"
+# the dmg goes on top of the project folder (the one with deps/), where it is found first;
+# without such a folder, into dist/ of the checkout
+if [ "$d" != "/" ]; then DIST="$d"; else DIST="$REPO/dist"; fi
 APP="$OUT/norns.app"
 R="$APP/Contents/Resources"
 VERSION="$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo dev)"

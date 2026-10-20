@@ -31,7 +31,7 @@ python3 <deps>/bin/waf
 ## app, dmg, AUv3
 
 ```
-macos/make-app.sh --dmg      # dist/norns.dmg: norns.app (+ AUv3) and the manual
+macos/make-app.sh --dmg      # norns.dmg (norns.app + AUv3, the manual) on top of the folder with deps/
 ```
 
 the app bundles everything (jackd, SuperCollider, sc3-plugins, GNU tools, maiden, all
