@@ -1829,12 +1829,13 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
         int c = skin_hit(&geom, px, py);
         int ox, oy;
         if (c == SKIN_FADER) {
-            drag_fader = true;
-            SDL_CaptureMouse(SDL_TRUE);
             if (b->clicks >= 2) {
-                // double click: back to 0 dB
+                // double click: back to 0 dB, and no drag after it (the pointer's slightest
+                // move would take the fader straight back to it)
                 call_lua("output_reset", {});
             } else {
+                drag_fader = true;
+                SDL_CaptureMouse(SDL_TRUE);
                 fader_to(py);
             }
         } else if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
