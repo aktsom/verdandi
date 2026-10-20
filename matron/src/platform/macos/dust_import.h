@@ -2,9 +2,14 @@
  * dust_import.h
  *
  * files dropped on a norns window go into dust, where scripts look for them:
- *  - audio files (wav aif aiff aifc flac ogg mp3) and folders with audio in them -> dust/audio
- *  - a script folder (a .lua file at its top) -> dust/code, a lone .lua file -> dust/code/<name>
- * nothing is overwritten: a name already there gets " 2", " 3" ... before the extension.
+ *  - audio files (wav aif aiff aifc flac ogg mp3) and folders with audio in them are linked
+ *    from dust/audio/mac (the originals stay where they are; deleting a link loses nothing),
+ *    or copied into dust/audio
+ *  - a script folder (a .lua file at its top) is copied to dust/code, a lone .lua file to
+ *    dust/code/<name>: scripts belong to norns (maiden updates them, norns resumes them)
+ * nothing is overwritten: a name already there gets " 2", " 3" ... before the extension. a
+ * link that is already there for the same original is used again; links whose original is
+ * gone are removed.
  * pure C on top of copyfile(3) (macos/tests/dust_import_test.c).
  */
 
@@ -25,12 +30,20 @@ typedef enum {
 // what a dropped path is
 extern dust_kind_t dust_import_kind(const char *path);
 
-// where it goes: <dust>/audio/<name> or <dust>/code/<name>, made unique. false if it is
-// skipped or the name does not fit in n bytes
-extern int dust_import_dest(const char *dust, const char *path, char *dest, size_t n);
+// the folder in dust/audio that holds the links
+#define DUST_LINK_DIR "mac"
 
-// copy it there (folders whole). the destination is returned in dest; false on failure
-extern int dust_import(const char *dust, const char *path, char *dest, size_t n);
+// where it goes: <dust>/audio/mac/<name> (link, audio only), <dust>/audio/<name> or
+// <dust>/code/<name>, made unique. false if it is skipped or the name does not fit in n bytes
+extern int dust_import_dest(const char *dust, const char *path, int link, char *dest, size_t n);
+
+// link (audio, link != 0) or copy it there (folders whole); path must be absolute to link.
+// on a disk that cannot hold links audio is copied. the destination is returned in dest and
+// *linked says which it was; false on failure
+extern int dust_import(const char *dust, const char *path, int link, char *dest, size_t n, int *linked);
+
+// remove the links in dust/audio/mac whose original is gone
+extern void dust_prune_links(const char *dust);
 
 #ifdef __cplusplus
 }

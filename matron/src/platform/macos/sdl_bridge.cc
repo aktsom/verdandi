@@ -23,7 +23,8 @@
  * the open windows are laid out round the norns window, as large as the screen allows;
  * when the last one closes, the norns window goes back.
  *
- * files dropped on any window go into dust (dust_import.h). the menu bar (mac_menu.h)
+ * files dropped on any window go into dust (dust_import.h): audio is linked, or copied with
+ * option held; scripts are copied. the menu bar (mac_menu.h)
  * imports, shows dust and the tape folder, and saves the screen as a png or records it
  * as a gif, to the desktop.
  *
@@ -1248,9 +1249,14 @@ static void keys_typed(const SDL_KeyboardEvent *k) {
     keys_redraw();
 }
 
-//--- files in: drops and the import panel (a worker thread copies)
+//--- files in: drops and the import panel (a worker thread links and copies)
 
-static std::deque<std::string> import_queue;
+struct import_item {
+    std::string path;
+    bool copy; // audio copied into dust/audio, not linked from dust/audio/mac
+};
+
+static std::deque<import_item> import_queue;
 static pthread_mutex_t import_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t import_cond = PTHREAD_COND_INITIALIZER;
 static bool import_running = false;
@@ -1260,35 +1266,42 @@ static std::string dust_dir(void) {
     return std::string(home != NULL ? home : ".") + "/dust";
 }
 
+// "kick.wav linked in dust/audio/mac" or "3 copied to dust/audio"
+static std::string import_part(int count, const std::string &last, const char *what) {
+    return (count == 1 ? last : std::to_string(count)) + " " + what;
+}
+
 static void *import_worker(void *arg) {
     (void)arg;
-    int audio = 0, scripts = 0, skipped = 0, failed = 0;
-    std::string last;
+    int linked = 0, copied = 0, scripts = 0, skipped = 0, failed = 0;
+    std::string last_linked, last_copied, last_script;
     for (;;) {
         pthread_mutex_lock(&import_lock);
         if (import_queue.empty()) {
             // a batch is done: one message for all of it
-            if (audio + scripts + skipped + failed > 0) {
-                std::string msg;
-                if (scripts == 1 && audio == 0) {
-                    msg = "script " + last + " added to dust/code";
-                } else if (scripts > 0) {
-                    msg = std::to_string(scripts) + " scripts added to dust/code";
+            if (linked + copied + scripts + skipped + failed > 0) {
+                std::vector<std::string> parts;
+                if (scripts > 0) {
+                    parts.push_back(scripts == 1 ? "script " + last_script + " added to dust/code"
+                                                 : std::to_string(scripts) + " scripts added to dust/code");
                 }
-                if (audio > 0) {
-                    if (!msg.empty()) {
-                        msg += ", ";
-                    }
-                    msg += audio == 1 ? last + " added to dust/audio"
-                                      : std::to_string(audio) + " added to dust/audio";
+                if (linked > 0) {
+                    parts.push_back(import_part(linked, last_linked, "linked in dust/audio/" DUST_LINK_DIR));
+                }
+                if (copied > 0) {
+                    parts.push_back(import_part(copied, last_copied, "copied to dust/audio"));
+                }
+                std::string msg;
+                for (size_t i = 0; i < parts.size(); i++) {
+                    msg += (i > 0 ? ", " : "") + parts[i];
                 }
                 if (msg.empty()) {
-                    msg = failed > 0 ? "could not copy into dust" : "nothing to import: not audio or a script";
+                    msg = failed > 0 ? "could not add it to dust" : "nothing to import: not audio or a script";
                 } else if (skipped + failed > 0) {
                     msg += " (" + std::to_string(skipped + failed) + " left out)";
                 }
                 post_toast(msg);
-                audio = scripts = skipped = failed = 0;
+                linked = copied = scripts = skipped = failed = 0;
             }
             struct timespec until;
             clock_gettime(CLOCK_REALTIME, &until);
@@ -1297,28 +1310,38 @@ static void *import_worker(void *arg) {
             pthread_mutex_unlock(&import_lock);
             continue;
         }
-        std::string path = import_queue.front();
+        import_item item = import_queue.front();
         import_queue.pop_front();
         pthread_mutex_unlock(&import_lock);
 
-        dust_kind_t kind = dust_import_kind(path.c_str());
+        dust_kind_t kind = dust_import_kind(item.path.c_str());
         char dest[2048];
+        int as_link = 0;
         if (kind == DUST_SKIP) {
             skipped++;
-        } else if (dust_import(dust_dir().c_str(), path.c_str(), dest, sizeof dest)) {
+        } else if (dust_import(dust_dir().c_str(), item.path.c_str(), !item.copy, dest, sizeof dest, &as_link)) {
             const char *slash = strrchr(dest, '/');
-            last = slash != NULL ? slash + 1 : dest;
-            fprintf(stderr, "sdl_bridge: imported %s -> %s\n", path.c_str(), dest);
-            (kind == DUST_AUDIO ? audio : scripts)++;
+            std::string name = slash != NULL ? slash + 1 : dest;
+            fprintf(stderr, "sdl_bridge: %s %s -> %s\n", as_link ? "linked" : "copied", item.path.c_str(), dest);
+            if (kind == DUST_SCRIPT) {
+                scripts++;
+                last_script = name;
+            } else if (as_link) {
+                linked++;
+                last_linked = name;
+            } else {
+                copied++;
+                last_copied = name;
+            }
         } else {
-            fprintf(stderr, "sdl_bridge: import of %s failed\n", path.c_str());
+            fprintf(stderr, "sdl_bridge: import of %s failed\n", item.path.c_str());
             failed++;
         }
     }
     return NULL;
 }
 
-static void import_path(const char *path) {
+static void import_path(const char *path, int copy) {
     pthread_mutex_lock(&import_lock);
     if (!import_running) {
         pthread_t t;
@@ -1327,7 +1350,7 @@ static void import_path(const char *path) {
             import_running = true;
         }
     }
-    import_queue.push_back(path);
+    import_queue.push_back({path, copy != 0});
     pthread_cond_signal(&import_cond);
     pthread_mutex_unlock(&import_lock);
 }
@@ -1888,7 +1911,8 @@ void sdl_bridge_run(void) {
             break;
         case SDL_DROPFILE:
             if (ev.drop.file != NULL) {
-                import_path(ev.drop.file);
+                // option held while dropping: a copy, as in the Finder
+                import_path(ev.drop.file, mac_option_held());
                 SDL_free(ev.drop.file);
             }
             break;

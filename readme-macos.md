@@ -105,8 +105,9 @@ like any app's port.
 
 menu bar (`mac_menu.m`): import (open panel), show dust / tape folder, screenshot (png, 4x)
 and gif recording (`gif_writer.c`, 16 grey levels) to the desktop. files dropped on a window
-are copied into dust by `dust_import.c` (audio -> dust/audio, scripts -> dust/code, never
-overwriting) on a worker thread.
+go into dust by `dust_import.c` on a worker thread: audio is symlinked from
+`dust/audio/mac` (option held, or the panel's box: copied to dust/audio; dead links are
+pruned on the next import), scripts are copied to dust/code; nothing is overwritten.
 
 audio: SYSTEM > AUDIO (`lua/core/menu/audio.lua`, devices from `macos/audio_devices.c`)
 writes `~/norns/audio.conf`; `macos/norns.sh` restarts jackd with it and falls back to the
@@ -130,7 +131,7 @@ P=<deps>/prefix; cc -std=c11 -I matron/src/platform/macos -I $P/include macos/te
 cc -std=c11 -I matron/src/platform/macos macos/tests/gif_test.c matron/src/platform/macos/gif_writer.c \
    -framework ImageIO -framework CoreGraphics -framework CoreFoundation -o /tmp/gift && /tmp/gift
 cc -std=c11 -I matron/src/platform/macos macos/tests/dust_import_test.c \
-   matron/src/platform/macos/dust_import.c -o /tmp/dit && /tmp/dit
+   matron/src/platform/macos/dust_import.c -o /tmp/dit && /tmp/dit [dir on another disk]
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 <lua 5.3> macos/tests/menu_pages_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua

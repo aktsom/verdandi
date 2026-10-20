@@ -14,7 +14,8 @@ extern "C" {
 #endif
 
 enum {
-    MAC_MENU_IMPORT = 1, // the open panel; the chosen paths come to the import callback
+    MAC_MENU_IMPORT = 1, // the open panel; the chosen paths come to the import callback (copy
+                         // = its "copy instead of linking" box)
     MAC_MENU_DUST,       // dust in Finder
     MAC_MENU_TAPE,       // dust/audio/tape in Finder
     MAC_MENU_SCREENSHOT, // the screen as png
@@ -25,13 +26,17 @@ enum {
 };
 
 // main thread, after SDL_Init(SDL_INIT_VIDEO)
-extern void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path));
+extern void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path, int copy));
 
 // the GIF item says "Stop" while recording
 extern void mac_menu_set_recording(int on);
 
 // the import panel (MAC_MENU_IMPORT calls this itself); does not block
 extern void mac_menu_choose_import(void);
+
+// the option key is down right now (whichever app is in front: also during a drag from the
+// Finder, when SDL has not seen the key)
+extern int mac_option_held(void);
 
 #ifdef __cplusplus
 }

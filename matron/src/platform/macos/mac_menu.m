@@ -8,7 +8,7 @@
 #include "mac_menu.h"
 
 static void (*item_cb)(int id) = NULL;
-static void (*import_cb)(const char *path) = NULL;
+static void (*import_cb)(const char *path, int copy) = NULL;
 
 @interface NornsMenuTarget : NSObject
 - (void)act:(NSMenuItem *)item;
@@ -42,7 +42,7 @@ static void insert(NSMenu *bar, NSMenu *menu, NSInteger at) {
     [top release];
 }
 
-void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path)) {
+void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path, int copy)) {
     item_cb = on_item;
     import_cb = on_import;
     NSMenu *bar = [NSApp mainMenu];
@@ -83,17 +83,26 @@ void mac_menu_choose_import(void) {
     panel.canChooseFiles = YES;
     panel.canChooseDirectories = YES;
     panel.allowsMultipleSelection = YES;
-    panel.message = @"Audio files and folders go to dust/audio, scripts to dust/code.";
+    panel.message = @"Audio is linked from dust/audio/mac (it stays where it is); scripts are copied to dust/code.";
     panel.prompt = @"Import";
+    NSButton *copy = [NSButton checkboxWithTitle:@"Copy audio into norns instead of linking it" target:nil action:nil];
+    copy.state = NSControlStateValueOff;
+    panel.accessoryView = copy;
+    panel.accessoryViewDisclosed = YES;
     // not modal: the norns window keeps drawing while the panel is open
     [panel beginWithCompletionHandler:^(NSModalResponse result) {
       if (result != NSModalResponseOK || import_cb == NULL) {
           return;
       }
+      int as_copy = copy.state == NSControlStateValueOn;
       for (NSURL *url in panel.URLs) {
           if (url.fileURL) {
-              import_cb(url.path.fileSystemRepresentation);
+              import_cb(url.path.fileSystemRepresentation, as_copy);
           }
       }
     }];
+}
+
+int mac_option_held(void) {
+    return ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
 }

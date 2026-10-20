@@ -99,11 +99,25 @@ dust_kind_t dust_import_kind(const char *path) {
     return is_lua_name(base_of(path)) ? DUST_SCRIPT : DUST_SKIP;
 }
 
-int dust_import_dest(const char *dust, const char *path, char *dest, size_t n) {
+// where a link to path in dir would be, or is already: a link with this name that points
+// at path is the one to reuse
+static int same_link(const char *link, const char *path) {
+    char target[2048];
+    ssize_t n = readlink(link, target, sizeof target - 1);
+    if (n < 0) {
+        return 0;
+    }
+    target[n] = '\0';
+    return strcmp(target, path) == 0;
+}
+
+int dust_import_dest(const char *dust, const char *path, int link, char *dest, size_t n) {
     dust_kind_t kind = dust_import_kind(path);
     if (kind == DUST_SKIP) {
         return 0;
     }
+    // scripts are always copied
+    link = link && kind == DUST_AUDIO;
     struct stat st;
     int dir = stat(path, &st) == 0 && S_ISDIR(st.st_mode);
     char name[1024];
@@ -123,7 +137,7 @@ int dust_import_dest(const char *dust, const char *path, char *dest, size_t n) {
             *dot = '\0';
         }
     }
-    const char *sub = kind == DUST_AUDIO ? "audio" : "code";
+    const char *sub = link ? "audio/" DUST_LINK_DIR : (kind == DUST_AUDIO ? "audio" : "code");
     int lone_script = kind == DUST_SCRIPT && !dir;
     for (int i = 1; i < 1000; i++) {
         char suffix[16] = "";
@@ -139,23 +153,40 @@ int dust_import_dest(const char *dust, const char *path, char *dest, size_t n) {
         if (w < 0 || (size_t)w >= n) {
             return 0;
         }
-        if (access(dest, F_OK) != 0) {
+        struct stat ls;
+        if (lstat(dest, &ls) != 0 || (link && same_link(dest, path))) {
             return 1;
         }
     }
     return 0;
 }
 
-int dust_import(const char *dust, const char *path, char *dest, size_t n) {
-    if (!dust_import_dest(dust, path, dest, n)) {
-        return 0;
+void dust_prune_links(const char *dust) {
+    char dir[2048];
+    snprintf(dir, sizeof dir, "%s/audio/%s", dust, DUST_LINK_DIR);
+    DIR *d = opendir(dir);
+    if (d == NULL) {
+        return;
     }
-    char parent[2048];
-    snprintf(parent, sizeof parent, "%s/%s", dust, dust_import_kind(path) == DUST_AUDIO ? "audio" : "code");
-    mkdir(parent, 0755);
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL) {
+        char p[4096];
+        struct stat st;
+        if (e->d_type != DT_LNK || snprintf(p, sizeof p, "%s/%s", dir, e->d_name) >= (int)sizeof p) {
+            continue;
+        }
+        // the original is gone (moved, deleted, its disk unplugged)
+        if (stat(p, &st) != 0) {
+            unlink(p);
+        }
+    }
+    closedir(d);
+}
+
+static int copy_into(const char *path, const char *dest, dust_kind_t kind) {
     struct stat st;
     int dir = stat(path, &st) == 0 && S_ISDIR(st.st_mode);
-    if (!dir && dust_import_kind(path) == DUST_SCRIPT) {
+    if (!dir && kind == DUST_SCRIPT) {
         // <dust>/code/<name>/<name>.lua
         if (mkdir(dest, 0755) != 0) {
             return 0;
@@ -171,4 +202,33 @@ int dust_import(const char *dust, const char *path, char *dest, size_t n) {
         flags |= COPYFILE_RECURSIVE;
     }
     return copyfile(path, dest, NULL, flags) == 0;
+}
+
+int dust_import(const char *dust, const char *path, int link, char *dest, size_t n, int *linked) {
+    *linked = 0;
+    dust_kind_t kind = dust_import_kind(path);
+    // a link must name the original from anywhere: an absolute path
+    if (kind == DUST_SKIP || (link && path[0] != '/')) {
+        return 0;
+    }
+    char parent[2048];
+    snprintf(parent, sizeof parent, "%s/%s", dust, kind == DUST_AUDIO ? "audio" : "code");
+    mkdir(parent, 0755);
+    if (link && kind == DUST_AUDIO) {
+        snprintf(parent, sizeof parent, "%s/audio/%s", dust, DUST_LINK_DIR);
+        mkdir(parent, 0755);
+        dust_prune_links(dust);
+        if (!dust_import_dest(dust, path, 1, dest, n)) {
+            return 0;
+        }
+        if (same_link(dest, path) || symlink(path, dest) == 0) {
+            *linked = 1;
+            return 1;
+        }
+        // a disk without links (exFAT, FAT): a copy then
+    }
+    if (!dust_import_dest(dust, path, 0, dest, n)) {
+        return 0;
+    }
+    return copy_into(path, dest, kind);
 }

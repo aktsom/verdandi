@@ -136,8 +136,9 @@ on or off (the window title then reads <i>norns &middot; keys</i>).</p>
 <h3>the menu bar</h3>
 <table>
   <tr><th>menu</th><th>does</th></tr>
-  <tr><td>File &rarr; Import Audio or Script&hellip; <kbd>&#8984;O</kbd></td><td>copies audio and
-      scripts into norns, like dropping them on the window (see <a href="#files">files</a>).</td></tr>
+  <tr><td>File &rarr; Import Audio or Script&hellip; <kbd>&#8984;O</kbd></td><td>adds audio and
+      scripts to norns, like dropping them on the window (see <a href="#files">files</a>); tick
+      <i>Copy audio into norns</i> for a copy instead of a link.</td></tr>
   <tr><td>File &rarr; Show dust Folder <kbd>&#8679;&#8984;D</kbd></td><td>opens norns' dust folder
       (scripts, audio, data) in the Finder.</td></tr>
   <tr><td>File &rarr; Show Tape Recordings <kbd>&#8679;&#8984;T</kbd></td><td>opens the folder TAPE
@@ -261,11 +262,22 @@ rescan plugins in the DAW (Logic: Plug-in Manager &rarr; Reset &amp; Rescan).</p
 
 <h2 id="files">10. files and logs</h2>
 <p><b>getting samples and scripts in:</b> drop files or folders on any norns window (or choose
-File &rarr; Import). audio files (wav, aiff, flac, ogg, mp3) and folders with audio in them go to
-<code>dust/audio</code>, where sampler scripts find them; a script folder (with a <code>.lua</code>
-file in it) or a single <code>.lua</code> file goes to <code>dust/code</code>. nothing is
-overwritten: a name that is already there gets a number. a note on the device says what was
-added.</p>
+File &rarr; Import). a note on the device says what happened.</p>
+<ul>
+  <li><b>audio</b> (wav, aiff, flac, ogg, mp3, and folders with audio in them) is <i>linked</i>:
+      the files stay where they are, and <code>dust/audio/mac</code> gets a link to them, where
+      sampler scripts find them like any other folder. nothing is copied, so there is nothing to
+      clean up: deleting a link in <code>dust/audio/mac</code> never deletes your samples, and
+      links whose files were moved or deleted are removed the next time you add something.
+      if you move the originals or unplug their disk, norns cannot play them until they are
+      back.</li>
+  <li>hold <kbd>&#8997;</kbd> (Option) while dropping to <i>copy</i> the audio into
+      <code>dust/audio</code> instead: for samples a saved preset should always find.</li>
+  <li><b>scripts</b> (a folder with a <code>.lua</code> file in it, or a single <code>.lua</code>
+      file) are always copied to <code>dust/code</code>, because they belong to norns: maiden
+      updates them, and norns starts the last one again on the next launch.</li>
+  <li>nothing is overwritten: a name that is already there gets a number.</li>
+</ul>
 <p><b>getting things out:</b> TAPE recordings are in <code>dust/audio/tape</code> (File &rarr;
 Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p>
 <table>
