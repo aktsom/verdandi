@@ -52,25 +52,25 @@ enum {
 };
 
 typedef struct {
-    int key_down[3];  // K1-K3 held
-    int enc_ticks[3]; // E1-E3 turned so far, sets the knob angle
-    int hover;        // control under the mouse, SKIN_NONE if none
-    int page;         // menu page shown (1-4: MIX TAPE HOME PARAMS), 0 = script
-    int grid_open;    // virtual grid window open
-    int arc_open;     // virtual arc window open
-    int keys_open;    // virtual keyboard window open
-    int input;        // SKIN_INPUT_*: what norns' input hears (the MIC button)
-    int button_down;  // button held by the mouse, SKIN_NONE if none
-    int recording;    // a gif of the screen is being recorded
+    int key_down[3];   // K1-K3 held
+    int enc_ticks[3];  // E1-E3 turned so far, sets the knob angle
+    int hover;         // control under the mouse, SKIN_NONE if none
+    int page;          // menu page shown (1-4: MIX TAPE HOME PARAMS), 0 = script
+    int grid_open;     // virtual grid window open
+    int arc_open;      // virtual arc window open
+    int keys_open;     // virtual keyboard window open
+    int input;         // SKIN_INPUT_*: what norns' input hears (the MIC button)
+    int button_down;   // button held by the mouse, SKIN_NONE if none
+    int recording;     // a gif of the screen is being recorded
     const char *toast; // a short message on the box (import, screenshot), NULL for none
     double out_level;  // the OUT fader, 0-1 (the output level's place on its scale)
     int out_muted;     // MUTE is on
 } skin_state_t;
 
 typedef struct {
-    int w, h;       // canvas in device pixels
-    double s;       // device pixels per layout unit
-    double ox, oy;  // box origin in device pixels
+    int w, h;                    // canvas in device pixels
+    double s;                    // device pixels per layout unit
+    double ox, oy;               // box origin in device pixels
     int oled_x, oled_y, oled_px; // oled position and pixel size (integer: crisp pixels)
 } skin_geom_t;
 

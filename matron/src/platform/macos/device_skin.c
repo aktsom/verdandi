@@ -30,9 +30,13 @@ typedef struct {
     const char *label;
 } button_t;
 static const button_t buttons[] = {
-    {77, "MIX"},  {153, "TAPE"}, {229, "HOME"}, {305, "PARAMS"}, // SKIN_PAGE1..4
-    {398, "MIC"}, {474, "GRID"}, {550, "ARC"},  {626, "KEYS"},   // SKIN_MIC..KEYS
-    {719, "MAIDEN"}, {795, "MANUAL"},                            // SKIN_MAIDEN, MANUAL
+    {77, "MIX"}, {153, "TAPE"}, {229, "HOME"}, {305, "PARAMS"}, // SKIN_PAGE1..4
+    {398, "MIC"},
+    {474, "GRID"},
+    {550, "ARC"},
+    {626, "KEYS"}, // SKIN_MIC..KEYS
+    {719, "MAIDEN"},
+    {795, "MANUAL"}, // SKIN_MAIDEN, MANUAL
 };
 #define NBUTTONS ((int)(sizeof buttons / sizeof buttons[0]))
 static const double button_y = 70, button_w = 70, button_h = 40;
@@ -94,7 +98,8 @@ int skin_hit(const skin_geom_t *g, double x, double y) {
 
 double skin_fader_value(const skin_geom_t *g, double y) {
     double v = (fader_bottom - (y - g->oy) / g->s) / (fader_bottom - fader_top);
-    return v < 0 ? 0 : v > 1 ? 1 : v;
+    return v < 0 ? 0 : v > 1 ? 1
+                             : v;
 }
 
 int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy) {
@@ -508,7 +513,8 @@ static void draw_toast(cairo_t *cr, const char *text, int recording) {
 
 // the OUT fader: a slot, the level lit up to the cap, the cap; MUTE under it
 static void draw_fader(cairo_t *cr, const skin_state_t *st) {
-    double v = st->out_level < 0 ? 0 : st->out_level > 1 ? 1 : st->out_level;
+    double v = st->out_level < 0 ? 0 : st->out_level > 1 ? 1
+                                                         : st->out_level;
     double cy = fader_bottom - v * (fader_bottom - fader_top);
     int hover = st->hover == SKIN_FADER;
 

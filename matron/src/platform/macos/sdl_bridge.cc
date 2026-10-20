@@ -53,10 +53,11 @@
 #include <string>
 #include <vector>
 
-#include "event_types.h"
 #include "event_custom.h"
+#include "event_types.h"
 #include "events.h"
 
+#include "app_audio.h"
 #include "device.h"
 #include "device_list.h"
 #include "device_monitor_macos.h"
@@ -64,16 +65,15 @@
 #include "device_skin.h"
 #include "dust_import.h"
 #include "gif_writer.h"
-#include "app_audio.h"
 #include "mac_menu.h"
-#include "product.h"
 #include "open_url.h"
+#include "product.h"
+#include "sdl_bridge.h"
 #include "varc_skin.h"
 #include "vgrid_device.h"
 #include "vgrid_skin.h"
 #include "vkeys_skin.h"
 #include "window_keys.h"
-#include "sdl_bridge.h"
 
 typedef enum {
     BRIDGE_CREATE_WINDOW,
@@ -580,7 +580,10 @@ static void arrange_windows(void) {
         max_h = open[i]->uh > max_h ? open[i]->uh : max_h;
     }
     // per layout: content width/height at 1:1 and the fixed gaps and title bars
-    enum { BELOW, ROW, COLUMN, STACK };
+    enum { BELOW,
+           ROW,
+           COLUMN,
+           STACK };
     double k[4];
     k[BELOW] = fmin((aw - (n - 1) * LAYOUT_GAP) / fmax(MAIN_W, sum_w), (ah - 2 * t - LAYOUT_GAP) / (MAIN_H + max_h));
     k[ROW] = fmin((aw - n * LAYOUT_GAP) / (MAIN_W + sum_w), (ah - t) / fmax(MAIN_H, max_h));
@@ -671,7 +674,7 @@ static void arrange_windows(void) {
 static vgrid_device_t *vgrid = NULL;
 static vgrid_geom_t grid_geom = {};
 static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
-static int grid_size = 0; // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
+static int grid_size = 0;                        // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
 static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
 static int grid_pending = 0;
 
@@ -1075,7 +1078,7 @@ static void arc_wheel(const SDL_MouseWheelEvent *w) {
 static vkeys_state_t vk = {};
 static vkeys_geom_t keys_geom = {};
 static MIDIEndpointRef keys_src = 0;
-static int keys_mouse = -1; // key held by the left button
+static int keys_mouse = -1;        // key held by the left button
 static int keys_sounding[VKEYS_N]; // note sent for each key, -1 if silent
 static char keys_labels[VKEYS_N][16];
 
@@ -1758,8 +1761,8 @@ static void to_pixels(Uint32 window_id, int x, int y, double *px, double *py) {
     *py = y * k;
 }
 
-static int held_key = 0; // key held by the mouse, 1-3
-static int drag_enc = 0; // knob turned by the mouse, 1-3
+static int held_key = 0;        // key held by the mouse, 1-3
+static int drag_enc = 0;        // knob turned by the mouse, 1-3
 static bool drag_fader = false; // the OUT fader held by the mouse
 static bool drag_oled = false;  // pressed on the oled on the MIX page (lua/core/menu/mix.lua)
 static double drag_acc = 0;
@@ -1805,8 +1808,10 @@ static void oled_mouse(double px, double py, const char *kind, int value) {
     if (!skin_oled_pixel(&geom, px, py, &ox, &oy)) {
         // dragged off the oled: the nearest pixel on it
         double fx = (px - geom.oled_x) / geom.oled_px, fy = (py - geom.oled_y) / geom.oled_px;
-        ox = fx < 0 ? 0 : fx > 127 ? 127 : (int)fx;
-        oy = fy < 0 ? 0 : fy > 63 ? 63 : (int)fy;
+        ox = fx < 0 ? 0 : fx > 127 ? 127
+                                   : (int)fx;
+        oy = fy < 0 ? 0 : fy > 63 ? 63
+                                  : (int)fy;
     }
     call_lua("screen_mouse", {std::to_string(ox), std::to_string(oy), kind, std::to_string(value)});
 }

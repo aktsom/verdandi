@@ -19,7 +19,6 @@ end
 
 -- escape for use as a lua pattern
 local real_pattern = real:gsub('[%^%$%(%)%%%.%[%]%*%+%-%?]', '%%%0')
-local real_repl = real:gsub('%%', '%%%%')
 
 -- '/home/we' as a whole path component, anywhere in s (paths are often inside shell
 -- commands or engine arguments)

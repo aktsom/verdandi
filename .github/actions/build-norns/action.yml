@@ -19,6 +19,6 @@ runs:
       with:
         imageName: ghcr.io/monome/norns-ci
         cacheFrom: ghcr.io/monome/norns-ci
-        push: filter
-        refFilterForPush: refs/heads/main
+        # a fork cannot write monome's image; build only
+        push: never
         runCmd: ./waf configure --release && ./waf build --release

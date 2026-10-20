@@ -13,11 +13,15 @@
 #include "hardware/i2c.h"
 #include "hardware/screen/ssd1322.h"
 
-void battery_init(void) {}
-void battery_deinit(void) {}
+void battery_init(void) {
+}
+void battery_deinit(void) {
+}
 
-void i2c_init(void) {}
-void i2c_deinit(void) {}
+void i2c_init(void) {
+}
+void i2c_deinit(void) {
+}
 void i2c_hp(int level) {
     (void)level;
 }
@@ -25,9 +29,12 @@ int adc_rev(void) {
     return 0;
 }
 
-void ssd1322_init() {}
-void ssd1322_deinit() {}
-void ssd1322_refresh() {}
+void ssd1322_init() {
+}
+void ssd1322_deinit() {
+}
+void ssd1322_refresh() {
+}
 void ssd1322_update(cairo_surface_t *surface, bool should_translate_color) {
     (void)surface;
     (void)should_translate_color;

@@ -17,12 +17,12 @@ struct dev_midi {
     bool clock_enabled;
 #ifdef __APPLE__
     // CoreMIDI object refs (UInt32), see platform/macos/device_midi_coremidi.inc
-    uint32_t src;        // MIDIEndpointRef we read from (0 = none)
-    uint32_t dst;        // MIDIEndpointRef we send to (0 = none)
-    uint32_t in_port;    // MIDIPortRef connected to src
-    uint32_t vsrc;       // virtual device: our own source, others receive what we send
-    uint32_t vdst;       // virtual device: our own destination, others send to us
-    int pipe_rd;         // CoreMIDI callback -> pipe -> dev_midi_start reader thread
+    uint32_t src;     // MIDIEndpointRef we read from (0 = none)
+    uint32_t dst;     // MIDIEndpointRef we send to (0 = none)
+    uint32_t in_port; // MIDIPortRef connected to src
+    uint32_t vsrc;    // virtual device: our own source, others receive what we send
+    uint32_t vdst;    // virtual device: our own destination, others send to us
+    int pipe_rd;      // CoreMIDI callback -> pipe -> dev_midi_start reader thread
     int pipe_wr;
 #else
     snd_rawmidi_t *handle_in;

@@ -29,15 +29,21 @@ extern "C" {
 #define VKEYS_HELD_TYPED 4
 
 // strip controls
-enum { VK_NONE = 0, VK_OCT_DOWN, VK_OCT_UP, VK_VEL_DOWN, VK_VEL_UP, VK_LATCH, VK_KEY };
+enum { VK_NONE = 0,
+       VK_OCT_DOWN,
+       VK_OCT_UP,
+       VK_VEL_DOWN,
+       VK_VEL_UP,
+       VK_LATCH,
+       VK_KEY };
 
 typedef struct {
     int octave;   // of the lowest C: note 12 * (octave + 1), so octave 4 starts at middle C (60)
     int velocity; // for the computer keyboard; the mouse takes it from where the key is hit
     int latch;    // clicks hold notes until clicked again
     uint8_t held[VKEYS_N];
-    int hover;       // control under the mouse
-    int button_down; // strip control held by the mouse
+    int hover;                        // control under the mouse
+    int button_down;                  // strip control held by the mouse
     const char *typed_label[VKEYS_N]; // the computer key for each piano key, NULL for none
 } vkeys_state_t;
 

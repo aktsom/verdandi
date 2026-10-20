@@ -28,10 +28,10 @@ extern "C" {
 #define WINDOW_KEYS_SHIFT_STEPS 5
 
 typedef enum {
-    WK_KEY,    // norns key n (1..3), value 1 = down, 0 = up
-    WK_ENC,    // norns encoder n (1..3), value = delta
-    WK_HID,    // usb keyboard usage n, value 1 = down, 0 = up, 2 = autorepeat
-    WK_MODE,   // norns mode changed, value = new mode (0/1)
+    WK_KEY,  // norns key n (1..3), value 1 = down, 0 = up
+    WK_ENC,  // norns encoder n (1..3), value = delta
+    WK_HID,  // usb keyboard usage n, value 1 = down, 0 = up, 2 = autorepeat
+    WK_MODE, // norns mode changed, value = new mode (0/1)
 } window_key_action_t;
 
 typedef struct {

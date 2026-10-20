@@ -32,7 +32,7 @@ int gif_begin(gif_writer_t *g, FILE *f, int w, int h, int scale) {
     }
     // loop forever
     static const uint8_t loop[] = {0x21, 0xff, 0x0b, 'N', 'E', 'T', 'S', 'C', 'A', 'P', 'E',
-                                   '2',  '.',  '0',  0x03, 0x01, 0x00, 0x00, 0x00};
+                                   '2', '.', '0', 0x03, 0x01, 0x00, 0x00, 0x00};
     fwrite(loop, 1, sizeof loop, f);
     return !ferror(f);
 }

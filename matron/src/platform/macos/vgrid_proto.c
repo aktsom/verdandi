@@ -7,7 +7,12 @@
 
 #include "vgrid_proto.h"
 
-enum { SS_SYSTEM = 0, SS_LED_GRID = 1, SS_KEY_GRID = 2, SS_ENCODER = 5, SS_TILT = 8, SS_LED_RING = 9 };
+enum { SS_SYSTEM = 0,
+       SS_LED_GRID = 1,
+       SS_KEY_GRID = 2,
+       SS_ENCODER = 5,
+       SS_TILT = 8,
+       SS_LED_RING = 9 };
 
 // payload length of every host -> device message
 static int payload_length(int ss, int cmd) {

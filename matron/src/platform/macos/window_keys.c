@@ -30,34 +30,64 @@ enum {
 
 static int control_key(int usage) {
     switch (usage) {
-    case U_1: return 1;
-    case U_2: return 2;
-    case U_3: return 3;
+    case U_1:
+        return 1;
+    case U_2:
+        return 2;
+    case U_3:
+        return 3;
     // confirm
-    case U_ENTER: return 3;
-    case U_KP_ENTER: return 3;
-    case U_SPACE: return 3;
+    case U_ENTER:
+        return 3;
+    case U_KP_ENTER:
+        return 3;
+    case U_SPACE:
+        return 3;
     // back
-    case U_ESC: return 2;
-    case U_BACKSPACE: return 2;
-    default: return 0;
+    case U_ESC:
+        return 2;
+    case U_BACKSPACE:
+        return 2;
+    default:
+        return 0;
     }
 }
 
 // encoder n and direction for usage; 0 if not an encoder key
 static int control_enc(int usage, int *dir) {
     switch (usage) {
-    case U_Q: *dir = -1; return 1;
-    case U_W: *dir = 1; return 1;
-    case U_A: *dir = -1; return 2;
-    case U_S: *dir = 1; return 2;
-    case U_UP: *dir = -1; return 2;
-    case U_DOWN: *dir = 1; return 2;
-    case U_Z: *dir = -1; return 3;
-    case U_X: *dir = 1; return 3;
-    case U_LEFT: *dir = -1; return 3;
-    case U_RIGHT: *dir = 1; return 3;
-    default: return 0;
+    case U_Q:
+        *dir = -1;
+        return 1;
+    case U_W:
+        *dir = 1;
+        return 1;
+    case U_A:
+        *dir = -1;
+        return 2;
+    case U_S:
+        *dir = 1;
+        return 2;
+    case U_UP:
+        *dir = -1;
+        return 2;
+    case U_DOWN:
+        *dir = 1;
+        return 2;
+    case U_Z:
+        *dir = -1;
+        return 3;
+    case U_X:
+        *dir = 1;
+        return 3;
+    case U_LEFT:
+        *dir = -1;
+        return 3;
+    case U_RIGHT:
+        *dir = 1;
+        return 3;
+    default:
+        return 0;
     }
 }
 

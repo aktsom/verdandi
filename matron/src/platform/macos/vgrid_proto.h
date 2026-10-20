@@ -22,12 +22,12 @@ extern "C" {
 #define VARC_LEDS 64
 
 typedef struct {
-    int cols, rows;                         // 0 x 0 for an arc: that is how libmonome tells them apart
-    int rings;                              // an arc's rings, 0 for a grid
+    int cols, rows;                      // 0 x 0 for an arc: that is how libmonome tells them apart
+    int rings;                           // an arc's rings, 0 for a grid
     uint8_t level[VGRID_MAX][VGRID_MAX]; // [y][x], 0-15 as sent by the host
-    uint8_t ring[VARC_RINGS][VARC_LEDS];    // arc leds, 0-15, led 0 at the top, clockwise
-    uint8_t intensity;                      // 0-15, scales all leds
-    const char *id;                         // answered to "get id" (up to 32 chars)
+    uint8_t ring[VARC_RINGS][VARC_LEDS]; // arc leds, 0-15, led 0 at the top, clockwise
+    uint8_t intensity;                   // 0-15, scales all leds
+    const char *id;                      // answered to "get id" (up to 32 chars)
     // partial message between feeds
     uint8_t buf[64];
     size_t have;

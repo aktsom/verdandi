@@ -692,6 +692,12 @@ files["lua/core/state.lua"] = {
     },
 }
 
+files["lua/core/virtual_home.lua"] = {
+    ignore = {
+        "122", -- setting a read-only field of a global (io, os: wrapped on purpose)
+    },
+}
+
 files["lua/core/vport.lua"] = {
     ignore = {
         "211", -- unused local variable
