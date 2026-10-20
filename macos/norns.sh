@@ -178,7 +178,8 @@ run_jackd() {
     jackd "${args[@]}" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
     JACK_PID=$!
     PIDS="$PIDS $JACK_PID"
-    "$JACK_WAIT" 10
+    # 30 s: the first start after an install is slow while macOS checks the new binaries
+    "$JACK_WAIT" 30
 }
 start_jackd() {
     read_audio_conf
