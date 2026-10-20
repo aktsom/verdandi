@@ -31,8 +31,11 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_MIC 4  // n = 1 the audio input is on, 0 off
 extern void sdl_bridge_show_control(int kind, int n, int value);
 
-// any thread, does not block: open or close the virtual grid window
-extern void sdl_bridge_toggle_grid(void);
+// any thread, does not block: open or close a virtual device window
+#define SDL_BRIDGE_GRID 1
+#define SDL_BRIDGE_ARC 2
+#define SDL_BRIDGE_KEYS 3
+extern void sdl_bridge_toggle_window(int which);
 
 #ifdef __cplusplus
 }

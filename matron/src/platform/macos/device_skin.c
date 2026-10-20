@@ -3,6 +3,7 @@
  */
 
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "device_skin.h"
@@ -25,11 +26,12 @@ typedef struct {
     const char *label;
 } button_t;
 static const button_t buttons[] = {
-    {77, "MIX"},  {173, "TAPE"}, {269, "HOME"},   {365, "PARAMS"}, // SKIN_PAGE1..4
-    {489, "MIC"}, {585, "GRID"}, {681, "MAIDEN"}, {777, "MANUAL"}, // SKIN_MIC..MANUAL
+    {77, "MIX"},  {153, "TAPE"}, {229, "HOME"}, {305, "PARAMS"}, // SKIN_PAGE1..4
+    {398, "MIC"}, {474, "GRID"}, {550, "ARC"},  {626, "KEYS"},   // SKIN_MIC..KEYS
+    {719, "MAIDEN"}, {795, "MANUAL"},                            // SKIN_MAIDEN, MANUAL
 };
 #define NBUTTONS ((int)(sizeof buttons / sizeof buttons[0]))
-static const double button_y = 70, button_w = 88, button_h = 40;
+static const double button_y = 70, button_w = 70, button_h = 40;
 
 // the knobs are endless encoders: no pointer, only the knurl moves. one detent turns it by
 // a third of the knurl spacing, so it always visibly moves the right way
@@ -381,6 +383,7 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     int id = SKIN_PAGE1 + i;
     int down = st->button_down == id;
     int lit = (id <= SKIN_PAGE4 && st->page == i + 1) || (id == SKIN_GRID && st->grid_open) ||
+              (id == SKIN_ARC && st->arc_open) || (id == SKIN_KEYS && st->keys_open) ||
               (id == SKIN_MIC && st->mic_live);
     double x = b->x, y = button_y, dy = down ? 1.2 : 0;
 
@@ -417,19 +420,60 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
 
     // led or arrow on the left, label in the rest
     double mid = y + dy + button_h / 2;
-    if (id <= SKIN_GRID) {
-        draw_led(cr, x + 15, mid, lit);
+    if (id <= SKIN_KEYS) {
+        draw_led(cr, x + 12, mid, lit);
     } else {
-        draw_out_arrow(cr, x + 15, mid);
+        draw_out_arrow(cr, x + 12, mid);
     }
     cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 12);
+    double area = x + 20, area_w = button_w - 23;
+    // long labels get a smaller size rather than touching the edge
+    double size = 12;
     cairo_text_extents_t te;
-    cairo_text_extents(cr, b->label, &te);
-    double area = x + 25, area_w = button_w - 28;
+    for (;;) {
+        cairo_set_font_size(cr, size);
+        cairo_text_extents(cr, b->label, &te);
+        if (te.width <= area_w - 2 || size <= 8) {
+            break;
+        }
+        size -= 0.5;
+    }
     cairo_move_to(cr, area + (area_w - te.width) / 2 - te.x_bearing, mid - te.height / 2 - te.y_bearing);
     hex(cr, lit ? "ffffff" : "c3c6cb", 1);
     cairo_show_text(cr, b->label);
+}
+
+// a message under the buttons, right of E1: a dark pill like a notification
+static void draw_toast(cairo_t *cr, const char *text, int recording) {
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 14);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, text, &te);
+    double dot = recording ? 22 : 0;
+    double w = te.x_advance + 36 + dot, h = 36;
+    double right = SKIN_W - 95, cy = 175;
+    if (w > right - 300) {
+        w = right - 300;
+    }
+    double x = right - w, y = cy - h / 2;
+    rounded_rect(cr, x, y + 2, w, h, h / 2);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+    cairo_fill(cr);
+    rounded_rect(cr, x, y, w, h, h / 2);
+    hex(cr, "1d1e21", 0.92);
+    cairo_fill(cr);
+    if (recording) {
+        circle(cr, x + 22, cy, 6);
+        hex(cr, "ff453a", 1);
+        cairo_fill(cr);
+    }
+    cairo_save(cr);
+    rounded_rect(cr, x + 12, y, w - 24, h, 0);
+    cairo_clip(cr);
+    cairo_move_to(cr, x + 18 + dot - te.x_bearing, cy - te.height / 2 - te.y_bearing);
+    hex(cr, "f2f3f5", 1);
+    cairo_show_text(cr, text);
+    cairo_restore(cr);
 }
 
 void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st) {
@@ -438,6 +482,9 @@ void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *s
     cairo_scale(cr, g->s, g->s);
     for (int i = 0; i < NBUTTONS; i++) {
         draw_button(cr, i, st);
+    }
+    if (st->toast != NULL && st->toast[0] != '\0') {
+        draw_toast(cr, st->toast, st->recording);
     }
     for (int i = 0; i < 3; i++) {
         draw_key(cr, key_pos[i], st->key_down[i], st->hover == SKIN_K1 + i);

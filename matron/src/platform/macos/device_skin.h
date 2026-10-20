@@ -23,8 +23,8 @@ extern "C" {
 #define SKIN_MARGIN 16
 
 // controls: 1-3 = K1-K3, 4-6 = E1-E3, then the button row along the top (not on the
-// device): the menu pages MIX TAPE HOME PARAMS, MIC (input on/off), GRID (virtual grid
-// window), MAIDEN, MANUAL
+// device): the menu pages MIX TAPE HOME PARAMS, MIC (input on/off), the virtual device
+// windows GRID ARC KEYS, then MAIDEN, MANUAL
 enum {
     SKIN_NONE = 0,
     SKIN_K1 = 1,
@@ -35,8 +35,10 @@ enum {
     SKIN_PAGE4 = 10,
     SKIN_MIC = 11,
     SKIN_GRID = 12,
-    SKIN_MAIDEN = 13,
-    SKIN_MANUAL = 14,
+    SKIN_ARC = 13,
+    SKIN_KEYS = 14,
+    SKIN_MAIDEN = 15,
+    SKIN_MANUAL = 16,
 };
 
 typedef struct {
@@ -45,8 +47,12 @@ typedef struct {
     int hover;        // control under the mouse, SKIN_NONE if none
     int page;         // menu page shown (1-4: MIX TAPE HOME PARAMS), 0 = script
     int grid_open;    // virtual grid window open
+    int arc_open;     // virtual arc window open
+    int keys_open;    // virtual keyboard window open
     int mic_live;     // the audio input reaches norns
     int button_down;  // button held by the mouse, SKIN_NONE if none
+    int recording;    // a gif of the screen is being recorded
+    const char *toast; // a short message on the box (import, screenshot), NULL for none
 } skin_state_t;
 
 typedef struct {

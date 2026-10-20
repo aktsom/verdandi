@@ -56,7 +56,9 @@ static void *run(void *arg) {
     return NULL;
 }
 
-vgrid_device_t *vgrid_open(const char *id, int cols, int rows, void (*on_change)(void *ctx), void *ctx) {
+// rings > 0: an arc, otherwise a grid of cols x rows
+static vgrid_device_t *open_device(const char *id, int cols, int rows, int rings, void (*on_change)(void *ctx),
+                                   void *ctx) {
     vgrid_device_t *g = (vgrid_device_t *)calloc(1, sizeof *g);
     if (g == NULL) {
         return NULL;
@@ -85,14 +87,19 @@ vgrid_device_t *vgrid_open(const char *id, int cols, int rows, void (*on_change)
     if (mkdtemp(g->dir) == NULL) {
         goto fail;
     }
-    snprintf(g->path, sizeof g->path, "%s/grid-m0000001", g->dir);
+    // distinct serials, so a grid and an arc can be plugged in at the same time
+    snprintf(g->path, sizeof g->path, rings > 0 ? "%s/arc-m0000002" : "%s/grid-m0000001", g->dir);
     if (symlink(slave, g->path) < 0) {
         rmdir(g->dir);
         goto fail;
     }
     g->linked = 1;
     pthread_mutex_init(&g->lock, NULL);
-    vgrid_proto_init(&g->proto, id, cols, rows);
+    if (rings > 0) {
+        vgrid_proto_init_arc(&g->proto, id, rings);
+    } else {
+        vgrid_proto_init(&g->proto, id, cols, rows);
+    }
     g->on_change = on_change;
     g->ctx = ctx;
     if (pthread_create(&g->thread, NULL, run, g) != 0) {
@@ -111,6 +118,14 @@ fail:
     }
     free(g);
     return NULL;
+}
+
+vgrid_device_t *vgrid_open(const char *id, int cols, int rows, void (*on_change)(void *ctx), void *ctx) {
+    return open_device(id, cols, rows, 0, on_change, ctx);
+}
+
+vgrid_device_t *vgrid_open_arc(const char *id, int rings, void (*on_change)(void *ctx), void *ctx) {
+    return open_device(id, 0, 0, rings, on_change, ctx);
 }
 
 void vgrid_close(vgrid_device_t *g) {
@@ -138,17 +153,45 @@ void vgrid_unlink(vgrid_device_t *g) {
     }
 }
 
+static void send_bytes(vgrid_device_t *g, const uint8_t *m, size_t n) {
+    if (write(g->master, m, n) < 0) {
+        perror("vgrid: write");
+    }
+}
+
 void vgrid_key(vgrid_device_t *g, int x, int y, int down) {
     uint8_t m[3];
     vgrid_proto_key(x, y, down, m);
-    if (write(g->master, m, 3) < 0) {
-        perror("vgrid: key");
+    send_bytes(g, m, 3);
+}
+
+void vgrid_enc(vgrid_device_t *g, int n, int delta) {
+    // one message carries -128..127
+    while (delta != 0) {
+        int d = delta < -128 ? -128 : (delta > 127 ? 127 : delta);
+        uint8_t m[3];
+        vgrid_proto_enc(n, d, m);
+        send_bytes(g, m, 3);
+        delta -= d;
     }
+}
+
+void vgrid_enc_key(vgrid_device_t *g, int n, int down) {
+    uint8_t m[2];
+    vgrid_proto_enc_key(n, down, m);
+    send_bytes(g, m, 2);
 }
 
 void vgrid_levels(vgrid_device_t *g, uint8_t level[VGRID_MAX][VGRID_MAX], int *intensity) {
     pthread_mutex_lock(&g->lock);
     memcpy(level, g->proto.level, sizeof g->proto.level);
+    *intensity = g->proto.intensity;
+    pthread_mutex_unlock(&g->lock);
+}
+
+void vgrid_rings(vgrid_device_t *g, uint8_t ring[VARC_RINGS][VARC_LEDS], int *intensity) {
+    pthread_mutex_lock(&g->lock);
+    memcpy(ring, g->proto.ring, sizeof g->proto.ring);
     *intensity = g->proto.intensity;
     pthread_mutex_unlock(&g->lock);
 }

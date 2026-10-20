@@ -3,16 +3,21 @@
  *
  * cc -std=c11 -Wall -Wextra -I matron/src/platform/macos $(pkg-config --cflags --libs cairo) \
  *    macos/tests/device_skin_test.c matron/src/platform/macos/device_skin.c \
- *    matron/src/platform/macos/vgrid_skin.c -o /tmp/dst && /tmp/dst [out_dir]
+ *    matron/src/platform/macos/vgrid_skin.c matron/src/platform/macos/varc_skin.c \
+ *    matron/src/platform/macos/vkeys_skin.c -o /tmp/dst && /tmp/dst [out_dir]
  *
- * with out_dir it also writes skin_<w>x<h>.png renders to look at.
+ * with out_dir it also writes skin_<w>x<h>.png renders (and the grid, arc and keyboard
+ * windows) to look at.
  */
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "device_skin.h"
+#include "varc_skin.h"
 #include "vgrid_skin.h"
+#include "vkeys_skin.h"
 
 static int failures = 0;
 
@@ -67,13 +72,18 @@ static void test_geom(int w, int h) {
     CHECK(skin_hit(&g, px(&g, 280), py(&g, 460)) == SKIN_NONE, "%dx%d: screen hits a control", w, h);
     CHECK(skin_hit(&g, px(&g, 500), py(&g, 170)) == SKIN_NONE, "%dx%d: top hits a control", w, h);
     CHECK(skin_hit(&g, 1, 1) == SKIN_NONE, "%dx%d: corner hits a control", w, h);
-    // the button row: pages, mic, grid, maiden, manual, left to right
-    static const double bx[8] = {77, 173, 269, 365, 489, 585, 681, 777};
-    for (int i = 0; i < 8; i++) {
-        int hb = skin_hit(&g, px(&g, bx[i] + 44), py(&g, 90));
+    // the button row: pages, mic, grid, arc, keys, maiden, manual, left to right
+    static const double bx[10] = {77, 153, 229, 305, 398, 474, 550, 626, 719, 795};
+    for (int i = 0; i < 10; i++) {
+        int hb = skin_hit(&g, px(&g, bx[i] + 35), py(&g, 90));
         CHECK(hb == SKIN_PAGE1 + i, "%dx%d: button %d hits %d", w, h, i, hb);
     }
-    CHECK(skin_hit(&g, px(&g, 471), py(&g, 90)) == SKIN_NONE, "%dx%d: gap between button groups", w, h);
+    CHECK(skin_hit(&g, px(&g, 626 + 35), py(&g, 90)) == SKIN_KEYS, "%dx%d: KEYS", w, h);
+    CHECK(skin_hit(&g, px(&g, 795 + 35), py(&g, 90)) == SKIN_MANUAL, "%dx%d: MANUAL is last", w, h);
+    CHECK(skin_hit(&g, px(&g, 386), py(&g, 90)) == SKIN_NONE, "%dx%d: gap between button groups", w, h);
+    CHECK(skin_hit(&g, px(&g, 707), py(&g, 90)) == SKIN_NONE, "%dx%d: gap before maiden", w, h);
+    // nothing reaches past the last knob (the box edge)
+    CHECK(795 + 70 <= 865 + 0.01, "buttons end at E3's edge");
     CHECK(skin_hit(&g, px(&g, 125), py(&g, 160)) == SKIN_NONE, "%dx%d: below the buttons", w, h);
     // K2 and E2 do not overlap: between them is nothing
     CHECK(skin_hit(&g, px(&g, 633), py(&g, 481)) == SKIN_NONE, "%dx%d: K2/E2 overlap", w, h);
@@ -160,7 +170,120 @@ static void test_vgrid(const char *dir, int size) {
     cairo_surface_destroy(out);
 }
 
+static void test_varc(const char *dir) {
+    int uw, uh;
+    varc_skin_units(4, &uw, &uh);
+    int w = uw * 2, h = uh * 2;
+    varc_geom_t g;
+    varc_skin_geom(w, h, 4, &g);
+    for (int n = 0; n < 4; n++) {
+        double cx, cy;
+        varc_skin_center(&g, n, &cx, &cy);
+        CHECK(varc_skin_hit(&g, cx, cy) == n, "arc: centre of ring %d", n);
+        CHECK(varc_skin_hit(&g, cx + 80 * g.s, cy) == n, "arc: rim of ring %d", n);
+        CHECK(cx > 0 && cx < w && cy > 0 && cy < h, "arc: ring %d inside", n);
+    }
+    CHECK(varc_skin_hit(&g, 2, 2) == -1, "arc: corner hits a ring");
+    if (dir == NULL) {
+        return;
+    }
+    uint8_t ring[VARC_RINGS][VARC_LEDS] = {{0}};
+    for (int x = 0; x < 64; x++) {
+        ring[0][x] = x < 24 ? 15 : 0;
+        ring[1][x] = (uint8_t)(x / 4);
+        ring[3][x] = x >= 40 ? 6 : 0;
+    }
+    ring[2][10] = 15;
+    double angle[4] = {0, 0.1, 0.2, 0.3};
+    cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    cairo_t *cr = cairo_create(out);
+    varc_skin_draw(cr, &g, w, h, ring, 15, angle, 2);
+    char path[512];
+    snprintf(path, sizeof path, "%s/varc.png", dir);
+    CHECK(cairo_surface_write_to_png(out, path) == CAIRO_STATUS_SUCCESS, "write %s", path);
+    cairo_destroy(cr);
+    cairo_surface_destroy(out);
+}
+
+static void test_vkeys(const char *dir) {
+    int uw, uh, key = -1, vel = 0;
+    vkeys_skin_units(&uw, &uh);
+    int w = uw * 2, h = uh * 2;
+    vkeys_geom_t g;
+    vkeys_skin_geom(w, h, &g);
+    // layout units: keys start at 32,86; white keys 44 x 190, black 27 x 118
+    double kx = g.ox + 32 * g.s, ky = g.oy + 86 * g.s;
+    // the front of each white key: C D E F G A B C ...
+    static const int whites[15] = {0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24};
+    for (int i = 0; i < 15; i++) {
+        int c = vkeys_skin_hit(&g, kx + (i * 44 + 22) * g.s, ky + 170 * g.s, &key, &vel);
+        CHECK(c == VK_KEY && key == whites[i], "keys: white %d hits %d (key %d)", i, c, key);
+        CHECK(vel > 100, "keys: front of a key is loud (%d)", vel);
+    }
+    // black keys over the white ones: C# between C and D, at the top
+    int c = vkeys_skin_hit(&g, kx + 44 * g.s, ky + 20 * g.s, &key, &vel);
+    CHECK(c == VK_KEY && key == 1, "keys: C# hits %d (key %d)", c, key);
+    CHECK(vel < 60, "keys: back of a key is soft (%d)", vel);
+    c = vkeys_skin_hit(&g, kx + (7 * 44 + 4 * 44) * g.s, ky + 60 * g.s, &key, &vel);
+    CHECK(c == VK_KEY && key == 18, "keys: upper F# hits %d (key %d)", c, key);
+    // E and F have no black key between them
+    c = vkeys_skin_hit(&g, kx + 3 * 44 * g.s, ky + 40 * g.s, &key, &vel);
+    CHECK(c == VK_KEY && (key == 4 || key == 5), "keys: between E and F hits %d (key %d)", c, key);
+    // the strip
+    int found[VK_KEY + 1] = {0};
+    for (double x = 0; x < w; x += 2) {
+        int hit = vkeys_skin_hit(&g, x, g.oy + (32 + 17) * g.s, &key, &vel);
+        found[hit] = 1;
+    }
+    CHECK(found[VK_OCT_DOWN] && found[VK_OCT_UP] && found[VK_VEL_DOWN] && found[VK_VEL_UP] && found[VK_LATCH],
+          "keys: strip has octave, velocity and latch");
+    CHECK(!found[VK_KEY], "keys: strip hits a key");
+    CHECK(vkeys_skin_hit(&g, 2, 2, &key, &vel) == VK_NONE, "keys: corner");
+
+    // notes and the computer keyboard
+    vkeys_state_t st;
+    memset(&st, 0, sizeof st);
+    st.octave = 3;
+    CHECK(vkeys_note(&st, 0) == 48 && vkeys_note(&st, 12) == 60, "keys: octave 3 is C3 (48), middle C 60");
+    int ctl;
+    CHECK(vkeys_typed(4, &ctl) == 0 && ctl == VK_NONE, "keys: A plays C");
+    CHECK(vkeys_typed(26, &ctl) == 1, "keys: W plays C#");
+    CHECK(vkeys_typed(14, &ctl) == 12, "keys: K plays the upper C");
+    CHECK(vkeys_typed(52, &ctl) == 17, "keys: ' plays the upper F");
+    CHECK(vkeys_typed(29, &ctl) == -1 && ctl == VK_OCT_DOWN, "keys: Z is octave down");
+    CHECK(vkeys_typed(27, &ctl) == -1 && ctl == VK_OCT_UP, "keys: X is octave up");
+    CHECK(vkeys_typed(6, &ctl) == -1 && ctl == VK_VEL_DOWN, "keys: C is velocity down");
+    CHECK(vkeys_typed(25, &ctl) == -1 && ctl == VK_VEL_UP, "keys: V is velocity up");
+    CHECK(vkeys_typed(20, &ctl) == -1 && ctl == VK_NONE, "keys: Q plays nothing");
+    for (int k = 0; k < 18; k++) {
+        CHECK(vkeys_typed(vkeys_typed_usage(k), &ctl) == k, "keys: usage round trip %d", k);
+    }
+    CHECK(vkeys_typed_usage(20) == -1, "keys: no computer key above F");
+    if (dir == NULL) {
+        return;
+    }
+    st.velocity = 100;
+    st.latch = 1;
+    st.held[0] = VKEYS_HELD_MOUSE;
+    st.held[4] = VKEYS_HELD_LATCH;
+    st.held[13] = VKEYS_HELD_TYPED;
+    static const char *labels[18] = {"A", "W", "S", "E", "D", "F", "T", "G", "Y", "H", "U", "J", "K", "O", "L", "P", ";", "'"};
+    for (int k = 0; k < 18; k++) {
+        st.typed_label[k] = labels[k];
+    }
+    cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    cairo_t *cr = cairo_create(out);
+    vkeys_skin_draw(cr, &g, w, h, &st);
+    char path[512];
+    snprintf(path, sizeof path, "%s/vkeys.png", dir);
+    CHECK(cairo_surface_write_to_png(out, path) == CAIRO_STATUS_SUCCESS, "write %s", path);
+    cairo_destroy(cr);
+    cairo_surface_destroy(out);
+}
+
 int main(int argc, char **argv) {
+    test_varc(argc > 1 ? argv[1] : NULL);
+    test_vkeys(argc > 1 ? argv[1] : NULL);
     for (int size = 1; size <= 3; size++) {
         test_vgrid(argc > 1 ? argv[1] : NULL, size);
     }
@@ -169,11 +292,21 @@ int main(int argc, char **argv) {
         test_geom(sizes[i][0], sizes[i][1]);
     }
     if (argc > 1) {
-        skin_state_t idle = {{0, 0, 0}, {0, 0, 0}, SKIN_NONE, 0, 0, 1, SKIN_NONE};
-        skin_state_t used = {{0, 1, 0}, {0, 3, -5}, SKIN_E1, 4, 1, 0, SKIN_MAIDEN};
+        skin_state_t idle = {.hover = SKIN_NONE, .mic_live = 1, .button_down = SKIN_NONE};
+        skin_state_t used = {.key_down = {0, 1, 0},
+                             .enc_ticks = {0, 3, -5},
+                             .hover = SKIN_E1,
+                             .page = 4,
+                             .grid_open = 1,
+                             .keys_open = 1,
+                             .button_down = SKIN_MAIDEN,
+                             .recording = 1,
+                             .toast = "REC  GIF · \u21e7\u2318G stops"};
+        skin_state_t toast = {.hover = SKIN_NONE, .mic_live = 1, .arc_open = 1, .toast = "3 files \u2192 dust/audio"};
         render(argv[1], 1984, 1324, &idle, "");
         render(argv[1], 1984, 1324, &used, "_used");
         render(argv[1], 992, 662, &idle, "");
+        render(argv[1], 992, 662, &toast, "_toast");
     }
     printf("%s: %d failures\n", failures ? "FAILED" : "ok", failures);
     return failures != 0;

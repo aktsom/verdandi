@@ -10,12 +10,22 @@
  * receives, whatever sent it (mouse, keyboard, midi mapping): matron reports every
  * key/enc event back through sdl_bridge_show_control().
  *
- * the button row above the device opens the menu pages, maiden, the manual and the virtual
- * grid: a second window that libmonome sees as a usb grid (vgrid_device.h), 64, 128 or 256
- * (the switch under it; the choice is kept in ~/.vgrid-size). click a key to press it, drag
- * across keys to play them in turn, right-click (or ctrl-click) to latch a key down, for
- * chords. when the grid opens, the two windows are laid out next to or above each other,
- * as large as the screen allows; when it closes, the norns window goes back.
+ * the button row above the device opens the menu pages, maiden, the manual and three
+ * virtual devices, each in a window of its own:
+ *  - GRID: libmonome sees a usb grid (vgrid_device.h), 64, 128 or 256 (the switch under
+ *    it; the choice is kept in ~/.vgrid-size). click a key to press it, drag across keys to
+ *    play them in turn, right-click (or ctrl-click) to latch a key down, for chords.
+ *  - ARC: libmonome sees an arc with 4 rings. drag round a knob (or use the wheel over it)
+ *    to turn it, right-click to push it.
+ *  - KEYS: a two octave keyboard that norns sees as the midi device "norns keys" (other
+ *    apps see it too). click a key, higher up for softer; with the window in front the
+ *    computer keyboard plays it (vkeys_skin.h).
+ * the open windows are laid out round the norns window, as large as the screen allows;
+ * when the last one closes, the norns window goes back.
+ *
+ * files dropped on any window go into dust (dust_import.h). the menu bar (mac_menu.h)
+ * imports, shows dust and the tape folder, and saves the screen as a png or records it
+ * as a gif, to the desktop.
  *
  * keyboard: plain keys go to norns as the usb keyboard, where lua/core/keyboard.lua turns
  * 1 2 3 / QW AS ZX into K1-3 / E1-3 when nothing else wants them. window_keys.h adds the
@@ -29,9 +39,17 @@
 #include <dispatch/dispatch.h>
 #include <math.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <deque>
+#include <string>
+#include <vector>
 
 #include "event_types.h"
 #include "events.h"
@@ -41,9 +59,14 @@
 #include "device_monitor_macos.h"
 #include "device_runloop.h"
 #include "device_skin.h"
+#include "dust_import.h"
+#include "gif_writer.h"
+#include "mac_menu.h"
 #include "open_url.h"
+#include "varc_skin.h"
 #include "vgrid_device.h"
 #include "vgrid_skin.h"
+#include "vkeys_skin.h"
 #include "window_keys.h"
 #include "sdl_bridge.h"
 
@@ -64,8 +87,12 @@ typedef struct {
 
 static Uint32 bridge_event_type = (Uint32)-1;
 static Uint32 show_event_type = (Uint32)-1;
-static Uint32 grid_event_type = (Uint32)-1;
+static Uint32 device_event_type = (Uint32)-1;
+static Uint32 toast_event_type = (Uint32)-1;
 static pthread_t main_thread;
+
+// device_event_type codes
+enum { DEV_GRID_LEDS = 0, DEV_TOGGLE = 1, DEV_ARC_LEDS = 2 };
 
 //--- drawing (main thread only)
 
@@ -161,6 +188,8 @@ static void redraw(bool full) {
     SDL_UpdateWindowSurfaceRects(the_window, &r, 1);
 }
 
+static void gif_add_frame(void);
+
 static void present(SDL_Window *window, SDL_Surface *src) {
     // a frame for a window that is gone (quit) is dropped
     if (src == NULL || window == NULL || window != the_window) {
@@ -176,6 +205,7 @@ static void present(SDL_Window *window, SDL_Surface *src) {
     bool first = !have_frame;
     have_frame = 1;
     redraw(first || canvas == NULL);
+    gif_add_frame();
 }
 
 // dock icon from the png in NORNS_ICON (set by macos/norns.sh)
@@ -249,80 +279,159 @@ static void bridge_call(bridge_req_t *req) {
     dispatch_release(req->done);
 }
 
-//--- virtual grid window (main thread, except grid_changed)
+//--- toasts: a short message on the box (main thread)
 
-static vgrid_device_t *vgrid = NULL;
-static SDL_Window *grid_window = NULL;
-static vgrid_geom_t grid_geom = {};
-static int grid_w = 0, grid_h = 0;
-static cairo_surface_t *grid_canvas = NULL;
-static SDL_Surface *grid_canvas_sdl = NULL;
-static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
-static int grid_size = 0; // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
-static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
-static int grid_pending = 0;
+static std::string toast_text;
+static unsigned toast_gen = 0;
+static bool recording = false;
 
-// device thread: leds changed; one redraw request at a time
-static void grid_changed(void *ctx) {
-    (void)ctx;
-    if (__atomic_exchange_n(&grid_pending, 1, __ATOMIC_ACQ_REL) == 0) {
-        SDL_Event ev;
-        SDL_zero(ev);
-        ev.type = grid_event_type;
-        SDL_PushEvent(&ev);
+static Uint32 toast_timeout(Uint32 interval, void *gen) {
+    (void)interval;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 1; // clear, if still the same message
+    ev.user.data1 = gen;
+    SDL_PushEvent(&ev);
+    return 0;
+}
+
+// a message for a few seconds; while a gif is recorded the recording note stays instead
+static void show_toast(const std::string &text, Uint32 ms = 3500) {
+    toast_text = text;
+    toast_gen++;
+    skin.toast = toast_text.c_str();
+    redraw(true);
+    if (ms > 0) {
+        SDL_AddTimer(ms, toast_timeout, (void *)(uintptr_t)toast_gen);
     }
 }
 
-static void grid_free_canvas(void) {
-    if (grid_canvas_sdl != NULL) {
-        SDL_FreeSurface(grid_canvas_sdl);
-        grid_canvas_sdl = NULL;
-    }
-    if (grid_canvas != NULL) {
-        cairo_surface_destroy(grid_canvas);
-        grid_canvas = NULL;
-    }
-    grid_w = grid_h = 0;
+static void recording_toast(void) {
+    show_toast("REC  GIF  \xc2\xb7  shift-cmd-G stops", 0);
 }
 
-static void grid_redraw(void) {
-    __atomic_store_n(&grid_pending, 0, __ATOMIC_RELEASE);
-    if (grid_window == NULL || vgrid == NULL) {
+static void toast_expired(unsigned gen) {
+    if (gen != toast_gen) {
         return;
     }
-    SDL_Surface *dst = SDL_GetWindowSurface(grid_window);
+    if (recording) {
+        recording_toast();
+        return;
+    }
+    toast_text.clear();
+    skin.toast = NULL;
+    redraw(true);
+}
+
+// any thread: a message, through the event queue
+static void post_toast(const std::string &text) {
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 0;
+    ev.user.data1 = strdup(text.c_str());
+    if (SDL_PushEvent(&ev) < 1) {
+        free(ev.user.data1);
+    }
+}
+
+//--- extra windows: grid, arc, keys
+
+typedef struct {
+    SDL_Window *window;
+    int uw, uh; // size at 1:1, in points
+    cairo_surface_t *canvas;
+    SDL_Surface *canvas_sdl;
+    int w, h; // canvas in pixels
+} pane_t;
+
+static void pane_free_canvas(pane_t *p) {
+    if (p->canvas_sdl != NULL) {
+        SDL_FreeSurface(p->canvas_sdl);
+        p->canvas_sdl = NULL;
+    }
+    if (p->canvas != NULL) {
+        cairo_surface_destroy(p->canvas);
+        p->canvas = NULL;
+    }
+    p->w = p->h = 0;
+}
+
+// a canvas the size of the window surface; *resized when it is new. NULL if none
+static cairo_t *pane_begin(pane_t *p, bool *resized) {
+    *resized = false;
+    if (p->window == NULL) {
+        return NULL;
+    }
+    SDL_Surface *dst = SDL_GetWindowSurface(p->window);
     if (dst == NULL) {
-        return;
+        return NULL;
     }
-    int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1];
-    if (grid_canvas == NULL || grid_w != dst->w || grid_h != dst->h || grid_geom.cols != cols ||
-        grid_geom.rows != rows) {
-        grid_free_canvas();
-        grid_canvas = cairo_image_surface_create(CAIRO_FORMAT_RGB24, dst->w, dst->h);
-        grid_canvas_sdl = SDL_CreateRGBSurfaceWithFormatFrom(cairo_image_surface_get_data(grid_canvas), dst->w, dst->h,
-                                                             32, cairo_image_surface_get_stride(grid_canvas),
-                                                             SDL_PIXELFORMAT_RGB888);
-        if (grid_canvas_sdl == NULL) {
-            grid_free_canvas();
-            return;
+    if (p->canvas == NULL || p->w != dst->w || p->h != dst->h) {
+        pane_free_canvas(p);
+        p->canvas = cairo_image_surface_create(CAIRO_FORMAT_RGB24, dst->w, dst->h);
+        p->canvas_sdl = SDL_CreateRGBSurfaceWithFormatFrom(cairo_image_surface_get_data(p->canvas), dst->w, dst->h, 32,
+                                                           cairo_image_surface_get_stride(p->canvas),
+                                                           SDL_PIXELFORMAT_RGB888);
+        if (p->canvas_sdl == NULL) {
+            pane_free_canvas(p);
+            return NULL;
         }
-        SDL_SetSurfaceBlendMode(grid_canvas_sdl, SDL_BLENDMODE_NONE);
-        grid_w = dst->w;
-        grid_h = dst->h;
-        vgrid_skin_geom(grid_w, grid_h, cols, rows, &grid_geom);
+        SDL_SetSurfaceBlendMode(p->canvas_sdl, SDL_BLENDMODE_NONE);
+        p->w = dst->w;
+        p->h = dst->h;
+        *resized = true;
     }
-    uint8_t level[VGRID_MAX][VGRID_MAX];
-    int intensity;
-    vgrid_levels(vgrid, level, &intensity);
-    cairo_t *cr = cairo_create(grid_canvas);
-    vgrid_skin_draw(cr, &grid_geom, grid_w, grid_h, level, intensity, grid_held, grid_size);
-    cairo_destroy(cr);
-    cairo_surface_flush(grid_canvas);
-    SDL_BlitSurface(grid_canvas_sdl, NULL, dst, NULL);
-    SDL_UpdateWindowSurface(grid_window);
+    return cairo_create(p->canvas);
 }
 
-static void redraw(bool full);
+static void pane_end(pane_t *p, cairo_t *cr) {
+    cairo_destroy(cr);
+    cairo_surface_flush(p->canvas);
+    SDL_Surface *dst = SDL_GetWindowSurface(p->window);
+    if (dst != NULL) {
+        SDL_BlitSurface(p->canvas_sdl, NULL, dst, NULL);
+        SDL_UpdateWindowSurface(p->window);
+    }
+}
+
+static SDL_Window *pane_open(pane_t *p, const char *title, int uw, int uh) {
+    p->uw = uw;
+    p->uh = uh;
+    p->window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, uw, uh,
+                                 SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+    if (p->window != NULL) {
+        SDL_SetWindowMinimumSize(p->window, uw / 3, uh / 3);
+        set_icon(p->window);
+    }
+    return p->window;
+}
+
+static void pane_close(pane_t *p) {
+    if (p->window != NULL) {
+        SDL_DestroyWindow(p->window);
+        p->window = NULL;
+    }
+    pane_free_canvas(p);
+}
+
+static bool is_pane(const pane_t *p, Uint32 window_id) {
+    return p->window != NULL && window_id == SDL_GetWindowID(p->window);
+}
+
+// window points -> canvas pixels
+static void pane_pixels(const pane_t *p, int x, int y, double *px, double *py) {
+    int ww = 1, wh = 1;
+    SDL_GetWindowSize(p->window, &ww, &wh);
+    double k = p->w > 0 && ww > 0 ? (double)p->w / ww : 1;
+    *px = x * k;
+    *py = y * k;
+}
+
+static pane_t grid_pane = {};
+static pane_t arc_pane = {};
+static pane_t keys_pane = {};
 
 //--- window layout
 
@@ -331,7 +440,7 @@ static void redraw(bool full);
 #define LAYOUT_GAP 12
 #define LAYOUT_PAD 8
 
-static SDL_Rect main_before_grid;
+static SDL_Rect main_before_extras;
 static bool main_saved = false;
 
 // the free screen area (no menu bar, no dock) of the display the norns window is on
@@ -364,52 +473,174 @@ static void fit_main_window(SDL_Window *w) {
     }
 }
 
-// norns and the grid (gw x gh at 1:1) next to or above each other, whichever leaves them
-// larger, centred, both at the same scale. the norns window is remembered for later
-static void arrange_windows(int gw, int gh) {
+static void restore_main_window(void) {
+    if (main_saved && the_window != NULL) {
+        SDL_SetWindowSize(the_window, main_before_extras.w, main_before_extras.h);
+        SDL_SetWindowPosition(the_window, main_before_extras.x, main_before_extras.y);
+    }
+    main_saved = false;
+}
+
+// norns and the open device windows, all at one scale, centred: the extras in a row below
+// norns, all in one row, the extras in a column right of norns, or everything stacked,
+// whichever leaves them largest. the norns window is remembered for when they close
+static void arrange_windows(void) {
+    pane_t *open[3];
+    int n = 0;
+    for (pane_t *p : {&grid_pane, &keys_pane, &arc_pane}) {
+        if (p->window != NULL) {
+            open[n++] = p;
+        }
+    }
     SDL_Rect u;
-    if (the_window == NULL || grid_window == NULL || !usable_bounds(&u)) {
+    if (the_window == NULL || !usable_bounds(&u)) {
+        return;
+    }
+    if (n == 0) {
+        restore_main_window();
         return;
     }
     if (!main_saved) {
-        SDL_GetWindowPosition(the_window, &main_before_grid.x, &main_before_grid.y);
-        SDL_GetWindowSize(the_window, &main_before_grid.w, &main_before_grid.h);
+        SDL_GetWindowPosition(the_window, &main_before_extras.x, &main_before_extras.y);
+        SDL_GetWindowSize(the_window, &main_before_extras.w, &main_before_extras.h);
         main_saved = true;
     }
     int t = title_height(the_window);
-    double above = fmin(1.0, fmin((double)(u.h - 2 * LAYOUT_PAD - 2 * t - LAYOUT_GAP) / (MAIN_H + gh),
-                                  (double)(u.w - 2 * LAYOUT_PAD) / fmax(MAIN_W, gw)));
-    double beside = fmin(1.0, fmin((double)(u.w - 2 * LAYOUT_PAD - LAYOUT_GAP) / (MAIN_W + gw),
-                                   (double)(u.h - 2 * LAYOUT_PAD - t) / fmax(MAIN_H, gh)));
-    bool side = beside > above + 0.01;
-    double k = side ? beside : above;
-    int mw = (int)(MAIN_W * k), mh = (int)(MAIN_H * k), w = (int)(gw * k), h = (int)(gh * k);
-    int mx, my, x, y;
-    if (side) {
-        mx = u.x + (u.w - (mw + LAYOUT_GAP + w)) / 2;
-        x = mx + mw + LAYOUT_GAP;
+    double aw = u.w - 2 * LAYOUT_PAD, ah = u.h - 2 * LAYOUT_PAD;
+    int sum_w = 0, sum_h = 0, max_w = 0, max_h = 0;
+    for (int i = 0; i < n; i++) {
+        sum_w += open[i]->uw;
+        sum_h += open[i]->uh;
+        max_w = open[i]->uw > max_w ? open[i]->uw : max_w;
+        max_h = open[i]->uh > max_h ? open[i]->uh : max_h;
+    }
+    // per layout: content width/height at 1:1 and the fixed gaps and title bars
+    enum { BELOW, ROW, COLUMN, STACK };
+    double k[4];
+    k[BELOW] = fmin((aw - (n - 1) * LAYOUT_GAP) / fmax(MAIN_W, sum_w), (ah - 2 * t - LAYOUT_GAP) / (MAIN_H + max_h));
+    k[ROW] = fmin((aw - n * LAYOUT_GAP) / (MAIN_W + sum_w), (ah - t) / fmax(MAIN_H, max_h));
+    k[COLUMN] = fmin((aw - LAYOUT_GAP) / (MAIN_W + max_w),
+                     fmin((ah - t) / MAIN_H, (ah - n * t - (n - 1) * LAYOUT_GAP) / sum_h));
+    k[STACK] = fmin(aw / fmax(MAIN_W, max_w), (ah - (n + 1) * t - n * LAYOUT_GAP) / (MAIN_H + sum_h));
+    int best = BELOW;
+    for (int i = 1; i < 4; i++) {
+        if (k[i] > k[best] + 0.01) {
+            best = i;
+        }
+    }
+    double s = fmin(1.0, k[best]);
+    int mw = (int)(MAIN_W * s), mh = (int)(MAIN_H * s);
+    int ew[3], eh[3];
+    for (int i = 0; i < n; i++) {
+        ew[i] = (int)(open[i]->uw * s);
+        eh[i] = (int)(open[i]->uh * s);
+    }
+    int mx, my, ex[3], ey[3];
+    if (best == BELOW || best == ROW) {
+        int row_w = (n - 1) * LAYOUT_GAP, row_h = 0;
+        for (int i = 0; i < n; i++) {
+            row_w += ew[i];
+            row_h = eh[i] > row_h ? eh[i] : row_h;
+        }
+        if (best == BELOW) {
+            my = u.y + t + (u.h - (t + mh + LAYOUT_GAP + t + row_h)) / 2;
+            mx = u.x + (u.w - mw) / 2;
+            int x = u.x + (u.w - row_w) / 2;
+            for (int i = 0; i < n; i++) {
+                ex[i] = x;
+                ey[i] = my + mh + LAYOUT_GAP + t;
+                x += ew[i] + LAYOUT_GAP;
+            }
+        } else {
+            int x = u.x + (u.w - (mw + LAYOUT_GAP + row_w)) / 2;
+            mx = x;
+            my = u.y + t + (u.h - t - mh) / 2;
+            x += mw + LAYOUT_GAP;
+            for (int i = 0; i < n; i++) {
+                ex[i] = x;
+                ey[i] = u.y + t + (u.h - t - eh[i]) / 2;
+                x += ew[i] + LAYOUT_GAP;
+            }
+        }
+    } else if (best == COLUMN) {
+        int col_w = 0, col_h = (n - 1) * LAYOUT_GAP + (n - 1) * t;
+        for (int i = 0; i < n; i++) {
+            col_w = ew[i] > col_w ? ew[i] : col_w;
+            col_h += eh[i];
+        }
+        mx = u.x + (u.w - (mw + LAYOUT_GAP + col_w)) / 2;
         my = u.y + t + (u.h - t - mh) / 2;
-        y = u.y + t + (u.h - t - h) / 2;
+        int y = u.y + t + (u.h - t - col_h) / 2;
+        for (int i = 0; i < n; i++) {
+            ex[i] = mx + mw + LAYOUT_GAP;
+            ey[i] = y;
+            y += eh[i] + LAYOUT_GAP + t;
+        }
     } else {
-        my = u.y + t + (u.h - (t + mh + LAYOUT_GAP + t + h)) / 2;
-        y = my + mh + LAYOUT_GAP + t;
+        int total = t + mh;
+        for (int i = 0; i < n; i++) {
+            total += LAYOUT_GAP + t + eh[i];
+        }
+        int y = u.y + (u.h - total) / 2 + t;
         mx = u.x + (u.w - mw) / 2;
-        x = u.x + (u.w - w) / 2;
+        my = y;
+        y += mh + LAYOUT_GAP + t;
+        for (int i = 0; i < n; i++) {
+            ex[i] = u.x + (u.w - ew[i]) / 2;
+            ey[i] = y;
+            y += eh[i] + LAYOUT_GAP + t;
+        }
     }
     SDL_SetWindowSize(the_window, mw, mh);
     SDL_SetWindowPosition(the_window, mx, my);
-    SDL_SetWindowSize(grid_window, w, h);
-    SDL_SetWindowPosition(grid_window, x, y);
     SDL_RaiseWindow(the_window);
-    SDL_RaiseWindow(grid_window);
+    for (int i = 0; i < n; i++) {
+        SDL_SetWindowSize(open[i]->window, ew[i], eh[i]);
+        SDL_SetWindowPosition(open[i]->window, ex[i], ey[i]);
+        SDL_RaiseWindow(open[i]->window);
+    }
 }
 
-static void restore_main_window(void) {
-    if (main_saved && the_window != NULL) {
-        SDL_SetWindowSize(the_window, main_before_grid.w, main_before_grid.h);
-        SDL_SetWindowPosition(the_window, main_before_grid.x, main_before_grid.y);
+//--- virtual grid window (main thread, except grid_changed)
+
+static vgrid_device_t *vgrid = NULL;
+static vgrid_geom_t grid_geom = {};
+static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
+static int grid_size = 0; // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
+static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
+static int grid_pending = 0;
+
+// device thread: leds changed; one redraw request at a time
+static void grid_changed(void *ctx) {
+    (void)ctx;
+    if (__atomic_exchange_n(&grid_pending, 1, __ATOMIC_ACQ_REL) == 0) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = device_event_type;
+        ev.user.code = DEV_GRID_LEDS;
+        SDL_PushEvent(&ev);
     }
-    main_saved = false;
+}
+
+static void grid_redraw(void) {
+    __atomic_store_n(&grid_pending, 0, __ATOMIC_RELEASE);
+    if (vgrid == NULL) {
+        return;
+    }
+    bool resized;
+    cairo_t *cr = pane_begin(&grid_pane, &resized);
+    if (cr == NULL) {
+        return;
+    }
+    int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1];
+    if (resized || grid_geom.cols != cols || grid_geom.rows != rows) {
+        vgrid_skin_geom(grid_pane.w, grid_pane.h, cols, rows, &grid_geom);
+    }
+    uint8_t level[VGRID_MAX][VGRID_MAX];
+    int intensity;
+    vgrid_levels(vgrid, level, &intensity);
+    vgrid_skin_draw(cr, &grid_geom, grid_pane.w, grid_pane.h, level, intensity, grid_held, grid_size);
+    pane_end(&grid_pane, cr);
 }
 
 // the size choice, in the norns home (norns.sh sets HOME)
@@ -458,22 +689,33 @@ static void grid_set_size(int size) {
     }
 }
 
+// a monome device for matron; libmonome has it open when this returns, so its link can go
+static void plug_in(vgrid_device_t *g, const char *name) {
+    const char *path = vgrid_path(g);
+    device_runloop_sync(^{
+      dev_list_add(DEV_TYPE_MONOME, path, strdup(name), NULL);
+    });
+    vgrid_unlink(g);
+}
+
+// matron closes its side first (dev_delete -> monome_close), then the pty goes
+static void unplug(vgrid_device_t *g) {
+    const char *path = vgrid_path(g);
+    device_runloop_sync(^{
+      dev_list_remove(DEV_TYPE_MONOME, path);
+    });
+    vgrid_close(g);
+}
+
 static void toggle_grid(void) {
     if (vgrid != NULL) {
-        // matron closes its side first (dev_delete -> monome_close), then the pty goes
-        const char *path = vgrid_path(vgrid);
-        device_runloop_sync(^{
-          dev_list_remove(DEV_TYPE_MONOME, path);
-        });
-        vgrid_close(vgrid);
+        unplug(vgrid);
         vgrid = NULL;
-        SDL_DestroyWindow(grid_window);
-        grid_window = NULL;
-        grid_free_canvas();
+        pane_close(&grid_pane);
         memset(grid_held, 0, sizeof grid_held);
         grid_mouse_c = grid_mouse_r = -1;
         skin.grid_open = 0;
-        restore_main_window();
+        arrange_windows();
         redraw(true);
         return;
     }
@@ -486,36 +728,22 @@ static void toggle_grid(void) {
         fprintf(stderr, "sdl_bridge: virtual grid failed\n");
         return;
     }
-    // one unit per point; arrange_windows fits both windows on the screen
+    // one unit per point; arrange_windows fits the windows on the screen
     int uw, uh;
     vgrid_skin_units(cols, rows, &uw, &uh);
-    grid_window = SDL_CreateWindow("grid", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, uw, uh,
-                                   SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
-    if (grid_window != NULL) {
-        SDL_SetWindowMinimumSize(grid_window, uw / 3, uh / 3);
-        set_icon(grid_window);
-        arrange_windows(uw, uh);
+    if (pane_open(&grid_pane, "grid", uw, uh) != NULL) {
+        arrange_windows();
     }
-    const char *path = vgrid_path(vgrid);
-    device_runloop_sync(^{
-      dev_list_add(DEV_TYPE_MONOME, path, strdup("virtual grid"), NULL);
-    });
-    // libmonome has it open now: no files are left behind, whatever happens later
-    vgrid_unlink(vgrid);
+    plug_in(vgrid, "virtual grid");
     skin.grid_open = 1;
     redraw(true);
     grid_redraw();
 }
 
-static bool is_grid_window(Uint32 window_id) {
-    return grid_window != NULL && window_id == SDL_GetWindowID(grid_window);
-}
-
-static bool grid_key_at(Uint32 window_id, int x, int y, int *c, int *r) {
-    int ww = 1, wh = 1;
-    SDL_GetWindowSize(SDL_GetWindowFromID(window_id), &ww, &wh);
-    double k = grid_w > 0 ? (double)grid_w / ww : 1;
-    return vgrid_skin_hit(&grid_geom, x * k, y * k, c, r);
+static bool grid_key_at(int x, int y, int *c, int *r) {
+    double px, py;
+    pane_pixels(&grid_pane, x, y, &px, &py);
+    return vgrid_skin_hit(&grid_geom, px, py, c, r);
 }
 
 static void grid_press(int c, int r) {
@@ -532,23 +760,18 @@ static void grid_let_go(int c, int r) {
     }
 }
 
-static int grid_size_at(Uint32 window_id, int x, int y) {
-    int ww = 1, wh = 1;
-    SDL_GetWindowSize(SDL_GetWindowFromID(window_id), &ww, &wh);
-    double k = grid_w > 0 ? (double)grid_w / ww : 1;
-    return vgrid_skin_hit_size(&grid_geom, x * k, y * k);
-}
-
 static void grid_button(const SDL_MouseButtonEvent *b) {
     if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0) {
-        int size = grid_size_at(b->windowID, b->x, b->y);
+        double px, py;
+        pane_pixels(&grid_pane, b->x, b->y, &px, &py);
+        int size = vgrid_skin_hit_size(&grid_geom, px, py);
         if (size != 0) {
             grid_set_size(size);
             return;
         }
     }
     int c, r;
-    bool hit = grid_key_at(b->windowID, b->x, b->y, &c, &r);
+    bool hit = grid_key_at(b->x, b->y, &c, &r);
     bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
     if (b->button == SDL_BUTTON_LEFT && !ctrl) {
         if (b->type == SDL_MOUSEBUTTONDOWN) {
@@ -580,7 +803,7 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
 
 static void grid_motion(const SDL_MouseMotionEvent *m) {
     int c, r;
-    if (grid_mouse_c < 0 || !grid_key_at(m->windowID, m->x, m->y, &c, &r) || (c == grid_mouse_c && r == grid_mouse_r)) {
+    if (grid_mouse_c < 0 || !grid_key_at(m->x, m->y, &c, &r) || (c == grid_mouse_c && r == grid_mouse_r)) {
         return;
     }
     // dragging across keys plays them one after the other
@@ -590,6 +813,746 @@ static void grid_motion(const SDL_MouseMotionEvent *m) {
     grid_mouse_c = c;
     grid_mouse_r = r;
     grid_redraw();
+}
+
+//--- virtual arc window (main thread, except arc_changed)
+
+#define ARC_RINGS 4
+#define ARC_NAME "monome arc virtual"
+// encoder ticks per turn, as on the hardware
+#define ARC_TICKS_PER_TURN 1024.0
+
+static vgrid_device_t *varc = NULL;
+static varc_geom_t arc_geom = {};
+static double arc_turns[ARC_RINGS]; // how far each knob turned, for its knurl
+static int arc_pushed = 0;          // bit n: push button n held by the right button
+static int arc_drag = -1;           // knob turned by the left button
+static double arc_last = 0, arc_acc[ARC_RINGS];
+static int arc_pending = 0;
+
+static void arc_changed(void *ctx) {
+    (void)ctx;
+    if (__atomic_exchange_n(&arc_pending, 1, __ATOMIC_ACQ_REL) == 0) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = device_event_type;
+        ev.user.code = DEV_ARC_LEDS;
+        SDL_PushEvent(&ev);
+    }
+}
+
+static void arc_redraw(void) {
+    __atomic_store_n(&arc_pending, 0, __ATOMIC_RELEASE);
+    if (varc == NULL) {
+        return;
+    }
+    bool resized;
+    cairo_t *cr = pane_begin(&arc_pane, &resized);
+    if (cr == NULL) {
+        return;
+    }
+    if (resized) {
+        varc_skin_geom(arc_pane.w, arc_pane.h, ARC_RINGS, &arc_geom);
+    }
+    uint8_t ring[VARC_RINGS][VARC_LEDS];
+    int intensity;
+    vgrid_rings(varc, ring, &intensity);
+    varc_skin_draw(cr, &arc_geom, arc_pane.w, arc_pane.h, ring, intensity, arc_turns, arc_pushed);
+    pane_end(&arc_pane, cr);
+}
+
+static void toggle_arc(void) {
+    if (varc != NULL) {
+        for (int n = 0; n < ARC_RINGS; n++) {
+            if (arc_pushed & (1 << n)) {
+                vgrid_enc_key(varc, n, 0);
+            }
+        }
+        unplug(varc);
+        varc = NULL;
+        pane_close(&arc_pane);
+        arc_pushed = 0;
+        arc_drag = -1;
+        skin.arc_open = 0;
+        arrange_windows();
+        redraw(true);
+        return;
+    }
+    // lua/core/startup.lua tells an arc from a grid by its name: "monome arc..."
+    varc = vgrid_open_arc(ARC_NAME, ARC_RINGS, arc_changed, NULL);
+    if (varc == NULL) {
+        fprintf(stderr, "sdl_bridge: virtual arc failed\n");
+        return;
+    }
+    int uw, uh;
+    varc_skin_units(ARC_RINGS, &uw, &uh);
+    if (pane_open(&arc_pane, "arc", uw, uh) != NULL) {
+        arrange_windows();
+    }
+    plug_in(varc, ARC_NAME);
+    skin.arc_open = 1;
+    redraw(true);
+    arc_redraw();
+}
+
+// shift: 4x finer, command: 4x faster (as on the norns knobs)
+static double turn_factor(void) {
+    SDL_Keymod mod = SDL_GetModState();
+    if (mod & KMOD_SHIFT) {
+        return 0.25;
+    }
+    if (mod & KMOD_GUI) {
+        return 4;
+    }
+    return 1;
+}
+
+static void arc_turn(int n, double ticks) {
+    arc_acc[n] += ticks;
+    int t = (int)arc_acc[n];
+    if (t != 0) {
+        arc_acc[n] -= t;
+        vgrid_enc(varc, n, t);
+        arc_turns[n] += t / ARC_TICKS_PER_TURN;
+        arc_redraw();
+    }
+}
+
+static double arc_angle_at(int n, int x, int y, double *dist) {
+    double px, py, cx, cy;
+    pane_pixels(&arc_pane, x, y, &px, &py);
+    varc_skin_center(&arc_geom, n, &cx, &cy);
+    *dist = hypot(px - cx, py - cy) / (arc_geom.s > 0 ? arc_geom.s : 1);
+    return atan2(py - cy, px - cx);
+}
+
+static void arc_button(const SDL_MouseButtonEvent *b) {
+    double px, py;
+    pane_pixels(&arc_pane, b->x, b->y, &px, &py);
+    int n = varc_skin_hit(&arc_geom, px, py);
+    bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
+    if (b->button == SDL_BUTTON_LEFT && !ctrl) {
+        if (b->type == SDL_MOUSEBUTTONDOWN && n >= 0 && arc_drag < 0) {
+            double d;
+            arc_drag = n;
+            arc_last = arc_angle_at(n, b->x, b->y, &d);
+            SDL_CaptureMouse(SDL_TRUE);
+        } else if (b->type == SDL_MOUSEBUTTONUP && arc_drag >= 0) {
+            arc_drag = -1;
+            SDL_CaptureMouse(SDL_FALSE);
+        }
+        return;
+    }
+    // right button (or ctrl-click): the push button, held while the mouse button is
+    if (b->type == SDL_MOUSEBUTTONDOWN && n >= 0 && !(arc_pushed & (1 << n))) {
+        arc_pushed |= 1 << n;
+        vgrid_enc_key(varc, n, 1);
+        arc_redraw();
+    } else if (b->type == SDL_MOUSEBUTTONUP && arc_pushed) {
+        for (int i = 0; i < ARC_RINGS; i++) {
+            if (arc_pushed & (1 << i)) {
+                vgrid_enc_key(varc, i, 0);
+            }
+        }
+        arc_pushed = 0;
+        arc_redraw();
+    }
+}
+
+static void arc_motion(const SDL_MouseMotionEvent *m) {
+    if (arc_drag < 0) {
+        return;
+    }
+    // round the knob: clockwise is up. near the centre the angle jumps, so it waits there
+    double d, a = arc_angle_at(arc_drag, m->x, m->y, &d);
+    if (d < 8) {
+        return;
+    }
+    double da = a - arc_last;
+    while (da > M_PI) {
+        da -= 2 * M_PI;
+    }
+    while (da < -M_PI) {
+        da += 2 * M_PI;
+    }
+    arc_last = a;
+    arc_turn(arc_drag, da / (2 * M_PI) * ARC_TICKS_PER_TURN * turn_factor());
+}
+
+static void arc_wheel(const SDL_MouseWheelEvent *w) {
+    int mx, my;
+    SDL_GetMouseState(&mx, &my);
+    double px, py;
+    pane_pixels(&arc_pane, mx, my, &px, &py);
+    int n = varc_skin_hit(&arc_geom, px, py);
+    if (n < 0) {
+        return;
+    }
+    double dy = w->preciseY != 0 ? w->preciseY : w->y;
+    if (w->direction == SDL_MOUSEWHEEL_FLIPPED) {
+        dy = -dy;
+    }
+    // 6 ticks a notch: a few notches move a ring of 64 leds visibly, not wildly
+    arc_turn(n, dy * 6 * turn_factor());
+}
+
+//--- virtual keyboard window: a CoreMIDI source matron picks up like any app's port
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+#define NORNS_KEYS_UID 0x6e726e6b // 'nrnk', so other apps remember the port
+
+static vkeys_state_t vk = {};
+static vkeys_geom_t keys_geom = {};
+static MIDIEndpointRef keys_src = 0;
+static int keys_mouse = -1; // key held by the left button
+static int keys_sounding[VKEYS_N]; // note sent for each key, -1 if silent
+static char keys_labels[VKEYS_N][16];
+
+static void keys_send(uint8_t status, uint8_t d1, uint8_t d2) {
+    if (keys_src == 0) {
+        return;
+    }
+    Byte buf[64];
+    MIDIPacketList *list = (MIDIPacketList *)buf;
+    MIDIPacket *p = MIDIPacketListInit(list);
+    const Byte msg[3] = {status, d1, d2};
+    if (MIDIPacketListAdd(list, sizeof buf, p, 0, 3, msg) != NULL) {
+        MIDIReceived(keys_src, list);
+    }
+}
+
+static void keys_redraw(void) {
+    bool resized;
+    cairo_t *cr = pane_begin(&keys_pane, &resized);
+    if (cr == NULL) {
+        return;
+    }
+    if (resized) {
+        vkeys_skin_geom(keys_pane.w, keys_pane.h, &keys_geom);
+    }
+    vkeys_skin_draw(cr, &keys_geom, keys_pane.w, keys_pane.h, &vk);
+    pane_end(&keys_pane, cr);
+}
+
+// key k gets a hold of kind bit: the note starts with the first hold
+static void keys_hold(int k, int bit, int velocity) {
+    if (vk.held[k] == 0) {
+        int note = vkeys_note(&vk, k);
+        if (note >= 0 && note <= 127) {
+            keys_send(0x90, (uint8_t)note, (uint8_t)(velocity < 1 ? 1 : (velocity > 127 ? 127 : velocity)));
+            keys_sounding[k] = note;
+        }
+    }
+    vk.held[k] |= (uint8_t)bit;
+}
+
+// and loses it: the note ends with the last
+static void keys_release(int k, int bits) {
+    if (vk.held[k] == 0) {
+        return;
+    }
+    vk.held[k] &= (uint8_t)~bits;
+    if (vk.held[k] == 0 && keys_sounding[k] >= 0) {
+        keys_send(0x80, (uint8_t)keys_sounding[k], 0);
+        keys_sounding[k] = -1;
+    }
+}
+
+static void keys_release_all(int bits) {
+    for (int k = 0; k < VKEYS_N; k++) {
+        keys_release(k, bits);
+    }
+}
+
+static void keys_set_labels(void) {
+    for (int k = 0; k < VKEYS_N; k++) {
+        int usage = vkeys_typed_usage(k);
+        vk.typed_label[k] = NULL;
+        if (usage < 0) {
+            continue;
+        }
+        // the letter printed on this key of the user's keyboard layout
+        const char *name = SDL_GetKeyName(SDL_GetKeyFromScancode((SDL_Scancode)usage));
+        if (name != NULL && name[0] != '\0' && strlen(name) < sizeof keys_labels[k]) {
+            snprintf(keys_labels[k], sizeof keys_labels[k], "%s", name);
+            vk.typed_label[k] = keys_labels[k];
+        }
+    }
+}
+
+static void keys_control(int c) {
+    switch (c) {
+    case VK_OCT_DOWN:
+    case VK_OCT_UP: {
+        int o = vk.octave + (c == VK_OCT_UP ? 1 : -1);
+        if (o >= VKEYS_OCT_MIN && o <= VKEYS_OCT_MAX) {
+            // the sounding notes end, as they would on a controller with its octave changed
+            keys_release_all(VKEYS_HELD_MOUSE | VKEYS_HELD_LATCH | VKEYS_HELD_TYPED);
+            keys_mouse = -1;
+            vk.octave = o;
+        }
+        break;
+    }
+    case VK_VEL_DOWN:
+        vk.velocity = vk.velocity > 20 ? vk.velocity - 10 : 10;
+        break;
+    case VK_VEL_UP:
+        vk.velocity = vk.velocity < 117 ? vk.velocity + 10 : 127;
+        break;
+    case VK_LATCH:
+        vk.latch = !vk.latch;
+        if (!vk.latch) {
+            keys_release_all(VKEYS_HELD_LATCH);
+        }
+        break;
+    default:
+        break;
+    }
+    keys_redraw();
+}
+
+static void toggle_keys(void) {
+    if (keys_src != 0) {
+        keys_release_all(VKEYS_HELD_MOUSE | VKEYS_HELD_LATCH | VKEYS_HELD_TYPED);
+        MIDIEndpointDispose(keys_src);
+        keys_src = 0;
+        pane_close(&keys_pane);
+        keys_mouse = -1;
+        skin.keys_open = 0;
+        arrange_windows();
+        redraw(true);
+        return;
+    }
+    MIDIClientRef client = coremidi_client();
+    if (client == 0 || MIDISourceCreate(client, CFSTR("norns keys"), &keys_src) != noErr) {
+        fprintf(stderr, "sdl_bridge: virtual keyboard failed\n");
+        keys_src = 0;
+        return;
+    }
+    MIDIObjectSetIntegerProperty(keys_src, kMIDIPropertyUniqueID, NORNS_KEYS_UID);
+    if (vk.velocity == 0) {
+        vk.octave = 3;
+        vk.velocity = 100;
+    }
+    memset(vk.held, 0, sizeof vk.held);
+    for (int k = 0; k < VKEYS_N; k++) {
+        keys_sounding[k] = -1;
+    }
+    vk.hover = vk.button_down = VK_NONE;
+    keys_set_labels();
+    int uw, uh;
+    vkeys_skin_units(&uw, &uh);
+    if (pane_open(&keys_pane, "keys", uw, uh) != NULL) {
+        arrange_windows();
+    }
+    skin.keys_open = 1;
+    redraw(true);
+    keys_redraw();
+}
+
+#pragma clang diagnostic pop
+
+static int keys_hit(int x, int y, int *key, int *velocity) {
+    double px, py;
+    pane_pixels(&keys_pane, x, y, &px, &py);
+    return vkeys_skin_hit(&keys_geom, px, py, key, velocity);
+}
+
+static void keys_button(const SDL_MouseButtonEvent *b) {
+    int key = -1, vel = 0;
+    int c = keys_hit(b->x, b->y, &key, &vel);
+    bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
+    bool right = b->button == SDL_BUTTON_RIGHT || (b->button == SDL_BUTTON_LEFT && ctrl);
+    if (b->type == SDL_MOUSEBUTTONDOWN) {
+        if (c != VK_KEY) {
+            if (c != VK_NONE && b->button == SDL_BUTTON_LEFT) {
+                vk.button_down = c;
+                keys_redraw();
+            }
+            return;
+        }
+        if (right || vk.latch) {
+            // latch: a click holds the note, the next click lets it go
+            if (vk.held[key] & VKEYS_HELD_LATCH) {
+                keys_release(key, VKEYS_HELD_LATCH);
+            } else {
+                keys_hold(key, VKEYS_HELD_LATCH, vel);
+            }
+        } else if (b->button == SDL_BUTTON_LEFT && keys_mouse < 0) {
+            keys_hold(key, VKEYS_HELD_MOUSE, vel);
+            keys_mouse = key;
+        }
+        keys_redraw();
+        return;
+    }
+    if (b->button != SDL_BUTTON_LEFT) {
+        return;
+    }
+    if (vk.button_down != VK_NONE) {
+        int down = vk.button_down;
+        vk.button_down = VK_NONE;
+        if (c == down) {
+            keys_control(c);
+        } else {
+            keys_redraw();
+        }
+    }
+    if (keys_mouse >= 0) {
+        keys_release(keys_mouse, VKEYS_HELD_MOUSE);
+        keys_mouse = -1;
+        keys_redraw();
+    }
+}
+
+static void keys_motion(const SDL_MouseMotionEvent *m) {
+    int key = -1, vel = 0;
+    int c = keys_hit(m->x, m->y, &key, &vel);
+    if (keys_mouse >= 0) {
+        // dragging across keys plays them one after the other
+        if (c == VK_KEY && key != keys_mouse) {
+            keys_release(keys_mouse, VKEYS_HELD_MOUSE);
+            keys_hold(key, VKEYS_HELD_MOUSE, vel);
+            keys_mouse = key;
+            keys_redraw();
+        }
+        return;
+    }
+    int hover = c == VK_KEY ? VK_KEY + key : c;
+    if (hover != vk.hover) {
+        vk.hover = hover;
+        keys_redraw();
+    }
+}
+
+// the computer keyboard while the keys window is in front; command keys go to the menus
+static void keys_typed(const SDL_KeyboardEvent *k) {
+    if (k->repeat || (k->keysym.mod & KMOD_GUI)) {
+        return;
+    }
+    int control;
+    int key = vkeys_typed((int)k->keysym.scancode, &control);
+    if (k->type == SDL_KEYDOWN && control != VK_NONE) {
+        keys_control(control);
+        return;
+    }
+    if (key < 0) {
+        return;
+    }
+    if (k->type == SDL_KEYDOWN) {
+        keys_hold(key, VKEYS_HELD_TYPED, vk.velocity);
+    } else {
+        keys_release(key, VKEYS_HELD_TYPED);
+    }
+    keys_redraw();
+}
+
+//--- files in: drops and the import panel (a worker thread copies)
+
+static std::deque<std::string> import_queue;
+static pthread_mutex_t import_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t import_cond = PTHREAD_COND_INITIALIZER;
+static bool import_running = false;
+
+static std::string dust_dir(void) {
+    const char *home = getenv("HOME");
+    return std::string(home != NULL ? home : ".") + "/dust";
+}
+
+static void *import_worker(void *arg) {
+    (void)arg;
+    int audio = 0, scripts = 0, skipped = 0, failed = 0;
+    std::string last;
+    for (;;) {
+        pthread_mutex_lock(&import_lock);
+        if (import_queue.empty()) {
+            // a batch is done: one message for all of it
+            if (audio + scripts + skipped + failed > 0) {
+                std::string msg;
+                if (scripts == 1 && audio == 0) {
+                    msg = "script " + last + " added to dust/code";
+                } else if (scripts > 0) {
+                    msg = std::to_string(scripts) + " scripts added to dust/code";
+                }
+                if (audio > 0) {
+                    if (!msg.empty()) {
+                        msg += ", ";
+                    }
+                    msg += audio == 1 ? last + " added to dust/audio"
+                                      : std::to_string(audio) + " added to dust/audio";
+                }
+                if (msg.empty()) {
+                    msg = failed > 0 ? "could not copy into dust" : "nothing to import: not audio or a script";
+                } else if (skipped + failed > 0) {
+                    msg += " (" + std::to_string(skipped + failed) + " left out)";
+                }
+                post_toast(msg);
+                audio = scripts = skipped = failed = 0;
+            }
+            struct timespec until;
+            clock_gettime(CLOCK_REALTIME, &until);
+            until.tv_sec += 1;
+            pthread_cond_timedwait(&import_cond, &import_lock, &until);
+            pthread_mutex_unlock(&import_lock);
+            continue;
+        }
+        std::string path = import_queue.front();
+        import_queue.pop_front();
+        pthread_mutex_unlock(&import_lock);
+
+        dust_kind_t kind = dust_import_kind(path.c_str());
+        char dest[2048];
+        if (kind == DUST_SKIP) {
+            skipped++;
+        } else if (dust_import(dust_dir().c_str(), path.c_str(), dest, sizeof dest)) {
+            const char *slash = strrchr(dest, '/');
+            last = slash != NULL ? slash + 1 : dest;
+            fprintf(stderr, "sdl_bridge: imported %s -> %s\n", path.c_str(), dest);
+            (kind == DUST_AUDIO ? audio : scripts)++;
+        } else {
+            fprintf(stderr, "sdl_bridge: import of %s failed\n", path.c_str());
+            failed++;
+        }
+    }
+    return NULL;
+}
+
+static void import_path(const char *path) {
+    pthread_mutex_lock(&import_lock);
+    if (!import_running) {
+        pthread_t t;
+        if (pthread_create(&t, NULL, import_worker, NULL) == 0) {
+            pthread_detach(t);
+            import_running = true;
+        }
+    }
+    import_queue.push_back(path);
+    pthread_cond_signal(&import_cond);
+    pthread_mutex_unlock(&import_lock);
+}
+
+//--- the screen out: png and gif on the desktop
+
+// the user's own desktop (HOME is the norns home here)
+static std::string desktop_dir(void) {
+    struct passwd *pw = getpwuid(getuid());
+    const char *home = pw != NULL && pw->pw_dir != NULL ? pw->pw_dir : getenv("HOME");
+    std::string d = std::string(home != NULL ? home : ".") + "/Desktop";
+    struct stat st;
+    return stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? d : dust_dir();
+}
+
+// "norns 2026-10-20 at 14.03.12.png", like a macOS screenshot
+static std::string capture_path(const char *ext) {
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    char name[64];
+    strftime(name, sizeof name, "norns %Y-%m-%d at %H.%M.%S", &tm);
+    std::string dir = desktop_dir(), path = dir + "/" + name + ext;
+    for (int i = 2; access(path.c_str(), F_OK) == 0 && i < 100; i++) {
+        path = dir + "/" + name + " " + std::to_string(i) + ext;
+    }
+    return path;
+}
+
+static const char *where(const std::string &path) {
+    return path.find("/Desktop/") != std::string::npos ? "Desktop" : "dust";
+}
+
+#define CAPTURE_SCALE 4
+
+static void save_screenshot(void) {
+    if (!have_frame) {
+        show_toast("no screen to save yet");
+        return;
+    }
+    int w = cairo_image_surface_get_width(oled), h = cairo_image_surface_get_height(oled);
+    cairo_surface_t *big = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w * CAPTURE_SCALE, h * CAPTURE_SCALE);
+    cairo_t *cr = cairo_create(big);
+    cairo_scale(cr, CAPTURE_SCALE, CAPTURE_SCALE);
+    cairo_set_source_surface(cr, oled, 0, 0);
+    // crisp pixels, as on the oled
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    std::string path = capture_path(".png");
+    if (cairo_surface_write_to_png(big, path.c_str()) == CAIRO_STATUS_SUCCESS) {
+        show_toast(std::string("screenshot saved to ") + where(path));
+    } else {
+        show_toast("screenshot could not be saved");
+    }
+    cairo_surface_destroy(big);
+}
+
+#define GIF_W 128
+#define GIF_H 64
+#define GIF_MAX_MS 60000
+
+typedef struct {
+    std::vector<std::vector<uint8_t>> frames;
+    std::vector<Uint32> at; // ms each frame appeared
+} gif_take_t;
+
+static gif_take_t *gif_take = NULL;
+static Uint32 gif_start = 0;
+
+// the oled as 16 levels (its 4 bits)
+static bool oled_levels(std::vector<uint8_t> &out) {
+    if (oled == NULL || cairo_image_surface_get_width(oled) != GIF_W || cairo_image_surface_get_height(oled) != GIF_H) {
+        return false;
+    }
+    cairo_surface_flush(oled);
+    const uint8_t *data = cairo_image_surface_get_data(oled);
+    int stride = cairo_image_surface_get_stride(oled);
+    out.resize(GIF_W * GIF_H);
+    for (int y = 0; y < GIF_H; y++) {
+        const uint32_t *row = (const uint32_t *)(data + y * stride);
+        for (int x = 0; x < GIF_W; x++) {
+            uint32_t p = row[x];
+            int r = (p >> 16) & 0xff, g = (p >> 8) & 0xff, b = p & 0xff;
+            int v = r > g ? (r > b ? r : b) : (g > b ? g : b);
+            out[y * GIF_W + x] = (uint8_t)((v * 15 + 127) / 255);
+        }
+    }
+    return true;
+}
+
+static void gif_stop(void);
+
+static void gif_add_frame(void) {
+    if (gif_take == NULL) {
+        return;
+    }
+    Uint32 now = SDL_GetTicks() - gif_start;
+    if (now > GIF_MAX_MS) {
+        gif_stop();
+        return;
+    }
+    std::vector<uint8_t> f;
+    if (!oled_levels(f) || (!gif_take->frames.empty() && gif_take->frames.back() == f)) {
+        return;
+    }
+    gif_take->frames.push_back(std::move(f));
+    gif_take->at.push_back(now);
+}
+
+typedef struct {
+    gif_take_t *take;
+    Uint32 end;
+    std::string path;
+} gif_job_t;
+
+static void *gif_encode(void *arg) {
+    gif_job_t *job = (gif_job_t *)arg;
+    gif_take_t *take = job->take;
+    FILE *f = fopen(job->path.c_str(), "wb");
+    bool ok = f != NULL;
+    if (ok) {
+        gif_writer_t g;
+        ok = gif_begin(&g, f, GIF_W, GIF_H, CAPTURE_SCALE);
+        // delays in hundredths, rounded so the total stays true
+        Uint32 shown = 0;
+        for (size_t i = 0; ok && i < take->frames.size(); i++) {
+            Uint32 until = i + 1 < take->at.size() ? take->at[i + 1] : job->end;
+            int cs = (int)((until - take->at[0]) / 10) - (int)(shown / 10);
+            shown += (Uint32)(cs > 0 ? cs : 0) * 10;
+            ok = gif_frame(&g, take->frames[i].data(), cs);
+        }
+        ok = ok && gif_end(&g);
+        ok = fclose(f) == 0 && ok;
+    }
+    if (ok) {
+        post_toast(std::string("GIF saved to ") + where(job->path));
+    } else {
+        unlink(job->path.c_str());
+        post_toast("GIF could not be saved");
+    }
+    delete take;
+    delete job;
+    return NULL;
+}
+
+static void gif_stop(void) {
+    if (gif_take == NULL) {
+        return;
+    }
+    gif_job_t *job = new gif_job_t{gif_take, SDL_GetTicks() - gif_start, capture_path(".gif")};
+    gif_take = NULL;
+    recording = false;
+    skin.recording = 0;
+    mac_menu_set_recording(0);
+    if (job->take->frames.empty()) {
+        delete job->take;
+        delete job;
+        show_toast("nothing recorded");
+        return;
+    }
+    show_toast("saving GIF", 0);
+    pthread_t t;
+    if (pthread_create(&t, NULL, gif_encode, job) == 0) {
+        pthread_detach(t);
+    } else {
+        delete job->take;
+        delete job;
+        show_toast("GIF could not be saved");
+    }
+}
+
+static void gif_toggle(void) {
+    if (gif_take != NULL) {
+        gif_stop();
+        return;
+    }
+    if (!have_frame) {
+        show_toast("no screen to record yet");
+        return;
+    }
+    gif_take = new gif_take_t();
+    gif_start = SDL_GetTicks();
+    recording = true;
+    skin.recording = 1;
+    mac_menu_set_recording(1);
+    // the screen as it is now: a still screen records too
+    gif_add_frame();
+    recording_toast();
+}
+
+//--- menu bar
+
+static void show_in_finder(const std::string &dir) {
+    mkdir(dir.c_str(), 0755);
+    macos_open_url(dir.c_str());
+}
+
+static void menu_item(int id) {
+    switch (id) {
+    case MAC_MENU_DUST:
+        show_in_finder(dust_dir());
+        break;
+    case MAC_MENU_TAPE:
+        mkdir((dust_dir() + "/audio").c_str(), 0755);
+        show_in_finder(dust_dir() + "/audio/tape");
+        break;
+    case MAC_MENU_SCREENSHOT:
+        save_screenshot();
+        break;
+    case MAC_MENU_GIF:
+        gif_toggle();
+        break;
+    case MAC_MENU_GRID:
+        toggle_grid();
+        break;
+    case MAC_MENU_ARC:
+        toggle_arc();
+        break;
+    case MAC_MENU_KEYS:
+        toggle_keys();
+        break;
+    default:
+        break;
+    }
 }
 
 //--- input
@@ -608,7 +1571,7 @@ static void post_enc(int n, int delta) {
     event_post(ev);
 }
 
-// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual
+// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual, 6 mic
 static void post_window_button(int n) {
     union event_data *ev = event_data_new(EVENT_WINDOW_BUTTON);
     ev->key.n = n;
@@ -627,6 +1590,10 @@ static void button_action(int control) {
         macos_open_url("http://127.0.0.1:5000/maiden");
     } else if (control == SKIN_GRID) {
         toggle_grid();
+    } else if (control == SKIN_ARC) {
+        toggle_arc();
+    } else if (control == SKIN_KEYS) {
+        toggle_keys();
     }
 }
 
@@ -650,14 +1617,7 @@ static int drag_x, drag_y;
 #define DRAG_STEP 5.0
 
 static double drag_step(void) {
-    SDL_Keymod mod = SDL_GetModState();
-    if (mod & KMOD_SHIFT) {
-        return DRAG_STEP * 4;
-    }
-    if (mod & KMOD_GUI) {
-        return DRAG_STEP / 4;
-    }
-    return DRAG_STEP;
+    return DRAG_STEP / turn_factor();
 }
 
 static SDL_Cursor *cursor_hand = NULL;
@@ -764,6 +1724,10 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
 static window_keys_t keys;
 
 static void handle_key(const SDL_KeyboardEvent *k) {
+    if (is_pane(&keys_pane, k->windowID)) {
+        keys_typed(k);
+        return;
+    }
     window_key_event_t out;
     int option = (k->keysym.mod & KMOD_ALT) != 0;
     int shift = (k->keysym.mod & KMOD_SHIFT) != 0;
@@ -818,6 +1782,16 @@ static void handle_show(int kind, int n, int value) {
     redraw(true);
 }
 
+static void toggle_window(int which) {
+    if (which == SDL_BRIDGE_ARC) {
+        toggle_arc();
+    } else if (which == SDL_BRIDGE_KEYS) {
+        toggle_keys();
+    } else {
+        toggle_grid();
+    }
+}
+
 void sdl_bridge_init(void) {
     main_thread = pthread_self();
     window_keys_init(&keys);
@@ -828,14 +1802,17 @@ void sdl_bridge_init(void) {
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     // the first click into the window already presses a key
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         fprintf(stderr, "sdl_bridge: SDL_Init failed: %s\n", SDL_GetError());
     }
     // right button on a trackpad: ctrl-click
     SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
-    bridge_event_type = SDL_RegisterEvents(3);
+    bridge_event_type = SDL_RegisterEvents(4);
     show_event_type = bridge_event_type + 1;
-    grid_event_type = bridge_event_type + 2;
+    device_event_type = bridge_event_type + 2;
+    toast_event_type = bridge_event_type + 3;
+    SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+    mac_menu_install(menu_item, import_path);
 }
 
 void sdl_bridge_show_control(int kind, int n, int value) {
@@ -851,14 +1828,15 @@ void sdl_bridge_show_control(int kind, int n, int value) {
     SDL_PushEvent(&ev);
 }
 
-void sdl_bridge_toggle_grid(void) {
-    if (grid_event_type == (Uint32)-1) {
+void sdl_bridge_toggle_window(int which) {
+    if (device_event_type == (Uint32)-1) {
         return;
     }
     SDL_Event ev;
     SDL_zero(ev);
-    ev.type = grid_event_type;
-    ev.user.code = 1;
+    ev.type = device_event_type;
+    ev.user.code = DEV_TOGGLE;
+    ev.user.data1 = (void *)(intptr_t)which;
     SDL_PushEvent(&ev);
 }
 
@@ -878,11 +1856,23 @@ void sdl_bridge_run(void) {
             handle_show(ev.user.code, (int)(intptr_t)ev.user.data1, (int)(intptr_t)ev.user.data2);
             continue;
         }
-        if (ev.type == grid_event_type) {
-            if (ev.user.code == 1) {
-                toggle_grid();
+        if (ev.type == device_event_type) {
+            if (ev.user.code == DEV_TOGGLE) {
+                toggle_window((int)(intptr_t)ev.user.data1);
+            } else if (ev.user.code == DEV_ARC_LEDS) {
+                arc_redraw();
             } else {
                 grid_redraw();
+            }
+            continue;
+        }
+        if (ev.type == toast_event_type) {
+            if (ev.user.code == 1) {
+                toast_expired((unsigned)(uintptr_t)ev.user.data1);
+            } else {
+                char *text = (char *)ev.user.data1;
+                show_toast(text);
+                free(text);
             }
             continue;
         }
@@ -896,45 +1886,87 @@ void sdl_bridge_run(void) {
         case SDL_KEYUP:
             handle_key(&ev.key);
             break;
+        case SDL_DROPFILE:
+            if (ev.drop.file != NULL) {
+                import_path(ev.drop.file);
+                SDL_free(ev.drop.file);
+            }
+            break;
         case SDL_MOUSEWHEEL:
-            if (!is_grid_window(ev.wheel.windowID)) {
+            if (is_pane(&arc_pane, ev.wheel.windowID)) {
+                arc_wheel(&ev.wheel);
+            } else if (!is_pane(&grid_pane, ev.wheel.windowID) && !is_pane(&keys_pane, ev.wheel.windowID)) {
                 handle_wheel(&ev.wheel);
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
-            if (is_grid_window(ev.button.windowID)) {
+            if (is_pane(&grid_pane, ev.button.windowID)) {
                 grid_button(&ev.button);
+            } else if (is_pane(&arc_pane, ev.button.windowID)) {
+                arc_button(&ev.button);
+            } else if (is_pane(&keys_pane, ev.button.windowID)) {
+                keys_button(&ev.button);
             } else {
                 handle_button(&ev.button);
             }
             break;
         case SDL_MOUSEMOTION:
-            if (is_grid_window(ev.motion.windowID)) {
+            if (is_pane(&grid_pane, ev.motion.windowID)) {
                 grid_motion(&ev.motion);
+            } else if (is_pane(&arc_pane, ev.motion.windowID)) {
+                arc_motion(&ev.motion);
+            } else if (is_pane(&keys_pane, ev.motion.windowID)) {
+                keys_motion(&ev.motion);
             } else {
                 handle_motion(&ev.motion);
             }
             break;
-        case SDL_WINDOWEVENT:
-            if (is_grid_window(ev.window.windowID)) {
-                if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
+        case SDL_WINDOWEVENT: {
+            Uint32 id = ev.window.windowID;
+            Uint8 e = ev.window.event;
+            bool repaint = e == SDL_WINDOWEVENT_SIZE_CHANGED || e == SDL_WINDOWEVENT_EXPOSED;
+            if (is_pane(&grid_pane, id)) {
+                if (e == SDL_WINDOWEVENT_CLOSE) {
                     toggle_grid();
-                } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                           ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
+                } else if (repaint) {
                     grid_redraw();
                 }
                 break;
             }
-            if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
-                // with the grid open, closing the norns window is no SDL_QUIT
+            if (is_pane(&arc_pane, id)) {
+                if (e == SDL_WINDOWEVENT_CLOSE) {
+                    toggle_arc();
+                } else if (repaint) {
+                    arc_redraw();
+                }
+                break;
+            }
+            if (is_pane(&keys_pane, id)) {
+                if (e == SDL_WINDOWEVENT_CLOSE) {
+                    toggle_keys();
+                } else if (e == SDL_WINDOWEVENT_FOCUS_LOST) {
+                    // typed notes would hang: their key-up goes to another window
+                    keys_release_all(VKEYS_HELD_TYPED);
+                    keys_redraw();
+                } else if (e == SDL_WINDOWEVENT_LEAVE && vk.hover != VK_NONE) {
+                    vk.hover = VK_NONE;
+                    keys_redraw();
+                } else if (repaint) {
+                    keys_redraw();
+                }
+                break;
+            }
+            if (e == SDL_WINDOWEVENT_CLOSE) {
+                // with a device window open, closing the norns window is no SDL_QUIT
                 event_post(event_data_new(EVENT_QUIT));
-            } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || ev.window.event == SDL_WINDOWEVENT_EXPOSED) {
+            } else if (repaint) {
                 redraw(true);
-            } else if (ev.window.event == SDL_WINDOWEVENT_LEAVE && held_key == 0 && drag_enc == 0) {
+            } else if (e == SDL_WINDOWEVENT_LEAVE && held_key == 0 && drag_enc == 0) {
                 set_hover(SKIN_NONE);
             }
             break;
+        }
         default:
             break;
         }

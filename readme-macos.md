@@ -88,14 +88,25 @@ path in lua).
 
 buttons above the device (not on the hardware): the menu pages (`EVENT_WINDOW_BUTTON` ->
 `_norns.window_button` in `lua/core/menu.lua`), MIC (unplugs system:capture from
-crone:input_1/2 through jack_disconnect, kept in `~/norns/.mic-off`), GRID, MAIDEN, MANUAL
-(`macos/manual/manual.html`; opened by `open_url.c`, http(s) and paths only). opening the
-grid lays both windows out to fit the screen (`arrange_windows`).
+crone:input_1/2 through jack_disconnect, kept in `~/norns/.mic-off`), GRID, ARC, KEYS,
+MAIDEN, MANUAL (`macos/manual/manual.html`; opened by `open_url.c`, http(s) and paths only).
+opening a device window lays all windows out to fit the screen (`arrange_windows`).
 
 virtual grid: `vgrid_proto.c` is the grid side of the mext serial protocol, `vgrid_device.c`
 puts it on a pty that libmonome opens like a usb grid (`dev_list_add`), `vgrid_skin.c`
 draws the window. GRID or F6 opens it; 64, 128 or 256 (switch under it, kept in
-`~/norns/.vgrid-size`).
+`~/norns/.vgrid-size`). the virtual arc is the same pty device answering as 4 encoders
+(libmonome then reports 0x0 keys, which matron takes for an arc; its name starts "monome arc"
+because `lua/core/startup.lua` routes by name), drawn by `varc_skin.c`; ARC or F8.
+
+virtual keyboard: KEYS or F7. `vkeys_skin.c` (layout, hit test, computer keys by HID usage)
+and a CoreMIDI source "norns keys" made in `sdl_bridge.cc`; the device monitor picks it up
+like any app's port.
+
+menu bar (`mac_menu.m`): import (open panel), show dust / tape folder, screenshot (png, 4x)
+and gif recording (`gif_writer.c`, 16 grey levels) to the desktop. files dropped on a window
+are copied into dust by `dust_import.c` (audio -> dust/audio, scripts -> dust/code, never
+overwriting) on a worker thread.
 
 audio: SYSTEM > AUDIO (`lua/core/menu/audio.lua`, devices from `macos/audio_devices.c`)
 writes `~/norns/audio.conf`; `macos/norns.sh` restarts jackd with it and falls back to the
@@ -111,10 +122,15 @@ cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c \
    matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt
 cc -std=c11 -I matron/src/platform/macos $(pkg-config --cflags --libs cairo) \
    macos/tests/device_skin_test.c matron/src/platform/macos/device_skin.c \
-   matron/src/platform/macos/vgrid_skin.c -o /tmp/dst && /tmp/dst [png_dir]
+   matron/src/platform/macos/vgrid_skin.c matron/src/platform/macos/varc_skin.c \
+   matron/src/platform/macos/vkeys_skin.c -o /tmp/dst && /tmp/dst [png_dir]
 P=<deps>/prefix; cc -std=c11 -I matron/src/platform/macos -I $P/include macos/tests/vgrid_test.c \
    matron/src/platform/macos/vgrid_proto.c matron/src/platform/macos/vgrid_device.c \
    -L $P/lib -lmonome -o /tmp/vgt && DYLD_LIBRARY_PATH=$P/lib /tmp/vgt
+cc -std=c11 -I matron/src/platform/macos macos/tests/gif_test.c matron/src/platform/macos/gif_writer.c \
+   -framework ImageIO -framework CoreGraphics -framework CoreFoundation -o /tmp/gift && /tmp/gift
+cc -std=c11 -I matron/src/platform/macos macos/tests/dust_import_test.c \
+   matron/src/platform/macos/dust_import.c -o /tmp/dit && /tmp/dit
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 <lua 5.3> macos/tests/menu_pages_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
