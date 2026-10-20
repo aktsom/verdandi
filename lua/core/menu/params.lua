@@ -77,19 +77,21 @@ local function pset_list(results)
   end
 
   for _,file in pairs(t) do
-    local n = tonumber(file:match"(%d+).pset$")
-    if not n then n=1 end
-    --print(file,n)
-    local name = norns.state.shortname
-    local f = io.open(file,"r")
-    io.input(f)
-    local line = io.read("*line")
-    if util.string_starts(line, "-- ") then
-      name = string.sub(line,4,-1)
+    -- the listing can also carry ls's "no such file" message: only open .pset files, and
+    -- read from the file itself (io.input(nil) would leave io.read on stdin, blocking matron)
+    local f = file:match("%.pset$") and io.open(file,"r")
+    if f then
+      local n = tonumber(file:match"(%d+).pset$")
+      if not n then n=1 end
+      local name = norns.state.shortname
+      local line = f:read("*line")
+      if line and util.string_starts(line, "-- ") then
+        name = string.sub(line,4,-1)
+      end
+      f:close()
+      pset[n] = {file=file,name=name}
+      m.ps_n = math.max(n, m.ps_n)
     end
-    io.close(f)
-    pset[n] = {file=file,name=name}
-    m.ps_n = math.max(n, m.ps_n)
   end
 
   m.ps_n = m.ps_n + 1

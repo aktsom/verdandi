@@ -53,7 +53,8 @@ encoders.process = function(n,d)
   if math.abs(encoders.tick[n]) >= encoders.sens[n] then
     local val = encoders.tick[n] / encoders.sens[n]
 		val = (val > 0) and math.floor(val) or math.ceil(val)
-    encoders.callback(n,val)
+    -- nil until the menu is set up: a knob turned during startup is dropped
+    if encoders.callback then encoders.callback(n,val) end
     encoders.tick[n] = math.fmod(encoders.tick[n],encoders.sens[n])
     screen.ping()
 	end
@@ -75,7 +76,8 @@ encoders.process_with_accel = function(n,d)
   if math.abs(encoders.tick[n]) >= encoders.sens[n] then
     local val = encoders.tick[n] / encoders.sens[n]
 		val = (val > 0) and math.floor(val) or math.ceil(val)
-    encoders.callback(n,val)
+    -- nil until the menu is set up: a knob turned during startup is dropped
+    if encoders.callback then encoders.callback(n,val) end
     encoders.tick[n] = math.fmod(encoders.tick[n],encoders.sens[n])
     screen.ping()
   end
