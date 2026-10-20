@@ -26,8 +26,12 @@ jobs:
       - name: install luacheck
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.3 liblua5.3-dev luarocks
-          sudo luarocks --lua-version=5.3 install luacheck
+          # ubuntu's package first: luarocks.org is not always reachable
+          if ! sudo apt-get install -y lua-check; then
+            sudo apt-get install -y lua5.3 liblua5.3-dev luarocks
+            sudo luarocks --lua-version=5.3 install luacheck
+          fi
+          luacheck --version
       - name: lint lua code
         run: luacheck lua/ --codes
 

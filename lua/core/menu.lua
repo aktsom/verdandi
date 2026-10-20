@@ -327,6 +327,12 @@ _norns.output_fader = function(raw)
   params:set_raw("output_level", tonumber(raw) or 0)
 end
 
+-- double click on the fader: 0 dB
+_norns.output_reset = function()
+  out_unmuted = nil
+  params:set("output_level", 0)
+end
+
 _norns.output_step = function(d)
   params:delta("output_level", tonumber(d) or 0)
 end

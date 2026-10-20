@@ -23,7 +23,8 @@ end
 
 -- macOS: the mouse on the screen (lua/core/menu.lua _norns.screen_mouse). the six
 -- columns out in mon eng cut tp are 22 pixels wide, their level bars 48 pixels high from y 55:
--- pressing a column selects its pair, dragging sets its level, the wheel steps it
+-- pressing a column selects its pair, dragging sets its level, the wheel steps it, a double
+-- click sets it back to 0 dB
 local mouse_ch = {"output_level", "input_level", "monitor_level", "engine_level", "softcut_level", "tape_level"}
 
 local function mouse_column(x)
@@ -39,6 +40,11 @@ m.mouse = function(x, y, kind, value)
     m.drag = mouse_column(x)
     m.sel = math.ceil(m.drag / 2)
     mouse_level(m.drag, y)
+  elseif kind == "double" then
+    local col = mouse_column(x)
+    m.drag = nil
+    m.sel = math.ceil(col / 2)
+    params:set(mouse_ch[col], 0)
   elseif kind == "drag" and m.drag then
     mouse_level(m.drag, y)
   elseif kind == "up" then

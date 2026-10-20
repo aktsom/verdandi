@@ -83,6 +83,18 @@ _norns.output_mute()
 check(values.output_level == -math.huge, "mute after that mutes")
 _norns.output_mute()
 
+-- a double click on the fader: 0 dB, also out of mute
+_norns.output_fader("0.9")
+_norns.output_reset()
+check(values.output_level == 0 and shown.muted == 0, "double click: 0 dB")
+_norns.output_mute()
+_norns.output_reset()
+check(values.output_level == 0 and shown.muted == 0, "double click while muted: 0 dB, unmuted")
+_norns.output_mute()
+check(values.output_level == -math.huge, "mute after that mutes")
+_norns.output_mute()
+check(values.output_level == 0, "and unmutes to 0 dB")
+
 -- the wheel over the fader
 local r = params:get_raw("output_level")
 _norns.output_step("3")
@@ -120,6 +132,15 @@ mix.mouse(120, 40, "wheel", 2)
 check(math.abs(params:get_raw("tape_level") - (tape + 0.02)) < 1e-9 and mix.sel == 3, "wheel on tp steps it, cut/tp selected")
 mix.mouse(127, 0, "drag", 0)
 check(math.abs(params:get_raw("tape_level") - (tape + 0.02)) < 1e-9, "a drag without a press changes nothing")
+-- a double click: its first press set the level, the double click sets 0 dB; a drag after it
+-- does nothing
+mix.mouse(50, 10, "down", 0)
+mix.mouse(50, 10, "up", 0)
+mix.mouse(50, 10, "double", 0)
+check(values.monitor_level == 0 and mix.sel == 2, "double click on mon: 0 dB, mon/eng selected")
+mix.mouse(50, 50, "drag", 0)
+check(values.monitor_level == 0, "dragging after a double click changes nothing")
+mix.mouse(50, 50, "up", 0)
 
 print(fails == 0 and "output fader: all scenarios pass" or (fails .. " failures"))
 os.exit(fails == 0)

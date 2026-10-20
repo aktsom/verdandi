@@ -1831,11 +1831,16 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
         if (c == SKIN_FADER) {
             drag_fader = true;
             SDL_CaptureMouse(SDL_TRUE);
-            fader_to(py);
+            if (b->clicks >= 2) {
+                // double click: back to 0 dB
+                call_lua("output_reset", {});
+            } else {
+                fader_to(py);
+            }
         } else if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
             drag_oled = true;
             SDL_CaptureMouse(SDL_TRUE);
-            oled_mouse(px, py, "down", 0);
+            oled_mouse(px, py, b->clicks >= 2 ? "double" : "down", 0);
         } else if (c >= SKIN_PAGE1) {
             // buttons act on release over the same button, like any mac button
             skin.button_down = c;
