@@ -124,7 +124,10 @@ kill_tree() {
 }
 
 cleanup() {
-    for p in $PIDS; do kill_tree "$p"; done
+    # reverse start order: jackd goes last, after everything that plays through it
+    local p rev=""
+    for p in $PIDS; do rev="$p $rev"; done
+    for p in $rev; do kill_tree "$p"; done
     wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
