@@ -1,10 +1,12 @@
-# norns on macOS
+# Verdandi: norns on macOS
 
-community port of norns to macOS (Apple Silicon, macOS 15 or newer: `macos/MACOS_MIN`). not
-affiliated with monome.
+Verdandi is a community port of norns to macOS (Apple Silicon, macOS 15 or newer:
+`macos/MACOS_MIN`); it runs norns scripts on a Mac. not affiliated with monome: norns is
+theirs, so the app has a name of its own (Verdandi, the norn of the present; product name in
+`matron/src/platform/macos/product.h`, `macos/make-app.sh`, `macos/auv3/build-appex.sh`).
 scripts from the norns catalog are meant to run unchanged: all compatibility lives here.
 
-users: get `norns.dmg` and read the manual (`macos/manual/manual.html`, also in the dmg).
+users: get `Verdandi.dmg` and read the manual (`macos/manual/manual.html`, also in the dmg).
 this file is for building and changing the port.
 
 ## layout
@@ -37,18 +39,18 @@ with a space breaks lua's makefile).
 ## app, dmg, AUv3
 
 ```
-macos/make-app.sh --dmg      # norns.dmg (norns.app + AUv3, the manual) on top of the folder with deps/
+macos/make-app.sh --dmg      # Verdandi.dmg (Verdandi.app + AUv3, the manual) on top of the folder with deps/
 ```
 
 the app bundles everything (jackd, SuperCollider, sc3-plugins, GNU tools, maiden, all
 dylibs rewritten to @rpath, see `macos/bundle_dylibs.py`) and is ad-hoc signed. its
 launcher (`macos/app-launcher.sh`) uses `~/norns` as the norns home.
 
-the AUv3 (`macos/auv3/`, type `aumf`, subtype `nrns`, manufacturer `Nrns`) is a sandboxed
+the AUv3 (`macos/auv3/`, "Verdandi", type `aumf`, subtype `vrdn`, manufacturer `Vrdn`) is a sandboxed
 extension inside the app. it sends the DAW's audio and MIDI over UDP on 127.0.0.1 to
 `auv3_bridge`, a jack client next to norns that resamples between the two clocks (jack's
 adapter) and takes over crone's main in/out while the plugin renders. check it with
-`auval -v aumf nrns Nrns`.
+`auval -v aumf vrdn Vrdn`.
 
 ## run
 

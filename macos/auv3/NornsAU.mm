@@ -1,7 +1,7 @@
 // NornsAU.mm
 //
 // the norns AUv3 (music effect: stereo audio in/out + MIDI in). it carries the DAW's audio
-// to norns.app and back (auv3_bridge, see bridge_protocol.h) and passes the DAW's MIDI on.
+// to Verdandi.app and back (auv3_bridge, see bridge_protocol.h) and passes the DAW's MIDI on.
 // norns itself keeps running in its own window; while the plugin renders, norns hears the
 // DAW instead of the audio interface and plays into the DAW instead of the speakers.
 //
@@ -353,7 +353,7 @@ class Bridge {
     view.wantsLayer = YES;
     view.layer.backgroundColor = NSColor.blackColor.CGColor;
 
-    NSTextField *title = [NSTextField labelWithString:@"norns"];
+    NSTextField *title = [NSTextField labelWithString:@"Verdandi"];
     title.font = [NSFont monospacedSystemFontOfSize:28 weight:NSFontWeightBold];
     title.textColor = NSColor.whiteColor;
     title.frame = NSMakeRect(20, 92, 400, 40);
@@ -380,11 +380,11 @@ class Bridge {
 
 - (void)refresh {
     if (_unit != nil && _unit.nornsConnected) {
-        _status.stringValue = @"connected. play norns in its window; it hears this track and plays into it. "
-                              @"MIDI from this track arrives as the device \"norns AUv3\".";
+        _status.stringValue = @"connected. play norns in Verdandi's window; it hears this track and plays into it. "
+                              @"MIDI from this track arrives as the device \"Verdandi AUv3\".";
     } else {
-        _status.stringValue = @"norns is not running: audio passes through unchanged. "
-                              @"start norns.app, then press play.";
+        _status.stringValue = @"Verdandi is not running: audio passes through unchanged. "
+                              @"start Verdandi, then press play.";
     }
 }
 

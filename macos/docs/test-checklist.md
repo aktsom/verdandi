@@ -1,4 +1,4 @@
-# norns for macOS: test checklist
+# Verdandi (norns on macOS): test checklist
 
 what has not been tested on the machine it was built on. tick what works, and for what
 does not, send the logs: `~/norns/norns.log`, `sclang.log`, `jackd.log`, `auv3_bridge.log`
@@ -6,13 +6,13 @@ does not, send the logs: `~/norns/norns.log`, `sclang.log`, `jackd.log`, `auv3_b
 
 ## a Mac with macOS 15 (Sequoia), not the one it was built on
 
-- [ ] open `norns.dmg`, drag norns into Applications, start it: macOS refuses at first
+- [ ] open `Verdandi.dmg`, drag Verdandi into Applications, start it: macOS refuses at first
       (not notarized); right-click > Open, or System Settings > Privacy & Security > Open Anyway
-- [ ] allow the microphone; norns shows its screen, the HOME menu reacts to K2/K3 (2, 3, return, esc)
+- [ ] allow the microphone; Verdandi shows the norns screen, the HOME menu reacts to K2/K3 (2, 3, return, esc)
 - [ ] SELECT a script (awake, then something with an engine: passersby, cranes): it plays
 - [ ] MIC > SYS: play a video in the browser, allow "record audio from other apps"; the video is
       heard through norns (MIX: in moves), not directly; MIC > OFF: the video is heard directly again
-- [ ] quit norns while on SYS, start it again: SYS again, with the note; the video goes into norns
+- [ ] quit Verdandi while on SYS, start it again: SYS again, with the note; the video goes into norns
 - [ ] Manual.pdf and the Licenses folder open from the dmg
 
 ## audio interface
@@ -32,10 +32,10 @@ does not, send the logs: `~/norns/norns.log`, `sclang.log`, `jackd.log`, `auv3_b
 
 ## the AUv3 plugin in a DAW
 
-- [ ] Logic (Audio FX or MIDI-controlled effect), Ableton Live, Bitwig or Reaper: norns shows up
-      after starting norns.app once; insert it on a track, press play: "connected"
+- [ ] Logic (Audio FX or MIDI-controlled effect), Ableton Live, Bitwig or Reaper: the plugin
+      shows up as "Verdandi" after starting Verdandi once; insert it on a track, press play: "connected"
 - [ ] the track's audio goes into norns (MIX: in), norns comes back into the track
-- [ ] MIDI on the plugin's track reaches norns (device "norns AUv3")
+- [ ] MIDI on the plugin's track reaches norns (device "Verdandi AUv3")
 - [ ] stop the DAW: norns goes back to the interface within a second
 - [ ] with MIC on SYS, play the DAW through the plugin: the DAW is heard (SYS pauses), no
       feedback; stop it: SYS takes the apps again

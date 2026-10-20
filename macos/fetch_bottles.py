@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Homebrew's bottles of the packages norns.app bundles, built for the oldest macOS the app
+"""Homebrew's bottles of the packages Verdandi.app bundles, built for the oldest macOS the app
 supports (macos/MACOS_MIN).
 
 homebrew installs the bottles of the running macOS, and those need that macOS (a tahoe

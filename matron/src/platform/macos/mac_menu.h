@@ -55,6 +55,10 @@ extern void mac_menu_install(void (*on_item)(int id), void (*on_import)(const ch
 // what the input hears now (MAC_INPUT_*), for the checkmarks
 extern void mac_menu_set_input(int input);
 
+// the app's name in the menu bar and its menu (About, Hide, Quit ...): the binary is norns, the
+// app is not. before SDL_Init
+extern void mac_set_app_name(const char *name);
+
 // the GIF item says "Stop" while recording
 extern void mac_menu_set_recording(int on);
 

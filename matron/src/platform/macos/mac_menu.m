@@ -157,6 +157,10 @@ void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *pat
     [devices release];
 }
 
+void mac_set_app_name(const char *name) {
+    [[NSProcessInfo processInfo] setProcessName:@(name)];
+}
+
 void mac_menu_set_input(int input) {
     input_now = input;
 }

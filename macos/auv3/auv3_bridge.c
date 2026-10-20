@@ -6,7 +6,7 @@
  * (jack's adapter), and answers each block with norns' output. while an AU is rendering,
  * crone's inputs come from the DAW instead of the audio interface and crone's main output
  * goes to the DAW instead of the speakers; when it stops (bye or 1 s of silence) the original
- * connections come back. MIDI from the DAW appears as the CoreMIDI source "norns AUv3".
+ * connections come back. MIDI from the DAW appears as the CoreMIDI source "Verdandi AUv3".
  *
  * started by macos/norns.sh; idle until an AU connects.
  */
@@ -186,8 +186,8 @@ int main(void) {
         return 1;
     }
 
-    if (MIDIClientCreate(CFSTR("norns AUv3 bridge"), NULL, NULL, &midi_client) != noErr ||
-        MIDISourceCreate(midi_client, CFSTR("norns AUv3"), &midi_source) != noErr) {
+    if (MIDIClientCreate(CFSTR("Verdandi AUv3 bridge"), NULL, NULL, &midi_client) != noErr ||
+        MIDISourceCreate(midi_client, CFSTR("Verdandi AUv3"), &midi_source) != noErr) {
         fprintf(stderr, "auv3_bridge: no CoreMIDI source, DAW MIDI will not reach norns\n");
     }
 

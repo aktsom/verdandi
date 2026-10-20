@@ -355,7 +355,7 @@ _norns.screen_mouse = function(x, y, kind, value)
 end
 
 -- 1-4: menu page (clicking the page that is up goes back to the script), 5: the manual of
--- norns for macOS, 6: the next audio input (MIC > SYS > OFF)
+-- Verdandi (the macOS app), 6: the next audio input (MIC > SYS > OFF)
 _norns.window_button = function(n)
   if n >= 1 and n <= 4 then
     if _menu.mode and _menu.page == _menu.panels[n] and not _menu.locked then

@@ -1,5 +1,5 @@
 #!/bin/bash
-# norns.app launcher (Contents/MacOS/norns).
+# Verdandi.app launcher (Contents/MacOS/Verdandi): starts norns with the app's own files.
 #
 # the norns home is ~/norns (override: NORNS_USER_HOME): dust lives there, and ~/norns/norns
 # links to the runtime inside this app, so the layout matches /home/we on the device.

@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "app_audio.h"
+#include "product.h"
 
 extern char **environ;
 
@@ -88,8 +89,8 @@ int app_audio_list(app_audio_app_t *out, int max) {
             [a.bundleIdentifier isEqualToString:@"com.apple.finder"]) {
             continue;
         }
-        // the norns app bundle runs this binary through a launcher
-        if ([a.localizedName isEqualToString:@"norns"]) {
+        // the app runs this binary through a launcher (and so under either name)
+        if ([a.localizedName isEqualToString:@"norns"] || [a.localizedName isEqualToString:@MACOS_PRODUCT]) {
             continue;
         }
         [apps addObject:a];

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The licenses and sources of everything norns.app bundles.
+"""The licenses and sources of everything Verdandi.app bundles.
 
   python3 -I licenses.py fetch <deps>
       once, online (macos/setup-deps.sh): the license texts and the exact sources of what is
@@ -268,7 +268,7 @@ def fetch_web(deps, src, tmp):
 
 # parts of the norns repository with their own license, compiled into norns
 REPO_PARTS = [
-    ('norns', 'norns (with the macOS port)', 'GPL-3.0', ['LICENSE.txt']),
+    ('norns', 'norns, with Verdandi (the macOS port)', 'GPL-3.0', ['LICENSE.txt']),
     ('softcut', 'softcut', 'GPL-3.0', ['crone/softcut/LICENSE.txt']),
     ('ableton-link', 'Ableton Link', 'GPL-2.0-or-later', ['third-party/link/LICENSE.md',
                                                           'third-party/link/modules/asio-standalone/asio/LICENSE_1_0.txt']),
@@ -368,15 +368,15 @@ def collect(deps, bottles, repo, res, out):
     lines = ['%-*s  %-16s  %s\n%*s  source: %s%s\n' % (w, r[0], r[1], r[2], w, '', r[3], '\n%*s  %s' % (w, '', r[4]) if r[4] else '')
              for r in rows]
     write(os.path.join(out, 'PACKAGES.txt'),
-          'what norns.app contains, with its version, license and where its source is.\n'
+          'what Verdandi.app contains, with its version, license and where its source is.\n'
           'the license texts are in the folder of the same name next to this file.\n\n' + '\n'.join(lines))
     write(os.path.join(out, 'README.txt'), README)
     print('licenses: %d packages in %s' % (len(rows), out))
 
 
-README = '''licenses of norns for macOS
+README = '''licenses of Verdandi (norns on macOS)
 
-norns.app contains free software by many people, each part under its own license. PACKAGES.txt
+Verdandi.app contains free software by many people, each part under its own license. PACKAGES.txt
 lists every part: its version, its license and where its exact source is (with a checksum or a
 commit). each folder here holds the license texts of one part.
 
@@ -387,8 +387,8 @@ fetch, build and bundle everything listed, and the patches applied) is published
 release. the GNU General Public License gives you the right to get, study, change and share
 all of it.
 
-norns and monome are names of monome; this port is an independent community project and is
-not endorsed by or affiliated with monome.
+Verdandi runs norns, by monome and its community. norns and monome are names of monome;
+Verdandi is an independent community project, not endorsed by or affiliated with monome.
 '''
 
 

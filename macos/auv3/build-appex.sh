@@ -15,7 +15,7 @@ clang++ -std=c++17 -fobjc-arc -fapplication-extension -O2 -Wall -mmacosx-version
     -I "$HERE" "$HERE/NornsAU.mm" \
     -framework AudioToolbox -framework AVFoundation -framework CoreAudioKit -framework AppKit -framework Foundation \
     -Xlinker -e -Xlinker _NSExtensionMain \
-    -o "$OUT/Contents/MacOS/norns-au"
+    -o "$OUT/Contents/MacOS/verdandi-au"
 
 cat > "$OUT/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -23,10 +23,10 @@ cat > "$OUT/Contents/Info.plist" <<EOF
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleDisplayName</key><string>norns</string>
-    <key>CFBundleExecutable</key><string>norns-au</string>
-    <key>CFBundleIdentifier</key><string>community.norns-macos.app.au</string>
-    <key>CFBundleName</key><string>norns-au</string>
+    <key>CFBundleDisplayName</key><string>Verdandi</string>
+    <key>CFBundleExecutable</key><string>verdandi-au</string>
+    <key>CFBundleIdentifier</key><string>community.verdandi.app.au</string>
+    <key>CFBundleName</key><string>verdandi-au</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
     <key>CFBundleShortVersionString</key><string>0.1</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
@@ -38,10 +38,10 @@ cat > "$OUT/Contents/Info.plist" <<EOF
             <key>AudioComponents</key>
             <array>
                 <dict>
-                    <key>description</key><string>norns</string>
-                    <key>manufacturer</key><string>Nrns</string>
-                    <key>name</key><string>norns: norns</string>
-                    <key>subtype</key><string>nrns</string>
+                    <key>description</key><string>Verdandi: norns in a DAW track</string>
+                    <key>manufacturer</key><string>Vrdn</string>
+                    <key>name</key><string>Verdandi: Verdandi</string>
+                    <key>subtype</key><string>vrdn</string>
                     <key>type</key><string>aumf</string>
                     <key>version</key><integer>65536</integer>
                     <key>sandboxSafe</key><true/>

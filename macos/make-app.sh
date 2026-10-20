@@ -1,5 +1,5 @@
 #!/bin/bash
-# make-app.sh: build a self-contained norns.app (and a .dmg) from this checkout.
+# make-app.sh: build a self-contained Verdandi.app (norns on macOS; and a .dmg) from this checkout.
 #
 # needs what macos/setup-deps.sh provides (with homebrew's packages built for the oldest
 # macOS the app runs on, macos/MACOS_MIN) and a norns build (waf). the app is ad-hoc signed
@@ -28,16 +28,16 @@ bottle() {
     for d in "$BOTTLES/$1"/*/; do echo "$d"; return; done
 }
 # built on APFS: codesign trips over the xattr files exFAT and similar volumes keep
-OUT="${NORNS_APP_OUT:-${TMPDIR:-/tmp}/norns-app}"
+OUT="${NORNS_APP_OUT:-${TMPDIR:-/tmp}/verdandi-app}"
 # outside build/: waf clean empties that
 # the dmg goes on top of the project folder (the one with deps/), where it is found first;
 # without such a folder, into dist/ of the checkout
 if [ "$d" != "/" ]; then DIST="$d"; else DIST="$REPO/dist"; fi
-APP="$OUT/norns.app"
+APP="$OUT/Verdandi.app"
 R="$APP/Contents/Resources"
 VERSION="$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo dev)"
 
-echo "== norns.app ($VERSION)"
+echo "== Verdandi.app ($VERSION)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$R/norns/build/norns" "$R/norns/build/ws-wrapper" "$R/norns/build/macos" \
     "$R/norns/macos" "$R/deps/bin" "$R/deps/lib/jack" "$R/deps/gnubin" "$R/deps/SuperCollider"
@@ -85,24 +85,24 @@ cp -R "$NORNS_HOME/maiden" "$R/maiden"
 find "$R/maiden" -name '*.map' -delete
 
 # launcher + Info.plist
-cp "$REPO/macos/app-launcher.sh" "$APP/Contents/MacOS/norns"
-chmod +x "$APP/Contents/MacOS/norns"
+cp "$REPO/macos/app-launcher.sh" "$APP/Contents/MacOS/Verdandi"
+chmod +x "$APP/Contents/MacOS/Verdandi"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>norns</string>
-    <key>CFBundleDisplayName</key><string>norns</string>
-    <key>CFBundleIdentifier</key><string>community.norns-macos.app</string>
-    <key>CFBundleExecutable</key><string>norns</string>
+    <key>CFBundleName</key><string>Verdandi</string>
+    <key>CFBundleDisplayName</key><string>Verdandi</string>
+    <key>CFBundleIdentifier</key><string>community.verdandi.app</string>
+    <key>CFBundleExecutable</key><string>Verdandi</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>$MIN</string>
     <key>LSUIElement</key><true/>
-    <key>NSMicrophoneUsageDescription</key><string>norns records and processes audio input (softcut, tape, engines).</string>
-    <key>NSAudioCaptureUsageDescription</key><string>Devices &gt; Audio Input from App plays the sound of the app you choose into norns' input.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Verdandi runs norns: its scripts record and process the audio input (softcut, tape, engines).</string>
+    <key>NSAudioCaptureUsageDescription</key><string>SYS on the MIC button (or Devices &gt; Audio Input) plays other apps' sound into the input of norns.</string>
     <key>NSHumanReadableCopyright</key><string>GPL-3.0. community port, not affiliated with monome.</string>
 </dict>
 </plist>
@@ -125,7 +125,7 @@ python3 -I "$REPO/macos/licenses.py" collect "$(dirname "$P")" "$BOTTLES" "$REPO
 
 echo "== AUv3"
 mkdir -p "$APP/Contents/PlugIns"
-"$REPO/macos/auv3/build-appex.sh" "$APP/Contents/PlugIns/norns-au.appex" "$VERSION"
+"$REPO/macos/auv3/build-appex.sh" "$APP/Contents/PlugIns/Verdandi.appex" "$VERSION"
 
 codesign --force --sign - "$APP"
 
@@ -157,7 +157,7 @@ echo "  ok"
 if [ "${1:-}" = "--dmg" ]; then
     echo "== dmg"
     STAGE="$OUT/dmg"
-    rm -rf "$STAGE" "$OUT/norns.dmg"
+    rm -rf "$STAGE" "$OUT/Verdandi.dmg"
     mkdir -p "$STAGE"
     cp -R "$APP" "$STAGE/"
     cp -R "$R/Licenses" "$STAGE/Licenses"
@@ -166,9 +166,9 @@ if [ "${1:-}" = "--dmg" ]; then
     [ -f "$REPO/macos/manual/manual.html" ] && cp "$REPO/macos/manual/manual.html" "$STAGE/Manual.html"
     chmod 644 "$STAGE"/Manual.* 2>/dev/null
     xattr -c "$STAGE"/Manual.* 2>/dev/null
-    hdiutil create -volname norns -srcfolder "$STAGE" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$OUT/norns.dmg" >/dev/null
+    hdiutil create -volname Verdandi -srcfolder "$STAGE" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$OUT/Verdandi.dmg" >/dev/null
     rm -rf "$STAGE"
     mkdir -p "$DIST"
-    cp "$OUT/norns.dmg" "$DIST/norns.dmg"
-    ls -la "$DIST/norns.dmg"
+    cp "$OUT/Verdandi.dmg" "$DIST/Verdandi.dmg"
+    ls -la "$DIST/Verdandi.dmg"
 fi

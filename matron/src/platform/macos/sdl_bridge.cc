@@ -17,7 +17,7 @@
  *    play them in turn, right-click (or ctrl-click) to latch a key down, for chords.
  *  - ARC: libmonome sees an arc with 4 rings. drag round a knob (or use the wheel over it)
  *    to turn it, right-click to push it.
- *  - KEYS: a two octave keyboard that norns sees as the midi device "norns keys" (other
+ *  - KEYS: a two octave keyboard that norns sees as the midi device "Verdandi keys" (other
  *    apps see it too). click a key, higher up for softer; with the window in front the
  *    computer keyboard plays it (vkeys_skin.h).
  * the open windows are laid out round the norns window, as large as the screen allows;
@@ -66,6 +66,7 @@
 #include "gif_writer.h"
 #include "app_audio.h"
 #include "mac_menu.h"
+#include "product.h"
 #include "open_url.h"
 #include "varc_skin.h"
 #include "vgrid_device.h"
@@ -1194,7 +1195,7 @@ static void toggle_keys(void) {
         return;
     }
     MIDIClientRef client = coremidi_client();
-    if (client == 0 || MIDISourceCreate(client, CFSTR("norns keys"), &keys_src) != noErr) {
+    if (client == 0 || MIDISourceCreate(client, CFSTR(MACOS_PRODUCT " keys"), &keys_src) != noErr) {
         fprintf(stderr, "sdl_bridge: virtual keyboard failed\n");
         keys_src = 0;
         return;
@@ -1489,13 +1490,13 @@ static std::string desktop_dir(void) {
     return stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? d : dust_dir();
 }
 
-// "norns 2026-10-20 at 14.03.12.png", like a macOS screenshot
+// "Verdandi 2026-10-20 at 14.03.12.png", like a macOS screenshot
 static std::string capture_path(const char *ext) {
     time_t now = time(NULL);
     struct tm tm;
     localtime_r(&now, &tm);
     char name[64];
-    strftime(name, sizeof name, "norns %Y-%m-%d at %H.%M.%S", &tm);
+    strftime(name, sizeof name, MACOS_PRODUCT " %Y-%m-%d at %H.%M.%S", &tm);
     std::string dir = desktop_dir(), path = dir + "/" + name + ext;
     for (int i = 2; access(path.c_str(), F_OK) == 0 && i < 100; i++) {
         path = dir + "/" + name + " " + std::to_string(i) + ext;
@@ -1960,7 +1961,7 @@ static void handle_key(const SDL_KeyboardEvent *k) {
     case WK_MODE: {
         SDL_Window *window = SDL_GetWindowFromID(k->windowID);
         if (window != NULL) {
-            SDL_SetWindowTitle(window, out.value ? "norns · keys" : "norns");
+            SDL_SetWindowTitle(window, out.value ? MACOS_PRODUCT " · keys" : MACOS_PRODUCT);
         }
         break;
     }
@@ -2024,6 +2025,8 @@ void sdl_bridge_init(void) {
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     // the first click into the window already presses a key
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+    // the menu SDL makes is named after the process
+    mac_set_app_name(MACOS_PRODUCT);
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         fprintf(stderr, "sdl_bridge: SDL_Init failed: %s\n", SDL_GetError());
     }
