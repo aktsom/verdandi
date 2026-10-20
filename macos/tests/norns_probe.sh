@@ -52,4 +52,10 @@ if pgrep -f "$NHOME/norns/build/norns/norns|SuperCollider.app/Contents/MacOS/sc"
     echo "norns_probe: WARNING leftover processes:"; pgrep -fl "$NHOME/norns/build/norns/norns|SuperCollider.app/Contents/MacOS/sc"
 fi
 rm -f "$FIFO"
+# the next run needs sclang's port 57120 free: wait for the old SuperCollider to be gone
+n=0
+while lsof -nP -iUDP:57120 >/dev/null 2>&1 && [ $n -lt 50 ]; do
+    sleep 0.2
+    n=$((n + 1))
+done
 echo "norns_probe: done, log in $LOG"
