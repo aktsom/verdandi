@@ -81,9 +81,23 @@ the automatic part is `lua/core/keyboard.lua` (enabled by `NORNS_HARDWARE_KEYS=1
 macos/tests/keyboard_hardware_test.lua`.
 
 mouse: the window draws the device (`matron/src/platform/macos/device_skin.c`, layout of
-the standard norns). click a key; drag a knob (up/right = clockwise) or scroll over it; the
-wheel elsewhere turns the nearest knob. keys and knobs show every key/enc event norns
-receives (`sdl_bridge_show_control`, also called by the keyboard path in lua).
+the standard norns). click a key; drag a knob (up/right = clockwise, shift fine, command
+fast) or scroll over it; the wheel elsewhere turns the nearest knob. keys and knobs show
+every key/enc event norns receives (`sdl_bridge_show_control`, also called by the keyboard
+path in lua).
+
+buttons above the device (not on the hardware): the menu pages (`EVENT_WINDOW_BUTTON` ->
+`_norns.window_button` in `lua/core/menu.lua`), GRID, MAIDEN, MANUAL (the running script's
+docs from the catalog, else `macos/manual/manual.html`; opened by `open_url.c`, http(s) and
+paths only).
+
+virtual grid: `vgrid_proto.c` is the grid side of the mext serial protocol, `vgrid_device.c`
+puts it on a pty that libmonome opens like a usb grid (`dev_list_add`), `vgrid_skin.c`
+draws the window. GRID or F6 opens it.
+
+audio: SYSTEM > AUDIO (`lua/core/menu/audio.lua`, devices from `macos/audio_devices.c`)
+writes `~/norns/audio.conf`; `macos/norns.sh` restarts jackd with it and falls back to the
+defaults (leaving `audio.conf.failed`) if it does not start.
 
 the key mapping is plain C (`matron/src/platform/macos/window_keys.c`) with scenario tests:
 `cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt`
@@ -94,7 +108,11 @@ the key mapping is plain C (`matron/src/platform/macos/window_keys.c`) with scen
 cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c \
    matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt
 cc -std=c11 -I matron/src/platform/macos $(pkg-config --cflags --libs cairo) \
-   macos/tests/device_skin_test.c matron/src/platform/macos/device_skin.c -o /tmp/dst && /tmp/dst [png_dir]
+   macos/tests/device_skin_test.c matron/src/platform/macos/device_skin.c \
+   matron/src/platform/macos/vgrid_skin.c -o /tmp/dst && /tmp/dst [png_dir]
+P=<deps>/prefix; cc -std=c11 -I matron/src/platform/macos -I $P/include macos/tests/vgrid_test.c \
+   matron/src/platform/macos/vgrid_proto.c matron/src/platform/macos/vgrid_device.c \
+   -L $P/lib -lmonome -o /tmp/vgt && DYLD_LIBRARY_PATH=$P/lib /tmp/vgt
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 <lua 5.3> macos/tests/menu_pages_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua

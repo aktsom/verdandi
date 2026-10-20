@@ -38,7 +38,8 @@ cp "$REPO/macos/manual/manual.html" "$R/norns/macos/manual/"
 cp "$REPO/build/norns/norns" "$R/norns/build/norns/"
 cp "$REPO/build/ws-wrapper/ws-wrapper" "$R/norns/build/ws-wrapper/"
 cp "$REPO"/build/macos/jack_wait "$REPO"/build/macos/jack_connect "$REPO"/build/macos/jack_disconnect \
-    "$REPO"/build/macos/jack_lsp "$REPO"/build/macos/auv3_bridge "$R/norns/build/macos/"
+    "$REPO"/build/macos/jack_lsp "$REPO"/build/macos/auv3_bridge "$REPO"/build/macos/audio_devices \
+    "$R/norns/build/macos/"
 
 # jack server and the drivers norns uses
 cp "$(readlink -f "$BREW/bin/jackd")" "$R/deps/bin/jackd"

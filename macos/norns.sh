@@ -30,8 +30,6 @@ if [ -z "$DEPS" ]; then
     DEPS="$d/deps/prefix"
 fi
 BREW="${HOMEBREW_PREFIX:-/opt/homebrew}"
-JACK_RATE="${NORNS_JACK_RATE:-48000}"
-JACK_PERIOD="${NORNS_JACK_PERIOD:-256}"
 
 export HOME="$NORNS_HOME"
 SC_BIN="$DEPS/SuperCollider/SuperCollider.app/Contents/MacOS"
@@ -134,14 +132,74 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# audio device, rate and buffer: SYSTEM > AUDIO (lua/core/menu/audio.lua) writes
+# audio.conf (input= output= rate= period=, empty device = the macOS default) and restarts
+# through AUDIO_MARK. NORNS_JACK_RATE / NORNS_JACK_PERIOD in the environment win.
+AUDIO_CONF="$NORNS_HOME/audio.conf"
+AUDIO_TOOL="$REPO/build/macos/audio_devices"
+export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
+read_audio_conf() {
+    JACK_IN=""
+    JACK_OUT=""
+    JACK_RATE=48000
+    JACK_PERIOD=256
+    if [ -f "$AUDIO_CONF" ]; then
+        local k v
+        while IFS='=' read -r k v; do
+            case "$k" in
+            input) JACK_IN="$v" ;;
+            output) JACK_OUT="$v" ;;
+            rate) case "$v" in 44100 | 48000 | 88200 | 96000) JACK_RATE="$v" ;; esac ;;
+            period) case "$v" in 64 | 128 | 256 | 512 | 1024) JACK_PERIOD="$v" ;; esac ;;
+            esac
+        done < "$AUDIO_CONF"
+    fi
+    JACK_RATE="${NORNS_JACK_RATE:-$JACK_RATE}"
+    JACK_PERIOD="${NORNS_JACK_PERIOD:-$JACK_PERIOD}"
+}
+
 JACK_WAIT="$REPO/build/macos/jack_wait"
+JACK_PID=""
+# helpers get /dev/null as stdin: they share the file description with matron's REPL,
+# and one that flips it to non-blocking makes matron's reads fail
+run_jackd() {
+    local args=(-d coreaudio -r "$JACK_RATE" -p "$JACK_PERIOD")
+    local in="$JACK_IN" out="$JACK_OUT"
+    # one device chosen: the other side is the macOS default, named, so jackd opens both
+    if [ -n "$in$out" ]; then
+        [ -n "$in" ] || in="$("$AUDIO_TOOL" --default-input 2>/dev/null)"
+        [ -n "$out" ] || out="$("$AUDIO_TOOL" --default-output 2>/dev/null)"
+        [ -n "$in" ] && args+=(-C "$in")
+        [ -n "$out" ] && args+=(-P "$out")
+        # two devices have two clocks
+        [ -n "$in" ] && [ -n "$out" ] && [ "$in" != "$out" ] && args+=(-s)
+    fi
+    echo "norns.sh: starting jackd (coreaudio, ${JACK_RATE} Hz, period ${JACK_PERIOD}${JACK_IN:+, chosen input}${JACK_OUT:+, chosen output})"
+    jackd "${args[@]}" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
+    JACK_PID=$!
+    PIDS="$PIDS $JACK_PID"
+    "$JACK_WAIT" 10
+}
+start_jackd() {
+    read_audio_conf
+    run_jackd && return 0
+    # the chosen setting does not start (device gone, rate not supported): macOS defaults,
+    # and audio.conf.failed tells SYSTEM > AUDIO
+    if [ -f "$AUDIO_CONF" ]; then
+        echo "norns.sh: audio settings did not start, using the macOS defaults"
+        kill_tree "$JACK_PID"
+        mv -f "$AUDIO_CONF" "$AUDIO_CONF.failed"
+        JACK_IN=""
+        JACK_OUT=""
+        JACK_RATE=48000
+        JACK_PERIOD=256
+        run_jackd && return 0
+    fi
+    echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"
+    return 1
+}
 if ! "$JACK_WAIT" 0 2>/dev/null; then
-    echo "norns.sh: starting jackd (coreaudio, ${JACK_RATE} Hz, period ${JACK_PERIOD})"
-    # helpers get /dev/null as stdin: they share the file description with matron's REPL,
-    # and one that flips it to non-blocking makes matron's reads fail
-    jackd -d coreaudio -r "$JACK_RATE" -p "$JACK_PERIOD" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
-    PIDS="$PIDS $!"
-    "$JACK_WAIT" 10 || { echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"; exit 1; }
+    start_jackd || exit 1
 fi
 
 WS="$REPO/build/ws-wrapper/ws-wrapper"
@@ -182,10 +240,15 @@ stop_sclang() {
 start_norns
 
 # the norns side of the AUv3: idle until the plugin renders in a DAW
-if [ -x "$REPO/build/macos/auv3_bridge" ]; then
-    "$REPO/build/macos/auv3_bridge" < /dev/null > "$NORNS_HOME/auv3_bridge.log" 2>&1 &
-    PIDS="$PIDS $!"
-fi
+AUV3_PID=""
+start_auv3() {
+    if [ -x "$REPO/build/macos/auv3_bridge" ]; then
+        "$REPO/build/macos/auv3_bridge" < /dev/null > "$NORNS_HOME/auv3_bridge.log" 2>&1 &
+        AUV3_PID=$!
+        PIDS="$PIDS $AUV3_PID"
+    fi
+}
+start_auv3
 
 MAIDEN="${NORNS_MAIDEN:-$NORNS_HOME/maiden}"
 if [ -x "$MAIDEN/maiden" ]; then
@@ -201,11 +264,24 @@ if [ -x "$MAIDEN/maiden" ]; then
 fi
 [ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_HOME/norns.log (close the norns window or ctrl-c to stop)"
 
+AUDIO_MARK="$NORNS_HOME/.norns-restart-audio"
+rm -f "$AUDIO_MARK"
 while :; do
     wait "$NORNS_PID"
     [ -f "$RESTART_MARK" ] || break
     rm -f "$RESTART_MARK"
     echo "norns.sh: restarting norns and sclang"
     stop_sclang
+    # new audio settings: jackd and its other client too (only a jackd started here)
+    if [ -f "$AUDIO_MARK" ]; then
+        rm -f "$AUDIO_MARK"
+        if [ -n "$JACK_PID" ]; then
+            echo "norns.sh: restarting audio"
+            [ -n "$AUV3_PID" ] && kill_tree "$AUV3_PID"
+            kill_tree "$JACK_PID"
+            start_jackd || break
+            start_auv3
+        fi
+    fi
     start_norns
 done

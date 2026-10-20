@@ -16,6 +16,13 @@ def build(bld):
             use=['JACK'],
             ldflags=['-Wl,-headerpad_max_install_names'])
 
+    # the CoreAudio devices for SYSTEM > AUDIO
+    bld.program(features='c cprogram',
+        source='audio_devices.c',
+        target='audio_devices',
+        framework=['CoreAudio', 'CoreFoundation'],
+        ldflags=['-Wl,-headerpad_max_install_names'])
+
     # norns side of the AUv3 (see auv3/auv3_bridge.c)
     bld.program(features='c cprogram',
         source='auv3/auv3_bridge.c',
