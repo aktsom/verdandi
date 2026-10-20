@@ -25,6 +25,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # sc3-plugins, jackd and its drivers, SDL3, the GNU userland (macos/make-app.sh)
 TOP = ['jack', 'liblo', 'libsndfile', 'cairo', 'sdl2-compat', 'sdl3', 'fftw', 'readline', 'yaml-cpp',
        'boost', 'libsamplerate', 'coreutils', 'findutils', 'gnu-sed', 'grep']
+# built from source by setup-deps.sh (into <out>/<tag>/<formula>/<version>-source): their
+# bottle needs a newer macOS than its tag says (jack's: 15.7). their dependencies are fetched
+SOURCE = {'jack'}
 TAGS = {'13': 'arm64_ventura', '14': 'arm64_sonoma', '15': 'arm64_sequoia', '26': 'arm64_tahoe'}
 
 
@@ -117,6 +120,13 @@ def main():
     out = os.path.join(out, t)
     os.makedirs(out, exist_ok=True)
     for n in closure(names):
+        if n in SOURCE:
+            print('  %-14s built from source (setup-deps.sh)' % n)
+            # a bottle of it fetched before would be bundled in its place
+            for v in os.listdir(os.path.join(out, n)) if os.path.isdir(os.path.join(out, n)) else []:
+                if not v.endswith('-source'):
+                    shutil.rmtree(os.path.join(out, n, v))
+            continue
         dest, new = fetch(n, out, t)
         prune(dest)
         print('  %-14s %s%s' % (n, os.path.basename(dest), '' if new else ' (had it)'))

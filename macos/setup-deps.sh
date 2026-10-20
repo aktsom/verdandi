@@ -18,6 +18,8 @@ SRC="$DEPS/src"
 BREW="${HOMEBREW_PREFIX:-/opt/homebrew}"
 J=$(sysctl -n hw.ncpu)
 
+JACK_VERSION=1.9.22
+JACK_SHA256=1e42b9fc4ad7db7befd414d45ab2f8a159c0b30fcd6eee452be662298766a849
 LUA_VERSION=5.3.6
 LUA_SHA256=fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60
 WAF_VERSION=2.1.9
@@ -39,13 +41,37 @@ brew install cairo boost cmake pkgconf readline jack liblo libsndfile sdl2 fftw 
 echo "== homebrew bottles for macOS $MACOSX_DEPLOYMENT_TARGET (what make-app.sh bundles)"
 python3 -I "$REPO/macos/fetch_bottles.py" "$DEPS/bottles"
 
+BOTTLES="$(python3 -I "$REPO/macos/fetch_bottles.py" --where "$DEPS/bottles")"
+
 # built for another oldest macOS: build it again
 STAMP="$P/.macos-min"
 if [ "$(cat "$STAMP" 2>/dev/null)" != "$MACOSX_DEPLOYMENT_TARGET" ]; then
     echo "== oldest macOS is now $MACOSX_DEPLOYMENT_TARGET: rebuilding lua, nng, libmonome, SuperCollider, sc3-plugins"
     rm -rf "$P/lib/liblua.a" "$P/lib/libnng.a" "$P/include/monome.h" "$P/SuperCollider" \
         "$SRC/lua-$LUA_VERSION" "$SRC/nng/build" "$SRC/libmonome/build" "$SRC/supercollider/build" \
-        "$SRC/sc3-plugins/build" "$NORNS_HOME/Library/Application Support/SuperCollider/Extensions/SC3plugins"
+        "$SRC/sc3-plugins/build" "$NORNS_HOME/Library/Application Support/SuperCollider/Extensions/SC3plugins" \
+        "$BOTTLES/jack"/*-source "$SRC/jack2-$JACK_VERSION/build"
+fi
+
+echo "== jack $JACK_VERSION for macOS $MACOSX_DEPLOYMENT_TARGET (homebrew's bottle needs a newer one)"
+JACK_OUT="$BOTTLES/jack/$JACK_VERSION-source"
+if [ ! -x "$JACK_OUT/bin/jackd" ]; then
+    cd "$SRC"
+    if [ ! -d "jack2-$JACK_VERSION" ]; then
+        curl -sSfL -o "jack2-$JACK_VERSION.tar.gz" "https://github.com/jackaudio/jack2/archive/refs/tags/v$JACK_VERSION.tar.gz"
+        echo "$JACK_SHA256  jack2-$JACK_VERSION.tar.gz" | shasum -a 256 -c -
+        tar xzf "jack2-$JACK_VERSION.tar.gz" && rm "jack2-$JACK_VERSION.tar.gz"
+    fi
+    cd "jack2-$JACK_VERSION"
+    # as homebrew builds it (no metadata: it needs Berkeley DB). a neutral prefix: it ends up
+    # in the binaries, and make-app.sh points the libraries at the bundle anyway
+    # its waf 2.0 needs python's imp module, gone since 3.12: the system python has it
+    CFLAGS="-I$BREW/include $MAP" CXXFLAGS="-I$BREW/include $MAP" LDFLAGS="-L$BREW/lib" \
+        PKG_CONFIG_PATH="$BREW/lib/pkgconfig" /usr/bin/python3 ./waf configure --prefix=/build/jack --db=no
+    /usr/bin/python3 ./waf build -j "$J"
+    rm -rf "$SRC/jack-stage" && /usr/bin/python3 ./waf install --destdir="$SRC/jack-stage"
+    rm -rf "$JACK_OUT" && mkdir -p "$(dirname "$JACK_OUT")" && mv "$SRC/jack-stage/build/jack" "$JACK_OUT"
+    rm -rf "$SRC/jack-stage" "$JACK_OUT/include" "$JACK_OUT/share"
 fi
 
 echo "== waf $WAF_VERSION"
