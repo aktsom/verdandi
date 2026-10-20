@@ -7,6 +7,9 @@ shows the device. as a standalone app, and as an AUv3 plugin that puts norns int
 an unofficial community port, not affiliated with monome. the norns scripts from the
 community catalog run unchanged.
 
+**support:** please ask here, in the [GitHub issues](../../issues), not on lines or at
+monome: they have nothing to do with this port.
+
 ## get it
 
 download `Verdandi.dmg` from the [releases](../../releases), open it and drag Verdandi into
