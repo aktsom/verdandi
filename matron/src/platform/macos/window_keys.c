@@ -19,6 +19,7 @@ enum {
     U_3 = 0x20,
     U_ENTER = 0x28,
     U_ESC = 0x29,
+    U_BACKSPACE = 0x2a,
     U_SPACE = 0x2c,
     U_RIGHT = 0x4f,
     U_LEFT = 0x50,
@@ -36,6 +37,9 @@ static int control_key(int usage) {
     case U_ENTER: return 3;
     case U_KP_ENTER: return 3;
     case U_SPACE: return 3;
+    // back
+    case U_ESC: return 2;
+    case U_BACKSPACE: return 2;
     default: return 0;
     }
 }

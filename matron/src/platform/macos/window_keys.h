@@ -7,6 +7,7 @@
  * with Option held (or always, in "norns mode") these keys are the hardware:
  *   1 2 3          K1 K2 K3 (press / hold / release)
  *   enter space    K3 (confirm)
+ *   esc backspace  K2 (back)
  *   Q W  A S  Z X  E1 E2 E3, down / up
  *   up/down        E2      left/right   E3
  *   + Shift        5 steps per press

@@ -50,6 +50,8 @@ check("shift = 5 steps", "E3+5")
 -- enter and space confirm (K3)
 send('ENTER', 1); send('ENTER', 0); send('SPACE', 1); send('SPACE', 0); send('KPENTER', 1); send('KPENTER', 0)
 check("enter / space / keypad enter = K3", "K3=1 K3=0 K3=1 K3=0 K3=1 K3=0")
+send('ESC', 1); send('ESC', 0); send('BACKSPACE', 1); send('BACKSPACE', 0)
+check("esc / backspace = K2", "K2=1 K2=0 K2=1 K2=0")
 
 -- K1 held while turning, release after other keys
 send('1', 1); send('S', 1); send('S', 0); send('1', 0)

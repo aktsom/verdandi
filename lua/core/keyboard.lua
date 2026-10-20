@@ -98,14 +98,15 @@ end
 --- hardware keys.
 -- on computers without norns hardware (env NORNS_HARDWARE_KEYS=1, set by the macOS
 -- launcher) the keyboard drives the keys and encoders whenever nothing else wants it:
--- 1 2 3 = K1 K2 K3, enter / space = K3 (confirm), Q/W A/S Z/X = E1 E2 E3 (left/right),
+-- 1 2 3 = K1 K2 K3, enter / space = K3 (confirm), esc / backspace = K2 (back),
+-- Q/W A/S Z/X = E1 E2 E3 (left/right),
 -- shift = 5 steps, and in
 -- scripts the arrows are E2 (up/down) and E3 (left/right); in the menu the arrows keep
 -- their menu bindings. text entry, and scripts that set keyboard.code / keyboard.char,
 -- get the keys as before.
 keyboard.hardware_keys = os.getenv("NORNS_HARDWARE_KEYS") == "1"
 
-local hw_key = {['1']=1, ['2']=2, ['3']=3, ENTER=3, KPENTER=3, SPACE=3}
+local hw_key = {['1']=1, ['2']=2, ['3']=3, ENTER=3, KPENTER=3, SPACE=3, ESC=2, BACKSPACE=2}
 local hw_enc = {Q={1,-1}, W={1,1}, A={2,-1}, S={2,1}, Z={3,-1}, X={3,1}}
 local hw_arrow = {UP={2,-1}, DOWN={2,1}, LEFT={3,-1}, RIGHT={3,1}}
 -- keys whose press went to the hardware: code -> {key=n} or {enc=n, dir=d}

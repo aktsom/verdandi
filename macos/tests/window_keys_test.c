@@ -19,6 +19,7 @@ enum {
     U_3 = 0x20,
     U_ENTER = 0x28,
     U_ESC = 0x29,
+    U_BACKSPACE = 0x2a,
     U_SPACE = 0x2c,
     U_DOWN = 0x51,
     U_LALT = 0xe2
@@ -99,8 +100,10 @@ int main(void) {
     expect(&wk, "enter up", U_ENTER, 0, 0, 0, 0, WK_KEY, 3, 0);
     expect(&wk, "space in norns mode confirms", U_SPACE, 1, 0, 0, 0, WK_KEY, 3, 1);
     expect(&wk, "space up", U_SPACE, 0, 0, 0, 0, WK_KEY, 3, 0);
-    expect(&wk, "esc alone still types", U_ESC, 1, 0, 0, 0, WK_HID, U_ESC, 1);
-    expect(&wk, "esc up", U_ESC, 0, 0, 0, 0, WK_HID, U_ESC, 0);
+    expect(&wk, "esc alone in norns mode is back (K2)", U_ESC, 1, 0, 0, 0, WK_KEY, 2, 1);
+    expect(&wk, "esc up", U_ESC, 0, 0, 0, 0, WK_KEY, 2, 0);
+    expect(&wk, "backspace in norns mode is back (K2)", U_BACKSPACE, 1, 0, 0, 0, WK_KEY, 2, 1);
+    expect(&wk, "backspace up", U_BACKSPACE, 0, 0, 0, 0, WK_KEY, 2, 0);
     expect(&wk, "opt+esc again", U_ESC, 1, 0, 1, 0, WK_MODE, 0, 0);
     expect(&wk, "q after leaving mode", U_Q, 1, 0, 0, 0, WK_HID, U_Q, 1);
 
