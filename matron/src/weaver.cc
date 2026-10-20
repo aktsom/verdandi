@@ -351,6 +351,9 @@ static int _platform_shield(lua_State *l);
 static int _show_control(lua_State *l);
 static int _open_url(lua_State *l);
 static int _grid_window(lua_State *l);
+static int _app_input(lua_State *l);
+static int _choose_file(lua_State *l);
+static int _choose_file_close(lua_State *l);
 #endif
 
 // boilerplate: push a lua function to the lua stack, from named field in global 'norns'
@@ -685,6 +688,9 @@ void w_init(void) {
     lua_register_norns("show_control", &_show_control);
     lua_register_norns("open_url", &_open_url);
     lua_register_norns("grid_window", &_grid_window);
+    lua_register_norns("app_input", &_app_input);
+    lua_register_norns("choose_file", &_choose_file);
+    lua_register_norns("choose_file_close", &_choose_file_close);
 #endif
 
     // name global extern table
@@ -3632,6 +3638,40 @@ int _grid_window(lua_State *l) {
         }
     }
     sdl_bridge_toggle_window(which);
+    return 0;
+}
+
+/***
+ * macOS: what the input hears besides the Mac's own input (lua/core/menu.lua, MIC button)
+ * @function app_input
+ * @tparam string target "system" (every other app), an app's bundle id, or nil for none
+ * @tparam string label for a note on the device ("input: <label>"), nil for none
+ */
+int _app_input(lua_State *l) {
+    const char *target = lua_gettop(l) >= 1 && !lua_isnil(l, 1) ? luaL_checkstring(l, 1) : NULL;
+    const char *label = lua_gettop(l) >= 2 && !lua_isnil(l, 2) ? luaL_checkstring(l, 2) : NULL;
+    sdl_bridge_app_input(target, label);
+    return 0;
+}
+
+/***
+ * macOS: the Finder's open panel for lua's fileselect; the choice comes back as
+ * _norns.file_chosen(path). again while it is open: it goes to the folder
+ * @function choose_file
+ * @tparam string folder where it starts
+ */
+int _choose_file(lua_State *l) {
+    sdl_bridge_choose_file(lua_gettop(l) >= 1 && !lua_isnil(l, 1) ? luaL_checkstring(l, 1) : NULL);
+    return 0;
+}
+
+/***
+ * macOS: the open panel of choose_file goes away
+ * @function choose_file_close
+ */
+int _choose_file_close(lua_State *l) {
+    (void)l;
+    sdl_bridge_choose_file_close();
     return 0;
 }
 #endif

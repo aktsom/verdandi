@@ -13,6 +13,8 @@
 static void (*item_cb)(int id) = NULL;
 static void (*import_cb)(const char *path, int mode) = NULL;
 static void (*note_cb)(const char *text) = NULL;
+static void (*input_cb)(const char *mode, const char *bundle, const char *name) = NULL;
+static int input_now = MAC_INPUT_MIC;
 
 static void note(NSString *text) {
     if (note_cb != NULL) {
@@ -36,14 +38,27 @@ static void note(NSString *text) {
     }
 }
 
-// Devices > Audio Input from App: the running apps, made fresh each time it opens
+// Devices > Audio Input: the Mac's input, every app, none, or one of the running apps (made
+// fresh each time it opens). lua decides (lua/core/menu.lua, _norns.input_chosen) and shows
+// it on the MIC button, which says what is checked here
 - (void)menuNeedsUpdate:(NSMenu *)menu {
     [menu removeAllItems];
     const char *cur = app_audio_current();
-    NSMenuItem *none = [menu addItemWithTitle:@"None" action:@selector(pickApp:) keyEquivalent:@""];
-    none.target = self;
-    none.representedObject = nil;
-    none.state = cur == NULL ? NSControlStateValueOn : NSControlStateValueOff;
+    struct {
+        NSString *title;
+        const char *mode;
+        int input;
+    } modes[] = {
+        {@"Microphone or Interface", "mic", MAC_INPUT_MIC},
+        {@"All Apps (System Audio)", "system", MAC_INPUT_SYSTEM},
+        {@"Off", "off", MAC_INPUT_OFF},
+    };
+    for (unsigned i = 0; i < sizeof modes / sizeof modes[0]; i++) {
+        NSMenuItem *it = [menu addItemWithTitle:modes[i].title action:@selector(pickApp:) keyEquivalent:@""];
+        it.target = self;
+        it.representedObject = @{@"mode" : @(modes[i].mode)};
+        it.state = input_now == modes[i].input ? NSControlStateValueOn : NSControlStateValueOff;
+    }
     [menu addItem:[NSMenuItem separatorItem]];
     app_audio_app_t apps[APP_INPUT_MAX];
     int n = app_audio_list(apps, APP_INPUT_MAX);
@@ -54,8 +69,10 @@ static void note(NSString *text) {
         }
         NSMenuItem *it = [menu addItemWithTitle:title action:@selector(pickApp:) keyEquivalent:@""];
         it.target = self;
-        it.representedObject = @{@"bundle" : @(apps[i].bundle), @"name" : @(apps[i].name)};
-        it.state = cur != NULL && strcmp(cur, apps[i].bundle) == 0 ? NSControlStateValueOn : NSControlStateValueOff;
+        it.representedObject = @{@"mode" : @"app", @"bundle" : @(apps[i].bundle), @"name" : @(apps[i].name)};
+        it.state = input_now == MAC_INPUT_APP && cur != NULL && strcmp(cur, apps[i].bundle) == 0
+                       ? NSControlStateValueOn
+                       : NSControlStateValueOff;
         NSRunningApplication *ra =
             [NSRunningApplication runningApplicationsWithBundleIdentifier:@(apps[i].bundle)].firstObject;
         if (ra.icon != nil) {
@@ -70,28 +87,10 @@ static void note(NSString *text) {
     }
 }
 
-static int picks = 0;
-
 - (void)pickApp:(NSMenuItem *)item {
-    NSDictionary *app = item.representedObject;
-    int pick = ++picks;
-    if (app == nil) {
-        if (app_audio_current() != NULL) {
-            app_audio_select(NULL);
-            note(@"app input off");
-        }
-        return;
-    }
-    if (app_audio_select([app[@"bundle"] UTF8String])) {
-        note([NSString stringWithFormat:@"input from %@: it plays through norns now", app[@"name"]]);
-        // the helper ends at once when it cannot tap here (unless another pick came since)
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-          if (pick == picks && app_audio_current() == NULL) {
-              note(@"app input stopped (see norns.log)");
-          }
-        });
-    } else {
-        note(@"app input does not start (see norns.log)");
+    NSDictionary *pick = item.representedObject;
+    if (input_cb != NULL && pick != nil) {
+        input_cb([pick[@"mode"] UTF8String], [pick[@"bundle"] UTF8String], [pick[@"name"] UTF8String]);
     }
 }
 @end
@@ -115,10 +114,12 @@ static void insert(NSMenu *bar, NSMenu *menu, NSInteger at) {
 }
 
 void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path, int mode),
-                      void (*on_note)(const char *text)) {
+                      void (*on_note)(const char *text),
+                      void (*on_input)(const char *mode, const char *bundle, const char *name)) {
     item_cb = on_item;
     import_cb = on_import;
     note_cb = on_note;
+    input_cb = on_input;
     NSMenu *bar = [NSApp mainMenu];
     if (bar == nil || target != nil) {
         return;
@@ -142,8 +143,8 @@ void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *pat
     add(devices, @"Arc  (F8)", @"", 0, MAC_MENU_ARC);
     if (app_audio_available()) {
         [devices addItem:[NSMenuItem separatorItem]];
-        NSMenuItem *from = [devices addItemWithTitle:@"Audio Input from App" action:nil keyEquivalent:@""];
-        NSMenu *apps = [[NSMenu alloc] initWithTitle:@"Audio Input from App"];
+        NSMenuItem *from = [devices addItemWithTitle:@"Audio Input" action:nil keyEquivalent:@""];
+        NSMenu *apps = [[NSMenu alloc] initWithTitle:@"Audio Input"];
         apps.delegate = target;
         from.submenu = apps;
         [apps release];
@@ -154,6 +155,10 @@ void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *pat
     insert(bar, devices, 2);
     [file release];
     [devices release];
+}
+
+void mac_menu_set_input(int input) {
+    input_now = input;
 }
 
 void mac_menu_set_recording(int on) {
@@ -382,5 +387,51 @@ void mac_drop_adopt_windows(void) {
         // registered before we were there: SDL's types (files, text) once more, through
         // drop_register
         [w registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeString ]];
+    }
+}
+
+//--- a script's file choice (lua's fileselect) in the Finder's open panel
+
+static NSOpenPanel *choose_panel = nil;
+static void (*chosen_cb)(const char *path) = NULL;
+
+void mac_menu_choose_file(const char *dir, const char *dust, void (*done)(const char *path)) {
+    NSString *d = dir != NULL && dir[0] != '\0' ? @(dir) : nil;
+    // dust itself says nothing about where the file might be: the panel's own last folder then.
+    // a folder linked from dust/audio/mac: where it really is
+    BOOL anywhere = d == nil || [d.stringByStandardizingPath isEqualToString:@(dust).stringByStandardizingPath];
+    NSURL *url = anywhere ? nil : [NSURL fileURLWithPath:d.stringByResolvingSymlinksInPath isDirectory:YES];
+    if (choose_panel != nil) {
+        if (url != nil) {
+            choose_panel.directoryURL = url;
+        }
+        return;
+    }
+    chosen_cb = done;
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.canChooseFiles = YES;
+    panel.canChooseDirectories = NO;
+    panel.allowsMultipleSelection = NO;
+    panel.message = @"Choose a file for the script (audio from elsewhere is linked into dust/audio/mac), "
+                    @"or Cancel for norns' own browser.";
+    panel.prompt = @"Choose";
+    if (url != nil) {
+        panel.directoryURL = url;
+    }
+    choose_panel = [panel retain];
+    // not modal: norns keeps running, and its own browser stays usable behind it
+    [panel beginWithCompletionHandler:^(NSModalResponse result) {
+      NSOpenPanel *p = choose_panel;
+      choose_panel = nil;
+      if (result == NSModalResponseOK && p.URL.fileURL && chosen_cb != NULL) {
+          chosen_cb(p.URL.path.fileSystemRepresentation);
+      }
+      [p release];
+    }];
+}
+
+void mac_menu_choose_file_close(void) {
+    if (choose_panel != nil) {
+        [choose_panel cancel:nil];
     }
 }

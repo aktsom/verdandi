@@ -41,6 +41,14 @@ enum {
     SKIN_MANUAL = 16,
 };
 
+// the MIC button: what reaches norns' input. lit unless OFF
+enum {
+    SKIN_INPUT_OFF = 0,
+    SKIN_INPUT_MIC = 1,    // the Mac's microphone or the interface
+    SKIN_INPUT_SYSTEM = 2, // every other app's sound
+    SKIN_INPUT_APP = 3,    // one app's sound
+};
+
 typedef struct {
     int key_down[3];  // K1-K3 held
     int enc_ticks[3]; // E1-E3 turned so far, sets the knob angle
@@ -49,7 +57,7 @@ typedef struct {
     int grid_open;    // virtual grid window open
     int arc_open;     // virtual arc window open
     int keys_open;    // virtual keyboard window open
-    int mic_live;     // the audio input reaches norns
+    int input;        // SKIN_INPUT_*: what norns' input hears (the MIC button)
     int button_down;  // button held by the mouse, SKIN_NONE if none
     int recording;    // a gif of the screen is being recorded
     const char *toast; // a short message on the box (import, screenshot), NULL for none

@@ -384,7 +384,7 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     int down = st->button_down == id;
     int lit = (id <= SKIN_PAGE4 && st->page == i + 1) || (id == SKIN_GRID && st->grid_open) ||
               (id == SKIN_ARC && st->arc_open) || (id == SKIN_KEYS && st->keys_open) ||
-              (id == SKIN_MIC && st->mic_live);
+              (id == SKIN_MIC && st->input != SKIN_INPUT_OFF);
     double x = b->x, y = button_y, dy = down ? 1.2 : 0;
 
     // well
@@ -427,12 +427,17 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     }
     cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     double area = x + 20, area_w = button_w - 23;
+    static const char *input_label[] = {"OFF", "MIC", "SYS", "APP"};
+    const char *label = b->label;
+    if (id == SKIN_MIC && st->input >= SKIN_INPUT_OFF && st->input <= SKIN_INPUT_APP) {
+        label = input_label[st->input];
+    }
     // long labels get a smaller size rather than touching the edge
     double size = 12;
     cairo_text_extents_t te;
     for (;;) {
         cairo_set_font_size(cr, size);
-        cairo_text_extents(cr, b->label, &te);
+        cairo_text_extents(cr, label, &te);
         if (te.width <= area_w - 2 || size <= 8) {
             break;
         }
@@ -440,7 +445,7 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     }
     cairo_move_to(cr, area + (area_w - te.width) / 2 - te.x_bearing, mid - te.height / 2 - te.y_bearing);
     hex(cr, lit ? "ffffff" : "c3c6cb", 1);
-    cairo_show_text(cr, b->label);
+    cairo_show_text(cr, label);
 }
 
 // a message under the buttons, right of E1: a dark pill like a notification

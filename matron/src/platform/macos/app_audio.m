@@ -182,7 +182,9 @@ int app_audio_select(const char *bundle) {
         return 0;
     }
     const char *exe = path.fileSystemRepresentation;
-    char *argv[] = {(char *)exe, (char *)bundle, NULL};
+    // "system": every app but norns
+    const char *what = strcmp(bundle, APP_AUDIO_SYSTEM) == 0 ? "--system" : bundle;
+    char *argv[] = {(char *)exe, (char *)what, NULL};
     posix_spawn_file_actions_t fa;
     posix_spawn_file_actions_init(&fa);
     // not matron's REPL input

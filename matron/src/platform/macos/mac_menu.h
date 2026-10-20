@@ -3,8 +3,8 @@
  *
  * the macOS menu bar of the norns window (SDL only makes the app and window menus):
  * File for getting samples and scripts in and recordings out, Devices for the virtual
- * grid, arc and keyboard windows and the app whose sound is norns' input. every item calls
- * back with its MAC_MENU_ id on the main thread.
+ * grid, arc and keyboard windows and what norns' input hears. every item calls back with
+ * its MAC_MENU_ id on the main thread.
  *
  * also what the norns windows take when something is dropped on them beyond SDL's Finder
  * files: files an app promises (written for the drop: Voice Memos, Music, DAWs, sample
@@ -36,10 +36,24 @@ enum {
                          // for the drop into a temporary folder of ours
 };
 
+// what the MIC button says: the input checked in Devices > Audio Input (SKIN_INPUT_*)
+enum {
+    MAC_INPUT_OFF = 0,
+    MAC_INPUT_MIC = 1,
+    MAC_INPUT_SYSTEM = 2,
+    MAC_INPUT_APP = 3,
+};
+
 // main thread, after SDL_Init(SDL_INIT_VIDEO). on_note shows a short message on the
-// device (any thread)
+// device (any thread). on_input: Devices > Audio Input chose mode "mic", "system", "off" or
+// "app" (with the app's bundle id and name, else NULL); lua decides, and says so through
+// mac_menu_set_input
 extern void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path, int mode),
-                             void (*on_note)(const char *text));
+                             void (*on_note)(const char *text),
+                             void (*on_input)(const char *mode, const char *bundle, const char *name));
+
+// what the input hears now (MAC_INPUT_*), for the checkmarks
+extern void mac_menu_set_input(int input);
 
 // the GIF item says "Stop" while recording
 extern void mac_menu_set_recording(int on);
@@ -54,6 +68,14 @@ extern int mac_option_held(void);
 // SDL windows made since the last call also take promised files and audio data; main
 // thread, after each SDL_CreateWindow
 extern void mac_drop_adopt_windows(void);
+
+// a script asks for a file (lua's fileselect): the Finder's open panel, not modal, starting
+// in dir (dust itself, or NULL: wherever the panel was last). done gets the chosen path,
+// nothing on cancel. again while it is open: it goes to dir. main thread
+extern void mac_menu_choose_file(const char *dir, const char *dust, void (*done)(const char *path));
+
+// the script got its file another way (norns' own browser): the panel goes away
+extern void mac_menu_choose_file_close(void);
 
 #ifdef __cplusplus
 }

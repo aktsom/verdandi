@@ -127,6 +127,7 @@ local PATH_FUNCTIONS = {
   'cut_buffer_read_mono', 'cut_buffer_read_stereo', 'cut_buffer_write_mono', 'cut_buffer_write_stereo',
   'tape_record_open', 'tape_play_open',
   'screen_display_png', 'screen_load_png', 'screen_export_png', 'screen_export_screenshot',
+  'choose_file',
 }
 
 local function wrap_arg(a)
@@ -144,7 +145,7 @@ for _, name in ipairs(PATH_FUNCTIONS) do
 end
 
 -- events from C that carry a file path, handled by lua functions defined later
-local PATH_EVENTS = {tape_play_file = true, tape_rec_file = true}
+local PATH_EVENTS = {tape_play_file = true, tape_rec_file = true, file_chosen = true, file_dropped = true}
 setmetatable(_norns, {__newindex = function(t, k, v)
   if PATH_EVENTS[k] and type(v) == 'function' then
     local handler = v

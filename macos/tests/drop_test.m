@@ -346,7 +346,7 @@ int main(int argc, char **argv) {
         }
         SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
         SDL_Window *sw = SDL_CreateWindow("drop here", 700, 300, 300, 200, SDL_WINDOW_SHOWN);
-        mac_menu_install(on_item, on_import, on_note);
+        mac_menu_install(on_item, on_import, on_note, NULL);
         mac_drop_adopt_windows();
         pump(0.5, nil);
         NSWindow *w = nil;

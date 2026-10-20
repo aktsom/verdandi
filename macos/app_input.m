@@ -9,6 +9,8 @@
  * like an instrument plugged into the device.
  *
  * usage: app_input <bundle id>
+ *        app_input --system   every app but norns' own processes (jackd plays norns out: tapping
+ *                             it would feed norns back into itself)
  * started and stopped by the norns window (Devices > Audio Input from App, see
  * matron/src/platform/macos/app_audio.m). ends on SIGTERM, with its parent or with jack;
  * the tap and the aggregate device go with it, and the app is heard again.
@@ -23,6 +25,7 @@
 #import <Foundation/Foundation.h>
 #include <jack/jack.h>
 #include <jack/net.h>
+#include <libproc.h>
 #include <signal.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -32,7 +35,9 @@
 #define CHANNELS 2
 #define BLOCK 256 // frames per push into the adapter
 
-static NSString *bundle;
+static NSString *bundle; // nil: every app (--system)
+// norns' own processes, never in a --system tap
+static const char *own[] = {"jackd", "scsynth", "sclang", "norns", "auv3_bridge", "app_input", "ws-wrapper", NULL};
 static jack_client_t *client;
 static jack_port_t *out_port[CHANNELS];
 static _Atomic(jack_adapter_t *) adapter = NULL;
@@ -150,7 +155,30 @@ static AudioObjectID default_output(void) {
     return dev;
 }
 
-// the app's process objects (it and its helpers), sorted
+static const char *what(void) {
+    return bundle != nil ? bundle.UTF8String : "every app";
+}
+
+static BOOL is_own(AudioObjectID obj) {
+    AudioObjectPropertyAddress addr = {kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal,
+                                       kAudioObjectPropertyElementMain};
+    pid_t pid = 0;
+    UInt32 n = sizeof pid;
+    if (AudioObjectGetPropertyData(obj, &addr, 0, NULL, &n, &pid) != noErr || pid <= 0) {
+        return NO;
+    }
+    char name[2 * MAXCOMLEN + 1] = "";
+    proc_name(pid, name, sizeof name);
+    for (int i = 0; own[i] != NULL; i++) {
+        if (strcmp(name, own[i]) == 0) {
+            return YES;
+        }
+    }
+    return pid == getpid();
+}
+
+// the app's process objects (it and its helpers), sorted; for --system norns' own, which
+// the tap leaves out
 static NSArray<NSNumber *> *app_processes(void) {
     AudioObjectPropertyAddress addr = {kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyScopeGlobal,
                                        kAudioObjectPropertyElementMain};
@@ -166,6 +194,12 @@ static NSArray<NSNumber *> *app_processes(void) {
     }
     NSString *helpers = [bundle stringByAppendingString:@"."];
     for (UInt32 i = 0; i < size / sizeof(AudioObjectID); i++) {
+        if (bundle == nil) {
+            if (is_own(ids[i])) {
+                [found addObject:@(ids[i])];
+            }
+            continue;
+        }
         NSString *b = string_prop(ids[i], kAudioProcessPropertyBundleID);
         if (b != nil && ([b isEqualToString:bundle] || [b hasPrefix:helpers])) {
             [found addObject:@(ids[i])];
@@ -213,14 +247,16 @@ static void set_adapter(double rate) {
 }
 
 API_AVAILABLE(macos(14.2)) static BOOL build_tap(NSArray<NSNumber *> *procs) {
-    CATapDescription *desc = [[CATapDescription alloc] initStereoMixdownOfProcesses:procs];
+    CATapDescription *desc = bundle != nil
+                                 ? [[CATapDescription alloc] initStereoMixdownOfProcesses:procs]
+                                 : [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:procs];
     desc.name = @"norns app input";
     desc.privateTap = YES;
     // heard through norns only
     desc.muteBehavior = CATapMutedWhenTapped;
     OSStatus e = AudioHardwareCreateProcessTap(desc, &tap);
     if (e != noErr) {
-        fprintf(stderr, "app_input: cannot tap %s (%d)\n", bundle.UTF8String, (int)e);
+        fprintf(stderr, "app_input: cannot tap %s (%d)\n", what(), (int)e);
         tap = kAudioObjectUnknown;
         return NO;
     }
@@ -260,28 +296,33 @@ API_AVAILABLE(macos(14.2)) static BOOL build_tap(NSArray<NSNumber *> *procs) {
         return NO;
     }
     tapped = procs;
-    fprintf(stderr, "app_input: tapping %s (%lu processes, %.0f Hz)\n", bundle.UTF8String,
-            (unsigned long)procs.count, rate);
+    fprintf(stderr, "app_input: tapping %s (%lu processes%s, %.0f Hz)\n", what(), (unsigned long)procs.count,
+            bundle != nil ? "" : " left out", rate);
     return YES;
 }
 
 // the app's processes changed (it started playing, quit, opened a helper): a new tap
 API_AVAILABLE(macos(14.2)) static void follow(void) {
+    // what it was last time (nil at the start: every app is tapped then, with no process of
+    // norns to leave out yet)
+    static NSArray<NSNumber *> *seen = nil;
     NSArray<NSNumber *> *procs = app_processes();
-    if ([procs isEqualToArray:tapped ?: @[]]) {
+    if (seen != nil && [procs isEqualToArray:seen]) {
         return;
     }
+    seen = procs;
     teardown();
-    if (procs.count > 0) {
+    // every app: also while norns has no process with audio (yet)
+    if (procs.count > 0 || bundle == nil) {
         build_tap(procs);
     } else {
-        fprintf(stderr, "app_input: %s has no audio yet, waiting\n", bundle.UTF8String);
+        fprintf(stderr, "app_input: %s has no audio yet, waiting\n", what());
     }
 }
 
 API_AVAILABLE(macos(14.2)) static int run(const char *app) {
     @autoreleasepool {
-        bundle = @(app);
+        bundle = strcmp(app, "--system") == 0 ? nil : @(app);
         pid_t parent = getppid();
 
         jack_status_t status;

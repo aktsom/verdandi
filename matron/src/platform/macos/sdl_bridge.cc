@@ -54,6 +54,7 @@
 #include <vector>
 
 #include "event_types.h"
+#include "event_custom.h"
 #include "events.h"
 
 #include "device.h"
@@ -63,6 +64,7 @@
 #include "device_skin.h"
 #include "dust_import.h"
 #include "gif_writer.h"
+#include "app_audio.h"
 #include "mac_menu.h"
 #include "open_url.h"
 #include "varc_skin.h"
@@ -94,7 +96,15 @@ static Uint32 toast_event_type = (Uint32)-1;
 static pthread_t main_thread;
 
 // device_event_type codes
-enum { DEV_GRID_LEDS = 0, DEV_TOGGLE = 1, DEV_ARC_LEDS = 2 };
+enum {
+    DEV_GRID_LEDS = 0,
+    DEV_TOGGLE = 1,
+    DEV_ARC_LEDS = 2,
+    DEV_APP_INPUT = 3,   // data1 target, data2 label (strdup, "" for none)
+    DEV_INPUT_CHECK = 4, // data1 = which select it checks
+    DEV_CHOOSE = 5,      // data1 folder (strdup)
+    DEV_CHOOSE_CLOSE = 6,
+};
 
 //--- drawing (main thread only)
 
@@ -343,6 +353,50 @@ static void post_toast(const std::string &text) {
 // mac_menu.m's messages (any thread)
 static void note_toast(const char *text) {
     post_toast(text);
+}
+
+//--- calls into lua: _norns.<fn>(args...) on matron's thread (any thread)
+
+struct lua_call {
+    std::string fn;
+    std::vector<std::string> args;
+};
+
+static void lua_call_weave(lua_State *l, void *value, void *context) {
+    (void)context;
+    lua_call *c = (lua_call *)value;
+    lua_getglobal(l, "_norns");
+    if (lua_istable(l, -1)) {
+        lua_getfield(l, -1, c->fn.c_str());
+        if (lua_isfunction(l, -1)) {
+            for (const std::string &a : c->args) {
+                lua_pushstring(l, a.c_str());
+            }
+            if (lua_pcall(l, (int)c->args.size(), 0, 0) != LUA_OK) {
+                fprintf(stderr, "sdl_bridge: _norns.%s: %s\n", c->fn.c_str(), lua_tostring(l, -1));
+                lua_pop(l, 1);
+            }
+        } else {
+            lua_pop(l, 1);
+        }
+    }
+    lua_pop(l, 1);
+}
+
+static void lua_call_free(void *value, void *context) {
+    (void)context;
+    delete (lua_call *)value;
+}
+
+static struct event_custom_ops lua_call_ops = {"macos lua call", lua_call_weave, lua_call_free};
+
+static void call_lua(const char *fn, std::vector<std::string> args) {
+    event_post(event_custom_new(&lua_call_ops, new lua_call{fn, std::move(args)}, NULL));
+}
+
+// Devices > Audio Input: lua decides (lua/core/menu.lua)
+static void input_chosen(const char *mode, const char *bundle, const char *name) {
+    call_lua("input_chosen", {mode != NULL ? mode : "mic", bundle != NULL ? bundle : "", name != NULL ? name : ""});
 }
 
 //--- extra windows: grid, arc, keys
@@ -831,6 +885,11 @@ static void grid_motion(const SDL_MouseMotionEvent *m) {
 #define ARC_NAME "monome arc virtual"
 // encoder ticks per turn, as on the hardware
 #define ARC_TICKS_PER_TURN 1024.0
+// a turn of the mouse round a knob on the screen is a quarter turn of the knob: a small
+// knob under a mouse would otherwise be far touchier than the hardware under a hand
+#define ARC_DRAG_GEAR 0.25
+// ticks a wheel notch (a trackpad scrolls in fractions of one)
+#define ARC_WHEEL_TICKS 2
 
 static vgrid_device_t *varc = NULL;
 static varc_geom_t arc_geom = {};
@@ -986,7 +1045,7 @@ static void arc_motion(const SDL_MouseMotionEvent *m) {
         da += 2 * M_PI;
     }
     arc_last = a;
-    arc_turn(arc_drag, da / (2 * M_PI) * ARC_TICKS_PER_TURN * turn_factor());
+    arc_turn(arc_drag, da / (2 * M_PI) * ARC_TICKS_PER_TURN * ARC_DRAG_GEAR * turn_factor());
 }
 
 static void arc_wheel(const SDL_MouseWheelEvent *w) {
@@ -1002,8 +1061,7 @@ static void arc_wheel(const SDL_MouseWheelEvent *w) {
     if (w->direction == SDL_MOUSEWHEEL_FLIPPED) {
         dy = -dy;
     }
-    // 6 ticks a notch: a few notches move a ring of 64 leds visibly, not wildly
-    arc_turn(n, dy * 6 * turn_factor());
+    arc_turn(n, dy * ARC_WHEEL_TICKS * turn_factor());
 }
 
 //--- virtual keyboard window: a CoreMIDI source matron picks up like any app's port
@@ -1262,7 +1320,8 @@ static void keys_typed(const SDL_KeyboardEvent *k) {
 
 struct import_item {
     std::string path;
-    int mode; // MAC_IMPORT_LINK, _COPY (audio into dust/audio), _TAKE (copy, then remove path)
+    int mode;    // MAC_IMPORT_LINK, _COPY (audio into dust/audio), _TAKE (copy, then remove path)
+    bool chosen; // a script's file from the open panel: back to lua's fileselect
 };
 
 static std::deque<import_item> import_queue;
@@ -1280,6 +1339,16 @@ static std::string user_home(void) {
     struct passwd *pw = getpwuid(getuid());
     const char *home = pw != NULL && pw->pw_dir != NULL ? pw->pw_dir : getenv("HOME");
     return home != NULL ? home : ".";
+}
+
+// path is in dust already (also through a link to it)
+static bool in_dust(const std::string &path) {
+    char real[PATH_MAX], dust[PATH_MAX];
+    if (realpath(path.c_str(), real) == NULL || realpath(dust_dir().c_str(), dust) == NULL) {
+        return false;
+    }
+    size_t n = strlen(dust);
+    return strncmp(real, dust, n) == 0 && real[n] == '/';
 }
 
 // a file an app wrote for the drop, and its folder of its own (mac_menu.m)
@@ -1340,6 +1409,12 @@ static void *import_worker(void *arg) {
         pthread_mutex_unlock(&import_lock);
 
         dust_kind_t kind = dust_import_kind(item.path.c_str());
+        // a script's file: audio from outside dust is linked in, anything else stays where it is
+        // (a .lua file it reads is no script to install)
+        if (item.chosen && (kind != DUST_AUDIO || in_dust(item.path))) {
+            call_lua("file_chosen", {item.path});
+            continue;
+        }
         char dest[2048];
         int as_link = 0;
         // a link to a temporary file dies with it: a copy
@@ -1361,9 +1436,19 @@ static void *import_worker(void *arg) {
                 copied++;
                 last_copied = name;
             }
+            // to the script that asked for it, or to a file browser that is open (lua's
+            // fileselect takes a dropped sample like a chosen one)
+            if (item.chosen) {
+                call_lua("file_chosen", {dest});
+            } else if (kind == DUST_AUDIO) {
+                call_lua("file_dropped", {dest});
+            }
         } else {
             fprintf(stderr, "sdl_bridge: import of %s failed\n", item.path.c_str());
             failed++;
+            if (item.chosen) {
+                call_lua("file_chosen", {item.path});
+            }
         }
         if (item.mode == MAC_IMPORT_TAKE) {
             remove_taken(item.path);
@@ -1372,7 +1457,7 @@ static void *import_worker(void *arg) {
     return NULL;
 }
 
-static void import_path(const char *path, int mode) {
+static void import_queue_push(const import_item &item) {
     pthread_mutex_lock(&import_lock);
     if (!import_running) {
         pthread_t t;
@@ -1381,9 +1466,18 @@ static void import_path(const char *path, int mode) {
             import_running = true;
         }
     }
-    import_queue.push_back({path, mode});
+    import_queue.push_back(item);
     pthread_cond_signal(&import_cond);
     pthread_mutex_unlock(&import_lock);
+}
+
+static void import_path(const char *path, int mode) {
+    import_queue_push({path, mode, false});
+}
+
+// the open panel's choice for lua's fileselect (main thread)
+static void import_chosen(const char *path) {
+    import_queue_push({path, MAC_IMPORT_LINK, true});
 }
 
 //--- the screen out: png and gif on the desktop
@@ -1810,8 +1904,9 @@ static void handle_key(const SDL_KeyboardEvent *k) {
 // a key/enc event reached norns: move the control on screen
 static void handle_show(int kind, int n, int value) {
     if (kind == SDL_BRIDGE_SHOW_MIC) {
-        if (skin.mic_live != (n != 0)) {
-            skin.mic_live = n != 0;
+        mac_menu_set_input(n);
+        if (skin.input != n) {
+            skin.input = n;
             redraw(true);
         }
         return;
@@ -1848,7 +1943,7 @@ void sdl_bridge_init(void) {
     main_thread = pthread_self();
     window_keys_init(&keys);
     // until lua says otherwise (lua/core/menu.lua, MIC)
-    skin.mic_live = 1;
+    skin.input = SKIN_INPUT_MIC;
     // keep default SIGINT/SIGTERM behaviour (terminate), as on linux; SDL would otherwise
     // swallow them as SDL_QUIT
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
@@ -1864,7 +1959,7 @@ void sdl_bridge_init(void) {
     device_event_type = bridge_event_type + 2;
     toast_event_type = bridge_event_type + 3;
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
-    mac_menu_install(menu_item, import_path, note_toast);
+    mac_menu_install(menu_item, import_path, note_toast, input_chosen);
 }
 
 void sdl_bridge_show_control(int kind, int n, int value) {
@@ -1877,6 +1972,84 @@ void sdl_bridge_show_control(int kind, int n, int value) {
     ev.user.code = kind;
     ev.user.data1 = (void *)(intptr_t)n;
     ev.user.data2 = (void *)(intptr_t)value;
+    SDL_PushEvent(&ev);
+}
+
+//--- what norns' input hears besides the Mac's own (lua/core/menu.lua decides)
+
+static unsigned input_gen = 0;
+
+static Uint32 input_check_due(Uint32 interval, void *gen) {
+    (void)interval;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = device_event_type;
+    ev.user.code = DEV_INPUT_CHECK;
+    ev.user.data1 = gen;
+    SDL_PushEvent(&ev);
+    return 0;
+}
+
+// main thread; frees both
+static void set_app_input(char *target, char *label) {
+    const char *t = target != NULL && target[0] != '\0' ? target : NULL;
+    const char *cur = app_audio_current();
+    // the same again (lua at startup, the button's own state): nothing to restart
+    bool same = (t == NULL && cur == NULL) || (t != NULL && cur != NULL && strcmp(t, cur) == 0);
+    if (!same && !app_audio_select(t) && t != NULL) {
+        show_toast("app input does not start (see norns.log)");
+        call_lua("input_ended", {});
+    } else if (label != NULL && label[0] != '\0') {
+        show_toast(std::string("input: ") + label);
+    }
+    if (t != NULL && !same) {
+        // the helper ends at once when it cannot tap here
+        SDL_AddTimer(1200, input_check_due, (void *)(uintptr_t)++input_gen);
+    }
+    free(target);
+    free(label);
+}
+
+static void check_app_input(unsigned gen) {
+    if (gen == input_gen && app_audio_current() == NULL) {
+        show_toast("app input stopped (see norns.log)");
+        call_lua("input_ended", {});
+    }
+}
+
+void sdl_bridge_app_input(const char *target, const char *label) {
+    if (device_event_type == (Uint32)-1) {
+        return;
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = device_event_type;
+    ev.user.code = DEV_APP_INPUT;
+    ev.user.data1 = strdup(target != NULL ? target : "");
+    ev.user.data2 = strdup(label != NULL ? label : "");
+    SDL_PushEvent(&ev);
+}
+
+void sdl_bridge_choose_file(const char *dir) {
+    if (device_event_type == (Uint32)-1) {
+        return;
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = device_event_type;
+    ev.user.code = DEV_CHOOSE;
+    ev.user.data1 = strdup(dir != NULL ? dir : "");
+    SDL_PushEvent(&ev);
+}
+
+void sdl_bridge_choose_file_close(void) {
+    if (device_event_type == (Uint32)-1) {
+        return;
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = device_event_type;
+    ev.user.code = DEV_CHOOSE_CLOSE;
     SDL_PushEvent(&ev);
 }
 
@@ -1911,6 +2084,16 @@ void sdl_bridge_run(void) {
         if (ev.type == device_event_type) {
             if (ev.user.code == DEV_TOGGLE) {
                 toggle_window((int)(intptr_t)ev.user.data1);
+            } else if (ev.user.code == DEV_APP_INPUT) {
+                set_app_input((char *)ev.user.data1, (char *)ev.user.data2);
+            } else if (ev.user.code == DEV_INPUT_CHECK) {
+                check_app_input((unsigned)(uintptr_t)ev.user.data1);
+            } else if (ev.user.code == DEV_CHOOSE) {
+                char *dir = (char *)ev.user.data1;
+                mac_menu_choose_file(dir, dust_dir().c_str(), import_chosen);
+                free(dir);
+            } else if (ev.user.code == DEV_CHOOSE_CLOSE) {
+                mac_menu_choose_file_close();
             } else if (ev.user.code == DEV_ARC_LEDS) {
                 arc_redraw();
             } else {

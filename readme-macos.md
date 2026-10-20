@@ -113,10 +113,16 @@ what other apps drag (file promises, audio data on the pasteboard) is taken by d
 `mac_menu.m` puts on SDL's window class: written into a temporary folder, copied into
 dust/audio, removed again; files in temporary folders and caches are copied, not linked.
 
-app input: Devices > Audio Input from App (`app_audio.m`) runs `macos/app_input.m`, a jack
-client that taps the chosen app (Core Audio process tap, macOS 14.2+, muted while tapped)
-through a private aggregate device and plays it into crone:input_1/2 next to system:capture.
-it ends with norns (parent watch), with jack or on SIGTERM.
+input: the MIC button goes MIC > SYS > OFF (lua/core/menu.lua `_menu.set_input`; APP: one app
+from Devices > Audio Input). MIC plugs system:capture into crone:input_1/2; SYS and APP run
+`macos/app_input.m` through `_norns.app_input` (`app_audio.m`), a jack client that taps every
+app but norns' own processes (`--system`) or the chosen one (Core Audio process tap, muted
+while tapped) through a private aggregate device and plays it into crone:input_1/2. it ends
+with norns (parent watch), with jack or on SIGTERM.
+
+a script's file: lua's fileselect also opens the Finder's open panel (`_norns.choose_file`,
+`mac_menu.m`); the choice, or a sample dropped on the window while the browser is up, comes
+back as `_norns.file_chosen` / `file_dropped` (audio from outside dust linked in first).
 
 audio: SYSTEM > AUDIO (`lua/core/menu/audio.lua`, devices from `macos/audio_devices.c`)
 writes `~/norns/audio.conf`; `macos/norns.sh` restarts jackd with it and falls back to the
@@ -148,6 +154,8 @@ cc -fobjc-arc macos/tests/app_input_test.m $(pkg-config --cflags --libs jack) -f
    -framework Foundation -o /tmp/ait && /tmp/ait build/macos/app_input   # own jack server, tone app
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 <lua 5.3> macos/tests/menu_pages_test.lua
+<lua 5.3> macos/tests/input_modes_test.lua
+<lua 5.3> macos/tests/fileselect_finder_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
 macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it
 ```

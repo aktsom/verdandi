@@ -14,6 +14,8 @@ local fs = {}
 local MIN_PREVIEW_INTERVAL = 0.1 -- seconds between preview restarts
 
 function fs.enter(folder, callback, filter_string)
+  -- macOS: the Finder's open panel comes up with it (see fs.getlist)
+  fs.active = true
   fs.folders = {}
   fs.list = {}
   fs.display_list = {}
@@ -56,6 +58,8 @@ function fs.enter(folder, callback, filter_string)
 end
 
 function fs.exit()
+  fs.active = false
+  if _norns.choose_file_close then _norns.choose_file_close() end
   -- ensure any clocks created by fileselect are cancelled
   if fs.preview_debounce_clock then
     clock.cancel(fs.preview_debounce_clock)
@@ -102,6 +106,9 @@ end
 
 fs.getlist = function()
   local dir = fs.getdir()
+  -- macOS: the Finder's open panel, in the same folder (a file chosen there or dropped on
+  -- the window comes back as _norns.file_chosen / file_dropped)
+  if fs.active and _norns.choose_file then _norns.choose_file(dir) end
   fs.list = util.scandir(dir)
   fs.display_list = {}
   fs.lengths = {}
@@ -283,5 +290,21 @@ fs.redraw = function()
 end
 
 fs.refresh = function() fs.redraw() end
+
+-- macOS: a file from the Finder (open panel) or dropped on the window while the browser is up
+-- is the file chosen
+local function take(path)
+  if not fs.active then return end
+  if stop then stop() end
+  fs.path = path
+  fs.exit()
+end
+
+_norns.file_chosen = take
+
+_norns.file_dropped = function(path)
+  -- a file, not a folder of samples
+  if path:match("[^/]%.%w+$") then take(path) end
+end
 
 return fs

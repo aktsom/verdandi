@@ -8,7 +8,8 @@
  * on a jack server of its own (dummy driver, the norns one is not touched) it starts a tone
  * app (this program again, inside a small .app with its own bundle id, playing 440 Hz quietly
  * on the default output), app_input on that bundle id, and measures what comes out of
- * app_input:out_1/2: level and pitch. the first run asks for permission to record other apps'
+ * app_input:out_1/2: level and pitch. then the same with --system (every app), and that a
+ * process named like one of norns' own (sclang) is left out of it. the first run asks for permission to record other apps'
  * audio (for the terminal it runs in): without it the tap stays silent.
  */
 
@@ -135,6 +136,19 @@ static NSString *make_tone_app(NSString *dir, const char *self_path) {
     return exe;
 }
 
+static void measure(double seconds, double rms[2], double *hz);
+
+// until something arrives (a new binary's first tap takes macOS a while), at most 5 s
+static void wait_for_sound(void) {
+    double rms[2], hz;
+    for (int i = 0; i < 25; i++) {
+        measure(0.2, rms, &hz);
+        if (rms[0] > 1e-3) {
+            return;
+        }
+    }
+}
+
 static void measure(double seconds, double rms[2], double *hz) {
     sum_sq[0] = sum_sq[1] = 0;
     frames_seen = crossings = 0;
@@ -195,7 +209,8 @@ int main(int argc, char **argv) {
                         jack_connect(c, "app_input:out_2", "meter:in_2") == 0;
         }
         CHECK(connected, "app_input has its jack ports");
-        usleep(1500000);
+        wait_for_sound();
+        usleep(300000);
         double rms[2], hz;
         measure(2.0, rms, &hz);
         printf("app input: rms %.4f %.4f (tone %.4f), %.1f Hz\n", rms[0], rms[1], TONE_AMP / sqrt(2), hz);
@@ -217,6 +232,38 @@ int main(int argc, char **argv) {
         [tap waitUntilExit];
         CHECK(tap.terminationStatus == 0, "ends cleanly on SIGTERM (%d)", tap.terminationStatus);
         CHECK(jack_port_by_name(c, "app_input:out_1") == NULL, "its ports are gone");
+
+        // --system: every app, but not norns' own processes
+        tap = start(@(argv[1]), @[ @"--system" ], env);
+        tone = start(tone_exe, @[], @{});
+        connected = 0;
+        for (int i = 0; i < 40 && !connected; i++) {
+            usleep(100000);
+            connected = jack_connect(c, "app_input:out_1", "meter:in_1") == 0 &&
+                        jack_connect(c, "app_input:out_2", "meter:in_2") == 0;
+        }
+        wait_for_sound();
+        usleep(300000);
+        measure(2.0, rms, &hz);
+        printf("system input: rms %.4f, %.1f Hz\n", rms[0], hz);
+        CHECK(rms[0] > 0.5 * TONE_AMP / sqrt(2) && fabs(hz - TONE_HZ) < 5,
+              "--system hears the app (rms %.4f, %.1f Hz; other sound playing on the Mac adds to it)", rms[0], hz);
+        [tone terminate];
+        [tone waitUntilExit];
+        // the same tone from a process named like one of norns' (sclang): left out
+        NSString *own_exe = [dir stringByAppendingPathComponent:@"sclang"];
+        [[NSFileManager defaultManager] removeItemAtPath:own_exe error:NULL];
+        [[NSFileManager defaultManager] copyItemAtPath:@(argv[0]) toPath:own_exe error:NULL];
+        NSTask *own = start(own_exe, @[ @"tone" ], @{});
+        usleep(2500000);
+        measure(1.5, rms, &hz);
+        printf("system input, norns' own process playing: rms %.5f\n", rms[0]);
+        CHECK(rms[0] < 1e-3, "norns' own processes are left out (rms %.5f)", rms[0]);
+        [own terminate];
+        [own waitUntilExit];
+        [tap terminate];
+        [tap waitUntilExit];
+        CHECK(tap.terminationStatus == 0, "--system ends cleanly (%d)", tap.terminationStatus);
 
         jack_client_close(c);
         [jackd terminate];

@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
         test_geom(sizes[i][0], sizes[i][1]);
     }
     if (argc > 1) {
-        skin_state_t idle = {.hover = SKIN_NONE, .mic_live = 1, .button_down = SKIN_NONE};
+        skin_state_t idle = {.hover = SKIN_NONE, .input = SKIN_INPUT_MIC, .button_down = SKIN_NONE};
         skin_state_t used = {.key_down = {0, 1, 0},
                              .enc_ticks = {0, 3, -5},
                              .hover = SKIN_E1,
@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
                              .button_down = SKIN_MAIDEN,
                              .recording = 1,
                              .toast = "REC  GIF · \u21e7\u2318G stops"};
-        skin_state_t toast = {.hover = SKIN_NONE, .mic_live = 1, .arc_open = 1, .toast = "3 files \u2192 dust/audio"};
+        skin_state_t toast = {.hover = SKIN_NONE, .input = SKIN_INPUT_SYSTEM, .arc_open = 1, .toast = "3 files \u2192 dust/audio"};
         render(argv[1], 1984, 1324, &idle, "");
         render(argv[1], 1984, 1324, &used, "_used");
         render(argv[1], 992, 662, &idle, "");

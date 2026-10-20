@@ -175,15 +175,22 @@ local function show_page()
   end
 end
 
--- MIC: the Mac's audio input (system:capture -> crone:input_1/2) is unplugged and plugged
--- back in, so loud speakers cannot feed back into the microphone. kept in ~/.mic-off
-_menu.mic_live = true
+-- MIC: what norns' input hears. "mic": the Mac's own input (microphone or interface,
+-- system:capture -> crone:input_1/2), "system": every other app's sound (a video in a
+-- browser ...), "app": one app (Devices > Audio Input), "off": nothing. the Mac's input is
+-- unplugged and plugged back in, so loud speakers cannot feed back into the microphone; the
+-- apps are tapped by the window (_norns.app_input). the button goes MIC > SYS > OFF.
+-- ~/.mic-off keeps it off for the next start unless it was "mic" (an app is chosen again)
+_menu.input = "mic"
+_menu.mic_live = true -- the Mac's own input reaches norns
 local MIC_OFF = "/home/we/.mic-off"
 local mic_links = {}
 local mic_checked = false
+local INPUT_SHOWN = {off = 0, mic = 1, system = 2, app = 3}
+local INPUT_LABEL = {off = "off", mic = "mic / interface", system = "all apps (system audio)"}
 
-local function show_mic()
-  if _norns.show_control then _norns.show_control(4, _menu.mic_live and 1 or 0, 0) end
+local function show_input()
+  if _norns.show_control then _norns.show_control(4, INPUT_SHOWN[_menu.input] or 0, 0) end
 end
 
 -- the system:capture -> crone:input_1/2 connections, from jack_lsp -c
@@ -200,33 +207,78 @@ local function capture_links()
   return links
 end
 
-function _menu.set_mic(live)
+local function set_capture(live)
   if live then
     for _, l in ipairs(mic_links) do _norns.execute("jack_connect " .. l[1] .. " " .. l[2]) end
     mic_links = {}
-    os.remove(MIC_OFF)
   else
     for _, l in ipairs(capture_links()) do
       _norns.execute("jack_disconnect " .. l[1] .. " " .. l[2])
       table.insert(mic_links, l)
     end
+  end
+  _menu.mic_live = live
+end
+
+-- mode "mic", "system", "app" (bundle id and name of the app) or "off"; quiet: no note on
+-- the device
+function _menu.set_input(mode, bundle, name, quiet)
+  if (mode == "system" or mode == "app") and not _norns.app_input then mode = "off" end
+  if mode == "app" and not bundle then mode = "off" end
+  set_capture(mode == "mic")
+  if _norns.app_input then
+    local label = not quiet and (INPUT_LABEL[mode] or name or bundle) or nil
+    if mode == "system" then
+      _norns.app_input("system", label)
+    elseif mode == "app" then
+      _norns.app_input(bundle, label)
+    else
+      _norns.app_input(nil, label)
+    end
+  end
+  _menu.input = mode
+  if mode == "mic" then
+    os.remove(MIC_OFF)
+  else
     local f = io.open(MIC_OFF, "w")
     if f then f:close() end
   end
-  _menu.mic_live = live
-  show_mic()
+  show_input()
+end
+
+-- the Mac's own input on or off (as before there were apps to hear)
+function _menu.set_mic(live)
+  _menu.set_input(live and "mic" or "off")
+end
+
+-- Devices > Audio Input chose (platform/macos/mac_menu.m)
+_norns.input_chosen = function(mode, bundle, name)
+  _menu.set_input(mode, bundle ~= "" and bundle or nil, name ~= "" and name or nil)
+end
+
+-- the tap stopped on its own (the window said why)
+_norns.input_ended = function()
+  if _menu.input == "system" or _menu.input == "app" then _menu.set_input("off", nil, nil, true) end
+end
+
+-- the MIC button
+local INPUT_NEXT = {mic = "system", system = "off", off = "mic", app = "off"}
+function _menu.next_input()
+  local mode = INPUT_NEXT[_menu.input] or "mic"
+  if mode == "system" and not _norns.app_input then mode = "off" end
+  _menu.set_input(mode)
 end
 
 -- when norns is up (crone has connected the input again): take it off if it was off
 function _menu.check_mic()
   if mic_checked or not _norns.show_control then return end
   mic_checked = true
-  if util.file_exists(MIC_OFF) then _menu.set_mic(false) else show_mic() end
+  if util.file_exists(MIC_OFF) then _menu.set_input("off", nil, nil, true) else show_input() end
 end
 hook.system_post_startup:register("menu-mic", _menu.check_mic)
 
 -- 1-4: menu page (clicking the page that is up goes back to the script), 5: the manual of
--- norns for macOS, 6: the audio input on/off
+-- norns for macOS, 6: the next audio input (MIC > SYS > OFF)
 _norns.window_button = function(n)
   if n >= 1 and n <= 4 then
     if _menu.mode and _menu.page == _menu.panels[n] and not _menu.locked then
@@ -239,7 +291,7 @@ _norns.window_button = function(n)
     local manual = os.getenv("NORNS_MANUAL")
     if manual then _norns.open_url(manual) end
   elseif n == 6 then
-    _menu.set_mic(not _menu.mic_live)
+    _menu.next_input()
   end
 end
 
