@@ -179,7 +179,8 @@ end
 -- system:capture -> crone:input_1/2), "system": every other app's sound (a video in a
 -- browser ...), "app": one app (Devices > Audio Input), "off": nothing. the Mac's input is
 -- unplugged and plugged back in, so loud speakers cannot feed back into the microphone; the
--- apps are tapped by the window (_norns.app_input). the button goes MIC > SYS > OFF.
+-- apps are tapped by the window (_norns.app_input), and still play directly: their monitor
+-- goes to TAPE only (_norns.monitor_out). the button goes MIC > SYS > OFF.
 -- the choice is kept for the next start: ~/.mic-off unless it was "mic", ~/.norns-input for
 -- "system" and "app" (with the app)
 _menu.input = "mic"
@@ -228,6 +229,8 @@ function _menu.set_input(mode, bundle, name, quiet)
   if (mode == "system" or mode == "app") and not _norns.app_input then mode = "off" end
   if mode == "app" and not bundle then mode = "off" end
   set_capture(mode == "mic")
+  -- other apps keep playing: the monitor of them goes to TAPE only, not heard a second time
+  if _norns.monitor_out then _norns.monitor_out(mode ~= "system" and mode ~= "app") end
   if _norns.app_input then
     local label = not quiet and (INPUT_LABEL[mode] or name or bundle) or nil
     if mode == "system" then
@@ -289,7 +292,7 @@ function _menu.check_mic()
     local mode, bundle, name = f:read("l"), f:read("l"), f:read("l")
     f:close()
     if mode == "system" or (mode == "app" and bundle and bundle ~= "") then
-      -- said on the device: the apps go quiet into norns again
+      -- said on the device
       _menu.set_input(mode, bundle ~= "" and bundle or nil, name ~= "" and name or nil)
       return
     end

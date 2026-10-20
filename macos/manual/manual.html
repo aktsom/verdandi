@@ -200,9 +200,9 @@ says <b>APP</b>.</p>
   <li>the sound goes into norns' inputs instead of the microphone or interface. scripts record
       and process it like anything plugged into a norns: record a buffer in a looper while a
       video plays, and it is in the buffer.</li>
-  <li>the apps go quiet while norns takes their sound: you hear them through norns, with the
-      input monitor level in MIX. click on to OFF or MIC and they are heard directly again;
-      quitting norns does the same.</li>
+  <li>the apps keep playing as before: you hear them directly, and norns gets a copy. norns'
+      input monitor of them goes to TAPE only, so nothing is heard twice: TAPE records the
+      video together with what norns plays, softcut and engines get it as their input.</li>
   <li>the app does not have to play, or even run, yet: norns picks it up when it starts.</li>
   <li>the first time, macOS asks whether Verdandi may record audio from other apps; allow it. if
       the app stays silent in norns, check <i>System Settings &rarr; Privacy &amp; Security
@@ -210,8 +210,8 @@ says <b>APP</b>.</p>
   <li>while a DAW plays through the <a href="#auv3">AUv3 plugin</a>, norns' input is the DAW
       track: SYS and APP pause meanwhile, and every app (the DAW too) is heard directly.</li>
 </ul>
-<p class="small">one app at a time. SYS and APP are kept for the next start; the note on the
-device says so, as the apps go quiet into norns again.</p>
+<p class="small">one app at a time. SYS and APP are kept for the next start; a note on the
+device says so.</p>
 
 <h2 id="maiden">6. maiden and the script catalog</h2>
 <p>maiden is norns' web editor. with Verdandi running, open

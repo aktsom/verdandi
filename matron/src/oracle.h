@@ -185,6 +185,8 @@ extern void o_set_rev_param(const char *name, float value);
 //--- compressor controls
 extern void o_set_comp_on();
 extern void o_set_comp_off();
+// the ADC monitor to the DAC (1) or to the tape only (0)
+extern void o_set_monitor_out(int on);
 extern void o_set_comp_mix(float level);
 extern void o_set_comp_param(const char *name, float value);
 

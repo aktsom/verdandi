@@ -12,8 +12,10 @@ does not, send the logs: `~/norns/norns.log`, `sclang.log`, `jackd.log`, `auv3_b
       `xattr -dr com.apple.quarantine /Applications/Verdandi.app`
 - [ ] allow the microphone; Verdandi shows the norns screen, the HOME menu reacts to K2/K3 (2, 3, return, esc)
 - [ ] SELECT a script (awake, then something with an engine: passersby, cranes): it plays
-- [ ] MIC > SYS: play a video in the browser, allow "record audio from other apps"; the video is
-      heard through norns (MIX: in moves), not directly; MIC > OFF: the video is heard directly again
+- [ ] MIC > SYS: play a video in the browser, allow "record audio from other apps"; the video
+      plays on as before, once (not doubled), and MIX: in moves; TAPE: record a few seconds, the
+      video is in the recording
+- [ ] SYSTEM > RESTART while on SYS: norns comes back (no crash), on SYS
 - [ ] quit Verdandi while on SYS, start it again: SYS again, with the note; the video goes into norns
 - [ ] Manual.pdf and the Licenses folder open from the dmg
 
@@ -39,8 +41,8 @@ does not, send the logs: `~/norns/norns.log`, `sclang.log`, `jackd.log`, `auv3_b
 - [ ] the track's audio goes into norns (MIX: in), norns comes back into the track
 - [ ] MIDI on the plugin's track reaches norns (device "Verdandi AUv3")
 - [ ] stop the DAW: norns goes back to the interface within a second
-- [ ] with MIC on SYS, play the DAW through the plugin: the DAW is heard (SYS pauses), no
-      feedback; stop it: SYS takes the apps again
+- [ ] with MIC on SYS, play the DAW through the plugin: no feedback (SYS pauses); stop it: SYS
+      takes the apps again
 
 ## the window
 

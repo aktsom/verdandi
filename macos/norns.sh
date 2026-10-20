@@ -90,7 +90,7 @@ EOF
 fi
 
 # one norns at a time: a second one finds the OSC / REPL ports taken
-if pgrep -x norns >/dev/null; then
+if pgrep -x 'norns|Verdandi' >/dev/null; then
     echo "norns.sh: norns is already running (close its window first)"
     exit 1
 fi
@@ -216,13 +216,17 @@ WS="$REPO/build/ws-wrapper/ws-wrapper"
 RESTART_MARK="$NORNS_HOME/.norns-restart"
 rm -f "$RESTART_MARK"
 
+# the binary: build/norns/norns, named Verdandi in the app (macos/make-app.sh)
+NORNS_BIN="$REPO/build/norns/Verdandi"
+[ -x "$NORNS_BIN" ] || NORNS_BIN="$REPO/build/norns/norns"
+
 start_norns() {
     if [ $TERMINAL -eq 1 ]; then
         # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin,
         # which would leave matron's lua REPL without input
-        "$REPO/build/norns/norns" <&0 &
+        "$NORNS_BIN" <&0 &
     else
-        "$WS" "ws://127.0.0.1:5555" "$REPO/build/norns/norns" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
+        "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
     fi
     NORNS_PID=$!
     PIDS="$PIDS $NORNS_PID"
@@ -281,6 +285,18 @@ while :; do
     rm -f "$RESTART_MARK"
     echo "norns.sh: restarting norns and sclang"
     stop_sclang
+    # nothing of the old norns may stay in jack (the app input helper ends with it), and the
+    # old crone must be gone from jackd before the new one registers
+    pkill -f "$REPO/build/macos/app_input" 2>/dev/null
+    n=0
+    while jack_lsp 2>/dev/null | grep -q '^crone:' && [ $n -lt 25 ]; do
+        sleep 0.2
+        n=$((n + 1))
+    done
+    if jack_lsp 2>/dev/null | grep -q '^crone:' && [ -n "$JACK_PID" ]; then
+        echo "norns.sh: the old crone is stuck in jackd, restarting audio"
+        touch "$AUDIO_MARK"
+    fi
     # new audio settings: jackd and its other client too (only a jackd started here)
     if [ -f "$AUDIO_MARK" ]; then
         rm -f "$AUDIO_MARK"

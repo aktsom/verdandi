@@ -221,21 +221,10 @@ static void draw_bezel(cairo_t *cr) {
     cairo_fill(cr);
     cairo_pattern_destroy(p);
 
+    // the whole window black, as the oled's own black: no frame around the pixels
     rounded_rect(cr, bezel_x, bezel_y, bezel_w, bezel_h, 7);
-    hex(cr, "0b0b0c", 1);
+    hex(cr, "000000", 1);
     cairo_fill(cr);
-}
-
-static void draw_glass(cairo_t *cr) {
-    // faint reflection over the screen
-    rounded_rect(cr, bezel_x, bezel_y, bezel_w, bezel_h, 7);
-    cairo_pattern_t *p = cairo_pattern_create_linear(bezel_x, bezel_y, bezel_x + bezel_w * 0.6, bezel_y + bezel_h);
-    stop(p, 0, "ffffff", 0.07);
-    stop(p, 0.45, "ffffff", 0.015);
-    stop(p, 0.46, "ffffff", 0);
-    cairo_set_source(cr, p);
-    cairo_fill(cr);
-    cairo_pattern_destroy(p);
 }
 
 static void draw_label(cairo_t *cr, pt_t c, double r, const char *text) {
@@ -637,7 +626,7 @@ void skin_draw_oled(cairo_t *cr, const skin_geom_t *g, cairo_surface_t *oled) {
     rounded_rect(cr, bezel_x, bezel_y, bezel_w, bezel_h, 7);
     cairo_restore(cr);
     cairo_clip(cr);
-    hex(cr, "0b0b0c", 1);
+    hex(cr, "000000", 1);
     cairo_paint(cr);
 
     cairo_save(cr);
@@ -648,9 +637,5 @@ void skin_draw_oled(cairo_t *cr, const skin_geom_t *g, cairo_surface_t *oled) {
     cairo_rectangle(cr, 0, 0, 128, 64);
     cairo_fill(cr);
     cairo_restore(cr);
-
-    cairo_translate(cr, g->ox, g->oy);
-    cairo_scale(cr, g->s, g->s);
-    draw_glass(cr);
     cairo_restore(cr);
 }

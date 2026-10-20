@@ -75,6 +75,11 @@ inline void crone_set_enabled_compressor(float arg0) {
         crone::Commands::Id::SET_ENABLED_COMPRESSOR, arg0);
 }
 
+inline void crone_set_enabled_monitor_out(float arg0) {
+    crone::Commands::mixerCommands.post(
+        crone::Commands::Id::SET_ENABLED_MONITOR_OUT, arg0);
+}
+
 inline void crone_set_enabled_reverb(float arg0) {
     crone::Commands::mixerCommands.post(crone::Commands::Id::SET_ENABLED_REVERB,
                                         arg0);

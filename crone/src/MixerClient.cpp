@@ -104,7 +104,14 @@ void MixerClient::process(jack_nframes_t numFrames) {
 
     // process tape record
     if (tape.isWriting()) {
-        const float *src[2] = {(const float *)bus.dac_sink.buf[0], (const float *)bus.dac_sink.buf[1]};
+        StereoBus *rec = &bus.dac_sink;
+        if (!enabled.monitor_out) {
+            // the monitor the DAC does not get
+            bus.tape_sink.copyFrom(bus.dac_sink, numFrames);
+            bus.tape_sink.mixFrom(bus.adc_monitor, numFrames, smoothLevels.monitor);
+            rec = &bus.tape_sink;
+        }
+        const float *src[2] = {(const float *)rec->buf[0], (const float *)rec->buf[1]};
         tape.writer.process(src, numFrames);
     }
 
@@ -140,7 +147,9 @@ void MixerClient::processFx(size_t numFrames) {
         bus.aux_out.addFrom(bus.aux_in, numFrames);
     } else { // process aux
         bus.aux_in.clear(numFrames);
-        bus.aux_in.mixFrom(bus.adc_monitor, numFrames, smoothLevels.monitor_aux);
+        if (enabled.monitor_out) {
+            bus.aux_in.mixFrom(bus.adc_monitor, numFrames, smoothLevels.monitor_aux);
+        }
         bus.aux_in.mixFrom(bus.cut_source, numFrames, smoothLevels.cut_aux);
         bus.aux_in.mixFrom(bus.ext_source, numFrames, smoothLevels.ext_aux);
         bus.aux_in.mixFrom(bus.tape, numFrames, smoothLevels.tape_aux);
@@ -153,7 +162,9 @@ void MixerClient::processFx(size_t numFrames) {
     }
 
     // mix to insert bus
-    bus.ins_in.mixFrom(bus.adc_monitor, numFrames, smoothLevels.monitor);
+    if (enabled.monitor_out) {
+        bus.ins_in.mixFrom(bus.adc_monitor, numFrames, smoothLevels.monitor);
+    }
     bus.ins_in.addFrom(bus.cut_source, numFrames);
     bus.ins_in.addFrom(bus.ext_source, numFrames);
 
@@ -224,6 +235,9 @@ void MixerClient::handleCommand(Commands::CommandPacket *p) {
     case Commands::Id::SET_ENABLED_COMPRESSOR:
         enabled.comp = p->value > 0.f;
         break;
+    case Commands::Id::SET_ENABLED_MONITOR_OUT:
+        enabled.monitor_out = p->value > 0.f;
+        break;
 
         //-- softcut routing
     case Commands::Id::SET_LEVEL_ADC_CUT:
@@ -257,6 +271,7 @@ MixerClient::BusList::BusList() {
     aux_out.clear();
     adc_monitor.clear();
     tape.clear();
+    tape_sink.clear();
 }
 
 MixerClient::SmoothLevelList::SmoothLevelList() {
@@ -304,6 +319,7 @@ MixerClient::StaticLevelList::StaticLevelList() {
 MixerClient::EnabledList::EnabledList() {
     comp = false;
     reverb = false;
+    monitor_out = true;
 }
 
 void MixerClient::setFxDefaults() {

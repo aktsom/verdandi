@@ -79,6 +79,8 @@ class MixerClient : public Client<6, 6> {
         StereoBus adc_monitor;
         // tape playback
         StereoBus tape;
+        // tape record, when the monitor goes to tape only
+        StereoBus tape_sink;
         BusList();
     };
     BusList bus;
@@ -123,6 +125,7 @@ class MixerClient : public Client<6, 6> {
     struct EnabledList {
         bool reverb;
         bool comp;
+        bool monitor_out; // the ADC monitor in the DAC mix (else: in the tape only)
         EnabledList();
     };
     EnabledList enabled;

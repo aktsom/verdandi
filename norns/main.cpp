@@ -1,3 +1,4 @@
+#include <exception>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
@@ -36,9 +37,22 @@ static void *watch_parent(void *p) {
 }
 
 // matron and crone run off the main thread; the main thread belongs to cocoa (sdl_bridge)
+static void crone_at_exit(void) {
+    crone_stop();
+}
+
 static void *norns_thread(void *p) {
     (void)p;
-    crone_main();
+    try {
+        crone_main();
+    } catch (const std::exception &e) {
+        // no jack server (norns started on its own, jackd gone): a message, not a crash report
+        fprintf(stderr, "norns: cannot start audio: %s\n", e.what());
+        _exit(1);
+    }
+    // matron_cleanup() ends with exit(): stop crone's jack clients before exit tears down the
+    // objects their process callbacks use
+    atexit(crone_at_exit);
     matron_main(norns_argc, norns_argv);
     matron_cleanup();
     crone_cleanup();

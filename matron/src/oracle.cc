@@ -675,6 +675,10 @@ void o_set_comp_off() {
     crone_set_enabled_compressor(0);
 }
 
+void o_set_monitor_out(int on) {
+    crone_set_enabled_monitor_out(on ? 1 : 0);
+}
+
 void o_set_comp_mix(float value) {
     crone_set_level_compressor_mix(value);
 }

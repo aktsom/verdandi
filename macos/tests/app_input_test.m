@@ -25,7 +25,7 @@
 #define BUNDLE_ID "org.norns-macos.app-input-test-tone"
 #define SERVER "norns_app_input_test"
 #define TONE_HZ 440.0
-#define TONE_AMP 0.03 // -30 dBFS: quiet, and muted anyway once tapped
+#define TONE_AMP 0.03 // -30 dBFS: quiet (it plays on while tapped)
 
 //--- the tone app
 

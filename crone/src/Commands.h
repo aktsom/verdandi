@@ -33,6 +33,9 @@ class Commands {
 
         SET_ENABLED_REVERB,
         SET_ENABLED_COMPRESSOR,
+        // 0: the ADC monitor goes to tape only, not to the DAC (macOS: the input is other
+        // apps, which are heard directly)
+        SET_ENABLED_MONITOR_OUT,
 
         // level of stereo ext out -> stereo cut in
         SET_LEVEL_EXT_CUT,

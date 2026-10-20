@@ -190,8 +190,16 @@ int app_audio_select(const char *bundle) {
     posix_spawn_file_actions_init(&fa);
     // not matron's REPL input
     posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_addinherit_np(&fa, 1);
+    posix_spawn_file_actions_addinherit_np(&fa, 2);
+    // nothing else of norns: with crone's jack sockets the helper would keep the old crone
+    // alive in jackd after norns ends (SYSTEM > RESTART), and the new one could not connect
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
     pid_t pid;
-    int err = posix_spawn(&pid, exe, &fa, NULL, argv, environ);
+    int err = posix_spawn(&pid, exe, &fa, &attr, argv, environ);
+    posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&fa);
     if (err != 0) {
         fprintf(stderr, "app_audio: cannot start %s: %s\n", exe, strerror(err));

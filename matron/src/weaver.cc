@@ -352,6 +352,7 @@ static int _show_control(lua_State *l);
 static int _open_url(lua_State *l);
 static int _grid_window(lua_State *l);
 static int _app_input(lua_State *l);
+static int _monitor_out(lua_State *l);
 static int _choose_file(lua_State *l);
 static int _choose_file_close(lua_State *l);
 #endif
@@ -689,6 +690,7 @@ void w_init(void) {
     lua_register_norns("open_url", &_open_url);
     lua_register_norns("grid_window", &_grid_window);
     lua_register_norns("app_input", &_app_input);
+    lua_register_norns("monitor_out", &_monitor_out);
     lua_register_norns("choose_file", &_choose_file);
     lua_register_norns("choose_file_close", &_choose_file_close);
 #endif
@@ -3651,6 +3653,17 @@ int _app_input(lua_State *l) {
     const char *target = lua_gettop(l) >= 1 && !lua_isnil(l, 1) ? luaL_checkstring(l, 1) : NULL;
     const char *label = lua_gettop(l) >= 2 && !lua_isnil(l, 2) ? luaL_checkstring(l, 2) : NULL;
     sdl_bridge_app_input(target, label);
+    return 0;
+}
+
+/***
+ * macOS: whether the input monitor is heard (true) or goes to TAPE only (false: the input
+ * is other apps, which play directly)
+ * @function monitor_out
+ * @tparam boolean on
+ */
+int _monitor_out(lua_State *l) {
+    o_set_monitor_out(lua_toboolean(l, 1));
     return 0;
 }
 

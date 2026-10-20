@@ -3,5 +3,6 @@
 
 int crone_main();
 void crone_cleanup();
+void crone_stop();
 
 #endif

@@ -62,6 +62,7 @@ local function setup(with_apps)
   }
   if with_apps then
     _norns.app_input = function(target, label) table.insert(calls.app, {target = target, label = label}) end
+    _norns.monitor_out = function(on) calls.monitor = on end
   end
   _menu = {}
   load(block)()
@@ -79,18 +80,22 @@ check(last_app().target == "system" and last_app().label:match("system audio"), 
 check(#links == 0, "the mac's input unplugged while the apps play in")
 check(last_shown() == 2 and not _menu.mic_live, "the button says SYS")
 check(exists(mic_off), "the next start begins off (no surprise tap, no feedback)")
+check(calls.monitor == false, "SYS: the apps play on, norns' monitor of them goes to TAPE only")
 _menu.next_input()
 check(_menu.input == "off" and last_app().target == nil and last_app().label == "off", "SYS > OFF: no tap")
 check(#links == 0 and last_shown() == 0, "off: nothing plugged in, unlit")
+check(calls.monitor == true, "off: the monitor is heard again")
 _menu.next_input()
 check(_menu.input == "mic" and #links == 2, "OFF > MIC: the input plugged back in as it was")
 check(last_app().target == nil and last_shown() == 1 and not exists(mic_off), "mic: no tap, lit, kept on")
+check(calls.monitor == true, "mic: the monitor is heard")
 
 -- the menu: one app
 _norns.input_chosen("app", "com.google.Chrome", "Google Chrome")
 check(_menu.input == "app" and last_app().target == "com.google.Chrome" and last_app().label == "Google Chrome",
   "an app from the menu is tapped, by its name on the device")
 check(#links == 0 and last_shown() == 3, "app: the mac's input out, the button says APP")
+check(calls.monitor == false, "app: its monitor to TAPE only")
 _menu.next_input()
 check(_menu.input == "off" and last_app().target == nil, "APP > OFF")
 _norns.input_chosen("system", "", "")
@@ -117,7 +122,8 @@ check(_menu.input == "system" and exists(kept), "SYS is kept")
 setup(true)
 _menu.check_mic()
 check(_menu.input == "system" and #links == 0 and last_app().target == "system" and last_app().label ~= nil,
-  "starts with SYS, with a note (the apps go quiet)")
+  "starts with SYS, with a note")
+check(calls.monitor == false, "and the monitor to TAPE only, also after a restart")
 _menu.check_mic()
 check(#calls.app == 1, "checked once")
 -- after an app: that app

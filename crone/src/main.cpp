@@ -21,6 +21,16 @@ static inline void sleep(int ms) {
 static std::unique_ptr<crone::MixerClient> m;
 static std::unique_ptr<crone::SoftcutClient> sc;
 
+// the clients' process callbacks stop: nothing runs on while exit() tears down
+void crone_stop() {
+    if (m) {
+        m->stop();
+    }
+    if (sc) {
+        sc->stop();
+    }
+}
+
 void crone_cleanup() {
     std::cout << "stopping clients" << std::endl;
     m->stop();

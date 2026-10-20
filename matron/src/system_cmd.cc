@@ -145,10 +145,11 @@ typedef struct {
 #ifdef __APPLE__
 // macOS (macos/norns.sh supervises norns): SLEEP quits norns, it does not power off the Mac;
 // RESTART leaves a marker so norns.sh starts norns and sclang again. (pkill -a: macOS pkill
-// spares its own ancestors by default, and norns is one of them)
+// spares its own ancestors by default, and norns is one of them; in the app the binary is
+// named Verdandi, macos/make-app.sh)
 static const system_action_t system_actions[] = {
-    {"shutdown", "sleep 0.5; pkill -TERM -a -x norns", "norns-shutdown"},
-    {"reset", "touch \"$HOME/.norns-restart\"; sleep 0.5; pkill -TERM -a -x norns", "norns-reset"},
+    {"shutdown", "sleep 0.5; pkill -TERM -a -x 'norns|Verdandi'", "norns-shutdown"},
+    {"reset", "touch \"$HOME/.norns-restart\"; sleep 0.5; pkill -TERM -a -x 'norns|Verdandi'", "norns-reset"},
     {"update", "echo 'Verdandi: update scripts in maiden, Verdandi itself with a new version of the app'", "norns-update"},
 };
 #else

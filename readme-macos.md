@@ -123,9 +123,12 @@ dust/audio, removed again; files in temporary folders and caches are copied, not
 input: the MIC button goes MIC > SYS > OFF (lua/core/menu.lua `_menu.set_input`; APP: one app
 from Devices > Audio Input). MIC plugs system:capture into crone:input_1/2; SYS and APP run
 `macos/app_input.m` through `_norns.app_input` (`app_audio.m`), a jack client that taps every
-app but norns' own processes (`--system`) or the chosen one (Core Audio process tap, muted
-while tapped) through a private aggregate device and plays it into crone:input_1/2. it ends
-with norns (parent watch), with jack or on SIGTERM.
+app but norns' own processes (`--system`) or the chosen one (Core Audio process tap, the apps
+not muted) through a private aggregate device and plays it into crone:input_1/2. meanwhile
+`_norns.monitor_out(false)` sends crone's input monitor to the tape only (the apps are heard
+directly). it is spawned with nothing of norns' open files (POSIX_SPAWN_CLOEXEC_DEFAULT: with
+crone's jack sockets it kept the old crone in jackd after SYSTEM > RESTART) and ends with norns
+(parent watch), with jack or on SIGTERM.
 
 OUT fader and MUTE (right of E3, `device_skin.c`): `_norns.output_fader` / `output_step` /
 `output_mute` (lua/core/menu.lua) set output_level, whose action shows it back

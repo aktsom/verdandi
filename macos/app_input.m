@@ -5,8 +5,10 @@
  * processes (its bundle id and its helpers: com.google.Chrome.helper for com.google.Chrome)
  * as a stereo mixdown, in a private aggregate device clocked by the default output, resampled
  * (jack's adapter) into the jack client "app_input", whose outputs go to crone:input_1/2 next
- * to the audio interface. the app is muted while it is tapped: its sound comes out of norns,
- * like an instrument plugged into the device.
+ * to the audio interface. the app plays on as before: norns gets a copy, and its monitor of
+ * that input goes to TAPE only (lua/core/menu.lua), so nothing is heard twice. (a muted tap
+ * would silence the app for good wherever the copy does not arrive: no permission to record
+ * other apps, norns turned down.)
  *
  * usage: app_input <bundle id>
  *        app_input --system   every app but norns' own processes (jackd plays norns out: tapping
@@ -39,7 +41,8 @@
 
 static NSString *bundle; // nil: every app (--system)
 // norns' own processes, never in a --system tap
-static const char *own[] = {"jackd", "scsynth", "sclang", "norns", "auv3_bridge", "app_input", "ws-wrapper", NULL};
+// (in the app the norns binary is named Verdandi: matron/src/platform/macos/product.h)
+static const char *own[] = {"jackd", "scsynth", "sclang", "norns", "Verdandi", "auv3_bridge", "app_input", "ws-wrapper", NULL};
 static jack_client_t *client;
 static jack_port_t *out_port[CHANNELS];
 static _Atomic(jack_adapter_t *) adapter = NULL;
@@ -254,8 +257,8 @@ API_AVAILABLE(macos(14.2)) static BOOL build_tap(NSArray<NSNumber *> *procs) {
                                  : [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:procs];
     desc.name = @"norns app input";
     desc.privateTap = YES;
-    // heard through norns only
-    desc.muteBehavior = CATapMutedWhenTapped;
+    // the app is still heard directly
+    desc.muteBehavior = CATapUnmuted;
     OSStatus e = AudioHardwareCreateProcessTap(desc, &tap);
     if (e != noErr) {
         fprintf(stderr, "app_input: cannot tap %s (%d)\n", what(), (int)e);
