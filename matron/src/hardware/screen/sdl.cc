@@ -98,7 +98,7 @@ static void screen_sdl_surface_destroy(void *data) {
 #else
     SDL_DestroyWindow(priv->window);
 #endif
-    free(priv);
+    // priv is io->data: io_destroy_all() frees it
 }
 
 static cairo_surface_t *screen_sdl_surface_create(screen_sdl_priv_t *priv) {
