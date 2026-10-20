@@ -23,6 +23,12 @@ extern SDL_Window *sdl_bridge_create_window(const char *title, int w, int h);
 extern void sdl_bridge_present(SDL_Window *window, SDL_Surface *src);
 extern void sdl_bridge_destroy_window(SDL_Window *window);
 
+// any thread, does not block: a key (value 0/1) or enc (value = delta) event reached
+// norns; the window moves the control to match
+#define SDL_BRIDGE_SHOW_KEY 1
+#define SDL_BRIDGE_SHOW_ENC 2
+extern void sdl_bridge_show_control(int kind, int n, int value);
+
 #ifdef __cplusplus
 }
 #endif

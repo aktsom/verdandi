@@ -2,9 +2,12 @@ local m = {
   confirmed = false
 }
 
+-- on a computer RESET sits in SYSTEM (core/menu/system.lua)
+local back = os.getenv("NORNS_PLATFORM") ~= nil and "SYSTEM" or "SETTINGS"
+
 m.key = function(n,z)
   if n==2 and z==1 then
-    _menu.set_page("SETTINGS")
+    _menu.set_page(back)
   elseif n==3 and z==1 then
     m.confirmed = true
     _menu.redraw()

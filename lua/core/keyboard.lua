@@ -114,8 +114,20 @@ local function script_wants_keyboard()
   return (keyboard.code ~= nil and keyboard.code ~= noop) or (keyboard.char ~= nil and keyboard.char ~= noop)
 end
 
+-- the macOS window draws the keys and knobs: show what the keyboard did
+local function hw_show(kind, n, value)
+  if _norns.show_control then _norns.show_control(kind, n, value) end
+end
+
+local function hw_press(n, z)
+  hw_show(1, n, z)
+  _norns.key(n, z)
+end
+
 local function hw_turn(h)
-  _norns.enc(h.enc, h.dir * (keyboard.shift() and 5 or 1))
+  local d = h.dir * (keyboard.shift() and 5 or 1)
+  hw_show(2, h.enc, d)
+  _norns.enc(h.enc, d)
 end
 
 -- returns true if the event was used as norns hardware
@@ -125,7 +137,7 @@ local function hardware(c, value)
   if value == 0 then
     if h == nil then return false end
     hw_down[c] = nil
-    if h.key then _norns.key(h.key, 0) end
+    if h.key then hw_press(h.key, 0) end
     return true
   end
   if h ~= nil then
@@ -138,7 +150,7 @@ local function hardware(c, value)
 
   if hw_key[c] then
     hw_down[c] = {key=hw_key[c]}
-    _norns.key(hw_key[c], 1)
+    hw_press(hw_key[c], 1)
     return true
   end
   local e = hw_enc[c] or ((not _menu.mode) and hw_arrow[c])

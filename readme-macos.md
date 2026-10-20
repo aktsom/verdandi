@@ -80,8 +80,10 @@ the automatic part is `lua/core/keyboard.lua` (enabled by `NORNS_HARDWARE_KEYS=1
 `macos/norns.sh` sets; off on the device), tests: `NORNS_HARDWARE_KEYS=1 <lua 5.3>
 macos/tests/keyboard_hardware_test.lua`.
 
-mouse: the left / middle / right third of the window is K1+E1 / K2+E2 / K3+E3; click =
-key, scroll = encoder.
+mouse: the window draws the device (`matron/src/platform/macos/device_skin.c`, layout of
+the standard norns). click a key; drag a knob (up/right = clockwise) or scroll over it; the
+wheel elsewhere turns the nearest knob. keys and knobs show every key/enc event norns
+receives (`sdl_bridge_show_control`, also called by the keyboard path in lua).
 
 the key mapping is plain C (`matron/src/platform/macos/window_keys.c`) with scenario tests:
 `cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt`
@@ -91,6 +93,8 @@ the key mapping is plain C (`matron/src/platform/macos/window_keys.c`) with scen
 ```
 cc -std=c11 -I matron/src/platform/macos macos/tests/window_keys_test.c \
    matron/src/platform/macos/window_keys.c -o /tmp/wkt && /tmp/wkt
+cc -std=c11 -I matron/src/platform/macos $(pkg-config --cflags --libs cairo) \
+   macos/tests/device_skin_test.c matron/src/platform/macos/device_skin.c -o /tmp/dst && /tmp/dst [png_dir]
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua
 macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it

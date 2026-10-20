@@ -53,6 +53,10 @@
 #include "time_since.h"
 #include "weaver.h"
 
+#ifdef __APPLE__
+#include "platform/macos/sdl_bridge.h"
+#endif
+
 extern "C" {
 #if HAVE_LUA_CJSON
 int luaopen_cjson(lua_State *l);
@@ -342,6 +346,9 @@ static int _wall_time_get_delta(lua_State *l);
 static int _platform(lua_State *l);
 static int _platform_factory(lua_State *l);
 static int _platform_shield(lua_State *l);
+#ifdef __APPLE__
+static int _show_control(lua_State *l);
+#endif
 
 // boilerplate: push a lua function to the lua stack, from named field in global 'norns'
 static inline void _push_norns_func(const char *field, const char *func) {
@@ -671,6 +678,9 @@ void w_init(void) {
     lua_register_norns("platform", &_platform);
     lua_register_norns("platform_factory", &_platform_factory);
     lua_register_norns("platform_shield", &_platform_shield);
+#ifdef __APPLE__
+    lua_register_norns("show_control", &_show_control);
+#endif
 
     // name global extern table
     lua_setglobal(lvm, "_norns");
@@ -2729,6 +2739,9 @@ void w_handle_clock_stop() {
 
 // gpio handler
 void w_handle_key(const int n, const int val) {
+#ifdef __APPLE__
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_KEY, n, val);
+#endif
     lua_getglobal(lvm, "_norns");
     lua_getfield(lvm, -1, "key");
     lua_remove(lvm, -2);
@@ -2739,6 +2752,9 @@ void w_handle_key(const int n, const int val) {
 
 // gpio handler
 void w_handle_enc(const int n, const int delta) {
+#ifdef __APPLE__
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_ENC, n, delta);
+#endif
     lua_getglobal(lvm, "_norns");
     lua_getfield(lvm, -1, "enc");
     lua_remove(lvm, -2);
@@ -3553,5 +3569,21 @@ int _platform_shield(lua_State *l) {
     lua_pushboolean(l, platform_shield());
     return 1;
 }
+
+#ifdef __APPLE__
+/***
+ * macOS window: show a key/enc event that lua sent to _norns.key/_norns.enc itself
+ * (keyboard as hardware keys); events from matron are shown by w_handle_key/enc.
+ * @function show_control
+ * @tparam integer kind 1 = key, 2 = enc
+ * @tparam integer n 1-3
+ * @tparam integer value key 0/1, enc delta
+ */
+int _show_control(lua_State *l) {
+    lua_check_num_args(3);
+    sdl_bridge_show_control((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2), (int)luaL_checkinteger(l, 3));
+    return 0;
+}
+#endif
 
 #pragma GCC diagnostic pop

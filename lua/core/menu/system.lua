@@ -4,10 +4,12 @@ local m = {
   pages = {"DEVICES", "WIFI", "MODS", "SETTINGS", "RESTART", "UPDATE"}
 }
 
--- on a computer (NORNS_PLATFORM set by the launcher) the OS owns wifi and updates
+-- on a computer (NORNS_PLATFORM set by the launcher) the OS owns wifi, updates and the
+-- password, there is no battery and the display settings drive the oled chip: of
+-- SETTINGS only RESET is left, so it moves up here
 if os.getenv("NORNS_PLATFORM") ~= nil then
-  m.list = {"DEVICES > ", "MODS >", "SETTINGS >", "RESTART"}
-  m.pages = {"DEVICES", "MODS", "SETTINGS", "RESTART"}
+  m.list = {"DEVICES > ", "MODS >", "RESET", "RESTART"}
+  m.pages = {"DEVICES", "MODS", "RESET", "RESTART"}
 end
 
 m.key = function(n,z)

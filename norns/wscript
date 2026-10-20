@@ -153,6 +153,7 @@ def build(bld):
         matron_sources = [f for f in matron_sources if f not in replaced] + [
             '../matron/src/platform/macos/device_hid_iohid.cc',
             '../matron/src/platform/macos/device_monitor_macos.cc',
+            '../matron/src/platform/macos/device_skin.c',
             '../matron/src/platform/macos/device_runloop.cc',
             '../matron/src/platform/macos/hardware_null.cc',
             '../matron/src/platform/macos/sdl_bridge.cc',
