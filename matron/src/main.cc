@@ -41,6 +41,12 @@
 void print_version(void);
 
 void matron_cleanup(void) {
+    // runs once: it ends with exit(), which runs it again as the atexit handler
+    static bool done = false;
+    if (done) {
+        return;
+    }
+    done = true;
     dev_monitor_deinit();
     osc_deinit();
     o_deinit();

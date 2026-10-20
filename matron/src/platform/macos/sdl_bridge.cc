@@ -147,7 +147,8 @@ static void redraw(bool full) {
 }
 
 static void present(SDL_Window *window, SDL_Surface *src) {
-    if (src == NULL) {
+    // a frame for a window that is gone (quit) is dropped
+    if (src == NULL || window == NULL || window != the_window) {
         return;
     }
     if (oled == NULL) {
@@ -159,7 +160,6 @@ static void present(SDL_Window *window, SDL_Surface *src) {
     cairo_surface_mark_dirty(oled);
     bool first = !have_frame;
     have_frame = 1;
-    the_window = window;
     redraw(first || canvas == NULL);
 }
 

@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -27,6 +28,11 @@ static void screen_sdl_bind(matron_fb_t *fb, cairo_surface_t *surface);
 
 static void screen_sdl_surface_destroy(void *priv);
 static cairo_surface_t *screen_sdl_surface_create(screen_sdl_priv_t *priv);
+
+// the screen thread can still be painting a queued frame while matron's cleanup destroys
+// the screen: paint and destroy take turns, and nothing is painted once closed
+static pthread_mutex_t paint_lock = PTHREAD_MUTEX_INITIALIZER;
+static bool closed = false;
 
 static SDL_Rect windowSize = {
     .x = 0,
@@ -66,24 +72,35 @@ int screen_sdl_setup(matron_io_t *io) {
 
 static void screen_sdl_destroy(matron_io_t *io) {
     matron_fb_t *fb = (matron_fb_t *)io;
+    pthread_mutex_lock(&paint_lock);
+    closed = true;
+    pthread_mutex_unlock(&paint_lock);
     cairo_destroy(fb->cairo);
     cairo_surface_destroy(fb->surface);
 }
 
 static void screen_sdl_paint(matron_fb_t *fb) {
     screen_sdl_priv_t *priv = (screen_sdl_priv_t *)fb->io.data;
-    cairo_paint(fb->cairo);
+    pthread_mutex_lock(&paint_lock);
+    if (!closed) {
+        cairo_paint(fb->cairo);
 #ifdef __APPLE__
-    sdl_bridge_present(priv->window, priv->draw_surface);
+        sdl_bridge_present(priv->window, priv->draw_surface);
 #else
-    SDL_BlitScaled(priv->draw_surface, NULL, priv->window_surface, &windowSize);
-    SDL_UpdateWindowSurface(priv->window);
+        SDL_BlitScaled(priv->draw_surface, NULL, priv->window_surface, &windowSize);
+        SDL_UpdateWindowSurface(priv->window);
 #endif
+    }
+    pthread_mutex_unlock(&paint_lock);
 }
 
 static void screen_sdl_bind(matron_fb_t *fb, cairo_surface_t *surface) {
-    cairo_set_operator(fb->cairo, CAIRO_OPERATOR_SOURCE);
-    cairo_set_source_surface(fb->cairo, surface, 0, 0);
+    pthread_mutex_lock(&paint_lock);
+    if (!closed) {
+        cairo_set_operator(fb->cairo, CAIRO_OPERATOR_SOURCE);
+        cairo_set_source_surface(fb->cairo, surface, 0, 0);
+    }
+    pthread_mutex_unlock(&paint_lock);
 }
 
 static void screen_sdl_surface_destroy(void *data) {
@@ -92,12 +109,13 @@ static void screen_sdl_surface_destroy(void *data) {
     if (priv == NULL) {
         return;
     }
-    SDL_FreeSurface(priv->draw_surface);
+    // window first: a frame still queued for it reads draw_surface
 #ifdef __APPLE__
     sdl_bridge_destroy_window(priv->window);
 #else
     SDL_DestroyWindow(priv->window);
 #endif
+    SDL_FreeSurface(priv->draw_surface);
     // priv is io->data: io_destroy_all() frees it
 }
 
