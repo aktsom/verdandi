@@ -132,7 +132,18 @@ def main():
     t = tag()
     out = os.path.join(out, t)
     os.makedirs(out, exist_ok=True)
+    manifest = {}
     for n in closure(names):
+        f = formula(n)
+        stable = f['urls']['stable']
+        manifest[n] = {
+            'version': version(f),
+            'license': f.get('license') or 'see the license files',
+            'homepage': f.get('homepage', ''),
+            'source': stable.get('url', ''),
+            'sha256': stable.get('checksum') or '',
+            'formula': 'https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/%s/%s.rb' % (n[0], n),
+        }
         if n in SOURCE:
             print('  %-14s built from source (setup-deps.sh)' % n)
             # a bottle of it fetched before would be bundled in its place
@@ -147,6 +158,9 @@ def main():
         for v in os.listdir(os.path.join(out, n)):
             if v != os.path.basename(dest):
                 shutil.rmtree(os.path.join(out, n, v))
+    # what each package is, for the licenses and sources list of the app (macos/licenses.py)
+    with open(os.path.join(out, 'manifest.json'), 'w') as w:
+        json.dump(manifest, w, indent=1, sort_keys=True)
     print('fetch_bottles: %s in %s' % (t, out))
 
 

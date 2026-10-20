@@ -6,9 +6,11 @@
 local src = io.open("lua/core/menu.lua"):read("a")
 local block = src:match("(%-%- MIC: what norns' input hears.-)\nhook%.system_post_startup")
 assert(block, "input block not found")
-local mic_off = os.tmpname()
+local mic_off, kept = os.tmpname(), os.tmpname()
 os.remove(mic_off)
+os.remove(kept)
 block = block:gsub('"/home/we/%.mic%-off"', string.format("%q", mic_off))
+block = block:gsub('"/home/we/%.norns%-input"', string.format("%q", kept))
 
 local fails = 0
 local function check(cond, what)
@@ -109,14 +111,31 @@ check(_menu.input == "off" and #links == 0, "set_mic(false)")
 _menu.set_mic(true)
 check(_menu.input == "mic" and #links == 2, "set_mic(true)")
 
--- the next start after SYS: off, quietly
+-- the next start after SYS: SYS again, and said so
 _menu.next_input()
+check(_menu.input == "system" and exists(kept), "SYS is kept")
+setup(true)
+_menu.check_mic()
+check(_menu.input == "system" and #links == 0 and last_app().target == "system" and last_app().label ~= nil,
+  "starts with SYS, with a note (the apps go quiet)")
+_menu.check_mic()
+check(#calls.app == 1, "checked once")
+-- after an app: that app
+_norns.input_chosen("app", "com.google.Chrome", "Google Chrome")
+setup(true)
+_menu.check_mic()
+check(_menu.input == "app" and last_app().target == "com.google.Chrome" and last_app().label == "Google Chrome",
+  "starts with the app")
+-- after OFF: off, quietly, nothing kept for an app
+_menu.next_input()
+check(_menu.input == "off" and not exists(kept), "OFF forgets the app")
 setup(true)
 check(exists(mic_off), "kept off")
 _menu.check_mic()
 check(_menu.input == "off" and #links == 0 and last_app().label == nil and last_shown() == 0, "starts off, no note")
-_menu.check_mic()
-check(#calls.app == 1, "checked once")
+-- after MIC: mic, nothing kept
+_menu.next_input()
+check(not exists(kept) and not exists(mic_off), "MIC keeps nothing")
 
 -- no app tapping here: MIC > OFF > MIC
 os.remove(mic_off)
@@ -129,5 +148,6 @@ _norns.input_chosen("system", "", "")
 check(_menu.input == "off", "all apps without app input: off")
 
 os.remove(mic_off)
+os.remove(kept)
 print(fails == 0 and "input modes: all scenarios pass" or (fails .. " failures"))
 os.exit(fails == 0)

@@ -107,8 +107,12 @@ static int failures = 0;
         }                                                                                                              \
     } while (0)
 
-static NSTask *start(NSString *path, NSArray *args, NSDictionary *env) {
+static NSTask *start_logged(NSString *path, NSArray *args, NSDictionary *env, NSString *log) {
     NSTask *t = [NSTask new];
+    if (log != nil) {
+        [[NSFileManager defaultManager] createFileAtPath:log contents:nil attributes:nil];
+        t.standardError = [NSFileHandle fileHandleForWritingAtPath:log];
+    }
     t.launchPath = path;
     t.arguments = args;
     NSMutableDictionary *e = [NSProcessInfo.processInfo.environment mutableCopy];
@@ -116,6 +120,14 @@ static NSTask *start(NSString *path, NSArray *args, NSDictionary *env) {
     t.environment = e;
     [t launch];
     return t;
+}
+
+static NSTask *start(NSString *path, NSArray *args, NSDictionary *env) {
+    return start_logged(path, args, env, nil);
+}
+
+static BOOL logged(NSString *log, NSString *what) {
+    return [[NSString stringWithContentsOfFile:log encoding:NSUTF8StringEncoding error:NULL] containsString:what];
 }
 
 // <dir>/tone.app/Contents/MacOS/tone = this program, with a bundle id of its own
@@ -234,7 +246,8 @@ int main(int argc, char **argv) {
         CHECK(jack_port_by_name(c, "app_input:out_1") == NULL, "its ports are gone");
 
         // --system: every app, but not norns' own processes
-        tap = start(@(argv[1]), @[ @"--system" ], env);
+        NSString *log = [dir stringByAppendingPathComponent:@"app_input.log"];
+        tap = start_logged(@(argv[1]), @[ @"--system" ], env, log);
         tone = start(tone_exe, @[], @{});
         connected = 0;
         for (int i = 0; i < 40 && !connected; i++) {
@@ -248,6 +261,20 @@ int main(int argc, char **argv) {
         printf("system input: rms %.4f, %.1f Hz\n", rms[0], hz);
         CHECK(rms[0] > 0.5 * TONE_AMP / sqrt(2) && fabs(hz - TONE_HZ) < 5,
               "--system hears the app (rms %.4f, %.1f Hz; other sound playing on the Mac adds to it)", rms[0], hz);
+        // the AUv3 takes norns' input (auv3_bridge unplugs everything from crone): no tap, the
+        // apps play directly; plugged back in: the tap again
+        jack_disconnect(c, "app_input:out_1", "meter:in_1");
+        jack_disconnect(c, "app_input:out_2", "meter:in_2");
+        usleep(1500000);
+        CHECK(logged(log, @"paused"), "unplugged: the tap pauses");
+        jack_connect(c, "app_input:out_1", "meter:in_1");
+        jack_connect(c, "app_input:out_2", "meter:in_2");
+        usleep(1000000);
+        CHECK(logged(log, @"resumed"), "plugged back in: it resumes");
+        wait_for_sound();
+        measure(1.0, rms, &hz);
+        CHECK(rms[0] > 0.5 * TONE_AMP / sqrt(2) && fabs(hz - TONE_HZ) < 5, "and the tone arrives again (rms %.4f, %.1f Hz)",
+              rms[0], hz);
         [tone terminate];
         [tone waitUntilExit];
         // the same tone from a process named like one of norns' (sclang): left out

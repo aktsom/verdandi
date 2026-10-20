@@ -24,6 +24,11 @@ LUA_VERSION=5.3.6
 LUA_SHA256=fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60
 WAF_VERSION=2.1.9
 SC_TAG=Version-3.14.1
+# exact sources of what is built here (macos/licenses.py lists them in the app)
+NNG_TAG=v1.12.4
+LIBMONOME_COMMIT=9055ea22fd824839be821c10f6e9b13e9d2aa3cd
+SC3_PLUGINS_COMMIT=b80a41b731922feac7755df5ba359d14dfb8f4d9
+MAIDEN_COMMIT=2e64f7d59284962ac68055dd556e3fd8515462f8
 # maiden's web app (react-scripts 1.x) needs the node its own tooling pins
 NODE_VERSION=v16.20.2
 
@@ -34,6 +39,15 @@ export MACOSX_DEPLOYMENT_TARGET="$(cat "$REPO/macos/MACOS_MIN")"
 MAP="-ffile-prefix-map=$DEPS=/build/deps -ffile-prefix-map=$NORNS_HOME=/build/home"
 mkdir -p "$P/lib/pkgconfig" "$SRC" "$DEPS/bin"
 
+# a repository at one commit (with its submodules), shallow
+clone_at() {
+    git init -q "$2"
+    git -C "$2" remote add origin "$1"
+    git -C "$2" fetch -q --depth 1 origin "$3"
+    git -C "$2" checkout -q FETCH_HEAD
+    git -C "$2" submodule -q update --init --recursive --depth 1
+}
+
 if [ -z "${NORNS_NEUTRAL_ENV:-}" ]; then
     echo "== homebrew packages"
     brew install cairo boost cmake pkgconf readline jack liblo libsndfile sdl2 fftw yaml-cpp \
@@ -43,7 +57,11 @@ if [ -z "${NORNS_NEUTRAL_ENV:-}" ]; then
     # clones' reflogs, all inside this folder
     NEUTRAL_HOME="$DEPS/.home"
     mkdir -p "$NEUTRAL_HOME"
+    # download and build caches (go, npm, yarn: tens of thousands of files) in the temporary folder
+    CACHE="${TMPDIR:-/tmp}/norns-build-cache"
     exec env -i NORNS_NEUTRAL_ENV=1 HOME="$NEUTRAL_HOME" PATH="$BREW/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+        GOCACHE="$CACHE/go-build" GOMODCACHE="$CACHE/go-mod" npm_config_cache="$CACHE/npm" \
+        YARN_CACHE_FOLDER="$CACHE/yarn" npm_config_update_notifier=false \
         TMPDIR="${TMPDIR:-/tmp}" LANG=en_US.UTF-8 TERM="${TERM:-dumb}" \
         GIT_AUTHOR_NAME="norns-macos contributors" GIT_AUTHOR_EMAIL="noreply@norns-macos.invalid" \
         GIT_COMMITTER_NAME="norns-macos contributors" GIT_COMMITTER_EMAIL="noreply@norns-macos.invalid" \
@@ -110,8 +128,7 @@ EOF
 echo "== nng 1.x (norns uses the 1.x api; homebrew has 2.x)"
 if [ ! -f "$P/lib/libnng.a" ]; then
     cd "$SRC"
-    T=$(git ls-remote --tags --refs https://github.com/nanomsg/nng.git 'v1.*' | awk -F/ '{print $3}' | sort -V | tail -1)
-    [ -d nng ] || git clone -q --depth 1 -b "$T" https://github.com/nanomsg/nng.git
+    [ -d nng ] || git clone -q --depth 1 -b "$NNG_TAG" https://github.com/nanomsg/nng.git
     cmake -S nng -B nng/build -DCMAKE_INSTALL_PREFIX="$P" -DNNG_TESTS=OFF -DNNG_TOOLS=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release
     cmake --build nng/build -j "$J"
     cmake --install nng/build
@@ -120,7 +137,7 @@ fi
 echo "== libmonome"
 if [ ! -f "$P/include/monome.h" ]; then
     cd "$SRC"
-    [ -d libmonome ] || git clone -q --depth 1 https://github.com/monome/libmonome.git
+    [ -d libmonome ] || clone_at https://github.com/monome/libmonome.git libmonome "$LIBMONOME_COMMIT"
     cd libmonome
     # embedded protocols: otherwise libmonome dlopens them from this build's absolute prefix
     CFLAGS="-I$BREW/include $MAP" LDFLAGS="-L$BREW/lib" PKG_CONFIG_PATH="$P/lib/pkgconfig:$BREW/lib/pkgconfig" \
@@ -151,7 +168,7 @@ echo "== sc3-plugins"
 EXT="$NORNS_HOME/Library/Application Support/SuperCollider/Extensions"
 if [ ! -d "$EXT/SC3plugins" ]; then
     cd "$SRC"
-    [ -d sc3-plugins ] || git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/supercollider/sc3-plugins.git
+    [ -d sc3-plugins ] || clone_at https://github.com/supercollider/sc3-plugins.git sc3-plugins "$SC3_PLUGINS_COMMIT"
     # `0<=bufnum<= n` is always true, and clang 21 rejects it; the intended bounds check
     sed -i '' 's/	if(0<=bufnum<= world->mNumSndBufs) {/	if(bufnum < (int)world->mNumSndBufs) {/' \
         sc3-plugins/source/NCAnalysisUGens/SMS.cpp
@@ -177,7 +194,7 @@ if [ ! -x "$M/maiden" ]; then
         curl -sSfL "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt" | grep " $F\$" | shasum -a 256 -c -
         mkdir -p node16 && tar xzf "$F" -C node16 --strip-components 1 && rm "$F"
     fi
-    [ -d maiden ] || git clone -q --depth 1 https://github.com/monome/maiden.git
+    [ -d maiden ] || clone_at https://github.com/monome/maiden.git maiden "$MAIDEN_COMMIT"
     # --host: listen on 127.0.0.1 only (maiden edits files and fronts code-running REPLs)
     git -C maiden apply --check "$REPO/macos/patches/maiden-host-flag.patch" 2>/dev/null &&
         git -C maiden apply "$REPO/macos/patches/maiden-host-flag.patch"
@@ -189,6 +206,9 @@ if [ ! -x "$M/maiden" ]; then
     rm -rf "$M/app/build" && cp -R maiden/web/build "$M/app/"
     cp maiden/sources/*.json "$M/dist/sources/"
 fi
+
+echo "== licenses and sources of the bundled packages (macos/licenses.py)"
+python3 -I "$REPO/macos/licenses.py" fetch "$DEPS"
 
 echo "$MACOSX_DEPLOYMENT_TARGET" > "$STAMP"
 echo "== done. build norns: $REPO/macos/build.sh"

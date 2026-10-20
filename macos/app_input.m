@@ -16,7 +16,9 @@
  * the tap and the aggregate device go with it, and the app is heard again.
  *
  * the app does not have to play yet, or run: the tap follows its processes as they come
- * and go (checked every half second).
+ * and go (checked every half second). while nothing takes its sound (the AUv3 bridge has
+ * unplugged crone's inputs for a DAW) there is no tap: the apps, the DAW among them, play
+ * directly.
  */
 
 #import <CoreAudio/AudioHardwareTapping.h>
@@ -302,10 +304,32 @@ API_AVAILABLE(macos(14.2)) static BOOL build_tap(NSArray<NSNumber *> *procs) {
 }
 
 // the app's processes changed (it started playing, quit, opened a helper): a new tap
+// something takes the sound: crone's inputs. while a DAW plays through the AUv3, auv3_bridge
+// unplugs everything from them (and plugs it back afterwards)
+static BOOL listened(void) {
+    return jack_port_connected(out_port[0]) > 0 || jack_port_connected(out_port[1]) > 0;
+}
+
 API_AVAILABLE(macos(14.2)) static void follow(void) {
     // what it was last time (nil at the start: every app is tapped then, with no process of
     // norns to leave out yet)
     static NSArray<NSNumber *> *seen = nil;
+    static BOOL paused = NO;
+    // nothing takes the sound: no tap, so the apps (the DAW among them) are heard directly
+    // instead of muted into nowhere
+    if (!listened()) {
+        if (!paused) {
+            teardown();
+            paused = YES;
+            fprintf(stderr, "app_input: paused, nothing takes the sound (the AUv3 has norns' input)\n");
+        }
+        return;
+    }
+    if (paused) {
+        paused = NO;
+        seen = nil;
+        fprintf(stderr, "app_input: resumed\n");
+    }
     NSArray<NSNumber *> *procs = app_processes();
     if (seen != nil && [procs isEqualToArray:seen]) {
         return;

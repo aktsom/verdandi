@@ -171,6 +171,14 @@ d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/vir
 macos/tests/norns_probe.sh <commands.lua>   # boot norns, drive its REPL, stop it
 ```
 
+what only a person with the hardware can test: `macos/docs/test-checklist.md`.
+
+licenses: `macos/setup-deps.sh` runs `macos/licenses.py fetch` (the license texts and exact
+sources of what is built here, maiden's Go modules and web packages, into `deps/licenses`);
+`macos/make-app.sh` runs `licenses.py collect`, which puts `Licenses/` (texts per package,
+`PACKAGES.txt` with version, license, source and checksum or commit) into the app and the dmg
+for exactly the packages the app contains, and stops if a bundled library belongs to none.
+
 oldest macOS: `macos/MACOS_MIN`. waf builds norns for it, `setup-deps.sh` builds lua, nng,
 libmonome and SuperCollider for it, and `fetch_bottles.py` fetches homebrew's bottles of the
 bundled packages built for it (homebrew installs the ones for the running macOS, which need

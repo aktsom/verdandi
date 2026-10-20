@@ -180,10 +180,12 @@ end
 -- browser ...), "app": one app (Devices > Audio Input), "off": nothing. the Mac's input is
 -- unplugged and plugged back in, so loud speakers cannot feed back into the microphone; the
 -- apps are tapped by the window (_norns.app_input). the button goes MIC > SYS > OFF.
--- ~/.mic-off keeps it off for the next start unless it was "mic" (an app is chosen again)
+-- the choice is kept for the next start: ~/.mic-off unless it was "mic", ~/.norns-input for
+-- "system" and "app" (with the app)
 _menu.input = "mic"
 _menu.mic_live = true -- the Mac's own input reaches norns
 local MIC_OFF = "/home/we/.mic-off"
+local INPUT_KEPT = "/home/we/.norns-input"
 local mic_links = {}
 local mic_checked = false
 local INPUT_SHOWN = {off = 0, mic = 1, system = 2, app = 3}
@@ -243,6 +245,15 @@ function _menu.set_input(mode, bundle, name, quiet)
     local f = io.open(MIC_OFF, "w")
     if f then f:close() end
   end
+  if mode == "system" or mode == "app" then
+    local f = io.open(INPUT_KEPT, "w")
+    if f then
+      f:write(mode, "\n", bundle or "", "\n", name or "", "\n")
+      f:close()
+    end
+  else
+    os.remove(INPUT_KEPT)
+  end
   show_input()
 end
 
@@ -273,6 +284,16 @@ end
 function _menu.check_mic()
   if mic_checked or not _norns.show_control then return end
   mic_checked = true
+  local f = io.open(INPUT_KEPT)
+  if f then
+    local mode, bundle, name = f:read("l"), f:read("l"), f:read("l")
+    f:close()
+    if mode == "system" or (mode == "app" and bundle and bundle ~= "") then
+      -- said on the device: the apps go quiet into norns again
+      _menu.set_input(mode, bundle ~= "" and bundle or nil, name ~= "" and name or nil)
+      return
+    end
+  end
   if util.file_exists(MIC_OFF) then _menu.set_input("off", nil, nil, true) else show_input() end
 end
 hook.system_post_startup:register("menu-mic", _menu.check_mic)

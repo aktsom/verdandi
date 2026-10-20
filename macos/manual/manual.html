@@ -135,8 +135,8 @@ on or off (the window title then reads <i>norns &middot; keys</i>).</p>
       every other app: a video in the browser, a synth, Music) and <b>OFF</b>. <b>APP</b> means
       one app chosen in Devices &rarr; Audio Input, see <a href="#appinput">other apps as
       input</a>. its light is on while something reaches norns. switch the microphone off when
-      speakers are loud and close to it, so they cannot feed back. norns starts with MIC if it
-      was MIC, else OFF.</td></tr>
+      speakers are loud and close to it, so they cannot feed back. norns starts with what it
+      had.</td></tr>
   <tr><td>GRID ARC KEYS</td><td>open or close the virtual grid, arc and keyboard (also
       <kbd>F6</kbd>, <kbd>F8</kbd>, <kbd>F7</kbd>), see <a href="#devices">devices</a>. the
       light is on while one is open. norns and the open devices are laid out together so all
@@ -200,8 +200,11 @@ says <b>APP</b>.</p>
   <li>the first time, macOS asks whether norns may record audio from other apps; allow it. if
       the app stays silent in norns, check <i>System Settings &rarr; Privacy &amp; Security
       &rarr; Screen &amp; System Audio Recording</i>.</li>
+  <li>while a DAW plays through the <a href="#auv3">AUv3 plugin</a>, norns' input is the DAW
+      track: SYS and APP pause meanwhile, and every app (the DAW too) is heard directly.</li>
 </ul>
-<p class="small">one app at a time; SYS and APP last until norns quits (it starts with OFF then).</p>
+<p class="small">one app at a time. SYS and APP are kept for the next start; the note on the
+device says so, as the apps go quiet into norns again.</p>
 
 <h2 id="maiden">6. maiden and the script catalog</h2>
 <p>maiden is norns' web editor. with norns running, open
@@ -371,7 +374,10 @@ norns (GPL-3.0, monome and contributors), maiden (GPL-3.0), SuperCollider (GPL-3
 sc3-plugins (GPL-2.0 or later), JACK (GPL-2.0 / LGPL-2.1), Lua (MIT), lua-cjson (MIT),
 liblo (LGPL-2.1), libmonome (ISC), cairo (LGPL-2.1 / MPL-1.1), SDL (zlib), libsndfile (LGPL-2.1),
 libsamplerate (BSD-2), nng (MIT), Boost (BSL-1.0), yaml-cpp (MIT), GNU coreutils, findutils,
-sed and grep (GPL-3.0), and their dependencies. the complete source of the port, with build
+sed and grep (GPL-3.0), and their dependencies. the folder <b>Licenses</b> (in the dmg next to
+the app, and in <code>norns.app/Contents/Resources/Licenses</code>) has the license texts of
+every part and <code>PACKAGES.txt</code>, the list of all of them with version, license and
+where the exact source is. the complete source of the port, with build
 instructions (<code>readme-macos.md</code>, <code>macos/setup-deps.sh</code>,
 <code>macos/make-app.sh</code>), is published with each release; GPL-3.0 grants you the right
 to get, study, change and share it.</p>

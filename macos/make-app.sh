@@ -118,6 +118,11 @@ chmod -R u+rwX,go+rX,go-w "$APP"
 echo "== libraries"
 NORNS_BOTTLES="$BOTTLES" python3 -I "$REPO/macos/bundle_dylibs.py" "$R" "$R/deps/lib"
 
+echo "== licenses"
+# a folder of license texts for each package the app contains, and the list with their
+# versions and sources (macos/licenses.py; fetched by macos/setup-deps.sh)
+python3 -I "$REPO/macos/licenses.py" collect "$(dirname "$P")" "$BOTTLES" "$REPO" "$R" "$R/Licenses"
+
 echo "== AUv3"
 mkdir -p "$APP/Contents/PlugIns"
 "$REPO/macos/auv3/build-appex.sh" "$APP/Contents/PlugIns/norns-au.appex" "$VERSION"
@@ -155,6 +160,7 @@ if [ "${1:-}" = "--dmg" ]; then
     rm -rf "$STAGE" "$OUT/norns.dmg"
     mkdir -p "$STAGE"
     cp -R "$APP" "$STAGE/"
+    cp -R "$R/Licenses" "$STAGE/Licenses"
     ln -s /Applications "$STAGE/Applications"
     [ -f "$REPO/macos/manual/norns-macos-manual.pdf" ] && cp "$REPO/macos/manual/norns-macos-manual.pdf" "$STAGE/Manual.pdf"
     [ -f "$REPO/macos/manual/manual.html" ] && cp "$REPO/macos/manual/manual.html" "$STAGE/Manual.html"
