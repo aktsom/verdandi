@@ -36,6 +36,7 @@ not affiliated with monome. free software under the GPL-3.0.</p>
   <li><a href="#about">what this is</a></li>
   <li><a href="#install">installing</a></li>
   <li><a href="#first">first start</a></li>
+  <li><a href="#basics">norns in five minutes</a></li>
   <li><a href="#controls">controls</a></li>
   <li><a href="#audio">audio</a></li>
   <li><a href="#maiden">maiden and the script catalog</a></li>
@@ -63,6 +64,9 @@ happening now.</p>
 softcut (audio routing, loopers, tape), SuperCollider with the sc3-plugins, and maiden (the web
 editor with the script catalog). in addition Verdandi installs an AUv3 plugin that puts norns
 into a DAW track.</p>
+<p>new to norns? <a href="#basics">norns in five minutes</a> has the basics; monome's
+<a href="https://monome.org/docs/norns/">norns documentation</a> has the rest, and it applies to
+Verdandi too.</p>
 
 <h2 id="install">2. installing</h2>
 <p><b>requirements:</b> a Mac with Apple silicon (M1 or later), macOS 15 Sequoia or newer.</p>
@@ -94,7 +98,38 @@ the first start takes a little longer: macOS checks the bundled libraries once.<
 <p>to stop Verdandi, close its window, quit it from the Dock, or choose SLEEP in the norns menu.
 only one Verdandi runs at a time.</p>
 
-<h2 id="controls">4. controls</h2>
+<h2 id="basics">4. norns in five minutes</h2>
+<p>Verdandi plays like a norns. what monome's <a href="https://monome.org/docs/norns/">norns
+documentation</a> says holds here too, apart from the few things in
+<a href="#diff">differences from the device</a>. the short version:</p>
+<ul>
+  <li><b>a script plays, the menu waits.</b> norns runs one script at a time, and the screen,
+      keys and encoders belong to it. a short press on K1 (<kbd>1</kbd>) switches between the
+      script and the menu.</li>
+  <li><b>in the menu</b> E1 goes through the pages MIX, TAPE, HOME and PARAMS (the buttons
+      above the device do the same), E2 scrolls, K3 enters or confirms, K2 goes back.</li>
+  <li><b>HOME:</b> SELECT picks a script (K3 loads it), SYSTEM has devices, audio, mods, reset
+      and restart, SLEEP quits Verdandi.</li>
+  <li><b>PARAMS:</b> everything the script lets you set, then norns' own settings (levels,
+      reverb, compressor, clock). PSET saves and loads them as presets.</li>
+  <li><b>MIX:</b> the levels of out, in, monitor, engine, softcut and tape.</li>
+  <li><b>TAPE:</b> records what norns plays into <code>dust/audio/tape</code>, and plays files
+      back.</li>
+  <li><b>new scripts</b> come from the catalog in <a href="#maiden">maiden</a>; then SELECT them.
+      how a script is played is at the top of its file, in maiden's catalog entry, or on its
+      page on lines.</li>
+  <li><b>K1 + turn:</b> many scripts do something else while K1 is held: hold <kbd>1</kbd> and
+      turn.</li>
+</ul>
+<p>more, from monome: <a href="https://monome.org/docs/norns/play/">playing norns</a> (the menus
+in depth), <a href="https://monome.org/docs/norns/maiden/">maiden</a>,
+<a href="https://monome.org/docs/norns/control-clock/">clocks and controllers</a>,
+<a href="https://monome.org/docs/norns/scripting/">writing scripts</a>, the
+<a href="https://monome.org/docs/norns/reference/">API reference</a> and
+<a href="https://monome.org/docs/norns/help/">help</a>. questions about Verdandi itself go to
+its <a href="https://github.com/ha1dcre/verdandi/issues">GitHub issues</a>, not to monome.</p>
+
+<h2 id="controls">5. controls</h2>
 <h3>keyboard</h3>
 <p>while the Verdandi window is in front, the keyboard is the norns hardware:</p>
 <table>
@@ -174,7 +209,7 @@ on or off (the window title then reads <i>Verdandi &middot; keys</i>).</p>
 <p>the window can be resized and keeps the shape of the device; the screen is always drawn with
 sharp pixels.</p>
 
-<h2 id="audio">5. audio</h2>
+<h2 id="audio">6. audio</h2>
 <p>norns starts with the Mac's <b>default input and output</b> (<i>System Settings &rarr;
 Sound</i>) at 48&nbsp;kHz with a 256-frame buffer (about 5&nbsp;ms). to use an audio interface,
 another sample rate or a smaller buffer, go to <b>SYSTEM &rarr; AUDIO</b>:</p>
@@ -213,7 +248,7 @@ says <b>APP</b>.</p>
 <p class="small">one app at a time. SYS and APP are kept for the next start; a note on the
 device says so.</p>
 
-<h2 id="maiden">6. maiden and the script catalog</h2>
+<h2 id="maiden">7. maiden and the script catalog</h2>
 <p>maiden is norns' web editor. with Verdandi running, open
 <b><code>http://127.0.0.1:5000/maiden</code></b> in your browser.</p>
 <ul>
@@ -225,7 +260,7 @@ device says so.</p>
 <p>unlike on the device, maiden and the consoles only answer on this Mac (127.0.0.1), not on
 your network: the consoles can run any code.</p>
 
-<h2 id="scripts">7. scripts</h2>
+<h2 id="scripts">8. scripts</h2>
 <p>scripts run unchanged. the port takes care of what differs from the device:</p>
 <ul>
   <li>scripts see the usual <code>/home/we/dust/&hellip;</code> paths; norns maps them to <code>~/norns</code>.</li>
@@ -239,7 +274,7 @@ fails to load blocks later engine loads until you restart norns (as on the devic
 <p>new engines are compiled when norns starts: after installing a script with its own engine,
 restart norns (or use SYSTEM &rarr; RESTART in the menu).</p>
 
-<h2 id="devices">8. MIDI, grid, arc, crow, gamepads</h2>
+<h2 id="devices">9. MIDI, grid, arc, crow, gamepads</h2>
 <ul>
   <li><b>MIDI</b>: class-compliant USB MIDI devices and network/IAC ports appear in
       SYSTEM &rarr; DEVICES &rarr; MIDI. norns also creates a virtual port <b>norns</b> that other
@@ -283,7 +318,7 @@ restart norns (or use SYSTEM &rarr; RESTART in the menu).</p>
   <li><b>keyboard</b>: the Mac keyboard is the norns keyboard (see <a href="#controls">controls</a>).</li>
 </ul>
 
-<h2 id="auv3">9. the AUv3 plugin</h2>
+<h2 id="auv3">10. the AUv3 plugin</h2>
 <p>Verdandi installs an Audio Unit called <b>Verdandi</b> (a music effect: audio in, audio out, MIDI
 in). it puts norns into a DAW track: the track's audio goes into norns, and norns' output comes
 back into the track.</p>
@@ -303,7 +338,7 @@ is not running, the plugin passes audio through unchanged.</p>
 <p class="small">if the plugin does not show up: start Verdandi once from Applications, then
 rescan plugins in the DAW (Logic: Plug-in Manager &rarr; Reset &amp; Rescan).</p>
 
-<h2 id="files">10. files and logs</h2>
+<h2 id="files">11. files and logs</h2>
 <p><b>getting samples and scripts in:</b> drop files or folders on any norns window (or choose
 File &rarr; Import). a note on the device says what happened.</p>
 <p><b>a sample for a script:</b> when a script asks for a file (say <i>buffer 1 sample</i> in
@@ -345,7 +380,7 @@ Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p
 <p>to reset norns' settings, choose SYSTEM &rarr; RESET (or quit Verdandi and delete
 <code>~/norns/dust/data/system.*</code>). your scripts and audio are untouched.</p>
 
-<h2 id="trouble">11. troubleshooting</h2>
+<h2 id="trouble">12. troubleshooting</h2>
 <table>
   <tr><th>problem</th><th>what to do</th></tr>
   <tr><td>"Verdandi cannot be opened"</td><td><i>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</i> (see <a href="#install">installing</a>).</td></tr>
@@ -357,7 +392,7 @@ Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p
   <tr><td>maiden does not load</td><td>use <code>http://127.0.0.1:5000/maiden</code> (not <code>localhost</code>), with Verdandi running.</td></tr>
 </table>
 
-<h2 id="diff">12. differences from the device</h2>
+<h2 id="diff">13. differences from the device</h2>
 <ul>
   <li>SYSTEM shows DEVICES, AUDIO, MODS, RESET and RESTART. Wi-Fi and the password are the Mac's job,
       scripts are updated in maiden, and Verdandi itself with a new version of the app.</li>
@@ -371,11 +406,11 @@ Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p
       network, so phone controllers like TouchOSC work as on the device.</li>
 </ul>
 
-<h2 id="uninstall">13. uninstalling</h2>
+<h2 id="uninstall">14. uninstalling</h2>
 <p>delete <code>/Applications/Verdandi.app</code>. your norns folder <code>~/norns</code> (scripts,
 audio, data) stays; delete it too if you no longer need it.</p>
 
-<h2 id="source">14. source and licenses</h2>
+<h2 id="source">15. source and licenses</h2>
 <p>Verdandi is free software. the app contains, each under its own license:
 norns (GPL-3.0, monome and contributors), maiden (GPL-3.0), SuperCollider (GPL-3.0),
 sc3-plugins (GPL-2.0 or later), JACK (GPL-2.0 / LGPL-2.1), Lua (MIT), lua-cjson (MIT),
