@@ -1,48 +1,56 @@
-# norns
-_changes. travels. is open to possibilities._
+# Verdandi
 
-**norns is primarily intended to run on a pi-based sound computer designed by [monome](https://monome.org/norns).**
+**norns on macOS.** Verdandi runs [norns](https://monome.org/norns), the sound computer by
+monome, natively on a Mac: the same scripts, engines, softcut and maiden, in a window that
+shows the device. as a standalone app, and as an AUv3 plugin that puts norns into a DAW track.
 
-norns is many sound instruments. it connects to grids, MIDI, and other objects. norns lets you define its behavior with scripts and DSP.
+an unofficial community port, not affiliated with monome. the norns scripts from the
+community catalog run unchanged.
 
-## quick reference
+## get it
 
-```
-git clone https://github.com/monome/norns.git
-cd norns
-git submodule update --init --recursive
-./waf configure --release
-./waf build --release
-```
+download `Verdandi.dmg` from the [releases](../../releases), open it and drag Verdandi into
+Applications. it is not notarized: the first time, right-click Verdandi.app > Open (or System
+Settings > Privacy & Security > Open Anyway).
 
-(NB: the `--release` flag creates builds specifically for armv8/cortex-a53 instruction set, meaning optimized for rpi3 and compatible with rpi4. It also enables aggressive compiler optimizations. Omit flag if you need debug symbols or to build for a different architecture. It does need to supplied to both configuration and build steps.)
+needs a Mac with Apple silicon and macOS 15 (Sequoia) or newer.
 
-## documentation
-- [user docs](https://monome.org/docs/norns)
-- [API docs](https://monome.org/docs/norns/api)
-- [building and execution](readme-setup.md)
-- [discussion and help](https://llllllll.co)
+## what it does
 
-## related
-### supporting repositories
-- [maiden](https://github.com/monome/maiden/) | editing interface
-- [softcut](https://github.com/monome/softcut-lib) | sample-cutting editor part of `matron`
+- the norns device in a window: click the keys, drag or scroll the knobs, or use the keyboard
+  (1 2 3 for K1 K2 K3, return / space and esc, Q W A S Z X for the encoders)
+- the script catalog in maiden, the norns web editor
+- a virtual grid, arc and MIDI keyboard; real grids, arcs, crow and MIDI devices over USB
+- MIC / SYS / OFF: record the microphone or interface, or the sound of every other app (a
+  video in the browser, a synth) straight into a script, without a loopback driver
+- drop samples on the window from the Finder or other apps; a script's file parameter opens
+  the Finder
+- the MIX page by mouse, an output fader and mute
+- the AUv3 plugin: a DAW track goes into norns and norns comes back into the track
+- screenshots and GIFs of the screen for sharing
 
-### tools
-- [norns disk image](https://github.com/monome/norns-image) | raspbian-based disk image
-- [monome linux kernel](https://github.com/monome/linux/) | custom, monome-flavored linux kernel
-- [DIY shield instructions](https://github.com/monome/norns-shield) | the DIY open-source hardware variant
+the manual is in the dmg (`Manual.pdf`) and in [macos/manual](macos/manual/manual.html).
 
+## status
 
-## contributing
+works on the Mac it was built on. not yet tested by others: other Macs with macOS 15,
+audio interfaces, monome grid and arc hardware, crow, the AUv3 in Logic, Ableton Live, Bitwig
+and Reaper. the [test checklist](macos/docs/test-checklist.md) says what to try; reports
+are welcome as issues.
 
-this codebase was written by humans and we intend to keep it maintainable and understandable by humans.
+## build it
 
-see [CONTRIBUTING](https://github.com/monome/norns/blob/main/CONTRIBUTING.md)
+[readme-macos.md](readme-macos.md): `macos/setup-deps.sh`, `macos/build.sh`,
+`macos/make-app.sh --dmg`.
 
+## licenses
 
-## acknowledgments
+GPL-3.0, as norns. the app contains free software by many people, each part under its own
+license; `Licenses/PACKAGES.txt` in the dmg lists every part with its version, license and
+source.
 
-`matron` (control system) and `crone` (audio system) were created by [@catfact](https://github.com/catfact). `maiden` (editor) was created by [@ngwese](https://github.com/ngwese). Each grew with contributions from [@artfwo](https://github.com/artfwo), [@antonhornquist](https://github.com/antonhornquist), [@simonvanderveldt](https://github.com/simonvanderveldt),[@ranch-verdin](https://github.com/ranch-verdin), [@pq](https://github.com/pq), [@markwheeler](https://github.com/markwheeler), [@csboling](https://github.com/csboling), [@dewb](https://github.com/Dewb), [@tlubke](https://github.com/tlubke), [@colinmcardell](https://github.com/colinmcardell) and many others.
+## based on norns
 
-norns was initiated, designed, and variously coded by [@tehn](https://github.com/tehn) (monome).
+norns is by [monome](https://monome.org) and its contributors; their original readme is
+[readme-norns.md](readme-norns.md). the name: norns is monome's, so the port has its own.
+Verdandi is one of the three norns of the old stories, the one of the present.
