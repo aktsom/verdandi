@@ -7,7 +7,9 @@ does not, send the logs: `~/norns/norns.log`, `sclang.log`, `jackd.log`, `auv3_b
 ## a Mac with macOS 15 (Sequoia), not the one it was built on
 
 - [ ] open `Verdandi.dmg`, drag Verdandi into Applications, start it: macOS refuses at first
-      (not notarized); right-click > Open, or System Settings > Privacy & Security > Open Anyway
+      (not notarized); System Settings > Privacy & Security > Open Anyway lets it start (macOS 15
+      has no right-click > Open for this any more). if it says "damaged":
+      `xattr -dr com.apple.quarantine /Applications/Verdandi.app`
 - [ ] allow the microphone; Verdandi shows the norns screen, the HOME menu reacts to K2/K3 (2, 3, return, esc)
 - [ ] SELECT a script (awake, then something with an engine: passersby, cranes): it plays
 - [ ] MIC > SYS: play a video in the browser, allow "record audio from other apps"; the video is

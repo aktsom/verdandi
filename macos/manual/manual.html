@@ -68,9 +68,12 @@ into a DAW track.</p>
 <p><b>requirements:</b> a Mac with Apple silicon (M1 or later), macOS 15 Sequoia or newer.</p>
 <ol>
   <li>open <code>Verdandi.dmg</code> and drag <b>Verdandi</b> onto <b>Applications</b>.</li>
-  <li>the app is not notarized by Apple (it is ad-hoc signed, without a developer identity). the
-      first time, <b>right-click Verdandi.app &rarr; Open</b> and confirm. if macOS still refuses, open
-      <i>System Settings &rarr; Privacy &amp; Security</i> and click <b>Open Anyway</b>.</li>
+  <li>the app is not notarized by Apple (it is ad-hoc signed, without a developer identity), so
+      macOS blocks the first start. open Verdandi once and close the message, then open
+      <i>System Settings &rarr; Privacy &amp; Security</i>, scroll down to Verdandi and click
+      <b>Open Anyway</b>, and confirm. (macOS 15 no longer offers right-click &rarr; Open for this.)
+      if macOS says the app is damaged, run
+      <code>xattr -dr com.apple.quarantine /Applications/Verdandi.app</code> in Terminal.</li>
   <li>when Verdandi asks for the microphone, allow it: that is the audio input for softcut, tape
       and engines. (you can change it later under <i>Privacy &amp; Security &rarr; Microphone</i>.)</li>
 </ol>
@@ -345,7 +348,7 @@ Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p
 <h2 id="trouble">11. troubleshooting</h2>
 <table>
   <tr><th>problem</th><th>what to do</th></tr>
-  <tr><td>"Verdandi cannot be opened"</td><td>right-click &rarr; Open, or <i>Privacy &amp; Security &rarr; Open Anyway</i> (see <a href="#install">installing</a>).</td></tr>
+  <tr><td>"Verdandi cannot be opened"</td><td><i>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</i> (see <a href="#install">installing</a>).</td></tr>
   <tr><td>SUPERCOLLIDER FAIL on the first start</td><td>macOS was still checking the bundled libraries; quit and start Verdandi again.</td></tr>
   <tr><td>no sound</td><td>check the default output in System Settings &rarr; Sound, the levels in the MIX menu, and <code>jackd.log</code>.</td></tr>
   <tr><td>no input</td><td>allow the microphone for Verdandi (Privacy &amp; Security &rarr; Microphone); check the input level in MIX.</td></tr>

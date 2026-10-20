@@ -10,8 +10,10 @@ community catalog run unchanged.
 ## get it
 
 download `Verdandi.dmg` from the [releases](../../releases), open it and drag Verdandi into
-Applications. it is not notarized: the first time, right-click Verdandi.app > Open (or System
-Settings > Privacy & Security > Open Anyway).
+Applications. it is not notarized, so macOS blocks the first start: open Verdandi once, close
+the message, then System Settings > Privacy & Security, scroll down to Verdandi and click
+**Open Anyway** (macOS 15 no longer offers right-click > Open for this). if macOS says the app
+is damaged, run `xattr -dr com.apple.quarantine /Applications/Verdandi.app` in Terminal.
 
 needs a Mac with Apple silicon and macOS 15 (Sequoia) or newer.
 
