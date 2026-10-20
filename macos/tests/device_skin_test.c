@@ -65,15 +65,15 @@ static void test_geom(int w, int h) {
     }
     // the screen, the empty top and the outside are no control
     CHECK(skin_hit(&g, px(&g, 280), py(&g, 460)) == SKIN_NONE, "%dx%d: screen hits a control", w, h);
-    CHECK(skin_hit(&g, px(&g, 500), py(&g, 100)) == SKIN_NONE, "%dx%d: top hits a control", w, h);
+    CHECK(skin_hit(&g, px(&g, 500), py(&g, 170)) == SKIN_NONE, "%dx%d: top hits a control", w, h);
     CHECK(skin_hit(&g, 1, 1) == SKIN_NONE, "%dx%d: corner hits a control", w, h);
-    // the button row: pages, grid, maiden, manual, left to right
-    static const double bx[7] = {77, 181, 285, 389, 561, 665, 769};
-    for (int i = 0; i < 7; i++) {
-        int hb = skin_hit(&g, px(&g, bx[i] + 48), py(&g, 90));
+    // the button row: pages, mic, grid, maiden, manual, left to right
+    static const double bx[8] = {77, 173, 269, 365, 489, 585, 681, 777};
+    for (int i = 0; i < 8; i++) {
+        int hb = skin_hit(&g, px(&g, bx[i] + 44), py(&g, 90));
         CHECK(hb == SKIN_PAGE1 + i, "%dx%d: button %d hits %d", w, h, i, hb);
     }
-    CHECK(skin_hit(&g, px(&g, 523), py(&g, 90)) == SKIN_NONE, "%dx%d: gap between button groups", w, h);
+    CHECK(skin_hit(&g, px(&g, 471), py(&g, 90)) == SKIN_NONE, "%dx%d: gap between button groups", w, h);
     CHECK(skin_hit(&g, px(&g, 125), py(&g, 160)) == SKIN_NONE, "%dx%d: below the buttons", w, h);
     // K2 and E2 do not overlap: between them is nothing
     CHECK(skin_hit(&g, px(&g, 633), py(&g, 481)) == SKIN_NONE, "%dx%d: K2/E2 overlap", w, h);
@@ -169,8 +169,8 @@ int main(int argc, char **argv) {
         test_geom(sizes[i][0], sizes[i][1]);
     }
     if (argc > 1) {
-        skin_state_t idle = {{0, 0, 0}, {0, 0, 0}, SKIN_NONE, 0, 0, SKIN_NONE};
-        skin_state_t used = {{0, 1, 0}, {0, 3, -5}, SKIN_E1, 4, 1, SKIN_MAIDEN};
+        skin_state_t idle = {{0, 0, 0}, {0, 0, 0}, SKIN_NONE, 0, 0, 1, SKIN_NONE};
+        skin_state_t used = {{0, 1, 0}, {0, 3, -5}, SKIN_E1, 4, 1, 0, SKIN_MAIDEN};
         render(argv[1], 1984, 1324, &idle, "");
         render(argv[1], 1984, 1324, &used, "_used");
         render(argv[1], 992, 662, &idle, "");

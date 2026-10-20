@@ -14,7 +14,8 @@
  * grid: a second window that libmonome sees as a usb grid (vgrid_device.h), 64, 128 or 256
  * (the switch under it; the choice is kept in ~/.vgrid-size). click a key to press it, drag
  * across keys to play them in turn, right-click (or ctrl-click) to latch a key down, for
- * chords.
+ * chords. when the grid opens, the two windows are laid out next to or above each other,
+ * as large as the screen allows; when it closes, the norns window goes back.
  *
  * keyboard: plain keys go to norns as the usb keyboard, where lua/core/keyboard.lua turns
  * 1 2 3 / QW AS ZX into K1-3 / E1-3 when nothing else wants them. window_keys.h adds the
@@ -26,6 +27,7 @@
 
 #include <cairo.h>
 #include <dispatch/dispatch.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -196,6 +198,8 @@ static void set_icon(SDL_Window *window) {
     cairo_surface_destroy(img);
 }
 
+static void fit_main_window(SDL_Window *w);
+
 static void bridge_do(bridge_req_t *req) {
     switch (req->op) {
     case BRIDGE_CREATE_WINDOW:
@@ -208,7 +212,8 @@ static void bridge_do(bridge_req_t *req) {
         if (req->window == NULL) {
             fprintf(stderr, "sdl_bridge: SDL_CreateWindow failed: %s\n", SDL_GetError());
         } else {
-            SDL_SetWindowMinimumSize(req->window, (SKIN_W + 2 * SKIN_MARGIN) / 2, (SKIN_H + 2 * SKIN_MARGIN) / 2);
+            SDL_SetWindowMinimumSize(req->window, (SKIN_W + 2 * SKIN_MARGIN) / 3, (SKIN_H + 2 * SKIN_MARGIN) / 3);
+            fit_main_window(req->window);
             set_icon(req->window);
             the_window = req->window;
         }
@@ -319,6 +324,94 @@ static void grid_redraw(void) {
 
 static void redraw(bool full);
 
+//--- window layout
+
+#define MAIN_W (SKIN_W + 2 * SKIN_MARGIN)
+#define MAIN_H (SKIN_H + 2 * SKIN_MARGIN)
+#define LAYOUT_GAP 12
+#define LAYOUT_PAD 8
+
+static SDL_Rect main_before_grid;
+static bool main_saved = false;
+
+// the free screen area (no menu bar, no dock) of the display the norns window is on
+static bool usable_bounds(SDL_Rect *u) {
+    int d = the_window != NULL ? SDL_GetWindowDisplayIndex(the_window) : 0;
+    return SDL_GetDisplayUsableBounds(d < 0 ? 0 : d, u) == 0 && u->w > 0 && u->h > 0;
+}
+
+// window positions and sizes are the content; the title bar sits above it
+static int title_height(SDL_Window *w) {
+    int top = 0, left, bottom, right;
+    if (w == NULL || SDL_GetWindowBordersSize(w, &top, &left, &bottom, &right) != 0 || top <= 0) {
+        top = 28;
+    }
+    return top;
+}
+
+// a first window that does not fit the screen opens smaller
+static void fit_main_window(SDL_Window *w) {
+    SDL_Rect u;
+    int d = SDL_GetWindowDisplayIndex(w);
+    if (SDL_GetDisplayUsableBounds(d < 0 ? 0 : d, &u) != 0) {
+        return;
+    }
+    double k = fmin(1.0, fmin((double)(u.w - 2 * LAYOUT_PAD) / MAIN_W,
+                              (double)(u.h - 2 * LAYOUT_PAD - title_height(w)) / MAIN_H));
+    if (k < 1.0) {
+        SDL_SetWindowSize(w, (int)(MAIN_W * k), (int)(MAIN_H * k));
+        SDL_SetWindowPosition(w, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
+}
+
+// norns and the grid (gw x gh at 1:1) next to or above each other, whichever leaves them
+// larger, centred, both at the same scale. the norns window is remembered for later
+static void arrange_windows(int gw, int gh) {
+    SDL_Rect u;
+    if (the_window == NULL || grid_window == NULL || !usable_bounds(&u)) {
+        return;
+    }
+    if (!main_saved) {
+        SDL_GetWindowPosition(the_window, &main_before_grid.x, &main_before_grid.y);
+        SDL_GetWindowSize(the_window, &main_before_grid.w, &main_before_grid.h);
+        main_saved = true;
+    }
+    int t = title_height(the_window);
+    double above = fmin(1.0, fmin((double)(u.h - 2 * LAYOUT_PAD - 2 * t - LAYOUT_GAP) / (MAIN_H + gh),
+                                  (double)(u.w - 2 * LAYOUT_PAD) / fmax(MAIN_W, gw)));
+    double beside = fmin(1.0, fmin((double)(u.w - 2 * LAYOUT_PAD - LAYOUT_GAP) / (MAIN_W + gw),
+                                   (double)(u.h - 2 * LAYOUT_PAD - t) / fmax(MAIN_H, gh)));
+    bool side = beside > above + 0.01;
+    double k = side ? beside : above;
+    int mw = (int)(MAIN_W * k), mh = (int)(MAIN_H * k), w = (int)(gw * k), h = (int)(gh * k);
+    int mx, my, x, y;
+    if (side) {
+        mx = u.x + (u.w - (mw + LAYOUT_GAP + w)) / 2;
+        x = mx + mw + LAYOUT_GAP;
+        my = u.y + t + (u.h - t - mh) / 2;
+        y = u.y + t + (u.h - t - h) / 2;
+    } else {
+        my = u.y + t + (u.h - (t + mh + LAYOUT_GAP + t + h)) / 2;
+        y = my + mh + LAYOUT_GAP + t;
+        mx = u.x + (u.w - mw) / 2;
+        x = u.x + (u.w - w) / 2;
+    }
+    SDL_SetWindowSize(the_window, mw, mh);
+    SDL_SetWindowPosition(the_window, mx, my);
+    SDL_SetWindowSize(grid_window, w, h);
+    SDL_SetWindowPosition(grid_window, x, y);
+    SDL_RaiseWindow(the_window);
+    SDL_RaiseWindow(grid_window);
+}
+
+static void restore_main_window(void) {
+    if (main_saved && the_window != NULL) {
+        SDL_SetWindowSize(the_window, main_before_grid.w, main_before_grid.h);
+        SDL_SetWindowPosition(the_window, main_before_grid.x, main_before_grid.y);
+    }
+    main_saved = false;
+}
+
 // the size choice, in the norns home (norns.sh sets HOME)
 static void grid_size_path(char *buf, size_t n) {
     const char *home = getenv("HOME");
@@ -360,13 +453,8 @@ static void grid_set_size(int size) {
     grid_size = size;
     grid_save_size();
     if (vgrid != NULL) {
-        int x, y;
-        SDL_GetWindowPosition(grid_window, &x, &y);
         toggle_grid();
         toggle_grid();
-        if (grid_window != NULL) {
-            SDL_SetWindowPosition(grid_window, x, y);
-        }
     }
 }
 
@@ -385,6 +473,7 @@ static void toggle_grid(void) {
         memset(grid_held, 0, sizeof grid_held);
         grid_mouse_c = grid_mouse_r = -1;
         skin.grid_open = 0;
+        restore_main_window();
         redraw(true);
         return;
     }
@@ -397,33 +486,15 @@ static void toggle_grid(void) {
         fprintf(stderr, "sdl_bridge: virtual grid failed\n");
         return;
     }
-    // one unit per point, smaller if the screen is too small (the 256 on a laptop)
+    // one unit per point; arrange_windows fits both windows on the screen
     int uw, uh;
     vgrid_skin_units(cols, rows, &uw, &uh);
-    SDL_Rect usable = {0, 0, 0, 0};
-    int display = the_window != NULL ? SDL_GetWindowDisplayIndex(the_window) : 0;
-    if (SDL_GetDisplayUsableBounds(display < 0 ? 0 : display, &usable) == 0 && usable.h > 0 &&
-        uh > usable.h - 60) {
-        double k = (double)(usable.h - 60) / uh;
-        uw = (int)(uw * k);
-        uh = (int)(uh * k);
-    }
-    // under the norns window if there is room
-    int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
-    if (the_window != NULL && usable.h > 0) {
-        int wx, wy, ww, wh;
-        SDL_GetWindowPosition(the_window, &wx, &wy);
-        SDL_GetWindowSize(the_window, &ww, &wh);
-        if (wy + wh + 40 + uh <= usable.y + usable.h) {
-            x = wx + (ww - uw) / 2;
-            y = wy + wh + 40;
-        }
-    }
-    grid_window = SDL_CreateWindow("grid", x, y, uw, uh,
+    grid_window = SDL_CreateWindow("grid", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, uw, uh,
                                    SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
     if (grid_window != NULL) {
-        SDL_SetWindowMinimumSize(grid_window, uw / 2, uh / 2);
+        SDL_SetWindowMinimumSize(grid_window, uw / 3, uh / 3);
         set_icon(grid_window);
+        arrange_windows(uw, uh);
     }
     const char *path = vgrid_path(vgrid);
     device_runloop_sync(^{
@@ -550,6 +621,8 @@ static void button_action(int control) {
         post_window_button(control - SKIN_PAGE1 + 1);
     } else if (control == SKIN_MANUAL) {
         post_window_button(5);
+    } else if (control == SKIN_MIC) {
+        post_window_button(6);
     } else if (control == SKIN_MAIDEN) {
         macos_open_url("http://127.0.0.1:5000/maiden");
     } else if (control == SKIN_GRID) {
@@ -720,6 +793,13 @@ static void handle_key(const SDL_KeyboardEvent *k) {
 
 // a key/enc event reached norns: move the control on screen
 static void handle_show(int kind, int n, int value) {
+    if (kind == SDL_BRIDGE_SHOW_MIC) {
+        if (skin.mic_live != (n != 0)) {
+            skin.mic_live = n != 0;
+            redraw(true);
+        }
+        return;
+    }
     if (kind == SDL_BRIDGE_SHOW_PAGE) {
         if (n >= 0 && n <= 4 && n != skin.page) {
             skin.page = n;
@@ -741,6 +821,8 @@ static void handle_show(int kind, int n, int value) {
 void sdl_bridge_init(void) {
     main_thread = pthread_self();
     window_keys_init(&keys);
+    // until lua says otherwise (lua/core/menu.lua, MIC)
+    skin.mic_live = 1;
     // keep default SIGINT/SIGTERM behaviour (terminate), as on linux; SDL would otherwise
     // swallow them as SDL_QUIT
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");

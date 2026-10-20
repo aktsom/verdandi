@@ -7,6 +7,7 @@ local fileselect = require 'fileselect'
 local listselect = require 'listselect'
 local textentry = require 'textentry'
 local gamepad = require 'gamepad'
+local hook = require 'core/hook'
 
 _menu = {}
 
@@ -174,25 +175,58 @@ local function show_page()
   end
 end
 
--- the docs of the script that is running: catalog entry by project (folder) name
-local function script_docs()
-  local project = norns.state.script and norns.state.script:match("/code/([^/]+)/")
-  if project == nil then return nil end
-  for _, f in ipairs(util.scandir(_path.data .. "catalogs/") or {}) do
-    local fd = io.open(_path.data .. "catalogs/" .. f)
-    if fd then
-      local ok, cat = pcall(json.decode, fd:read("a"))
-      fd:close()
-      for _, e in ipairs(ok and type(cat) == "table" and cat.entries or {}) do
-        if e.project_name == project then
-          return e.documentation_url or e.discussion_url or e.project_url
-        end
-      end
-    end
-  end
+-- MIC: the Mac's audio input (system:capture -> crone:input_1/2) is unplugged and plugged
+-- back in, so loud speakers cannot feed back into the microphone. kept in ~/.mic-off
+_menu.mic_live = true
+local MIC_OFF = "/home/we/.mic-off"
+local mic_links = {}
+local mic_checked = false
+
+local function show_mic()
+  if _norns.show_control then _norns.show_control(4, _menu.mic_live and 1 or 0, 0) end
 end
 
--- 1-4: menu page (clicking the page that is up goes back to the script), 5: manual
+-- the system:capture -> crone:input_1/2 connections, from jack_lsp -c
+local function capture_links()
+  local links, port = {}, nil
+  for line in (util.os_capture("jack_lsp -c", true) or ""):gmatch("[^\n]+") do
+    local peer = line:match("^%s+(%S+)")
+    if peer == nil then
+      port = line:match("^(%S+)")
+    elseif port and port:match("^crone:input_[12]$") and peer:match("^system:capture_%d+$") then
+      table.insert(links, {peer, port})
+    end
+  end
+  return links
+end
+
+function _menu.set_mic(live)
+  if live then
+    for _, l in ipairs(mic_links) do _norns.execute("jack_connect " .. l[1] .. " " .. l[2]) end
+    mic_links = {}
+    os.remove(MIC_OFF)
+  else
+    for _, l in ipairs(capture_links()) do
+      _norns.execute("jack_disconnect " .. l[1] .. " " .. l[2])
+      table.insert(mic_links, l)
+    end
+    local f = io.open(MIC_OFF, "w")
+    if f then f:close() end
+  end
+  _menu.mic_live = live
+  show_mic()
+end
+
+-- when norns is up (crone has connected the input again): take it off if it was off
+function _menu.check_mic()
+  if mic_checked or not _norns.show_control then return end
+  mic_checked = true
+  if util.file_exists(MIC_OFF) then _menu.set_mic(false) else show_mic() end
+end
+hook.system_post_startup:register("menu-mic", _menu.check_mic)
+
+-- 1-4: menu page (clicking the page that is up goes back to the script), 5: the manual of
+-- norns for macOS, 6: the audio input on/off
 _norns.window_button = function(n)
   if n >= 1 and n <= 4 then
     if _menu.mode and _menu.page == _menu.panels[n] and not _menu.locked then
@@ -202,8 +236,10 @@ _norns.window_button = function(n)
       _menu.goto_panel(n)
     end
   elseif n == 5 and _norns.open_url then
-    local url = script_docs() or os.getenv("NORNS_MANUAL")
-    if url then _norns.open_url(url) end
+    local manual = os.getenv("NORNS_MANUAL")
+    if manual then _norns.open_url(manual) end
+  elseif n == 6 then
+    _menu.set_mic(not _menu.mic_live)
   end
 end
 

@@ -131,11 +131,11 @@ static void draw_keys(cairo_t *cr, const vgrid_geom_t *g, const uint8_t level[VG
             double l = level[r][c] / 15.0 * scale;
             if (l > 0) {
                 double cx = key_x(c) + KEY / 2, cy = key_y(r) + KEY / 2;
-                cairo_pattern_t *gl = cairo_pattern_create_radial(cx, cy, KEY * 0.35, cx, cy, KEY * 1.05);
-                cairo_pattern_add_color_stop_rgba(gl, 0, 1.0, 0.93, 0.70, 0.45 * l);
-                cairo_pattern_add_color_stop_rgba(gl, 1, 1.0, 0.93, 0.70, 0);
+                cairo_pattern_t *gl = cairo_pattern_create_radial(cx, cy, KEY * 0.3, cx, cy, KEY * 1.2);
+                cairo_pattern_add_color_stop_rgba(gl, 0, 1.0, 0.76, 0.10, 0.75 * l);
+                cairo_pattern_add_color_stop_rgba(gl, 1, 1.0, 0.76, 0.10, 0);
                 cairo_set_source(cr, gl);
-                cairo_rectangle(cr, cx - KEY * 1.1, cy - KEY * 1.1, KEY * 2.2, KEY * 2.2);
+                cairo_rectangle(cr, cx - KEY * 1.25, cy - KEY * 1.25, KEY * 2.5, KEY * 2.5);
                 cairo_fill(cr);
                 cairo_pattern_destroy(gl);
             }
@@ -154,10 +154,10 @@ static void draw_keys(cairo_t *cr, const vgrid_geom_t *g, const uint8_t level[VG
             cairo_set_source(cr, p);
             cairo_fill(cr);
             cairo_pattern_destroy(p);
-            // the silicone key: light grey, towards warm white with its led
+            // the silicone key: light grey, towards a glowing yellow with its led
             double base = down ? 0.70 : 0.775;
-            double rr = base + (1.00 - base) * l, gg = base + 0.005 + (0.975 - base) * l,
-                   bb = base + 0.015 + (0.900 - base) * l;
+            double rr = base + (1.00 - base) * l, gg = base + 0.005 + (0.80 - base) * l,
+                   bb = base + 0.015 + (0.16 - base - 0.015) * l;
             double in = down ? 0.8 : 0;
             rounded_rect(cr, x + in, y + in, KEY - 2 * in, KEY - 2 * in, 4.2);
             p = cairo_pattern_create_linear(0, y, 0, y + KEY);
@@ -169,9 +169,9 @@ static void draw_keys(cairo_t *cr, const vgrid_geom_t *g, const uint8_t level[VG
             if (l > 0) {
                 // the led behind the silicone: brightest in the middle
                 double cx = x + KEY / 2, cy = y + KEY / 2;
-                p = cairo_pattern_create_radial(cx, cy, 0, cx, cy, KEY * 0.6);
-                cairo_pattern_add_color_stop_rgba(p, 0, 1, 1, 0.96, 0.55 * l);
-                cairo_pattern_add_color_stop_rgba(p, 1, 1, 1, 0.96, 0);
+                p = cairo_pattern_create_radial(cx, cy, 0, cx, cy, KEY * 0.62);
+                cairo_pattern_add_color_stop_rgba(p, 0, 1, 0.97, 0.62, 0.85 * l);
+                cairo_pattern_add_color_stop_rgba(p, 1, 1, 0.92, 0.40, 0);
                 cairo_set_source(cr, p);
                 rounded_rect(cr, x + in, y + in, KEY - 2 * in, KEY - 2 * in, 4.2);
                 cairo_fill(cr);

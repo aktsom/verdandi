@@ -1,7 +1,7 @@
 /*
  * vgrid_skin.h: the virtual grid window drawn like a monome grid (pure cairo, like
  * device_skin.h): the bead-blasted aluminium plate with light grey square keys in their
- * cut-outs, lit keys warm white. under the plate (not on the grid) a switch for the size:
+ * cut-outs, lit keys glowing yellow. under the plate (not on the grid) a switch for the size:
  * 64 (8x8), 128 (16x8), 256 (16x16).
  */
 

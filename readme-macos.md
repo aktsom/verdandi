@@ -87,9 +87,10 @@ every key/enc event norns receives (`sdl_bridge_show_control`, also called by th
 path in lua).
 
 buttons above the device (not on the hardware): the menu pages (`EVENT_WINDOW_BUTTON` ->
-`_norns.window_button` in `lua/core/menu.lua`), GRID, MAIDEN, MANUAL (the running script's
-docs from the catalog, else `macos/manual/manual.html`; opened by `open_url.c`, http(s) and
-paths only).
+`_norns.window_button` in `lua/core/menu.lua`), MIC (unplugs system:capture from
+crone:input_1/2 through jack_disconnect, kept in `~/norns/.mic-off`), GRID, MAIDEN, MANUAL
+(`macos/manual/manual.html`; opened by `open_url.c`, http(s) and paths only). opening the
+grid lays both windows out to fit the screen (`arrange_windows`).
 
 virtual grid: `vgrid_proto.c` is the grid side of the mext serial protocol, `vgrid_device.c`
 puts it on a pty that libmonome opens like a usb grid (`dev_list_add`), `vgrid_skin.c`
