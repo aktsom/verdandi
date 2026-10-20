@@ -2,8 +2,8 @@ from waflib.TaskGen import extension
 
 @extension('.m')
 def objc_file(self, node):
-    # the macOS menu bar (matron/src/platform/macos/mac_menu.m): a c task, clang compiles it
-    # as objective-c by its extension
+    # the macOS menu bar and app input (matron/src/platform/macos/*.m): a c task, clang
+    # compiles it as objective-c by its extension
     return self.create_compiled_task('c', node)
 
 def build(bld):
@@ -159,6 +159,7 @@ def build(bld):
             '../matron/src/hardware/stat.cc',
         ]
         matron_sources = [f for f in matron_sources if f not in replaced] + [
+            '../matron/src/platform/macos/app_audio.m',
             '../matron/src/platform/macos/device_hid_iohid.cc',
             '../matron/src/platform/macos/device_monitor_macos.cc',
             '../matron/src/platform/macos/device_skin.c',
@@ -196,7 +197,7 @@ def build(bld):
         # darwin executables export their symbols by default (lua c modules resolve against them);
         # header padding lets macos/make-app.sh rewrite library paths
         norns_ldflags = ['-Wl,-headerpad_max_install_names']
-        norns_frameworks = ['AppKit', 'CoreFoundation', 'CoreMIDI', 'IOKit']
+        norns_frameworks = ['AppKit', 'CoreAudio', 'CoreFoundation', 'CoreMIDI', 'IOKit', 'UniformTypeIdentifiers']
 
     if bld.env.NORNS_PROFILE:
         norns_cxxflags += ['-pg']

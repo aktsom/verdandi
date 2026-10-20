@@ -1,4 +1,11 @@
+from waflib.TaskGen import extension
+
 top = '..'
+
+@extension('.m')
+def objc_file(self, node):
+    # objective-c (app_input.m): a c task, clang compiles it as objective-c by its extension
+    return self.create_compiled_task('c', node)
 
 def build(bld):
     bld.program(features='c cprogram',
@@ -31,4 +38,14 @@ def build(bld):
         use=['JACK'],
         lib=['jacknet'],
         framework=['CoreMIDI', 'CoreFoundation'],
+        ldflags=['-Wl,-headerpad_max_install_names'])
+
+    # another app's sound as norns' input (Devices > Audio Input from App, see app_input.m)
+    bld.program(features='c cprogram',
+        source='app_input.m',
+        target='app_input',
+        use=['JACK'],
+        lib=['jacknet'],
+        cflags=['-fobjc-arc'],
+        framework=['AudioToolbox', 'CoreAudio', 'Foundation'],
         ldflags=['-Wl,-headerpad_max_install_names'])

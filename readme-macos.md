@@ -108,6 +108,14 @@ and gif recording (`gif_writer.c`, 16 grey levels) to the desktop. files dropped
 go into dust by `dust_import.c` on a worker thread: audio is symlinked from
 `dust/audio/mac` (option held, or the panel's box: copied to dust/audio; dead links are
 pruned on the next import), scripts are copied to dust/code; nothing is overwritten.
+what other apps drag (file promises, audio data on the pasteboard) is taken by drop methods
+`mac_menu.m` puts on SDL's window class: written into a temporary folder, copied into
+dust/audio, removed again; files in temporary folders and caches are copied, not linked.
+
+app input: Devices > Audio Input from App (`app_audio.m`) runs `macos/app_input.m`, a jack
+client that taps the chosen app (Core Audio process tap, macOS 14.2+, muted while tapped)
+through a private aggregate device and plays it into crone:input_1/2 next to system:capture.
+it ends with norns (parent watch), with jack or on SIGTERM.
 
 audio: SYSTEM > AUDIO (`lua/core/menu/audio.lua`, devices from `macos/audio_devices.c`)
 writes `~/norns/audio.conf`; `macos/norns.sh` restarts jackd with it and falls back to the
@@ -132,6 +140,11 @@ cc -std=c11 -I matron/src/platform/macos macos/tests/gif_test.c matron/src/platf
    -framework ImageIO -framework CoreGraphics -framework CoreFoundation -o /tmp/gift && /tmp/gift
 cc -std=c11 -I matron/src/platform/macos macos/tests/dust_import_test.c \
    matron/src/platform/macos/dust_import.c -o /tmp/dit && /tmp/dit [dir on another disk]
+P=matron/src/platform/macos; cc -c $P/mac_menu.m $P/app_audio.m -I $P && \
+cc -fobjc-arc macos/tests/drop_test.m mac_menu.o app_audio.o -I $P $(pkg-config --cflags --libs sdl2) \
+   -framework AppKit -framework CoreAudio -framework UniformTypeIdentifiers -o /tmp/dropt && /tmp/dropt [--live]
+cc -fobjc-arc macos/tests/app_input_test.m $(pkg-config --cflags --libs jack) -framework AudioToolbox \
+   -framework Foundation -o /tmp/ait && /tmp/ait build/macos/app_input   # own jack server, tone app
 NORNS_HARDWARE_KEYS=1 <lua 5.3> macos/tests/keyboard_hardware_test.lua
 <lua 5.3> macos/tests/menu_pages_test.lua
 d=$(mktemp -d); HOME=$d <lua 5.3> macos/tests/virtual_home_test.lua lua/core/virtual_home.lua

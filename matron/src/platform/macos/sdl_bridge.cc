@@ -41,6 +41,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <removefile.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -247,6 +248,8 @@ static void bridge_do(bridge_req_t *req) {
             fit_main_window(req->window);
             set_icon(req->window);
             the_window = req->window;
+            // drops from apps other than the Finder
+            mac_drop_adopt_windows();
         }
         break;
     case BRIDGE_PRESENT:
@@ -337,6 +340,11 @@ static void post_toast(const std::string &text) {
     }
 }
 
+// mac_menu.m's messages (any thread)
+static void note_toast(const char *text) {
+    post_toast(text);
+}
+
 //--- extra windows: grid, arc, keys
 
 typedef struct {
@@ -405,6 +413,7 @@ static SDL_Window *pane_open(pane_t *p, const char *title, int uw, int uh) {
     if (p->window != NULL) {
         SDL_SetWindowMinimumSize(p->window, uw / 3, uh / 3);
         set_icon(p->window);
+        mac_drop_adopt_windows();
     }
     return p->window;
 }
@@ -1253,7 +1262,7 @@ static void keys_typed(const SDL_KeyboardEvent *k) {
 
 struct import_item {
     std::string path;
-    bool copy; // audio copied into dust/audio, not linked from dust/audio/mac
+    int mode; // MAC_IMPORT_LINK, _COPY (audio into dust/audio), _TAKE (copy, then remove path)
 };
 
 static std::deque<import_item> import_queue;
@@ -1264,6 +1273,22 @@ static bool import_running = false;
 static std::string dust_dir(void) {
     const char *home = getenv("HOME");
     return std::string(home != NULL ? home : ".") + "/dust";
+}
+
+// the user's own home (HOME is the norns home here)
+static std::string user_home(void) {
+    struct passwd *pw = getpwuid(getuid());
+    const char *home = pw != NULL && pw->pw_dir != NULL ? pw->pw_dir : getenv("HOME");
+    return home != NULL ? home : ".";
+}
+
+// a file an app wrote for the drop, and its folder of its own (mac_menu.m)
+static void remove_taken(const std::string &path) {
+    removefile(path.c_str(), NULL, REMOVEFILE_RECURSIVE);
+    size_t slash = path.rfind('/');
+    if (slash != std::string::npos && slash > 0) {
+        rmdir(path.substr(0, slash).c_str());
+    }
 }
 
 // "kick.wav linked in dust/audio/mac" or "3 copied to dust/audio"
@@ -1317,9 +1342,12 @@ static void *import_worker(void *arg) {
         dust_kind_t kind = dust_import_kind(item.path.c_str());
         char dest[2048];
         int as_link = 0;
+        // a link to a temporary file dies with it: a copy
+        bool link = item.mode == MAC_IMPORT_LINK &&
+                    !dust_import_volatile(item.path.c_str(), getenv("TMPDIR"), user_home().c_str());
         if (kind == DUST_SKIP) {
             skipped++;
-        } else if (dust_import(dust_dir().c_str(), item.path.c_str(), !item.copy, dest, sizeof dest, &as_link)) {
+        } else if (dust_import(dust_dir().c_str(), item.path.c_str(), link, dest, sizeof dest, &as_link)) {
             const char *slash = strrchr(dest, '/');
             std::string name = slash != NULL ? slash + 1 : dest;
             fprintf(stderr, "sdl_bridge: %s %s -> %s\n", as_link ? "linked" : "copied", item.path.c_str(), dest);
@@ -1337,11 +1365,14 @@ static void *import_worker(void *arg) {
             fprintf(stderr, "sdl_bridge: import of %s failed\n", item.path.c_str());
             failed++;
         }
+        if (item.mode == MAC_IMPORT_TAKE) {
+            remove_taken(item.path);
+        }
     }
     return NULL;
 }
 
-static void import_path(const char *path, int copy) {
+static void import_path(const char *path, int mode) {
     pthread_mutex_lock(&import_lock);
     if (!import_running) {
         pthread_t t;
@@ -1350,7 +1381,7 @@ static void import_path(const char *path, int copy) {
             import_running = true;
         }
     }
-    import_queue.push_back({path, copy != 0});
+    import_queue.push_back({path, mode});
     pthread_cond_signal(&import_cond);
     pthread_mutex_unlock(&import_lock);
 }
@@ -1359,9 +1390,7 @@ static void import_path(const char *path, int copy) {
 
 // the user's own desktop (HOME is the norns home here)
 static std::string desktop_dir(void) {
-    struct passwd *pw = getpwuid(getuid());
-    const char *home = pw != NULL && pw->pw_dir != NULL ? pw->pw_dir : getenv("HOME");
-    std::string d = std::string(home != NULL ? home : ".") + "/Desktop";
+    std::string d = user_home() + "/Desktop";
     struct stat st;
     return stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? d : dust_dir();
 }
@@ -1835,7 +1864,7 @@ void sdl_bridge_init(void) {
     device_event_type = bridge_event_type + 2;
     toast_event_type = bridge_event_type + 3;
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
-    mac_menu_install(menu_item, import_path);
+    mac_menu_install(menu_item, import_path, note_toast);
 }
 
 void sdl_bridge_show_control(int kind, int n, int value) {
@@ -1912,7 +1941,7 @@ void sdl_bridge_run(void) {
         case SDL_DROPFILE:
             if (ev.drop.file != NULL) {
                 // option held while dropping: a copy, as in the Finder
-                import_path(ev.drop.file, mac_option_held());
+                import_path(ev.drop.file, mac_option_held() ? MAC_IMPORT_COPY : MAC_IMPORT_LINK);
                 SDL_free(ev.drop.file);
             }
             break;

@@ -232,3 +232,31 @@ int dust_import(const char *dust, const char *path, int link, char *dest, size_t
     }
     return copy_into(path, dest, kind);
 }
+
+static int under(const char *path, const char *dir) {
+    size_t n = dir != NULL ? strlen(dir) : 0;
+    while (n > 0 && dir[n - 1] == '/') {
+        n--;
+    }
+    return n > 0 && strncmp(path, dir, n) == 0 && path[n] == '/';
+}
+
+static int under_home(const char *path, const char *home, const char *sub) {
+    char d[2048];
+    return home != NULL && home[0] != '\0' && snprintf(d, sizeof d, "%s/%s", home, sub) < (int)sizeof d &&
+           under(path, d);
+}
+
+int dust_import_volatile(const char *path, const char *tmpdir, const char *home) {
+    static const char *temp[] = {"/tmp", "/private/tmp", "/var/folders", "/private/var/folders", NULL};
+    if (path == NULL) {
+        return 0;
+    }
+    for (int i = 0; temp[i] != NULL; i++) {
+        if (under(path, temp[i])) {
+            return 1;
+        }
+    }
+    return under(path, tmpdir) || under_home(path, home, "Library/Caches") || under_home(path, home, ".Trash") ||
+           strstr(path, "/.Trashes/") != NULL;
+}

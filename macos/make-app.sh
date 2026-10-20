@@ -41,7 +41,7 @@ cp "$REPO/build/norns/norns" "$R/norns/build/norns/"
 cp "$REPO/build/ws-wrapper/ws-wrapper" "$R/norns/build/ws-wrapper/"
 cp "$REPO"/build/macos/jack_wait "$REPO"/build/macos/jack_connect "$REPO"/build/macos/jack_disconnect \
     "$REPO"/build/macos/jack_lsp "$REPO"/build/macos/auv3_bridge "$REPO"/build/macos/audio_devices \
-    "$R/norns/build/macos/"
+    "$REPO"/build/macos/app_input "$R/norns/build/macos/"
 
 # jack server and the drivers norns uses
 cp "$(readlink -f "$BREW/bin/jackd")" "$R/deps/bin/jackd"
@@ -88,6 +88,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>norns records and processes audio input (softcut, tape, engines).</string>
+    <key>NSAudioCaptureUsageDescription</key><string>Devices &gt; Audio Input from App plays the sound of the app you choose into norns' input.</string>
     <key>NSHumanReadableCopyright</key><string>GPL-3.0. community port, not affiliated with monome.</string>
 </dict>
 </plist>

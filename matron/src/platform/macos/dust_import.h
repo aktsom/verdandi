@@ -45,6 +45,11 @@ extern int dust_import(const char *dust, const char *path, int link, char *dest,
 // remove the links in dust/audio/mac whose original is gone
 extern void dust_prune_links(const char *dust);
 
+// path is a file the system or an app deletes on its own: in a temporary folder (tmpdir,
+// /tmp, /var/folders), a cache (<home>/Library/Caches) or a trash. a link to it would die
+// soon, so it is copied. tmpdir and home may be NULL
+extern int dust_import_volatile(const char *path, const char *tmpdir, const char *home);
+
 #ifdef __cplusplus
 }
 #endif

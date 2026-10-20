@@ -149,6 +149,8 @@ on or off (the window title then reads <i>norns &middot; keys</i>).</p>
       GIF (up to a minute, a red dot shows it is recording); the same item stops it and saves it on
       your desktop.</td></tr>
   <tr><td>Devices</td><td>opens or closes the grid, keyboard and arc.</td></tr>
+  <tr><td>Devices &rarr; Audio Input from App</td><td>plays another app's sound into norns, see
+      <a href="#appinput">another app as input</a>.</td></tr>
 </table>
 <h3>window</h3>
 <p>the window can be resized and keeps the shape of the device; the screen is always drawn with
@@ -170,6 +172,23 @@ another sample rate or a smaller buffer, go to <b>SYSTEM &rarr; AUDIO</b>:</p>
 </ul>
 <p>a mono microphone (like the built-in one) feeds both norns inputs. levels, monitoring,
 reverb and compressor are in the norns MIX menu, as on the device.</p>
+<h3 id="appinput">another app as input</h3>
+<p>to loop, sample or process what another app plays (a synth, a drum machine, a browser,
+Music) without a DAW or a loopback driver, choose <b>Devices &rarr; Audio Input from App</b>
+and the app. apps that are playing right now are at the top.</p>
+<ul>
+  <li>the app's sound goes into norns' inputs, next to the microphone or interface (switch
+      those off with MIC to hear only the app). scripts record and process it like anything
+      plugged into a norns.</li>
+  <li>the app itself goes quiet while norns takes its sound: you hear it through norns, with
+      the input monitor level in MIX. choose <i>None</i> and the app is heard directly again;
+      quitting norns does the same.</li>
+  <li>the app does not have to play, or even run, yet: norns picks it up when it starts.</li>
+  <li>the first time, macOS asks whether norns may record audio from other apps; allow it. if
+      the app stays silent in norns, check <i>System Settings &rarr; Privacy &amp; Security
+      &rarr; Screen &amp; System Audio Recording</i>.</li>
+</ul>
+<p class="small">macOS 14.2 or later. one app at a time; the choice lasts until norns quits.</p>
 
 <h2 id="maiden">6. maiden and the script catalog</h2>
 <p>maiden is norns' web editor. with norns running, open
@@ -276,6 +295,12 @@ File &rarr; Import). a note on the device says what happened.</p>
   <li><b>scripts</b> (a folder with a <code>.lua</code> file in it, or a single <code>.lua</code>
       file) are always copied to <code>dust/code</code>, because they belong to norns: maiden
       updates them, and norns starts the last one again on the next launch.</li>
+  <li><b>from other apps</b> (Voice Memos, Music, DAWs, sample browsers): many hand over a file
+      only when it is dropped, or the sound itself. that is copied into
+      <code>dust/audio</code>, as there is no original to link to; so is a file from a temporary
+      folder, which the app would delete. if an app drags nothing norns can use, the note on the
+      device says so: export the sound as a file first, or play it in with
+      <a href="#appinput">Audio Input from App</a>.</li>
   <li>nothing is overwritten: a name that is already there gets a number.</li>
 </ul>
 <p><b>getting things out:</b> TAPE recordings are in <code>dust/audio/tape</code> (File &rarr;

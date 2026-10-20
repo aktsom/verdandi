@@ -215,6 +215,20 @@ int main(int argc, char **argv) {
           "txt left out");
     remove_root();
 
+    // files that go away on their own are copied, not linked
+    const char *tmp = "/var/folders/ab/xyz/T/", *home = "/Users/me";
+    CHECK(dust_import_volatile("/var/folders/ab/xyz/T/norns-drops/1/memo.m4a", tmp, home), "TMPDIR is volatile");
+    CHECK(dust_import_volatile("/private/var/folders/ab/c/T/x.wav", NULL, NULL), "/private/var/folders");
+    CHECK(dust_import_volatile("/tmp/x.wav", NULL, NULL) && dust_import_volatile("/private/tmp/x.wav", NULL, NULL),
+          "/tmp");
+    CHECK(dust_import_volatile("/Users/me/Library/Caches/com.app/preview.wav", tmp, home), "a cache is volatile");
+    CHECK(dust_import_volatile("/Users/me/.Trash/old.wav", tmp, home), "the trash is volatile");
+    CHECK(dust_import_volatile("/Volumes/stick/.Trashes/501/old.wav", tmp, home), "a disk's trash is volatile");
+    CHECK(!dust_import_volatile("/Users/me/Music/Samples/kick.wav", tmp, home), "a sample folder is not");
+    CHECK(!dust_import_volatile("/Users/me/Library/CachesNot/kick.wav", tmp, home), "only the folder itself");
+    CHECK(!dust_import_volatile("/tmpfoo/kick.wav", tmp, home), "/tmpfoo is not /tmp");
+    CHECK(!dust_import_volatile("/Volumes/stick/kick.wav", NULL, NULL), "another disk is not");
+
     if (argc > 1) {
         test_other_disk(argv[1]);
     }

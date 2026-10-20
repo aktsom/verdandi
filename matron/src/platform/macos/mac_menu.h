@@ -3,8 +3,12 @@
  *
  * the macOS menu bar of the norns window (SDL only makes the app and window menus):
  * File for getting samples and scripts in and recordings out, Devices for the virtual
- * grid, arc and keyboard windows. every item calls back with its MAC_MENU_ id on the main
- * thread.
+ * grid, arc and keyboard windows and the app whose sound is norns' input. every item calls
+ * back with its MAC_MENU_ id on the main thread.
+ *
+ * also what the norns windows take when something is dropped on them beyond SDL's Finder
+ * files: files an app promises (written for the drop: Voice Memos, Music, DAWs, sample
+ * browsers) and audio data.
  */
 
 #pragma once
@@ -14,8 +18,7 @@ extern "C" {
 #endif
 
 enum {
-    MAC_MENU_IMPORT = 1, // the open panel; the chosen paths come to the import callback (copy
-                         // = its "copy instead of linking" box)
+    MAC_MENU_IMPORT = 1, // the open panel; the chosen paths come to the import callback
     MAC_MENU_DUST,       // dust in Finder
     MAC_MENU_TAPE,       // dust/audio/tape in Finder
     MAC_MENU_SCREENSHOT, // the screen as png
@@ -25,8 +28,18 @@ enum {
     MAC_MENU_KEYS,
 };
 
-// main thread, after SDL_Init(SDL_INIT_VIDEO)
-extern void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path, int copy));
+// how the import callback takes a path
+enum {
+    MAC_IMPORT_LINK = 0, // audio linked from dust/audio/mac (scripts are always copied)
+    MAC_IMPORT_COPY = 1, // copied into dust
+    MAC_IMPORT_TAKE = 2, // copied into dust, then the path is removed: a file an app wrote
+                         // for the drop into a temporary folder of ours
+};
+
+// main thread, after SDL_Init(SDL_INIT_VIDEO). on_note shows a short message on the
+// device (any thread)
+extern void mac_menu_install(void (*on_item)(int id), void (*on_import)(const char *path, int mode),
+                             void (*on_note)(const char *text));
 
 // the GIF item says "Stop" while recording
 extern void mac_menu_set_recording(int on);
@@ -37,6 +50,10 @@ extern void mac_menu_choose_import(void);
 // the option key is down right now (whichever app is in front: also during a drag from the
 // Finder, when SDL has not seen the key)
 extern int mac_option_held(void);
+
+// SDL windows made since the last call also take promised files and audio data; main
+// thread, after each SDL_CreateWindow
+extern void mac_drop_adopt_windows(void);
 
 #ifdef __cplusplus
 }
