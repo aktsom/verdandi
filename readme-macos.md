@@ -93,7 +93,8 @@ paths only).
 
 virtual grid: `vgrid_proto.c` is the grid side of the mext serial protocol, `vgrid_device.c`
 puts it on a pty that libmonome opens like a usb grid (`dev_list_add`), `vgrid_skin.c`
-draws the window. GRID or F6 opens it.
+draws the window. GRID or F6 opens it; 64, 128 or 256 (switch under it, kept in
+`~/norns/.vgrid-size`).
 
 audio: SYSTEM > AUDIO (`lua/core/menu/audio.lua`, devices from `macos/audio_devices.c`)
 writes `~/norns/audio.conf`; `macos/norns.sh` restarts jackd with it and falls back to the

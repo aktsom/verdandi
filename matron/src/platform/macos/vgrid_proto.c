@@ -33,14 +33,16 @@ static int payload_length(int ss, int cmd) {
     }
 }
 
-void vgrid_proto_init(vgrid_proto_t *p, const char *id) {
+void vgrid_proto_init(vgrid_proto_t *p, const char *id, int cols, int rows) {
     memset(p, 0, sizeof *p);
+    p->cols = cols < 1 ? 1 : (cols > VGRID_MAX ? VGRID_MAX : cols);
+    p->rows = rows < 1 ? 1 : (rows > VGRID_MAX ? VGRID_MAX : rows);
     p->intensity = 15;
     p->id = id;
 }
 
 static void set(vgrid_proto_t *p, int x, int y, int l, int *changed) {
-    if (x < 0 || x >= VGRID_COLS || y < 0 || y >= VGRID_ROWS) {
+    if (x < 0 || x >= p->cols || y < 0 || y >= p->rows) {
         return;
     }
     l &= 0x0f;
@@ -71,7 +73,7 @@ static size_t handle(vgrid_proto_t *p, const uint8_t *m, uint8_t *reply, size_t 
             strncpy((char *)r + 1, p->id ? p->id : "", 32);
             at = put(reply, at, cap, r, 33);
         } else if (cmd == 0x5) { // grid size
-            uint8_t r[3] = {0x03, VGRID_COLS, VGRID_ROWS};
+            uint8_t r[3] = {0x03, (uint8_t)p->cols, (uint8_t)p->rows};
             at = put(reply, at, cap, r, 3);
         }
         return at;
@@ -87,8 +89,8 @@ static size_t handle(vgrid_proto_t *p, const uint8_t *m, uint8_t *reply, size_t 
         break;
     case 0x2: // all off
     case 0x3: // all on
-        for (int r = 0; r < VGRID_ROWS; r++) {
-            for (int c = 0; c < VGRID_COLS; c++) {
+        for (int r = 0; r < p->rows; r++) {
+            for (int c = 0; c < p->cols; c++) {
                 set(p, c, r, cmd == 0x3 ? 15 : 0, changed);
             }
         }
@@ -120,8 +122,8 @@ static size_t handle(vgrid_proto_t *p, const uint8_t *m, uint8_t *reply, size_t 
         set(p, x, y, d[2], changed);
         break;
     case 0x9: // level all
-        for (int r = 0; r < VGRID_ROWS; r++) {
-            for (int c = 0; c < VGRID_COLS; c++) {
+        for (int r = 0; r < p->rows; r++) {
+            for (int c = 0; c < p->cols; c++) {
                 set(p, c, r, d[0], changed);
             }
         }

@@ -15,11 +15,12 @@
 extern "C" {
 #endif
 
-#define VGRID_COLS 16
-#define VGRID_ROWS 8
+// the sizes of the monome grids: 64 (8x8), 128 (16x8), 256 (16x16)
+#define VGRID_MAX 16
 
 typedef struct {
-    uint8_t level[VGRID_ROWS][VGRID_COLS]; // 0-15 as sent by the host
+    int cols, rows;
+    uint8_t level[VGRID_MAX][VGRID_MAX]; // [y][x], 0-15 as sent by the host
     uint8_t intensity;                      // 0-15, scales all leds
     const char *id;                         // answered to "get id" (up to 32 chars)
     // partial message between feeds
@@ -27,7 +28,7 @@ typedef struct {
     size_t have;
 } vgrid_proto_t;
 
-extern void vgrid_proto_init(vgrid_proto_t *p, const char *id);
+extern void vgrid_proto_init(vgrid_proto_t *p, const char *id, int cols, int rows);
 
 // bytes from the host. leds are updated; replies (handshake answers) are appended to
 // reply (at most reply_cap bytes), their length returned. *changed is set when leds changed

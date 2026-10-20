@@ -11,9 +11,10 @@
  * key/enc event back through sdl_bridge_show_control().
  *
  * the button row above the device opens the menu pages, maiden, the manual and the virtual
- * grid: a second window that libmonome sees as a usb grid (vgrid_device.h). click a key to
- * press it, drag across keys to play them in turn, right-click (or ctrl-click) to latch a
- * key down, for chords.
+ * grid: a second window that libmonome sees as a usb grid (vgrid_device.h), 64, 128 or 256
+ * (the switch under it; the choice is kept in ~/.vgrid-size). click a key to press it, drag
+ * across keys to play them in turn, right-click (or ctrl-click) to latch a key down, for
+ * chords.
  *
  * keyboard: plain keys go to norns as the usb keyboard, where lua/core/keyboard.lua turns
  * 1 2 3 / QW AS ZX into K1-3 / E1-3 when nothing else wants them. window_keys.h adds the
@@ -251,7 +252,8 @@ static vgrid_geom_t grid_geom = {};
 static int grid_w = 0, grid_h = 0;
 static cairo_surface_t *grid_canvas = NULL;
 static SDL_Surface *grid_canvas_sdl = NULL;
-static uint8_t grid_held[VGRID_ROWS][VGRID_COLS];
+static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
+static int grid_size = 0; // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
 static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
 static int grid_pending = 0;
 
@@ -287,7 +289,9 @@ static void grid_redraw(void) {
     if (dst == NULL) {
         return;
     }
-    if (grid_canvas == NULL || grid_w != dst->w || grid_h != dst->h) {
+    int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1];
+    if (grid_canvas == NULL || grid_w != dst->w || grid_h != dst->h || grid_geom.cols != cols ||
+        grid_geom.rows != rows) {
         grid_free_canvas();
         grid_canvas = cairo_image_surface_create(CAIRO_FORMAT_RGB24, dst->w, dst->h);
         grid_canvas_sdl = SDL_CreateRGBSurfaceWithFormatFrom(cairo_image_surface_get_data(grid_canvas), dst->w, dst->h,
@@ -300,13 +304,13 @@ static void grid_redraw(void) {
         SDL_SetSurfaceBlendMode(grid_canvas_sdl, SDL_BLENDMODE_NONE);
         grid_w = dst->w;
         grid_h = dst->h;
-        vgrid_skin_geom(grid_w, grid_h, &grid_geom);
+        vgrid_skin_geom(grid_w, grid_h, cols, rows, &grid_geom);
     }
-    uint8_t level[VGRID_ROWS][VGRID_COLS];
+    uint8_t level[VGRID_MAX][VGRID_MAX];
     int intensity;
     vgrid_levels(vgrid, level, &intensity);
     cairo_t *cr = cairo_create(grid_canvas);
-    vgrid_skin_draw(cr, &grid_geom, grid_w, grid_h, level, intensity, grid_held);
+    vgrid_skin_draw(cr, &grid_geom, grid_w, grid_h, level, intensity, grid_held, grid_size);
     cairo_destroy(cr);
     cairo_surface_flush(grid_canvas);
     SDL_BlitSurface(grid_canvas_sdl, NULL, dst, NULL);
@@ -314,6 +318,57 @@ static void grid_redraw(void) {
 }
 
 static void redraw(bool full);
+
+// the size choice, in the norns home (norns.sh sets HOME)
+static void grid_size_path(char *buf, size_t n) {
+    const char *home = getenv("HOME");
+    snprintf(buf, n, "%s/.vgrid-size", home ? home : ".");
+}
+
+static void grid_load_size(void) {
+    grid_size = 2;
+    char path[1024];
+    grid_size_path(path, sizeof path);
+    FILE *f = fopen(path, "r");
+    if (f != NULL) {
+        int keys = 0;
+        if (fscanf(f, "%d", &keys) == 1) {
+            grid_size = keys == 64 ? 1 : (keys == 256 ? 3 : 2);
+        }
+        fclose(f);
+    }
+}
+
+static void grid_save_size(void) {
+    static const int keys[4] = {0, 64, 128, 256};
+    char path[1024];
+    grid_size_path(path, sizeof path);
+    FILE *f = fopen(path, "w");
+    if (f != NULL) {
+        fprintf(f, "%d\n", keys[grid_size]);
+        fclose(f);
+    }
+}
+
+static void toggle_grid(void);
+
+// a new size: the grid is unplugged and plugged in again at that size, where it was
+static void grid_set_size(int size) {
+    if (size == grid_size || size < 1 || size > 3) {
+        return;
+    }
+    grid_size = size;
+    grid_save_size();
+    if (vgrid != NULL) {
+        int x, y;
+        SDL_GetWindowPosition(grid_window, &x, &y);
+        toggle_grid();
+        toggle_grid();
+        if (grid_window != NULL) {
+            SDL_SetWindowPosition(grid_window, x, y);
+        }
+    }
+}
 
 static void toggle_grid(void) {
     if (vgrid != NULL) {
@@ -333,28 +388,41 @@ static void toggle_grid(void) {
         redraw(true);
         return;
     }
-    vgrid = vgrid_open("virtual grid", grid_changed, NULL);
+    if (grid_size == 0) {
+        grid_load_size();
+    }
+    int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1];
+    vgrid = vgrid_open("virtual grid", cols, rows, grid_changed, NULL);
     if (vgrid == NULL) {
         fprintf(stderr, "sdl_bridge: virtual grid failed\n");
         return;
     }
+    // one unit per point, smaller if the screen is too small (the 256 on a laptop)
+    int uw, uh;
+    vgrid_skin_units(cols, rows, &uw, &uh);
+    SDL_Rect usable = {0, 0, 0, 0};
+    int display = the_window != NULL ? SDL_GetWindowDisplayIndex(the_window) : 0;
+    if (SDL_GetDisplayUsableBounds(display < 0 ? 0 : display, &usable) == 0 && usable.h > 0 &&
+        uh > usable.h - 60) {
+        double k = (double)(usable.h - 60) / uh;
+        uw = (int)(uw * k);
+        uh = (int)(uh * k);
+    }
     // under the norns window if there is room
     int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
-    if (the_window != NULL) {
+    if (the_window != NULL && usable.h > 0) {
         int wx, wy, ww, wh;
-        SDL_Rect usable;
         SDL_GetWindowPosition(the_window, &wx, &wy);
         SDL_GetWindowSize(the_window, &ww, &wh);
-        if (SDL_GetDisplayUsableBounds(SDL_GetWindowDisplayIndex(the_window), &usable) == 0 &&
-            wy + wh + 40 + VGRID_SKIN_H <= usable.y + usable.h) {
-            x = wx + (ww - VGRID_SKIN_W) / 2;
+        if (wy + wh + 40 + uh <= usable.y + usable.h) {
+            x = wx + (ww - uw) / 2;
             y = wy + wh + 40;
         }
     }
-    grid_window = SDL_CreateWindow("grid", x, y, VGRID_SKIN_W, VGRID_SKIN_H,
+    grid_window = SDL_CreateWindow("grid", x, y, uw, uh,
                                    SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
     if (grid_window != NULL) {
-        SDL_SetWindowMinimumSize(grid_window, VGRID_SKIN_W / 2, VGRID_SKIN_H / 2);
+        SDL_SetWindowMinimumSize(grid_window, uw / 2, uh / 2);
         set_icon(grid_window);
     }
     const char *path = vgrid_path(vgrid);
@@ -393,7 +461,21 @@ static void grid_let_go(int c, int r) {
     }
 }
 
+static int grid_size_at(Uint32 window_id, int x, int y) {
+    int ww = 1, wh = 1;
+    SDL_GetWindowSize(SDL_GetWindowFromID(window_id), &ww, &wh);
+    double k = grid_w > 0 ? (double)grid_w / ww : 1;
+    return vgrid_skin_hit_size(&grid_geom, x * k, y * k);
+}
+
 static void grid_button(const SDL_MouseButtonEvent *b) {
+    if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0) {
+        int size = grid_size_at(b->windowID, b->x, b->y);
+        if (size != 0) {
+            grid_set_size(size);
+            return;
+        }
+    }
     int c, r;
     bool hit = grid_key_at(b->windowID, b->x, b->y, &c, &r);
     bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;

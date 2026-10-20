@@ -56,7 +56,7 @@ static void *run(void *arg) {
     return NULL;
 }
 
-vgrid_device_t *vgrid_open(const char *id, void (*on_change)(void *ctx), void *ctx) {
+vgrid_device_t *vgrid_open(const char *id, int cols, int rows, void (*on_change)(void *ctx), void *ctx) {
     vgrid_device_t *g = (vgrid_device_t *)calloc(1, sizeof *g);
     if (g == NULL) {
         return NULL;
@@ -92,7 +92,7 @@ vgrid_device_t *vgrid_open(const char *id, void (*on_change)(void *ctx), void *c
     }
     g->linked = 1;
     pthread_mutex_init(&g->lock, NULL);
-    vgrid_proto_init(&g->proto, id);
+    vgrid_proto_init(&g->proto, id, cols, rows);
     g->on_change = on_change;
     g->ctx = ctx;
     if (pthread_create(&g->thread, NULL, run, g) != 0) {
@@ -146,7 +146,7 @@ void vgrid_key(vgrid_device_t *g, int x, int y, int down) {
     }
 }
 
-void vgrid_levels(vgrid_device_t *g, uint8_t level[VGRID_ROWS][VGRID_COLS], int *intensity) {
+void vgrid_levels(vgrid_device_t *g, uint8_t level[VGRID_MAX][VGRID_MAX], int *intensity) {
     pthread_mutex_lock(&g->lock);
     memcpy(level, g->proto.level, sizeof g->proto.level);
     *intensity = g->proto.intensity;

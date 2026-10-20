@@ -115,42 +115,55 @@ static void render(const char *dir, int w, int h, const skin_state_t *st, const 
     cairo_surface_destroy(out);
 }
 
-static void test_vgrid(const char *dir) {
+static void test_vgrid(const char *dir, int size) {
+    int cols = vgrid_sizes[size][0], rows = vgrid_sizes[size][1], uw, uh, c, r;
+    vgrid_skin_units(cols, rows, &uw, &uh);
+    int w = uw * 2, h = uh * 2;
     vgrid_geom_t g;
-    int w = 1496, h = 792, c, r;
-    vgrid_skin_geom(w, h, &g);
-    // key centres hit their key, outside hits nothing
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 16; x++) {
-            double px = g.ox + (VGRID_SKIN_PAD + x * VGRID_SKIN_PITCH + VGRID_SKIN_KEY / 2.0) * g.s;
-            double py = g.oy + (VGRID_SKIN_PAD + y * VGRID_SKIN_PITCH + VGRID_SKIN_KEY / 2.0) * g.s;
-            CHECK(vgrid_skin_hit(&g, px, py, &c, &r) && c == x && r == y, "grid key %d,%d hits %d,%d", x, y, c, r);
+    vgrid_skin_geom(w, h, cols, rows, &g);
+    // key centres (pitch 44, key 31, 18 + 26.5 to the first key) hit their key
+    for (int y = 0; y < rows; y++) {
+        for (int x = 0; x < cols; x++) {
+            double px = g.ox + (44.5 + x * 44 + 15.5) * g.s, py = g.oy + (44.5 + y * 44 + 15.5) * g.s;
+            CHECK(vgrid_skin_hit(&g, px, py, &c, &r) && c == x && r == y, "%dx%d: key %d,%d hits %d,%d", cols, rows,
+                  x, y, c, r);
         }
     }
-    CHECK(!vgrid_skin_hit(&g, 2, 2, &c, &r), "grid corner hits a key");
+    CHECK(!vgrid_skin_hit(&g, 2, 2, &c, &r), "%dx%d: corner hits a key", cols, rows);
+    CHECK(!vgrid_skin_hit(&g, w - 2, h / 2.0, &c, &r), "%dx%d: right edge hits a key", cols, rows);
+    // the size switch sits under the plate, in the middle, and no key is under it
+    int found[4] = {0};
+    for (double x = 0; x < w; x += 2) {
+        int s = vgrid_skin_hit_size(&g, x, g.oy + (uh - 50 + 4 + 13 + 5) * g.s);
+        found[s] = 1;
+    }
+    CHECK(found[1] && found[2] && found[3], "%dx%d: size switch has 64 128 256", cols, rows);
+    CHECK(vgrid_skin_hit_size(&g, w / 2.0, g.oy + 60 * g.s) == 0, "%dx%d: switch on the keys", cols, rows);
     if (dir == NULL) {
         return;
     }
-    uint8_t level[8][16] = {{0}}, held[8][16] = {{0}};
-    for (int x = 0; x < 16; x++) {
-        level[x % 8][x] = 15;
-        level[7][x] = (uint8_t)x;
+    uint8_t level[VGRID_MAX][VGRID_MAX] = {{0}}, held[VGRID_MAX][VGRID_MAX] = {{0}};
+    for (int x = 0; x < cols; x++) {
+        level[x % rows][x] = 15;
+        level[rows - 1][x] = (uint8_t)(x * 15 / (cols - 1));
     }
     level[3][5] = 4;
-    held[2][9] = VGRID_HELD_MOUSE;
-    held[5][12] = VGRID_HELD_LATCH;
+    held[2][6] = VGRID_HELD_MOUSE;
+    held[5][7] = VGRID_HELD_LATCH;
     cairo_surface_t *out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
     cairo_t *cr = cairo_create(out);
-    vgrid_skin_draw(cr, &g, w, h, level, 15, held);
+    vgrid_skin_draw(cr, &g, w, h, level, 15, held, size);
     char path[512];
-    snprintf(path, sizeof path, "%s/vgrid_%dx%d.png", dir, w, h);
+    snprintf(path, sizeof path, "%s/vgrid_%d.png", dir, cols * rows);
     CHECK(cairo_surface_write_to_png(out, path) == CAIRO_STATUS_SUCCESS, "write %s", path);
     cairo_destroy(cr);
     cairo_surface_destroy(out);
 }
 
 int main(int argc, char **argv) {
-    test_vgrid(argc > 1 ? argv[1] : NULL);
+    for (int size = 1; size <= 3; size++) {
+        test_vgrid(argc > 1 ? argv[1] : NULL, size);
+    }
     int sizes[][2] = {{1984, 1324}, {992, 662}, {496, 331}, {2400, 900}, {700, 1200}};
     for (unsigned i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
         test_geom(sizes[i][0], sizes[i][1]);
