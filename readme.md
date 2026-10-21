@@ -1,6 +1,6 @@
 # Verdandi
 
-**norns on macOS.** Verdandi runs [norns](https://monome.org/norns), the sound computer by
+**norns on macOS.** Verdandi runs [norns](https://monome.org/docs/norns/), the sound computer by
 monome, natively on a Mac: the same scripts, engines, softcut and maiden, in a window that
 shows the device. as a standalone app, and as an AUv3 plugin that puts norns into a DAW track.
 
