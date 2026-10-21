@@ -383,6 +383,7 @@ Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p
 <h2 id="trouble">12. troubleshooting</h2>
 <table>
   <tr><th>problem</th><th>what to do</th></tr>
+  <tr><td>a script says "version &hellip; required"</td><td>it needs a newer norns than this Verdandi contains: a new version of Verdandi brings it. (Verdandi before 0.1.1 always said 000000 here.)</td></tr>
   <tr><td>"Verdandi cannot be opened"</td><td><i>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</i> (see <a href="#install">installing</a>).</td></tr>
   <tr><td>SUPERCOLLIDER FAIL on the first start</td><td>macOS was still checking the bundled libraries; quit and start Verdandi again.</td></tr>
   <tr><td>no sound</td><td>check the default output in System Settings &rarr; Sound, the levels in the MIX menu, and <code>jackd.log</code>.</td></tr>
@@ -395,7 +396,9 @@ Show Tape Recordings); screenshots and GIFs of the screen go to your desktop.</p
 <h2 id="diff">13. differences from the device</h2>
 <ul>
   <li>SYSTEM shows DEVICES, AUDIO, MODS, RESET and RESTART. Wi-Fi and the password are the Mac's job,
-      scripts are updated in maiden, and Verdandi itself with a new version of the app.</li>
+      scripts are updated in maiden, and Verdandi itself with a new version of the app. the
+      norns release it contains (scripts that ask for a newer norns check it) is written to
+      <code>~/norns/version.txt</code> at every start; this one is 260819.</li>
   <li>the encoders are endless: E1 goes round the menu pages (after PARAMS comes MIX again).
       inside a page and in scripts, values stop where the page or script lets them stop.</li>
   <li>SYSTEM &rarr; RESTART restarts norns and SuperCollider; SLEEP quits Verdandi (it does not put

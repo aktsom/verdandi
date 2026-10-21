@@ -66,6 +66,11 @@ export NORNS_MANUAL="$REPO/macos/manual/manual.html"
 cd "$NORNS_HOME"
 
 mkdir -p dust/code dust/audio dust/data
+# the norns release this is (update/version.txt): scripts check it (norns.version.update,
+# lua/core/norns.lua). on the device an update writes it; here it comes with the app
+if [ -f "$REPO/update/version.txt" ] && ! cmp -s "$REPO/update/version.txt" version.txt; then
+    cp "$REPO/update/version.txt" version.txt
+fi
 if [ ! -f matronrc.lua ]; then
     cat > matronrc.lua <<'EOF'
 -- macOS desktop: the norns window (screen:sdl). keys/encoders: 1 2 3 and QW AS ZX on the
