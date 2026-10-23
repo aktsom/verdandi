@@ -46,3 +46,14 @@ Order of work: `docs/port/phase-2.md` section 6; stop after step 5 with `HARDWAR
 6. JACK MIDI client "Verdandi", device "Verdandi JACK in", no auto-connect.
 7. MIDI start after SPP begins at the SPP position (once).
 8. Ken runs the laptop checklist and sends the output.
+
+## Decision 9 (APPROVED by Ken, after his laptop results): which device crone uses
+crone follows the system default sink for the output and the default source for the input; `audio.conf` can
+override each by port-name prefix (`out_ports=`, `in_ports=`); SYS uses the monitor ports of the chosen output.
+Details, the `wpctl` query and the risks: `docs/port/phase-3.md` ("Decision 9"). Hardware note: the RME Fireface is
+not class-compliant on Linux; Windows still needs ASIO (Gate D).
+
+## Decision 10 (OPEN, for Ken): SYS and feedback
+A sink monitor contains norns' own output, so SYS through it can loop (analysis in `docs/port/phase-3.md`, "Feedback
+analysis"). Default SYS = sink monitor with safeguards (monitor off, a visible warning), or default SYS = all
+applications except norns (loop-free)? Step 5 waits for this and for Ken's report anyway.

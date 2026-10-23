@@ -94,8 +94,8 @@ continue, SPP), and the PipeWire exposure of ALSA MIDI.
 **Finding (`KNOWN-ISSUES.md` 2).** `crone/src/Client.h`: `connectAdcPorts()` / `connectDacPorts()` look for
 `JackPortIsPhysical` capture and playback ports and **throw** if there are none. That is right for a device with a
 sound card and is what the Pi and macOS rely on. In my PipeWire experiment (`pw-jack`), norns connected to
-PipeWire's JACK and stopped here: no physical ports in a PipeWire without a sound card. Real laptops probably
-have them, but that is unverified.
+PipeWire's JACK and stopped here: no physical ports in a PipeWire without a sound card. Real laptops have them: verified on
+Ken's laptop (see "Laptop results" below).
 
 **Proposal (crone change, small).**
 1. As today: connect to the first two physical ports when they exist.
@@ -229,3 +229,124 @@ Other MIDI sources (hardware, the keys window) still use handling time: unchange
 (SPP hook for every device; the JACK path and `clock_timed` are `NORNS_LINUX_DESKTOP` only), `clock_midi.cc` (`clock_midi_handle_message_at`, burst handling), `tests/matron/clocks/common/helpers.{cpp,h}`
 (weak stub), `tests/matron/clocks/clock_midi/test_clock_midi.cpp`. `device_monitor.cc` and `norns/wscript` are Linux-only
 changes. On macOS: plain clock/start/stop behave as before; continue and SPP are new there too.
+
+---
+
+# Laptop results (Ken, Linux Mint 22.2, PipeWire 1.0.5 with WirePlumber; pw-jack and jackd2 installed)
+
+Hardware today: the built-in card, and a USB DAC for the second test. **No external audio interface on Linux for
+now.** The RME Fireface is not USB class-compliant, so it cannot be used on Linux (on Windows it still needs ASIO:
+Gate D is unchanged); a class-compliant interface may come later.
+
+`pw-jack jack_lsp -p`, built-in card only:
+- `Built-in Audio Analog Stereo:capture_FL`, `:capture_FR`: output, **physical**, terminal
+- `Built-in Audio Analog Stereo:playback_FL`, `:playback_FR`: input, **physical**, terminal
+- `Built-in Audio Analog Stereo:monitor_FL`, `:monitor_FR`: output, **not physical**
+- `Midi-Bridge:Midi Through:(capture_0) Midi Through Port-0` and `(playback_0)`: MIDI, **physical**, terminal
+
+`pw-metadata` (settings): `clock.rate` 48000, `clock.allowed-rates` [48000], `clock.quantum` 1024,
+`clock.min-quantum` 32, `clock.max-quantum` 2048.
+
+While a browser played audio: non-physical output ports **`Vivaldi:output_FL` / `Vivaldi:output_FR`** appeared, one
+JACK client per audio stream; a second stream showed as **`Vivaldi-73`** (numeric suffix).
+
+With a USB DAC (AudioQuest DragonFly Black v1.5) connected: `AudioQuest DragonFly Black v1.5 Analog Stereo:playback_FL/FR`
+(input, physical, terminal) and `:monitor_FL/FR`. **It has no capture ports.** Both devices' playback ports are physical.
+
+What this settles (replaces my earlier "unverified"):
+1. **Physical-port detection works on real PipeWire.** The flag is there for the card and the DAC. The failure I
+   saw in the container (no physical ports) was the container having no sound card.
+2. Physical **MIDI** ports exist too (`Midi-Bridge:...`). crone's lookup (`jack_get_ports(..., NULL type, Physical |
+   Output)`) does not filter by **port type**, so on this laptop it would also see the MIDI "Midi Through" port.
+   Found by reading the data against `crone/src/Client.h`: the Linux desktop path must ask for audio ports only
+   (`JACK_DEFAULT_AUDIO_TYPE`). Tested with a fake physical MIDI port.
+3. **MIC/OFF must match capture ports by flag** (output + physical + audio), not by the literal `system:capture_N`
+   in `lua/core/menu.lua`: there is no `system:` client on PipeWire. (Step 5; until then MIC/OFF under PipeWire
+   will not disconnect anything.)
+4. **SYS** (decision 9) uses the `:monitor_FL/FR` ports of the chosen output device (see the feedback analysis).
+5. **ALSA MIDI appears as `Midi-Bridge` JACK MIDI ports** (physical): hardware MIDI is visible to JACK MIDI clients,
+   so the "Verdandi:midi_in" port can be fed from a hardware keyboard or a DAW through the Midi-Bridge.
+6. **Rate is fixed at 48000** here (`allowed-rates [48000]`): under PipeWire the RATE row can only be read-only; the
+   buffer is the quantum (32 to 2048, now 1024).
+7. Several devices have physical ports at once (built-in plus a DAC): a rule for which one crone uses is needed:
+   decision 9.
+8. Per-stream JACK clients named after the application, with a numeric suffix for further streams (`Vivaldi-73`):
+   APP grouping (step 5) must tolerate the suffix.
+
+## Decision 9 (approved by Ken): which device crone uses when several have physical ports
+- **Output:** follow the **system default sink**. Overridable in `audio.conf` by **port-name prefix** (key
+  `out_ports=`, for example `out_ports=AudioQuest DragonFly`). Same for the **input**: the default source,
+  overridable with `in_ports=`. A prefix matches the JACK **client** part of the name (`<prefix>...:port`).
+- **SYS** uses the `monitor_*` ports of the **chosen output** device (see the feedback analysis: open point).
+- Query for the default sink, done by `linux/norns.sh` once at start (crone gets the result in `NORNS_OUT_PORTS` /
+  `NORNS_IN_PORTS`; crone itself runs no program): `wpctl inspect @DEFAULT_AUDIO_SINK@` and read `node.description`
+  (and `node.nick`/`node.name` for diagnostics); for the input `wpctl inspect @DEFAULT_AUDIO_SOURCE@`. The JACK
+  client name of a card in your list equals the node's description (`Built-in Audio Analog Stereo`,
+  `AudioQuest DragonFly Black v1.5 Analog Stereo`), which is why the description is the prefix to match.
+  Alternative if `wpctl` is missing: `pw-metadata -n default 0 default.audio.sink` gives the default sink's
+  **node.name** (`{"name":"alsa_output...."}`), which needs a `pw-dump` lookup to turn into the description.
+- **Risks:** (a) the JACK client name is not guaranteed to be the description (it follows pipewire-jack's naming
+  rules and `node.description` can change with the card's profile); I use it because your `jack_lsp` shows it, and
+  fall back to the first physical group with a warning when nothing matches; (b) two identical devices have the
+  same description: the first wins (a prefix cannot tell them apart; `audio.conf` could take the full port name);
+  (c) `wpctl` output format could change: the parsing is tested against a fixture and fails soft (no prefix, first
+  physical group); (d) the default sink can change while norns runs: norns follows it at start only (restart to
+  follow); (e) the default **source** can be a monitor (not physical): then the first physical capture group is used;
+  (f) a sink without capture ports (the DragonFly) is fine: input and output are chosen independently.
+
+## Step 3 design updates
+- **crone (Linux desktop build only, `NORNS_LINUX_DESKTOP`; Pi and macOS keep today's code and throw as before):**
+  ask for **audio** ports, group candidates by JACK client, pick the group whose client name starts with the prefix
+  (`NORNS_IN_PORTS` / `NORNS_OUT_PORTS`), else the first group (with a warning when a prefix was asked for and not
+  found), connect its first two ports (a mono group feeds both channels), never mix ports of two devices. No
+  physical audio ports at all: **do not throw**; start unconnected.
+- **The warning must be seen in the window and menu, not only in the log** (Ken): crone records warnings
+  (`crone_audio_warning()`); at start-up Lua shows them as a **persistent message on the norns window** and as a line on
+  SYSTEM > AUDIO; `_norns.audio_warning()` returns the text (nil if none). Wording for the cases: no output ports
+  ("no audio output: connect crone:output_1/2 yourself"), no input ports, a prefix not found.
+- **`linux/norns.sh` audio server detection** (decision 4): (1) `NORNS_AUDIO_SERVER=jackd|pipewire|auto` (default
+  auto); (2) a JACK server that answers is used as it is; (3) none answers, PipeWire is running (`pw-cli info 0`) and
+  `pw-jack` exists: the script re-runs itself as `pw-jack linux/norns.sh ...` (a marker prevents a loop); (4) otherwise
+  it starts `jackd` as before. `NORNS_DECIDE_ONLY=1` prints the decision and exits, for tests.
+  Not decided by the script: the Mint laptop has both jackd2 and PipeWire; without a running `jackd` the answer is
+  PipeWire, which is what you want.
+
+## Step 4 design updates (`audio.conf`, SYSTEM > AUDIO)
+- `audio.conf` keys: the existing `input= output= rate= period=` (jackd mode) plus `in_ports=` and `out_ports=`
+  (port-name prefixes, decision 9).
+- `norns.sh` exports `NORNS_AUDIO_SERVER_MODE` = `pipewire` | `jackd` | `external` (a JACK server that was
+  already running). **Under PipeWire the INPUT, OUTPUT and RATE rows are read-only** ("managed by PipeWire", rate
+  shown as the current one, 48000 on this laptop); **BUFFER** (quantum) is requested with
+  `PIPEWIRE_QUANTUM=<period>/<rate>` for norns' own clients and is **marked experimental** (decision 5). In jackd mode the
+  device rows work as on macOS, fed by a new `linux/audio_devices.c` (ALSA).
+- The page also shows what crone connected ("out: <device>, in: <device>") and the warning, if any.
+
+## Step 5 design updates (not built, waits for Ken)
+- **MIC/OFF:** find the capture ports by flag: output + physical + **audio** type; connect/disconnect those of the
+  group crone chose (not the literal `system:capture_N`).
+- **SYS (decision 9):** the monitor ports of the chosen output device (`<client>:monitor_FL/FR` to `crone:input_1/2`).
+- **APP:** list **non-physical audio output ports grouped by client name**, the numeric suffix removed (`Vivaldi`
+  and `Vivaldi-73` are one entry; their ports are all connected, FL to input 1 and FR to input 2). Excluded: norns' own
+  clients (`crone`, `softcut`, `matron-clock`, `Verdandi`, SuperCollider's `SuperCollider`) and **device clients**
+  (clients that also own physical ports: their `monitor` ports are SYS, not an application) and MIDI ports.
+  **Refresh as streams appear and vanish:** a JACK port/client registration callback (not polling) marks the list
+  changed; the menu list is rebuilt when it opens and while it is open; if the chosen application's streams go away,
+  the choice stays ("waiting for Vivaldi") and reconnects when a stream of that name comes back.
+- **Feedback analysis (SYS through the sink monitor): there is a loop.** norns' own output (`crone:output_1/2`)
+  goes to the chosen sink (decision 9: the default sink), and **the monitor of that sink is the sum of everything
+  played into it, norns included**. With SYS on, crone's input then contains norns' own output: anything that
+  routes input to output (the input monitor `monitor_level`, an engine like SimplePassThru, softcut/tape recording
+  the input) feeds itself, a loop through the sound card's sink at unity gain (it can sustain, and grows with
+  reverb or gain). The macOS tap avoids it because it taps "every app but norns' own processes". Prevention and warning I
+  will build in step 5 unless Ken decides otherwise:
+  1. **Switch the input monitor off while SYS is on** (`_norns.monitor_out(false)`, as the macOS code does for SYS/APP):
+     this breaks the direct input-to-output path.
+  2. **Warn on the window and on the MIC line** whenever SYS is active through a sink monitor that norns itself plays
+     into: "SYS hears norns too; engines that play the input will feed back".
+  3. **Offer the loop-free variant**: SYS from *all applications except norns* (every non-physical audio output of
+     other clients, norns' own excluded, like the macOS tap), which needs no sink monitor. It is the one that
+     matches "every app but norns" exactly. APP never has the loop (one application's own ports).
+  This differs from decision 9 as worded ("SYS uses the monitor ports"); I keep decision 9 as the default and ask in
+  decision 10 below whether the loop-free variant should be the default instead.
+- **Decision 10 (new, for Ken):** SYS as sink monitor (decision 9) with the three safeguards above, or SYS as
+  all-applications-except-norns (no loop) as the default, with the sink monitor as an advanced option?
