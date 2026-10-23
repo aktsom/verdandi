@@ -28,8 +28,12 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 
 ## In progress
 - **Phase 3 steps 1-5 are done** (Ken's decisions in `DECISIONS.md`; decision 10 decided: SYS = all apps but norns, the sink monitor
-  only as an option). Stopped here as asked: waiting for Ken. Open for Ken: the MIDI auto-connect design (`phase-3.md`), the two
-  investigations (`KNOWN-ISSUES.md` items 4 and 5: the metro thread bug is real and not harmless; the tempo page is upstream behavior).
+  only as an option). Stopped here as asked: waiting for Ken. Open for Ken: nothing
+  pending from my side; the laptop checks of step 5, the metro fix and the MIDI auto-connect are in `HARDWARE-CHECKLIST.md`.
+  6. Ken's decisions applied: metro stack fix for the Linux desktop build (256 KiB, correct messages, a failed metro says so;
+     test with a TLS-pressure preload: 20 of 20 ticks, was 0); no other fixed-stack thread in the repo; tempo page refresh put on the
+     wishlist; MIDI auto-connect built (`midi_in_from=` / `NORNS_MIDI_IN_FROM`, 2 s re-check, status under SYSTEM > DEVICES > MIDI).
+     Full run_all.sh: 0 unexpected failures. Stopped, waiting for Ken.
   5. MIC/OFF by physical flag, SYS (every application except norns' own clients), APP by name, optional sink monitor; in-window
      menu lists the applications; tests: `tests/crone/test_input_route.cpp`, `linux/tests/input_test.sh` (fake card and streams).
   Also fixed on real-machine reports (see the three bug fixes in RUN-ON-LAPTOP.md): libmonome waf via `python3`, waf in

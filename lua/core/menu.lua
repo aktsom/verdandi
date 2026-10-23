@@ -381,6 +381,14 @@ hook.system_post_startup:register("menu-out", show_output)
 
 -- Linux desktop: a problem with the sound card (no ports, a device name that matches nothing) stays on
 -- the device screen, not only in the log (crone starts unconnected then)
+-- Linux: the optional MIDI auto-connect (NORNS_MIDI_IN_FROM, from audio.conf midi_in_from=): off unless a prefix is given
+if _norns.midi_in_from then
+  hook.system_post_startup:register("menu-midi-autolink", function()
+    local from = os.getenv("NORNS_MIDI_IN_FROM")
+    if from and from ~= "" then _norns.midi_in_from(from) end
+  end)
+end
+
 if _norns.audio_status and _norns.set_warning then
   hook.system_post_startup:register("menu-audio-warning", function()
     local warning = _norns.audio_status()

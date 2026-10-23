@@ -39,6 +39,7 @@ static void on_registration(jack_port_id_t port, int reg, void *arg) {
     (void)reg;
     (void)arg;
     sem_post(&wake); // only this: no jack calls in a jack callback
+    midi_autoconnect_poke();
 }
 
 static void on_client_registration(const char *name, int reg, void *arg) {
@@ -46,6 +47,7 @@ static void on_client_registration(const char *name, int reg, void *arg) {
     (void)reg;
     (void)arg;
     sem_post(&wake);
+    midi_autoconnect_poke();
 }
 
 static std::vector<PortInfo> snapshot(void) {
@@ -139,6 +141,10 @@ static int ensure_client(void) {
 }
 
 extern "C" {
+
+jack_client_t *input_route_client(void) {
+    return ensure_client() ? client : NULL;
+}
 
 int app_audio_available(void) {
     return ensure_client();

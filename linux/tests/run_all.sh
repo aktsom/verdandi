@@ -44,6 +44,7 @@ known() { # name, command...: a failure is expected and recorded
     fi
 }
 
+run "lua:devices midi status" lua5.3 linux/tests/devices_midi_test.lua
 for t in menu_pages input_modes fileselect_finder output_fader; do
     run "lua:$t" lua5.3 "$M/${t}_test.lua"
 done
@@ -263,6 +264,33 @@ if command -v jackd > /dev/null; then
         return $bad
     }
     run "input:MIC, SYS (all apps but norns), APP, sink monitor, OFF by port flags and names" input_ok
+fi
+
+# the optional MIDI auto-connect (midi_in_from= in audio.conf, or NORNS_MIDI_IN_FROM): a port matching a prefix is linked to
+# Verdandi:midi_in, a link cut behind norns' back is made again, a client that appears later is linked, a port that does
+# not match is not
+if command -v jackd > /dev/null; then
+    for sc in conf env; do
+        GLOG="$T/midilink-$sc.log"
+        MIDI_SCENARIO=$sc "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
+        midilink_ok() {
+            local bad=0
+            has() { peers "$GLOG.$1" Verdandi:midi_in | grep -qx "$2"; }
+            has start "Fake DAW:out" || { echo "start: Fake DAW:out is not linked"; bad=1; }
+            has start "Other:out" && { echo "start: Other:out is linked, it does not match"; bad=1; }
+            # (conf: only the 2 s timer can repair, so the cut is visible; env: a registration wakes the thread at once)
+            [ $sc = conf ] && has cut "Fake DAW:out" && { echo "the test did not cut the link"; bad=1; }
+            has repaired "Fake DAW:out" || { echo "the cut link was not made again within 4 s"; bad=1; }
+            has late "Late DAW:out" || { echo "a client that appeared later was not linked"; bad=1; }
+            has late "Other:out" && { echo "late: Other:out is linked"; bad=1; }
+            grep -aq "PROBE midi_in_status.true.1" "$GLOG" || { echo "status: not 'true, 1 linked' at the start"; bad=1; }
+            grep -aq "PROBE midi_in_status late.true.2" "$GLOG" || { echo "status: not 'true, 2 linked' at the end"; bad=1; }
+            grep -aq "midi: connected Fake DAW:out" "$GLOG" || { echo "no log line for the first link"; bad=1; }
+            grep -aq "midi: reconnected Fake DAW:out" "$GLOG" || { echo "no log line for the repaired link"; bad=1; }
+            return $bad
+        }
+        run "midi:auto-connect to Verdandi:midi_in, repaired when cut ($sc)" midilink_ok
+    done
 fi
 
 # the window on Xvfb: device skin, oled, mouse, keyboard, virtual grid and arc (needs xdotool, imagemagick)

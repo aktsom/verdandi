@@ -84,12 +84,14 @@ linux/norns.sh --terminal
 - **MIDI from a DAW (Reaper):** norns' JACK MIDI input is the port `Verdandi:midi_in` (device "Verdandi JACK in", vport 1).
   Connect Reaper's MIDI output (under PipeWire a `Midi-Bridge` port such as `Client-<n> Virtual RawMIDI`) to it with
   `pw-jack jack_connect "<Reaper's port>" Verdandi:midi_in` or qpwgraph; `pw-jack jack_lsp -t | grep -i midi` lists them. Set
-  `clock_source` to midi in PARAMS > CLOCK. The link is not made automatically yet (a design for that is in `phase-3.md`; you
-  reported it being dropped). The test script `window_probe.lua` now listens on every "Verdandi" MIDI device (the JACK input and
+  `clock_source` to midi in PARAMS > CLOCK. To have it made (and made again when it is dropped) put
+  `midi_in_from=Midi-Bridge:Client-` in `~/verdandi-home/audio.conf` (the start of the port's whole name as `jack_lsp` shows it;
+  several prefixes separated by `;`; `NORNS_MIDI_IN_FROM=...` in the environment wins). It is off without that line. norns checks every
+  2 seconds, logs `midi: connected/reconnected ...`, and SYSTEM > DEVICES > MIDI shows "AUTO-LINK: n linked". The test script `window_probe.lua` now listens on every "Verdandi" MIDI device (the JACK input and
   the keys window).
-- **Known problem, not fixed yet:** `error code: 22 (Invalid argument) in "pthread_create"` on key presses is the metro thread
-  of the screensaver timer failing to start (details and the reproduction in `KNOWN-ISSUES.md` item 4). Keys are not lost, but
-  a script's own `metro` can fail the same way: if one of your scripts' metros does nothing, that is why; tell me.
+- **Fixed:** `error code: 22 (Invalid argument) in "pthread_create"` on key presses was the metro thread of the screensaver timer
+  failing to start (a 16 KiB stack and a desktop's large thread-local storage; `KNOWN-ISSUES.md` item 4). Metros now get a
+  256 KiB stack. If a metro still cannot start, norns says "metro N did not start" once; tell me if you ever see it.
 - **Setup fixes from your reports** (all three are in `linux/`, nothing for you to change): the libmonome step runs its waf with
   `python3`; waf is installed in `~/.local/share/waf`; the re-run under `pw-jack` uses the script's absolute path (run it
   as plain `linux/norns.sh --terminal`; `pw-jack linux/norns.sh` also works).

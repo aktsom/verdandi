@@ -196,6 +196,15 @@ m.redraw = function()
     screen.move(0,10)
     screen.level(4)
     screen.text(string.upper(m.section))
+    -- Linux: the optional MIDI auto-connect (audio.conf midi_in_from=), under the title of the MIDI list
+    if m.section == "midi" and _norns.midi_in_status then
+      local on, count, names = _norns.midi_in_status()
+      if on then
+        screen.move(0,20)
+        screen.level(3)
+        screen.text("AUTO-LINK: " .. (count > 0 and (count .. " linked") or "none yet"))
+      end
+    end
   end
   for i=1,m.len do
     screen.move(0,10*i+y_offset)

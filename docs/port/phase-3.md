@@ -477,3 +477,26 @@ for every **MIDI output port** (type MIDI, output) whose name starts with a pref
   missing), a fake MIDI source client that is connected, disconnected behind norns' back and must be reconnected within 3 s,
   one that is registered later, and a non-matching one that must stay unconnected.
 - **Open question for Ken:** the 2 s interval, and whether the AUDIO page is the right place for the status line.
+
+## MIDI auto-connect: built (Ken's decision: as designed, 2 s re-check; status under SYSTEM > DEVICES > MIDI)
+
+As in the design above, plus these details. Off unless `midi_in_from=<prefixes>` is in `audio.conf` or `NORNS_MIDI_IN_FROM` is set
+(environment wins; prefixes separated by `;`, each the start of the whole `client:port` name). `linux/norns.sh` exports the value,
+a hook at post-startup starts it (`_norns.midi_in_from`). The thread of `midi_autoconnect.cc` wakes every 2 s and on every
+JACK port or client registration, links the matching MIDI output ports to `Verdandi:midi_in` and logs
+`midi: connected X to Verdandi:midi_in` (first time) or `midi: reconnected X ...` (a link made again; at most one such line per port
+per minute). `NORNS_MIDI_POKE=0` turns the registration wake-up off (tests, to prove the 2 s timer alone repairs a cut link).
+- **Status line:** SYSTEM > DEVICES > MIDI (the list of the 16 MIDI ports) shows "AUTO-LINK: n linked" or "AUTO-LINK: none yet"
+  under its title while it is on; nothing when it is off. The AUDIO page was not needed. The names of the linked ports are
+  available from `_norns.midi_in_status()` (not drawn: no room on the screen).
+- **Tests (first):** `tests/crone/test_midi_route.cpp` (prefix parsing, matching, own clients and non-MIDI never match, missing,
+  throttle), `linux/tests/midi_autoconnect_test.sh` with a fake MIDI client "Fake DAW", a non-matching "Other" and a client "Late DAW"
+  that appears later: linked at start; a link cut behind norns' back is made again within 4 s (conf scenario: only the 2 s timer;
+  env scenario: wake-up by registration); the late client is linked; "Other" never; status 1 then 2; the log lines.
+  `linux/tests/devices_midi_test.lua` for the page.
+- **Not tested:** the real Midi-Bridge and Reaper (the dropped-link case on the laptop).
+
+## Metro stack fix (Ken's decision)
+See `KNOWN-ISSUES.md` item 4 (now FIXED for the Linux desktop build): 256 KiB stack, correct error names, a metro that cannot start says so
+once; test with a TLS-pressure preload library (`linux/tests/tls_pressure.c`). No other small fixed-stack thread exists in the repo.
+Shared file changed: `matron/src/metro.cc` (everything under `NORNS_LINUX_DESKTOP`; the macOS and Pi paths are textually the same as before).

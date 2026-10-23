@@ -363,6 +363,8 @@ static int _monitor_out(lua_State *l);
 static int _audio_status(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
+static int _midi_in_from(lua_State *l);
+static int _midi_in_status(lua_State *l);
 static int _set_warning(lua_State *l);
 #endif
 static int _choose_file(lua_State *l);
@@ -706,6 +708,8 @@ void w_init(void) {
 #ifdef NORNS_LINUX_DESKTOP
     lua_register_norns("mic_input", &_mic_input);
     lua_register_norns("app_list", &_app_list);
+    lua_register_norns("midi_in_from", &_midi_in_from);
+    lua_register_norns("midi_in_status", &_midi_in_status);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
     lua_register_norns("audio_status", &_audio_status);
@@ -3720,6 +3724,35 @@ int _app_list(lua_State *l) {
     lua_pushboolean(l, input_route_monitor_enabled());
     return 2;
 }
+/***
+ * Linux desktop: start the optional MIDI auto-connect: JACK MIDI output ports whose name starts with one of the
+ * prefixes (separated by ;) are linked to Verdandi:midi_in and kept linked
+ * @function midi_in_from
+ * @tparam string prefixes
+ * @treturn boolean on
+ */
+int _midi_in_from(lua_State *l) {
+    lua_pushboolean(l, midi_autoconnect_start(luaL_checkstring(l, 1)));
+    return 1;
+}
+
+/***
+ * Linux desktop: state of the MIDI auto-connect
+ * @function midi_in_status
+ * @treturn boolean on
+ * @treturn integer linked ports
+ * @treturn string their names
+ */
+int _midi_in_status(lua_State *l) {
+    int count = 0;
+    char names[1024];
+    int on = midi_autoconnect_status(&count, names, sizeof(names));
+    lua_pushboolean(l, on);
+    lua_pushinteger(l, count);
+    lua_pushstring(l, names);
+    return 3;
+}
+
 #endif
 
 /***

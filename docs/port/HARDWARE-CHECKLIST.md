@@ -109,3 +109,11 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 - [ ] The sink monitor (`sys_monitor=1`): the warning "INPUT: sink monitor hears norns too" is on the device screen; with a script
       that plays its input it can feed back (keep the volume down).
 - [ ] The choice (SYS / APP) is still there after RESTART.
+
+## After the metro fix and the MIDI auto-connect
+- [ ] No more `error code: 22 ... pthread_create` when you press keys on the laptop; a script's metro (an animation, a clock-less
+      timer) runs. If a line "metro N did not start" appears, send it.
+- [ ] `midi_in_from=Midi-Bridge:Client-` (or the Reaper port's name, see `pw-jack jack_lsp -t | grep -i midi`) in `~/verdandi-home/audio.conf`:
+      Reaper's virtual output is linked to `Verdandi:midi_in` by itself after norns starts and after Reaper starts later; cut
+      the link by hand (`pw-jack jack_disconnect ...`): it is back within about two seconds; SYSTEM > DEVICES > MIDI shows
+      "AUTO-LINK: 1 linked". Watch whether it drops again by itself while neither port disappears (the log says "reconnected").
