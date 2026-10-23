@@ -27,7 +27,7 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   5. "keys" MIDI: DONE. A: internal norns device "Verdandi keys" (click and typed notes reach a script; close and
      reopen work). B: ALSA sequencer port written, runtime-optional, UNTESTED (no /dev/snd/seq here).
   Phase 2 stops here (steps 1-5 done); `HARDWARE-CHECKLIST.md` is updated.
-- Read-only clock investigation -> `docs/port/clock-notes.md`; then wait for Ken's decision.
+- Clock investigation DONE: `docs/port/clock-notes.md`. Waiting for Ken's decision (4 questions at its end).
 
 ## Next
 - See above.
