@@ -151,8 +151,8 @@ docker run --rm -it -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix \
   cd /work/home/norns && NORNS_HOME=/work/home NORNS_JACK_DRIVER=dummy linux/norns.sh --terminal
 ```
 That gives the window and input with silent audio. Sound from a container needs PipeWire's socket inside it
-(`-v "$XDG_RUNTIME_DIR/pipewire-0:/tmp/pw/pipewire-0" -e XDG_RUNTIME_DIR=/tmp/pw`, `apt install pipewire-jack`, run
-; norns.sh then finds PipeWire itself) and meets the same questions as on the laptop; I did not try it. `/dev/snd` pass-through
+(`-v "$XDG_RUNTIME_DIR/pipewire-0:/tmp/pw/pipewire-0" -e XDG_RUNTIME_DIR=/tmp/pw`, `apt install pipewire-jack`; norns.sh then
+finds PipeWire itself) and meets the same questions as on the laptop; I did not try it. `/dev/snd` pass-through
 (`--device /dev/snd`) only works if nothing else on the laptop holds the card, which PipeWire does.
 Files from the container's file manager and portals do not exist in a container (no desktop session):
 "Import files..." needs `zenity` (installed) and your X server, which works, or a portal, which does not.
