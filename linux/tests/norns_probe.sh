@@ -5,7 +5,8 @@
 # on stdin, waits for post-startup, feeds the lua REPL one line at a time from <commands.lua>
 # ("#sleep N" waits N seconds, other lines starting with # are comments), stops everything.
 # more commands for the window (Xvfb): "#shot <png>" saves the screen, "#xdo <xdotool args>" sends
-# input (needs xdotool, imagemagick: linux/setup-deps.sh).
+# input (needs xdotool, imagemagick: linux/setup-deps.sh), "#sh <command>" runs a shell command (append results to
+# $MARKS, a file next to the log: the log is norns' own, its writes would overwrite yours).
 # norns home: $NORNS_HOME, or a fresh temp dir with norns -> this checkout.
 
 set -u
@@ -52,6 +53,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     "#sleep "*) sleep "${line#\#sleep }" ;;
     "#shot "*) xwd -root -display "$DISPLAY" | convert xwd:- "png:${line#\#shot }" ;;
     "#xdo "*) xdotool ${line#\#xdo } ;;
+    "#sh "*) MARKS="$NORNS_HOME/probe.marks" bash -c "${line#\#sh }" ;; # a shell command; $MARKS: a file to note results in
     "#"* | "") ;;
     *) printf '%s\n' "$line" >&3 ;;
     esac

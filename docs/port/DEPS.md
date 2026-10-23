@@ -23,5 +23,8 @@ dependencies beyond what upstream norns and the macOS port already use; this lis
 | readline, ncurses | maiden-repl | GPL-3.0+, MIT |
 | Boost headers | build | BSL-1.0 |
 | Xvfb, xauth, x11-apps (xwd), xdotool | headless tests only | MIT/X11, BSD-3-Clause for xdotool |
+| dbus (dbus-run-session), python3-gi | headless tests only (mock portal) | AFL-2.1/GPL-2.0+, LGPL-2.1+ |
+| zenity | file dialog fallback (runtime, optional; also installed for the tests) | LGPL-2.1+ |
+| GIO (part of glib) | XDG portal file dialog over D-Bus | LGPL-2.1+ |
 | ImageMagick (`convert`) | headless tests only (screenshots) | ImageMagick license (Apache-2.0 style) |
 | git submodules: softcut-lib, Ableton Link, lua-cjson, concurrentqueue, readerwriterqueue, doctest, trompeloeil | as upstream | see each repository (Link: GPL-2.0+) |

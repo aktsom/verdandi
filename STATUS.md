@@ -21,7 +21,10 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   3. window (`sdl_bridge.cc` behind `desktop_shell.h`): DONE. The Verdandi window (device skin, oled,
      mouse, computer keyboard as hid keyboard, virtual grid and arc incl. LEDs, deltas, keys) runs
      under Xvfb; `window:` tests in `run_all.sh`.
-  4. menu/picker/screenshot/GIF: next. 5. "norns keys" A + B: after. Stop after step 5.
+  4. menu/picker/screenshot/GIF: DONE. In-window menu (right button, F10), file dialogs (portal via GDBus,
+     zenity, kdialog), screenshot, GIF, Import, folders via xdg-open, Quit. Tested with a stub zenity and a mock
+     portal; the real portal is on the hardware checklist.
+  5. "norns keys" A + B: next. Stop after step 5.
 - Then (read-only): clock investigation -> `docs/port/clock-notes.md`; wait for Ken's decision.
 
 ## Next

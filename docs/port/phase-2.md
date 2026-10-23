@@ -289,3 +289,9 @@ sees the same code paths:
 - new: `matron/src/platform/common/{desktop_platform,desktop_shell}.h`.
 What to check on macOS: the build; `macos/norns.sh` window, menu bar, drop, virtual grid/arc/keys,
 a screenshot, a GIF; `window_keys`, `device_skin`, `vgrid`, `dust_import`, `gif` tests.
+
+Step 4 (menu, file dialogs): new files only under `matron/src/platform/linux/` (`menu_skin`, `file_picker`,
+`desktop_shell_linux`) plus: `sdl_bridge.cc` (redraw draws the in-window menu, `menu_event` runs before the
+normal event switch, QUIT case; macOS: `shell_menu_*` are macros that do nothing, `menu_event` is `#ifndef
+__APPLE__`), `desktop_shell.h` (the macOS no-op macros), `norns/main.cpp` (`_exit(0)` after crone has stopped,
+`#ifndef __APPLE__`: glibc hangs destroying `crone::BufDiskWorker::qCv`), wscript (`gio-2.0`, Linux only).

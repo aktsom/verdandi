@@ -1,13 +1,23 @@
 /*
  * desktop_shell_linux.cc: see platform/common/desktop_shell.h
  *
- * the desktop pieces of the window on Linux (the keyboard as a hid device: hid_virtual.cc). step 3 of phase 2 has the window; the menu and the
- * file picker (step 4) and the MIDI keys (step 5) are still stubs here.
+ * the desktop pieces of the window on Linux: the in-window menu (menu_skin.c), the file dialogs
+ * (file_picker.cc), opening folders (open_url.c: xdg-open), the keyboard as a hid device
+ * (hid_virtual.cc). the "norns keys" MIDI port is step 5 of phase 2 and still a stub here.
  */
 
 #include <SDL2/SDL.h>
+#include <pwd.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
+#include <string>
+
+#include "file_picker.h"
+#include "menu_skin.h"
 #include "platform/common/desktop_shell.h"
 
 static void (*cb_item)(int id) = NULL;
@@ -16,6 +26,11 @@ static void (*cb_note)(const char *text) = NULL;
 static void (*cb_input)(const char *mode, const char *bundle, const char *name) = NULL;
 
 static int keys_up = 0;
+static menu_t menu = {};
+static int input_now = 1; // SKIN_INPUT_MIC until lua says otherwise
+static int recording = 0;
+static int copy_samples = 0;
+static int import_mode = SHELL_IMPORT_LINK;
 
 void shell_install(void (*on_item)(int id), void (*on_import)(const char *path, int mode),
                    void (*on_note)(const char *text),
@@ -31,11 +46,11 @@ void shell_set_app_name(const char *name) {
 }
 
 void shell_set_input(int input) {
-    (void)input;
+    input_now = input;
 }
 
 void shell_set_recording(int on) {
-    (void)on;
+    recording = on;
 }
 
 int shell_option_held(void) {
@@ -45,14 +60,239 @@ int shell_option_held(void) {
 void shell_adopt_windows(void) {
 }
 
+//--- file dialogs
+
+static void note(const char *text) {
+    if (cb_note != NULL) {
+        cb_note(text);
+    }
+}
+
+static std::string user_home(void) {
+    struct passwd *pw = getpwuid(getuid());
+    const char *home = pw != NULL && pw->pw_dir != NULL ? pw->pw_dir : getenv("HOME");
+    return home != NULL ? home : "/";
+}
+
+// a script's file (lua's fileselect): one path, nothing on cancel
+static void single_done(const char *const *paths, int n, void *ctx) {
+    if (n > 0) {
+        ((void (*)(const char *))ctx)(paths[0]);
+    }
+}
+
 void shell_choose_file(const char *dir, const char *dust, void (*done)(const char *path)) {
-    (void)dir;
-    (void)dust;
-    (void)done;
+    const char *start = dir != NULL && dir[0] != '\0' ? dir : dust;
+    if (picker_open(PICK_FILE, start, "Choose a file", single_done, (void *)done) != 0) {
+        note("no file dialog (install zenity or an xdg-desktop-portal)");
+    }
 }
 
 void shell_choose_file_close(void) {
+    picker_close();
 }
+
+// the menu's Import: every chosen path goes through the import callback
+static void import_done(const char *const *paths, int n, void *ctx) {
+    (void)ctx;
+    for (int i = 0; i < n; i++) {
+        if (cb_import != NULL) {
+            cb_import(paths[i], import_mode);
+        }
+    }
+}
+
+static void menu_import(int folder) {
+    import_mode = copy_samples ? SHELL_IMPORT_COPY : SHELL_IMPORT_LINK;
+    if (picker_open(folder ? PICK_FOLDER : PICK_FILES, user_home().c_str(),
+                    folder ? "Import a folder into dust" : "Import samples or scripts into dust", import_done,
+                    NULL) != 0) {
+        note("no file dialog (install zenity or an xdg-desktop-portal)");
+    }
+}
+
+//--- the in-window menu
+
+static void add_item(int id, const char *label, const char *hint, int checked) {
+    if (menu.n >= MENU_MAX) {
+        return;
+    }
+    menu_item_t *it = &menu.item[menu.n++];
+    memset(it, 0, sizeof *it);
+    it->id = id;
+    snprintf(it->label, sizeof it->label, "%s", label);
+    snprintf(it->hint, sizeof it->hint, "%s", hint);
+    it->checked = checked;
+}
+
+static void add_separator(void) {
+    if (menu.n < MENU_MAX) {
+        menu_item_t *it = &menu.item[menu.n++];
+        memset(it, 0, sizeof *it);
+        it->separator = 1;
+    }
+}
+
+static void menu_build(void) {
+    menu.n = 0;
+    add_item(SHELL_MENU_IMPORT, "Import files...", "Ctrl+O", 0);
+    add_item(SHELL_MENU_IMPORT_FOLDER, "Import folder...", "", 0);
+    add_item(SHELL_MENU_COPY_SAMPLES, "Copy samples into dust", "", copy_samples);
+    add_separator();
+    add_item(SHELL_MENU_DUST, "Show dust folder", "", 0);
+    add_item(SHELL_MENU_TAPE, "Show tape folder", "", 0);
+    add_separator();
+    add_item(SHELL_MENU_SCREENSHOT, "Screenshot", "Ctrl+Shift+S", 0);
+    add_item(SHELL_MENU_GIF, recording ? "Stop GIF recording" : "Record GIF", "", recording);
+    add_separator();
+    add_item(SHELL_MENU_GRID, "Virtual grid", "F6", 0);
+    add_item(SHELL_MENU_ARC, "Virtual arc", "F8", 0);
+    add_item(SHELL_MENU_KEYS, "Virtual keyboard", "F7", 0);
+    add_separator();
+    add_item(SHELL_MENU_INPUT_MIC, "Input: microphone", "", input_now == 1);
+    add_item(SHELL_MENU_INPUT_OFF, "Input: off", "", input_now == 0);
+    add_separator();
+    add_item(SHELL_MENU_QUIT, "Quit", "Ctrl+Q", 0);
+}
+
+static void menu_do(int id) {
+    switch (id) {
+    case SHELL_MENU_IMPORT:
+        menu_import(0);
+        break;
+    case SHELL_MENU_IMPORT_FOLDER:
+        menu_import(1);
+        break;
+    case SHELL_MENU_COPY_SAMPLES:
+        copy_samples = !copy_samples;
+        break;
+    case SHELL_MENU_INPUT_MIC:
+        if (cb_input != NULL) {
+            cb_input("mic", NULL, NULL);
+        }
+        break;
+    case SHELL_MENU_INPUT_OFF:
+        if (cb_input != NULL) {
+            cb_input("off", NULL, NULL);
+        }
+        break;
+    default:
+        if (cb_item != NULL) {
+            cb_item(id);
+        }
+        break;
+    }
+}
+
+static void menu_open_at(double px, double py, double scale, int w, int h) {
+    menu_build();
+    menu_skin_open(&menu, px, py, scale, w, h);
+}
+
+int shell_menu_is_open(void) {
+    return menu.open;
+}
+
+int shell_menu_mouse(int type, int button, double px, double py, double scale, int w, int h) {
+    if (!menu.open) {
+        if (type == 1 && button == SDL_BUTTON_RIGHT) {
+            menu_open_at(px, py, scale, w, h);
+            return SHELL_USED | SHELL_REDRAW;
+        }
+        return 0;
+    }
+    if (type == 0) {
+        int hover = menu_skin_hit(&menu, px, py);
+        if (hover != menu.hover) {
+            menu.hover = hover;
+            return SHELL_USED | SHELL_REDRAW;
+        }
+        return SHELL_USED;
+    }
+    int item = menu_skin_hit(&menu, px, py);
+    if (type == 1) {
+        // a click outside closes it (and is not passed on); inside, the item acts on release
+        if (!menu_skin_inside(&menu, px, py)) {
+            menu_skin_close(&menu);
+            return SHELL_USED | SHELL_REDRAW;
+        }
+        return SHELL_USED;
+    }
+    // button up: over an item it acts; the right button that opened the menu only acts when the
+    // pointer has moved to an item since
+    if (item >= 0 && (button == SDL_BUTTON_LEFT || item == menu.hover)) {
+        int id = menu.item[item].id;
+        menu_skin_close(&menu);
+        menu_do(id);
+        return SHELL_USED | SHELL_REDRAW;
+    }
+    return SHELL_USED;
+}
+
+int shell_menu_key(int down, int scancode, int mods, double px, double py, double scale, int w, int h) {
+    bool ctrl = (mods & KMOD_CTRL) != 0, shift = (mods & KMOD_SHIFT) != 0;
+    if (!menu.open) {
+        if (!down) {
+            return 0;
+        }
+        if (scancode == SDL_SCANCODE_F10) {
+            double x = px >= 0 ? px : 20 * scale, y = py >= 0 ? py : 20 * scale;
+            menu_open_at(x, y, scale, w, h);
+            // highlight the first item for the keyboard
+            menu_skin_move(&menu, 1);
+            return SHELL_USED | SHELL_REDRAW;
+        }
+        if (ctrl && scancode == SDL_SCANCODE_Q) {
+            menu_do(SHELL_MENU_QUIT);
+            return SHELL_USED;
+        }
+        if (ctrl && scancode == SDL_SCANCODE_O) {
+            menu_do(SHELL_MENU_IMPORT);
+            return SHELL_USED;
+        }
+        if (ctrl && shift && scancode == SDL_SCANCODE_S) {
+            menu_do(SHELL_MENU_SCREENSHOT);
+            return SHELL_USED;
+        }
+        return 0;
+    }
+    // open: it takes every key
+    if (!down) {
+        return SHELL_USED;
+    }
+    switch (scancode) {
+    case SDL_SCANCODE_ESCAPE:
+    case SDL_SCANCODE_F10:
+        menu_skin_close(&menu);
+        break;
+    case SDL_SCANCODE_UP:
+        menu_skin_move(&menu, -1);
+        break;
+    case SDL_SCANCODE_DOWN:
+        menu_skin_move(&menu, 1);
+        break;
+    case SDL_SCANCODE_RETURN:
+    case SDL_SCANCODE_KP_ENTER:
+    case SDL_SCANCODE_SPACE:
+        if (menu.hover >= 0) {
+            int id = menu.item[menu.hover].id;
+            menu_skin_close(&menu);
+            menu_do(id);
+        }
+        break;
+    default:
+        return SHELL_USED;
+    }
+    return SHELL_USED | SHELL_REDRAW;
+}
+
+void shell_menu_draw(cairo_t *cr, int w, int h) {
+    (void)w;
+    (void)h;
+    menu_skin_draw(cr, &menu);
+}
+
+//--- the "norns keys" MIDI port (step 5)
 
 int shell_keys_open(void) {
     keys_up = 1;

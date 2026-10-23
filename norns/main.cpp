@@ -46,6 +46,13 @@ static void *watch_parent(void *p) {
 // matron and crone run off the main thread; the main thread belongs to the window (sdl_bridge)
 static void crone_at_exit(void) {
     crone_stop();
+#ifndef __APPLE__
+    // everything is stopped. glibc's pthread_cond_destroy waits for the waiters of the static
+    // condition variable crone::BufDiskWorker::qCv, whose worker thread never leaves it: without
+    // this exit() hangs in the static destructors (macOS does not wait)
+    fflush(NULL);
+    _exit(0);
+#endif
 }
 
 static void *norns_thread(void *p) {

@@ -231,6 +231,10 @@ static void redraw(bool full) {
     if (dst == NULL || !ensure_layers(dst->w, dst->h)) {
         return;
     }
+    // the in-window menu (linux) is over the oled too
+    if (shell_menu_is_open()) {
+        full = true;
+    }
     cairo_t *cr = cairo_create(canvas);
     SDL_Rect r;
     if (full) {
@@ -238,6 +242,7 @@ static void redraw(bool full) {
         cairo_paint(cr);
         skin_draw_controls(cr, &geom, &skin);
         draw_oled(cr);
+        shell_menu_draw(cr, dst->w, dst->h);
         r = {0, 0, dst->w, dst->h};
     } else {
         draw_oled(cr);
@@ -1842,6 +1847,11 @@ static void menu_item(int id) {
     case SHELL_MENU_KEYS:
         toggle_keys();
         break;
+#ifndef __APPLE__
+    case SHELL_MENU_QUIT:
+        event_post(event_data_new(EVENT_QUIT));
+        break;
+#endif
     default:
         break;
     }
@@ -1902,6 +1912,66 @@ static void to_pixels(Uint32 window_id, int x, int y, double *px, double *py) {
     *px = x * k;
     *py = y * k;
 }
+
+#ifndef __APPLE__
+// the in-window menu (linux) sees the norns window's mouse and keys first; true: it used the event
+static bool menu_event(const SDL_Event *ev) {
+    if (the_window == NULL) {
+        return false;
+    }
+    Uint32 id = SDL_GetWindowID(the_window);
+    SDL_Surface *surf = SDL_GetWindowSurface(the_window);
+    if (surf == NULL) {
+        return false;
+    }
+    int w = surf->w, h = surf->h;
+    double scale = geom.s > 0.5 ? geom.s : 1.0;
+    double px = 0, py = 0;
+    int r = 0;
+    switch (ev->type) {
+    case SDL_MOUSEMOTION:
+        if (ev->motion.windowID != id) {
+            return false;
+        }
+        to_pixels(id, ev->motion.x, ev->motion.y, &px, &py);
+        r = shell_menu_mouse(0, 0, px, py, scale, w, h);
+        break;
+    case SDL_MOUSEBUTTONDOWN:
+    case SDL_MOUSEBUTTONUP:
+        if (ev->button.windowID != id) {
+            return false;
+        }
+        to_pixels(id, ev->button.x, ev->button.y, &px, &py);
+        r = shell_menu_mouse(ev->type == SDL_MOUSEBUTTONDOWN ? 1 : 2, ev->button.button, px, py, scale, w, h);
+        break;
+    case SDL_MOUSEWHEEL:
+        // an open menu keeps the wheel
+        return ev->wheel.windowID == id && shell_menu_is_open();
+    case SDL_KEYDOWN:
+    case SDL_KEYUP: {
+        if (ev->key.windowID != id) {
+            return false;
+        }
+        int mx = -1, my = -1;
+        if (SDL_GetMouseFocus() == the_window) {
+            SDL_GetMouseState(&mx, &my);
+            to_pixels(id, mx, my, &px, &py);
+        } else {
+            px = py = -1;
+        }
+        r = shell_menu_key(ev->type == SDL_KEYDOWN, (int)ev->key.keysym.scancode, (int)ev->key.keysym.mod, px, py, scale,
+                           w, h);
+        break;
+    }
+    default:
+        return false;
+    }
+    if (r & SHELL_REDRAW) {
+        redraw(true);
+    }
+    return (r & SHELL_USED) != 0;
+}
+#endif
 
 static int held_key = 0;        // key held by the mouse, 1-3
 static int drag_enc = 0;        // knob turned by the mouse, 1-3
@@ -2342,6 +2412,11 @@ void sdl_bridge_run(void) {
             }
             continue;
         }
+#ifndef __APPLE__
+        if (menu_event(&ev)) {
+            continue;
+        }
+#endif
         switch (ev.type) {
         case SDL_QUIT:
             // window closed: let matron leave its event loop; the norns thread cleans up

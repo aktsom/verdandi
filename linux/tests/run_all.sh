@@ -54,6 +54,8 @@ CFLAGS="-std=gnu11 -D_GNU_SOURCE -I $P -I /usr/local/include"
 cc $CFLAGS "$M/window_keys_test.c" "$P/window_keys.c" -o "$T/wkt" && run "c:window_keys" "$T/wkt"
 cc $CFLAGS $(pkg-config --cflags cairo) "$M/device_skin_test.c" "$P/device_skin.c" "$P/vgrid_skin.c" \
     "$P/varc_skin.c" "$P/vkeys_skin.c" -o "$T/dst" $(pkg-config --libs cairo) -lm && run "c:device_skin" "$T/dst"
+cc $CFLAGS -I matron/src/platform/linux $(pkg-config --cflags cairo) linux/tests/menu_skin_test.c \
+    matron/src/platform/linux/menu_skin.c -o "$T/mst" $(pkg-config --libs cairo) -lm && run "c:menu_skin" "$T/mst"
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
     -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
@@ -109,6 +111,76 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     window_pixels() { awk -v m="$(oled_mean)" 'BEGIN { exit !(m > 0.03 && m < 0.3) }'; }
     run "window:oled pixels" window_pixels
     cp "$WH/window-device.png" "$WH/window-devices.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
+
+    # the in-window menu and the file dialogs, once with a stub zenity answering, once against a mock of the
+    # desktop portal (a service on a private session bus: the real portals need a desktop, see
+    # docs/port/HARDWARE-CHECKLIST.md)
+    menu_scenario() { # picker (zenity|portal)
+        local picker="$1"
+        MH="$(mktemp -d)"
+        ln -s "$REPO" "$MH/norns"
+        mkdir -p "$MH/dust/code/probe" "$MH/stub"
+        # not under /tmp: files there are volatile and get copied, not linked (dust_import_volatile)
+        MI="$(mktemp -d -p /var/tmp)"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$MH/dust/code/probe/"
+        echo "RIFF" > "$MI/picked.wav"
+        MLOG="$T/menu-$picker.log"
+        if [ "$picker" = zenity ]; then
+            printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/zenity.args"\necho "%s/picked.wav"\n' "$MH" "$MI" > "$MH/stub/zenity"
+            chmod +x "$MH/stub/zenity"
+            PATH="$MH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$MH" "$REPO/linux/tests/norns_probe.sh" \
+                "$REPO/linux/tests/probe_menu.lua" "$MLOG" > /dev/null 2>&1
+        else
+            # a private session bus with the mock on it; the probe (and norns) run inside
+            dbus-run-session -- bash -c '
+                '"$PY"' "$0/linux/tests/mock_portal.py" "$1/portal.log" "$2/picked.wav" &
+                MOCK=$!
+                sleep 1
+                NORNS_PICKER=portal NORNS_HOME="$1" "$0/linux/tests/norns_probe.sh" "$0/linux/tests/probe_menu.lua" "$3" > /dev/null 2>&1
+                kill $MOCK' "$REPO" "$MH" "$MI" "$MLOG" > /dev/null 2>&1
+        fi
+        ml() { grep -q "$1" "$MLOG"; }
+        menu_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "menu opened and closed" 'ml "PROBE menu done"'
+            chk "screenshot png in dust" 'ls "$MH"/dust/Verdandi*.png'
+            chk "gif in dust" 'ls "$MH"/dust/Verdandi*.gif'
+            chk "Import files: audio linked" '[ -L "$MH/dust/audio/mac/picked.wav" ]'
+            chk "lua file dialog answered" 'ml "PROBE chosen.$MH/dust/audio/mac/picked.wav"'
+            if [ "$picker" = zenity ]; then
+                chk "zenity asked for files" 'grep -q -- "--file-selection" "$MH/zenity.args" && grep -q -- "--multiple" "$MH/zenity.args"'
+            else
+                chk "portal got OpenFile for several files" 'grep -q "\"multiple\": true" "$MH/portal.log"'
+                chk "portal got OpenFile for one file" 'grep -q "\"multiple\": false" "$MH/portal.log"'
+                chk "portal got a start folder" 'grep -q "\"current_folder\": \"/" "$MH/portal.log"'
+            fi
+            chk "Ctrl+Q ended norns" 'grep -q "norns gone" "$MH/probe.marks"'
+            return $bad
+        }
+        if [ "$picker" = zenity ]; then
+            run "window:menu, screenshot, gif, import, file dialog (zenity stub), quit" menu_ok
+        else
+            run "window:file dialog through the portal (mock portal on a private bus)" menu_ok
+        fi
+        if [ "$picker" = zenity ]; then
+            menu_pixels() { # the open menu is dark where the device is light
+                convert "$MH/menu-open.png" -crop 100x60+400+500 -colorspace Gray -format "%[fx:mean]" info: | awk '{ exit !($1 < 0.2) }'
+            }
+            run "window:menu drawn" menu_pixels
+        fi
+        rm -rf "$MI"
+    }
+    menu_scenario zenity
+    PY=""
+    for cand in python3 python3.12; do
+        "$cand" -I -c "import gi" 2> /dev/null && PY="$cand" && break
+    done
+    if [ -n "$PY" ] && command -v dbus-run-session > /dev/null; then
+        menu_scenario portal
+    else
+        echo "SKIP  portal mock (python3 gi and dbus-run-session not installed)"
+    fi
 else
     echo "SKIP  window (xdotool and imagemagick not installed)"
 fi

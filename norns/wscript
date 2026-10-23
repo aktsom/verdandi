@@ -93,6 +93,7 @@ def build(bld):
         'LIBUDEV',
         'LIBEVDEV',
         'GLIB-2.0',
+        'GIO-2.0',
         'LIBGPIOD',
         'CAIRO',
         'CAIRO-FT',
@@ -181,7 +182,7 @@ def build(bld):
             '../matron/src/platform/macos/vkeys_skin.c',
             '../matron/src/platform/macos/window_keys.c',
         ]
-        linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'GLIB-2.0', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
+        linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'GLIB-2.0', 'GIO-2.0', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
         matron_use = [u for u in matron_use if u not in linux_only]
         crone_use = [u for u in crone_use if u not in linux_only]
         matron_includes += ['../matron/src/platform/macos/include']
@@ -201,7 +202,9 @@ def build(bld):
         matron_sources = [f for f in matron_sources if f not in replaced] + [
             '../matron/src/platform/linux/app_audio_linux.c',
             '../matron/src/platform/linux/desktop_shell_linux.cc',
+            '../matron/src/platform/linux/file_picker.cc',
             '../matron/src/platform/linux/hid_virtual.cc',
+            '../matron/src/platform/linux/menu_skin.c',
             '../matron/src/platform/macos/device_skin.c',
             '../matron/src/platform/macos/dust_import.c',
             '../matron/src/platform/macos/gif_writer.c',

@@ -43,7 +43,15 @@
 #define shell_open_url macos_open_url
 #define shell_hid_keyboard_event macos_hid_keyboard_event
 
+// macOS has a menu bar: no menu in the window
+#define shell_menu_is_open() 0
+#define shell_menu_mouse(type, button, px, py, scale, w, h) 0
+#define shell_menu_key(down, scancode, mods, px, py, scale, w, h) 0
+#define shell_menu_draw(cr, w, h) ((void)0)
+
 #else // desktop Linux
+
+#include <cairo.h>
 
 #include "../macos/open_url.h"
 #define shell_open_url macos_open_url // http(s) or an absolute path, 0 = started (xdg-open here)
@@ -62,6 +70,11 @@ enum {
     SHELL_MENU_GRID,
     SHELL_MENU_ARC,
     SHELL_MENU_KEYS,
+    SHELL_MENU_IMPORT_FOLDER, // (handled by the shell, like IMPORT)
+    SHELL_MENU_COPY_SAMPLES,  // toggle: audio is copied into dust, not linked (the shell's own)
+    SHELL_MENU_INPUT_MIC,     // (the shell calls on_input)
+    SHELL_MENU_INPUT_OFF,
+    SHELL_MENU_QUIT,
 };
 
 // how the import callback takes a path
@@ -85,6 +98,19 @@ extern void shell_adopt_windows(void);            // a no-op here
 extern void shell_choose_file(const char *dir, const char *dust, void (*done)(const char *path));
 extern void shell_choose_file_close(void);
 extern void shell_hid_keyboard_event(uint16_t usage, int value);
+
+// the in-window menu (there is no menu bar). the window gives it the events of the norns window
+// (mouse in window pixels) and draws it over the device; scale: pixels per layout unit
+// (1.0 at 96 dpi). all return bit 1 if the event was used (the window does not handle it), bit 2
+// if the window must be redrawn
+#define SHELL_USED 1
+#define SHELL_REDRAW 2
+extern int shell_menu_is_open(void);
+// type 0 motion, 1 button down, 2 button up; button = SDL_BUTTON_*
+extern int shell_menu_mouse(int type, int button, double px, double py, double scale, int w, int h);
+// a key of the norns window; mods = SDL_Keymod; px, py: where the pointer is (F10 opens the menu there)
+extern int shell_menu_key(int down, int scancode, int mods, double px, double py, double scale, int w, int h);
+extern void shell_menu_draw(cairo_t *cr, int w, int h);
 
 // the virtual keyboard window's MIDI source ("norns keys", see phase-2.md)
 extern int shell_keys_open(void); // 0 = ready

@@ -26,7 +26,7 @@ $SUDO apt-get install -y --no-install-recommends \
     liblua5.3-dev libncurses-dev libnng-dev libreadline-dev libsamplerate0-dev libsdl2-dev \
     libsndfile1-dev libudev-dev \
     jackd2 lua5.3 supercollider-server supercollider-language sc3-plugins-server \
-    sc3-plugins-language xvfb xauth x11-apps xdotool imagemagick
+    sc3-plugins-language xvfb xauth x11-apps xdotool imagemagick dbus python3-gi gir1.2-glib-2.0 zenity
 
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
