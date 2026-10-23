@@ -30,7 +30,7 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 - **Phase 3 steps 1 and 2 only** (Ken's decisions in `DECISIONS.md`); steps 3-5 wait for Ken's laptop output.
   1. `clock_midi`: song position (0xF2) and continue (0xFB), tests first: DONE, pushed. 15 clock test cases pass
      (8 new); full `run_all.sh` green. The SPP byte parsing in `device_midi.cc` is tested end to end in step 2.
-  2. JACK MIDI input ("Verdandi" client, device "Verdandi JACK in", no auto-connect): in progress.
+  2. JACK MIDI input ("Verdandi" client, device "Verdandi JACK in", no auto-connect): DONE, see below.
 - Nothing. Phase 2 is complete. The Phase 3 approach note is written (`docs/port/phase-3.md`, audio, devices and
   the clock items); **no Phase 3 code until Ken confirms** (8 decisions at its end).
 

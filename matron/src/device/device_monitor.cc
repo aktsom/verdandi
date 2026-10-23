@@ -25,6 +25,7 @@
 #include "events.h"
 #ifdef NORNS_LINUX_DESKTOP
 #include "platform/linux/hid_virtual.h"
+#include "platform/linux/jack_midi_in.h"
 #endif
 
 #define SUB_NAME_SIZE 32
@@ -137,6 +138,8 @@ int dev_monitor_scan(void) {
 #ifdef NORNS_LINUX_DESKTOP
     // the computer keyboard, through the norns window (platform/linux/hid_virtual.cc)
     dev_list_add(DEV_TYPE_HID, LINUX_SDL_KEYBOARD_PATH, strdup("keyboard"), NULL);
+    // MIDI from other programs through JACK (clock, notes): platform/linux/jack_midi_in.cc
+    jack_midi_in_start();
 #endif
 
     udev = udev_new();

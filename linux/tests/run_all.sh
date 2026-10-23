@@ -91,6 +91,39 @@ boot_ok() {
 }
 run "boot:headless (xvfb, jackd dummy, crone, sclang, script)" boot_ok
 
+# MIDI clock and notes through JACK MIDI: a test client plays a 120 BPM "DAW" into Verdandi:midi_in
+# (start, a note, song position 16 beats, stop, continue, start again); every transport event prints the beat.
+if cc -std=gnu11 "$REPO/linux/tests/jack_midi_clock_test.c" -o "$T/jack_midi_clock_test" $(pkg-config --cflags --libs jack) -lm 2> /dev/null; then
+    JH="$(mktemp -d)"
+    ln -s "$REPO" "$JH/norns"
+    JLOG="$T/jackmidi.log"
+    JMT="$T/jack_midi_clock_test" NORNS_HOME="$JH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_jackmidi.lua" "$JLOG" > /dev/null 2>&1
+    jackmidi_ok() {
+        local bad=0
+        chk() { grep -q "$2" "$JLOG" || { echo "missing: $1"; bad=1; }; }
+        chk "the JACK MIDI device is a norns MIDI device" "PROBE jack midi found.true"
+        chk "clock source midi" "PROBE source.midi"
+        chk "note on through JACK MIDI" "PROBE jack note.note_on.60.100"
+        chk "note off through JACK MIDI" "PROBE jack note.note_off.60.0"
+        # the transport events in order: start (beat near 0), continue (beat past the song position), start again (near 0)
+        local starts stop
+        starts="$(grep "PROBE transport start" "$JLOG" | awk '{print $4}' | tr '\n' ' ')"
+        stop="$(grep "PROBE transport stop" "$JLOG" | head -1)"
+        set -- $starts
+        [ "$#" = 3 ] || { echo "missing: three start events (start, continue, start), got: $starts"; bad=1; }
+        awk -v a="${1:-99}" 'BEGIN { exit !(a < 1.5) }' || { echo "start 1 should be near beat 0: ${1:-none}"; bad=1; }
+        awk -v a="${2:-0}" 'BEGIN { exit !(a > 15.5) }' || { echo "continue must not reset the beat (after SPP 16): ${2:-none}"; bad=1; }
+        awk -v a="${3:-99}" 'BEGIN { exit !(a < 1.5) }' || { echo "start 2 should be near beat 0: ${3:-none}"; bad=1; }
+        [ -n "$stop" ] || { echo "missing: a stop event"; bad=1; }
+        awk -v b="$(echo "$stop" | awk '{print $4}')" -v t="$(echo "$stop" | awk '{print $5}')" \
+            'BEGIN { exit !(b > 15.5 && t > 108 && t < 132) }' || { echo "stop: beat after SPP > 15.5 and tempo about 120 (+-10%: arrival times are quantised to JACK periods, 117-122 seen), got: $stop"; bad=1; }
+        return $bad
+    }
+    run "clock:midi clock, start, SPP, stop, continue and notes through JACK MIDI" jackmidi_ok
+else
+    echo "SKIP  clock:jack midi (no jack headers)"
+fi
+
 # the window on Xvfb: device skin, oled, mouse, keyboard, virtual grid and arc (needs xdotool, imagemagick)
 if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     WH="$(mktemp -d)"

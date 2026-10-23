@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "platform/linux/jack_midi_in.h"
 #include "platform/linux/keys_midi.h"
 #endif
 
@@ -26,7 +27,7 @@ unsigned int dev_midi_port_count(const char *path) {
     int alsa_dev;
 
 #ifdef NORNS_LINUX_DESKTOP
-    if (strcmp(path, KEYS_MIDI_PATH) == 0) {
+    if (strcmp(path, KEYS_MIDI_PATH) == 0 || strcmp(path, JACK_MIDI_PATH) == 0) {
         return 1;
     }
 #endif
@@ -78,9 +79,9 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
     char *alsa_name;
 
 #ifdef NORNS_LINUX_DESKTOP
-    if (strcmp(base->path, KEYS_MIDI_PATH) == 0) {
-        // the virtual keyboard window: input only, from the pipe it writes
-        midi->pipe_rd = keys_midi_take_pipe();
+    if (strcmp(base->path, KEYS_MIDI_PATH) == 0 || strcmp(base->path, JACK_MIDI_PATH) == 0) {
+        // the virtual keyboard window and the JACK MIDI input: input only, from the pipe they write
+        midi->pipe_rd = strcmp(base->path, KEYS_MIDI_PATH) == 0 ? keys_midi_take_pipe() : jack_midi_in_take_pipe();
         if (midi->pipe_rd < 0) {
             return -1;
         }

@@ -58,3 +58,13 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
       norns (`clock_source` = link) follow Reaper's tempo? Same on macOS and Windows later.
 - [ ] Reaper > Preferences > MIDI Devices: the output that reaches norns has "send clock" on; norns follows tempo,
       start, stop (and, after Phase 3, continue and SPP).
+
+## After Phase 3 steps 1-2 (JACK MIDI clock input)
+- [ ] Reaper (Linux): add the JACK MIDI output as a MIDI output device, enable "send clock", connect
+      Reaper's port to `Verdandi:midi_in` (qpwgraph or `pw-jack jack_connect`; under PipeWire the port exists after
+      `pw-jack linux/norns.sh`). norns: clock source `midi`; tempo, start, stop follow Reaper; after moving the
+      play cursor and pressing play, the beat position is right (SPP) and continue does not jump to 0.
+- [ ] Notes: a keyboard through JACK MIDI (or Reaper's virtual keyboard) reaches a script as the device
+      "Verdandi JACK in".
+- [ ] The tempo readout is steady enough for you (see "Tempo accuracy" in `phase-3.md`; a timestamped version
+      is on offer).

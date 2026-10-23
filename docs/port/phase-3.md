@@ -180,3 +180,45 @@ disconnect and reconnect. **Not testable here:** the real PipeWire monitor/appli
 6. Name of the JACK MIDI client/device ("Verdandi" / "Verdandi JACK in") and no auto-connect: OK?
 7. MIDI **start after SPP**: begin at the SPP position (my reading of the standard) or always at beat 0 as today?
 8. Please run the laptop checklist (at least `pw-jack jack_lsp -p`) so steps 3 and 5 are based on facts.
+
+
+---
+
+# Steps 1 and 2: results (written after they were done)
+
+**Step 1, SPP and continue.** Done as designed, with tests first (8 new cases in
+`tests/matron/clocks/clock_midi/test_clock_midi.cpp`, 15 in all). What the code does now (`clock_midi.cc`):
+- 0xF2: counter = position * 6 - 1 (the next tick is the one at the position); the beat moves at once when a tempo is known;
+  the position is remembered until a start, continue or stop uses or drops it.
+- 0xFA: starts there if a position is waiting, else at beat 0 (counter -1); the start event fires at the first counted tick.
+- 0xFB: no counter change; the first counted tick fires `clock_continue_from_source` (a new function: the same event
+  to scripts as a start, **without** `clock_scheduler_reset_sync_events()`).
+- 0xFC: unchanged, and it forgets a waiting position. Ticks still count while stopped (unchanged behaviour: an
+  existing test depends on it); so after SPP and a stop the counter advances if ticks keep arriving.
+- Found on the way and fixed: `clock_midi_init()` did not reset the smoothing buffer (harmless at startup, wrong when
+  init runs twice, as in the tests).
+- SPP parsing in `device_midi.cc` (`dev_midi_consume_buffer`, shared with macOS and every MIDI device).
+
+**Step 2, JACK MIDI input.** `matron/src/platform/linux/jack_midi_in.{h,cc}`: client "Verdandi", port `midi_in`,
+real-time callback only copies into a `ReaderWriterQueue` (4096 entries, never allocates) and `sem_post`s; a reader
+thread writes the bytes into a pipe; the norns MIDI device "Verdandi JACK in" (`jackmidi:`) reads the pipe with the same
+parser and `from_pipe` path as "Verdandi keys". Started from `dev_monitor_scan` (Linux desktop only);
+`NORNS_JACK_MIDI=0` turns it off; no auto-connect. Test: `linux/tests/jack_midi_clock_test.c` is a JACK client that plays
+a 120 BPM "DAW" (start, a note, SPP 16 beats, stop, continue, start) with frame-accurate timing, and
+`probe_jackmidi.lua` + the `clock:` check in `run_all.sh` verify it from Lua. Results of the first complete run:
+`start 0.02` (beat), note on and off received, `stop 18.00` (SPP 16 beats at 3.0 s plus 2 beats), `continue 20.00`
+(**no reset**), second `start 0.00`. That run also proves the SPP bytes pass the device parser.
+
+**Tempo accuracy, measured, not yet fixed.** With the dummy JACK driver (period 1024 frames = 21.3 ms at 48 kHz) the
+tempo estimate read 122.3, then 117.2 and 122.2 (median) for a true 120. The beat position is exact (it counts
+ticks); only the tempo estimate and the extrapolation between ticks are affected. Likely cause: JACK delivers MIDI
+in period bursts, and the first version timestamps a message when the reader thread handles it, so arrival times are
+quantised to the period. **Option (needs your OK, shared code):** keep each event's frame offset through the queue and
+give `clock_midi` the exact JACK time (`clock_midi_handle_message_at(msg, time)`); the tick intervals would then be
+exact in the JACK time domain. I did not verify this explanation by building the option.
+
+**Shared files changed in steps 1-2 (re-verify macOS):** `matron/src/clock.cc`, `clock.h` (new
+`clock_continue_from_source`), `matron/src/clocks/clock_midi.cc`, `clock_midi.h`, `matron/src/device/device_midi.cc`
+(SPP hook for every device; the JACK path is `NORNS_LINUX_DESKTOP` only), `tests/matron/clocks/common/helpers.{cpp,h}`
+(weak stub), `tests/matron/clocks/clock_midi/test_clock_midi.cpp`. `device_monitor.cc` and `norns/wscript` are Linux-only
+changes. On macOS: plain clock/start/stop behave as before; continue and SPP are new there too.
