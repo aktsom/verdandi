@@ -32,6 +32,8 @@ set -u
 TERMINAL=0
 [ "${1:-}" = "--terminal" ] && TERMINAL=1
 
+# this script's own absolute path: a re-run (pw-jack) may start in another working directory, so $0 is not enough
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 NORNS_HOME="${NORNS_HOME:-$(dirname "$REPO")}"
 JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
@@ -136,7 +138,8 @@ decide_server
 decide_devices
 read_audio_conf
 decide_rate
-if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ]; then
+# NORNS_DECIDE_ONLY=reexec: as 1, but a decision to re-run under pw-jack is carried out (tests the re-run)
+if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ] || { [ "${NORNS_DECIDE_ONLY:-0}" = reexec ] && [ "$ACTION" != reexec-pw-jack ]; }; then
     echo "DECIDE action=$ACTION server=$SERVER in=$IN_PORTS out=$OUT_PORTS"
     if [ "$ACTION" = start-jackd ]; then
         jackd_args
@@ -211,7 +214,7 @@ case "$ACTION" in
 reexec-pw-jack)
     echo "norns.sh: no JACK server, but PipeWire runs: starting again under pw-jack"
     export NORNS_REEXEC=1
-    exec "$PW_JACK" "$0" "$@"
+    exec "$PW_JACK" /bin/bash "$SELF" "$@"
     ;;
 need-pw-jack)
     echo "norns.sh: PipeWire is the sound server here but pw-jack is not available (or PipeWire is not running)."
