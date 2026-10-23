@@ -3,20 +3,26 @@
 Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` first.
 
 ## Done
-- Phase 0 inventory (read-only): `docs/port/INVENTORY.md`.
-- Gate A question written to `DECISIONS.md`.
+- Phase 0 inventory: `docs/port/INVENTORY.md`.
+- Gate A decided by Ken: option 1, platform folders in this fork (`DECISIONS.md`).
+- Phase 1 (headless Linux build and boot): see `docs/port/phase-1.md`.
+  - `linux/setup-deps.sh`, `linux/build.sh`, `linux/norns.sh`, `linux/tests/run_all.sh`,
+    `linux/tests/norns_probe.sh`; package installs worked in this environment (no blocker).
+  - norns builds on Ubuntu 24.04 x86_64 and boots headless (Xvfb, jackd dummy, crone, sclang),
+    loads a script, receives key/enc events; 16/16 upstream unit tests, 6 lua tests,
+    window_keys and device_skin pass.
+  - Two known failures kept for Phase 2: vgrid (libmonome cannot open the pty on Linux) and
+    dust_import (copyfile).
 
 ## In progress
-- Nothing. Stopped at Gate A as instructed; Phase 1 not started.
+- Nothing. Stopped after Phase 1 as instructed.
 
 ## Next
-- Phase 1 (headless Linux build and boot), after Ken answers Gate A (or confirms to proceed
-  with the recommendation). Write `docs/port/phase-1.md` before touching code.
+- Phase 2 (desktop layer in `matron/src/platform/linux/`). Write `docs/port/phase-2.md` first.
+  Starting points: libmonome and the pty, `dust_import` without `copyfile`, SDL window
+  using the shared skins, quit handling, ALSA seq "norns keys".
 
 ## Not testable here / notes
-- `jackd`, `sclang`, `lua5.3` were not found on this sandbox's PATH (Xvfb is present). Phase 1
-  will need to install them; if apt access is unavailable, the boot test moves to
-  `docs/port/HARDWARE-CHECKLIST.md`.
-- `SANDBOX.md` (referenced in CLAUDE.md for the notification hook) does not exist in the repo,
-  so no notification was fired. Ken needs to see the Gate A entry in `DECISIONS.md`.
-- Phase 0 commits are pushed to `origin/linux-port` (an earlier 403 was fixed by Ken).
+- macOS not rebuilt after the small edits to shared sources (checklist item).
+- No `/dev/snd/seq`, no real audio device, no display other than Xvfb.
+- `SANDBOX.md` (notification hook) still does not exist; no notification was sent.

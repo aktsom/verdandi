@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cfloat>
+#include <cstdlib>
 #include <chrono>
 #include <mutex>
 #include <thread>

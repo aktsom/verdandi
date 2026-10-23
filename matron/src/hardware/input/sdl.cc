@@ -15,12 +15,14 @@ static void input_sdl_destroy(matron_io_t *io);
 static void *input_sdl_poll(void *data);
 
 input_ops_t input_sdl_ops = {
-    .io_ops.name = "input:sdl",
-    .io_ops.type = IO_INPUT,
-    .io_ops.data_size = sizeof(input_sdl_priv_t),
-    .io_ops.config = input_sdl_config,
-    .io_ops.setup = input_sdl_setup,
-    .io_ops.destroy = input_sdl_destroy,
+    .io_ops = {
+        .name = "input:sdl",
+        .type = IO_INPUT,
+        .data_size = sizeof(input_sdl_priv_t),
+        .config = input_sdl_config,
+        .setup = input_sdl_setup,
+        .destroy = input_sdl_destroy,
+    },
     .poll = input_sdl_poll,
 };
 

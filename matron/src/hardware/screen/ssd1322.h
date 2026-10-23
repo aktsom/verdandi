@@ -1,6 +1,8 @@
 #pragma once
 
+#if defined(__ARM_NEON) || defined(__aarch64__)
 #include <arm_neon.h>
+#endif
 #include <cairo.h>
 #include <fcntl.h>
 #include <gpiod.h>

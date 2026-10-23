@@ -1,3 +1,5 @@
+import platform
+
 from waflib.TaskGen import extension
 
 @extension('.m')
@@ -90,6 +92,7 @@ def build(bld):
         'ALSA',
         'LIBUDEV',
         'LIBEVDEV',
+        'GLIB-2.0',
         'LIBGPIOD',
         'CAIRO',
         'CAIRO-FT',
@@ -178,16 +181,31 @@ def build(bld):
             '../matron/src/platform/macos/vkeys_skin.c',
             '../matron/src/platform/macos/window_keys.c',
         ]
-        linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
+        linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'GLIB-2.0', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
         matron_use = [u for u in matron_use if u not in linux_only]
         crone_use = [u for u in crone_use if u not in linux_only]
         matron_includes += ['../matron/src/platform/macos/include']
+
+    if bld.env.NORNS_DESKTOP and not bld.env.NORNS_MACOS and not platform.machine().startswith(('arm', 'aarch')):
+        # desktop linux on a non-arm machine: no oled (ssd1322 is arm NEON), no battery, no i2c.
+        # the stubs are shared with the macOS port (see docs/port/INVENTORY.md)
+        replaced = [
+            '../matron/src/hardware/battery.cc',
+            '../matron/src/hardware/i2c.cc',
+            '../matron/src/hardware/screen/ssd1322.cc',
+        ]
+        matron_sources = [f for f in matron_sources if f not in replaced] + [
+            '../matron/src/platform/macos/hardware_null.cc',
+        ]
 
     norns_sources = norns_sources + matron_sources + crone_sources
     norns_includes = ['.'] + matron_includes + crone_includes
     norns_use = matron_use + crone_use
     norns_libs = norns_libs + matron_libs + crone_libs
-    norns_cxxflags = ['-O3', '-Wall', '-mfpu=neon']
+    norns_cxxflags = ['-O3', '-Wall']
+    if platform.machine().startswith(('arm', 'aarch')):
+        # NEON is an arm option; desktop Linux on x86 has no such flag
+        norns_cxxflags += ['-mfpu=neon']
     norns_ldflags = ['-Wl,-export-dynamic']
     norns_frameworks = []
 
