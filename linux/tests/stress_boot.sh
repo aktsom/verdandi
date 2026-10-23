@@ -27,7 +27,7 @@ start_load() { # loops
 fails=0
 for n in $(seq "$RUNS"); do
     stop_load
-    third=$(((n - 1) * 3 / RUNS))
+    third=${STRESS_THIRD:-$(((n - 1) * 3 / RUNS))}
     case $third in
     0) load=0 ;;
     1) load=$CPUS ;;

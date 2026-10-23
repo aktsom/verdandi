@@ -34,3 +34,15 @@ Notification: not sent. `SANDBOX.md` (notification hook) is missing from the rep
 3. `sdl_bridge.cc`: option A, the same file on Linux, platform seams behind `desktop_shell.h`.
 4. Menu: in-window menu (no menu bar). The dust link folder keeps the name `mac` for now.
 Order of work: `docs/port/phase-2.md` section 6; stop after step 5 with `HARDWARE-CHECKLIST.md` updated.
+
+## Phase 3 decisions (DECIDED by Ken, after `docs/port/phase-3.md`)
+1. Steps 1 and 2 first (SPP/continue, then JACK MIDI input), tests first. Steps 3-5 wait for Ken's laptop output.
+2. The probe readiness fix is applied (`linux/tests/norns_probe.sh`).
+3. crone without physical JACK ports starts **unconnected with a warning that is visible in the norns window or
+   menu, not only in the log**. Pi and macOS behavior unchanged. (Step 3, waits.)
+4. `norns.sh` re-runs itself under `pw-jack` only when PipeWire is running and no JACK server answers;
+   `NORNS_AUDIO_SERVER` override stays. (Step 3, waits.)
+5. SYSTEM > AUDIO rows are read-only under PipeWire; `PIPEWIRE_QUANTUM` is marked experimental. (Step 4, waits.)
+6. JACK MIDI client "Verdandi", device "Verdandi JACK in", no auto-connect.
+7. MIDI start after SPP begins at the SPP position (once).
+8. Ken runs the laptop checklist and sends the output.
