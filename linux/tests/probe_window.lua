@@ -48,10 +48,10 @@ print("PROBE midi device", midi.vports[1].name, midi.vports[2].name, midi.vports
 # closing and opening the keys window again: the device goes and comes back, and still plays
 _norns.grid_window("keys")
 #sleep 1
-print("PROBE midi closed", midi.vports[1].connected)
+print("PROBE midi closed", midi.vports[2].connected)
 _norns.grid_window("keys")
 #sleep 1.5
-print("PROBE midi reopened", midi.vports[1].connected)
+print("PROBE midi reopened", midi.vports[2].connected)
 #xdo search --name ^keys$ windowfocus
 #xdo keydown d
 #sleep 0.3

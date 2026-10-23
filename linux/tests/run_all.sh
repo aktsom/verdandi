@@ -15,7 +15,8 @@ cd "$REPO"
 P=matron/src/platform/macos
 M=macos/tests
 T="$(mktemp -d)"
-trap 'rm -rf "$T"' EXIT
+# KEEP_LOGS=<dir>: copy every log of this run there before the temporary folder goes (to diagnose a failure)
+trap '[ -n "${KEEP_LOGS:-}" ] && { mkdir -p "$KEEP_LOGS" && cp "$T"/*.log "$KEEP_LOGS"/ 2> /dev/null; }; rm -rf "$T"' EXIT
 WAF="${WAF:-/opt/waf/waf}"
 
 FAILED=()
@@ -150,7 +151,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         chk "arc wheel" "PROBE arcdelta.1.2"
         chk "arc key down" "PROBE arckey.1.1"
         chk "arc key up" "PROBE arckey.1.0"
-        chk "keys window is a norns MIDI device" "PROBE midi device.Verdandi keys"
+        chk "keys window is a norns MIDI device (after the JACK MIDI input)" "PROBE midi device.Verdandi JACK in.Verdandi keys"
         chk "click on a piano key: note on" "PROBE midi.note_on.52.111.1"
         chk "click on a piano key: note off" "PROBE midi.note_off.52.0.1"
         chk "typed d: note on" "PROBE midi.note_on.52.100.1"

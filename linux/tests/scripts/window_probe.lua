@@ -5,7 +5,8 @@ a = arc.connect()
 function g.key(x, y, z) print("PROBE gridkey", x, y, z) end
 function a.delta(n, d) print("PROBE arcdelta", n, d) end
 function a.key(n, z) print("PROBE arckey", n, z) end
-m = midi.connect()
+-- vport 1 is the JACK MIDI input ("Verdandi JACK in", always there on Linux); the keys window's device is the next one
+m = midi.connect(2)
 m.event = function(data)
   local d = midi.to_msg(data)
   print("PROBE midi", d.type, d.note, d.vel, d.ch)
