@@ -1,0 +1,26 @@
+jackdmp 1.9.21
+Copyright 2001-2005 Paul Davis and others.
+Copyright 2004-2016 Grame.
+Copyright 2016-2022 Filipe Coelho.
+jackdmp comes with ABSOLUTELY NO WARRANTY
+This is free software, and you are welcome to redistribute it
+under certain conditions; see the file COPYING for details
+JACK server starting in non-realtime mode
+self-connect-mode is "Don't restrict self connect requests"
+Unknown source port in attempted (dis)connection src_name [SuperCollider:out_2] dst_name [crone:input_6]
+Unknown destination port in attempted (dis)connection src_name [crone:output_5] dst_name [SuperCollider:in_1]
+Unknown destination port in attempted (dis)connection src_name [crone:output_6] dst_name [SuperCollider:in_2]
+Unknown source port in attempted (dis)connection src_name [SuperCollider:out_1] dst_name [crone:input_5]
+JackTimedDriver::Process XRun = 31 usec
+JackEngine::XRun: client = crone was not finished, state = Triggered
+JackEngine::XRun: client = softcut was not finished, state = Triggered
+JackEngine::XRun: client = SuperCollider was not finished, state = Triggered
+JackAudioDriver::ProcessGraphAsyncMaster: Process error
+JackEngine::XRun: client = crone was not finished, state = Triggered
+JackEngine::XRun: client = softcut was not finished, state = Triggered
+JackEngine::XRun: client = SuperCollider was not finished, state = Triggered
+JackAudioDriver::ProcessGraphAsyncMaster: Process error
+JackEngine::XRun: client = crone was not finished, state = Triggered
+JackEngine::XRun: client = softcut was not finished, state = Triggered
+JackAudioDriver::ProcessGraphAsyncMaster: Process error
+Jack main caught signal 15

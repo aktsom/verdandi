@@ -1,0 +1,95 @@
+attempting to bind socket at url ws://127.0.0.1:5556
+compiling class library...
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Sandboxing disabled by user.
+	Found 867 primitives.
+	Compiling directory '/usr/share/SuperCollider/SCClassLibrary'
+	Compiling directory '/usr/share/SuperCollider/Extensions'
+	Compiling directory '/home/user/verdandi/sc/core'
+	Compiling directory '/home/user/verdandi/sc/engines'
+	Compiling directory '/tmp/tmp.Yyoy5zPAGu/dust'
+	numentries = 1212762 / 19068840 = 0.064
+	5922 method selectors, 3220 classes
+	method table size 19735360 bytes, big table size 152550720
+	Number of Symbols 14975
+	Byte Code Size 433033
+	compiled 470 files in 0.87 seconds
+
+Info: 4 methods are currently overwritten by extensions. To see which, execute:
+MethodOverride.printAll
+
+compile done
+localhost : setting clientID to 0.
+internal : setting clientID to 0.
+Class tree inited in 0.32 seconds
+
+-------------------------------------------------
+ Norns startup
+
+ OSC rx port: 57120
+ OSC tx port: 8888
+ server port: 57110
+ crone port: 9999
+--------------------------------------------------
+
+
+
+*** Welcome to SuperCollider 3.13.0. *** For help type ctrl-c ctrl-h (Emacs) or :SChelp (vim) or ctrl-U (sced/gedit).
+Booting server 'localhost' on address 127.0.0.1:57110.
+Found 0 LADSPA plugins
+JackDriver: client name is 'SuperCollider'
+SC_AudioDriver: sample rate = 48000.000000, driver's block size = 1024
+SuperCollider 3 server ready.
+Requested notification messages from server 'localhost'
+localhost: server process's maxLogins (1) matches with my options.
+localhost: keeping clientID (0) as confirmed by server process.
+Shared memory server interface initialized
+JackDriver: max output latency 42.7 ms
+CroneDefs: sending defs
+play_fade
+patch_mono
+patch_mono_fb
+patch_stereo
+patch_pan
+rec_smooth
+adc
+amp_env
+pitch
+polySub
+patch_mono_gate_pause
+patch_mono_gate_pause_fb
+AudioContext: in_b[0] index: 4
+AudioContext: in_b[1] index: 5
+AudioContext: out_b index (stereo): 0
+AudioContext: initPolls
+>>> /crone/ready
+a CroneAudioContext
+[ CroneEngine adding command, hz, f, a Function ]
+[ CroneEngine adding command, amp, f, a Function ]
+[ CroneEngine adding command, pw, f, a Function ]
+[ CroneEngine adding command, release, f, a Function ]
+[ CroneEngine adding command, cutoff, f, a Function ]
+[ CroneEngine adding command, gain, f, a Function ]
+[ CroneEngine adding command, pan, f, a Function ]
+-----------------------
+-- crone: done loading engine, starting reports
+--------
+engine: an Engine_PolyPerc
+command entry: [ 0, hz, f ]
+command entry: [ 1, amp, f ]
+command entry: [ 2, pw, f ]
+command entry: [ 3, release, f ]
+command entry: [ 4, cutoff, f ]
+command entry: [ 5, gain, f ]
+command entry: [ 6, pan, f ]
+cpu_peak
+cpu_avg
+amp_in_l
+amp_in_r
+amp_out_l
+amp_out_r
+pitch_in_l
+pitch_in_r
+free engine: an Engine_PolyPerc
+CroneEngine.free
+engines: [ PolySub, SimplePassThru, PolyPerc, TestSine, None ]

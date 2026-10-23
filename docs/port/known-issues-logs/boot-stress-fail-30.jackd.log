@@ -1,0 +1,35 @@
+jackdmp 1.9.21
+Copyright 2001-2005 Paul Davis and others.
+Copyright 2004-2016 Grame.
+Copyright 2016-2022 Filipe Coelho.
+jackdmp comes with ABSOLUTELY NO WARRANTY
+This is free software, and you are welcome to redistribute it
+under certain conditions; see the file COPYING for details
+JACK server starting in non-realtime mode
+self-connect-mode is "Don't restrict self connect requests"
+Unknown source port in attempted (dis)connection src_name [SuperCollider:out_2] dst_name [crone:input_6]
+Unknown source port in attempted (dis)connection src_name [SuperCollider:out_1] dst_name [crone:input_5]
+Unknown destination port in attempted (dis)connection src_name [crone:output_6] dst_name [SuperCollider:in_2]
+Unknown destination port in attempted (dis)connection src_name [crone:output_5] dst_name [SuperCollider:in_1]
+JackTimedDriver::Process XRun = 58 usec
+JackEngine::XRun: client = crone was not finished, state = Running
+JackEngine::XRun: client = softcut was not finished, state = Triggered
+JackAudioDriver::ProcessGraphAsyncMaster: Process error
+Jack main caught signal 15
+JackClientSocket::Read time out
+ClientNotify fails name = crone notification = 18 val1 = 0 val2 = 0
+Cannot read socket fd = 17 err = Connection reset by peer
+Could not read notification result
+ClientNotify fails name = softcut notification = 18 val1 = 0 val2 = 0
+Cannot write socket fd = 17 err = Broken pipe
+CheckRes error
+Could not write notification
+ClientNotify fails name = softcut notification = 18 val1 = 1 val2 = 0
+Cannot write socket fd = 14 err = Broken pipe
+CheckRes error
+Could not write notification
+ClientNotify fails name = crone notification = 18 val1 = 1 val2 = 0
+Cannot write socket fd = 14 err = Broken pipe
+CheckRes error
+Could not write notification
+ClientNotify fails name = crone notification = 15 val1 = 33 val2 = 0

@@ -20,18 +20,20 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   MIDI continue, JACK MIDI input, later ALSA seq input; Phase 7: plugin transport) and `WISHLIST.md`.
 
 ## Test state
-`linux/tests/run_all.sh` (about 2 minutes): no unexpected failures at the end of step 5 and in the latest
-runs. One run of `boot:headless` failed once and passed on 3 standalone repeats and in later `run_all` runs;
-the cause was not found (suspected a timing race at startup). The check now says which condition failed.
+`linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.
+`boot:headless` is a **test race under CPU load**: 14 of 36 stress runs failed (0 of 12 at 2 busy loops per CPU).
+Cause found (the probe does not wait for norns/sclang to be ready), fix proposed and proven in scratch (10/10
+under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port/known-issues-logs/`.
+`linux/tests/stress_boot.sh` repeats the check.
 
 ## In progress
-- Nothing. Phase 2 is complete. Phase 3 has not been started: its approach note
-  (`docs/port/phase-3-clock.md`, plus the audio/device parts of Phase 3) comes first.
+- Nothing. Phase 2 is complete. The Phase 3 approach note is written (`docs/port/phase-3.md`, audio, devices and
+  the clock items); **no Phase 3 code until Ken confirms** (8 decisions at its end).
 
 ## Next
-- Ken: review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
+- Ken: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
-- Then Phase 3 approach note, no code before it.
+- Then answer the decisions in `docs/port/phase-3.md` section 8; Phase 3 code starts after that.
 
 ## Not testable here / notes
 - macOS not rebuilt after the edits to shared sources (list in `docs/port/phase-2.md`).

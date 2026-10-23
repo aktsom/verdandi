@@ -1,0 +1,178 @@
+# Build and run the Linux version on your laptop
+
+For a normal Ubuntu or Debian-based desktop with PipeWire. Read section 2 before you run anything: the
+setup script installs a lot with `sudo`.
+
+**What has been tested, honestly.** Everything in this branch was built and tested in one place: an Ubuntu 24.04
+container (x86_64, run as root, no sound card, no desktop session, no window manager, bare Xvfb), with a dummy
+JACK driver. **Nothing has been run on a real desktop, with real audio, under PipeWire, on Debian or on
+another Ubuntu version.** Sections 1, 3 and 4 are my best instructions, not a record of something that worked
+on a laptop. Where I know of a risk I say so.
+
+## 1. Steps (Ubuntu 24.04 or a derivative, X11 or Wayland session)
+
+```bash
+# 1. get the code, on the branch, in a folder of its own
+mkdir -p ~/verdandi-home
+git clone -b linux-port https://github.com/aktsom/verdandi ~/verdandi-home/norns
+cd ~/verdandi-home/norns
+
+# 2. dependencies (section 2 says exactly what it does; read it first). needs sudo
+linux/setup-deps.sh
+
+# 3. build (a few minutes on 4 cores); result: build/norns/norns
+linux/build.sh
+
+# 4. check it works at all, with no sound and no window needed (a few minutes, needs the test tools of step 2)
+linux/tests/run_all.sh
+```
+
+Why `~/verdandi-home/norns`: `linux/norns.sh` uses the folder **above** the repository as "the norns home"
+(like `/home/we` on the device): `dust/` (scripts, samples), `matronrc.lua`, logs and settings go there, and
+`HOME` is set to it while norns runs. If you clone into `~/verdandi`, your whole home folder becomes the
+norns home. To use another folder: `NORNS_HOME=/some/folder linux/norns.sh` (it must contain `norns` -> the repo).
+
+**Run, first without sound (recommended first run).** This starts its own silent JACK server, so nothing
+depends on PipeWire; it checks the window, keys, grid, menu and dialogs:
+
+```bash
+cd ~/verdandi-home/norns
+NORNS_JACK_DRIVER=dummy linux/norns.sh --terminal
+```
+`--terminal` keeps matron's Lua prompt and its log in this terminal (there is no maiden yet in the Linux
+version; that comes with packaging). Close the window or press Ctrl+Q in it to quit.
+
+**Run with sound under PipeWire.** norns needs a JACK server. On a PipeWire desktop that is PipeWire's JACK
+emulation, used through `pw-jack`:
+
+```bash
+sudo apt install pipewire-jack          # not installed by setup-deps.sh
+cd ~/verdandi-home/norns
+pw-jack linux/norns.sh --terminal
+```
+`linux/norns.sh` starts its own `jackd` only if no JACK server answers; under `pw-jack` PipeWire answers, so it
+does not. **Risk (found, not solved, see `KNOWN-ISSUES.md` item 2):** crone refuses to start when the JACK
+server shows no port flagged "physical" for capture and playback (`norns: cannot start audio: no ADC ports
+found`). In my container, with a PipeWire that had no sound card, exactly that happened. Whether your sound
+card's ports are flagged physical in PipeWire's JACK view is **unknown**. If you see that message, run
+`pw-jack jack_lsp -p` and send me the output (it lists ports with their flags); Phase 3 will deal with it.
+
+**Plain JACK instead of PipeWire.** If you use `jackd` or qjackctl yourself, start it first; then
+`linux/norns.sh` finds it. If nothing runs and PipeWire holds the sound card, `NORNS_JACK_DRIVER=alsa` (the
+default) fails because the card is busy: use the `dummy` driver or `pw-jack`.
+
+**Put a script on it.** Without maiden: copy a script folder into `~/verdandi-home/dust/code/<name>/<name>.lua`
+(or use the menu's "Import files..." / "Import folder..."), then in the norns window use HOME > SELECT. A tiny
+test script that reports every key, encoder, grid, arc and MIDI event on the terminal:
+```bash
+mkdir -p ~/verdandi-home/dust/code/probe
+cp linux/tests/scripts/window_probe.lua ~/verdandi-home/dust/code/probe/
+```
+
+### Debian and other derivatives
+Package names in section 2 are the Ubuntu 24.04 ones. Debian 12/13, Mint, Pop!_OS and others are untested; I did
+not check which package names or versions exist there (for example the nng, SuperCollider and sc3-plugins
+packages). libmonome and waf are built by the script on every system.
+
+## 2. What `linux/setup-deps.sh` does (review it: it is about 50 lines)
+
+It runs `sudo` for these, and nothing else:
+
+1. `apt-get update`, then `apt-get install -y --no-install-recommends` of:
+   - **to build:** build-essential, ca-certificates, curl, git, pkg-config, python3, libasound2-dev,
+     libavahi-client-dev, libavahi-compat-libdnssd-dev, libboost-dev, libcairo2-dev, libevdev-dev,
+     libfftw3-dev, libglib2.0-dev, libgpiod-dev, libjack-jackd2-dev, liblo-dev, liblua5.3-dev, libncurses-dev,
+     libnng-dev, libreadline-dev, libsamplerate0-dev, libsdl2-dev, libsndfile1-dev, libudev-dev
+   - **to run:** jackd2, lua5.3, supercollider-server, supercollider-language, sc3-plugins-server,
+     sc3-plugins-language (SuperCollider brings Qt WebEngine: several hundred MB with its dependencies)
+   - **for the tests only:** xvfb, xauth, x11-apps, xdotool, imagemagick, dbus, python3-gi,
+     gir1.2-glib-2.0, zenity (zenity is also the file-dialog fallback at runtime)
+2. Builds **libmonome 1.4.9** (git tag from github.com/monome/libmonome) with this repository's patch
+   (`linux/patches/libmonome-pty-serial.patch`) and installs it into **`/usr/local`** (libmonome in
+   `/usr/local/lib`, header in `/usr/local/include`, a marker file `/usr/local/share/verdandi/libmonome-pty-serial`),
+   then runs `ldconfig`. Skipped if the marker exists.
+3. Builds **waf 2.1.9** from the GitLab tag (the waf in the repository needs a python module that Python 3.12
+   removed) and installs it as **`/opt/waf/waf`**.
+
+Effects to know about: `jackd2` and `libjack-jackd2-dev` come in next to PipeWire (on Ubuntu both can be
+installed; `pw-jack` selects PipeWire's JACK library for one program, nothing system-wide changes); jackd2's
+installer may ask about real-time privileges (the script sets non-interactive, which answers no).
+Not touched: your PipeWire setup, your home folder (except what the build writes inside the repository
+folder: `build/`, `.waf3-*` and the submodules under `third-party/` and `crone/softcut/`).
+
+If you do not want the test tools, delete `xvfb xauth x11-apps xdotool imagemagick dbus python3-gi
+gir1.2-glib-2.0` from the install line (then `linux/tests/run_all.sh` skips what needs them). A
+`--no-test-deps` switch would be better; say if you want it.
+
+## 3. In a container instead (nothing installed on the laptop)
+
+**Tested:** an Ubuntu 24.04 container, headless (this is how everything here was tested): all of
+`linux/tests/run_all.sh` passes there. Roughly:
+```bash
+docker run --rm -it -v "$PWD":/work/norns ubuntu:24.04 bash      # PWD = the repo on the laptop
+  apt-get update && apt-get install -y sudo git ca-certificates curl
+  cd /work/norns && linux/setup-deps.sh && linux/build.sh && linux/tests/run_all.sh
+```
+(`run_all.sh` starts its own Xvfb, JACK dummy and everything; run as root as I did, norns sets the two
+`QTWEBENGINE_*` variables that SuperCollider's Qt needs as root.)
+
+**Not tested: the window on your screen from a container.** The idea, with X11 (on Wayland this goes through
+XWayland):
+```bash
+xhost +local:                                   # allows local containers to use your X server; undo: xhost -local:
+docker run --rm -it -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix \
+    -v "$PWD":/work/home/norns ubuntu:24.04 bash
+  # inside, after setup-deps.sh and build.sh as above:
+  cd /work/home/norns && NORNS_HOME=/work/home NORNS_JACK_DRIVER=dummy linux/norns.sh --terminal
+```
+That gives the window and input with silent audio. Sound from a container needs PipeWire's socket inside it
+(`-v "$XDG_RUNTIME_DIR/pipewire-0:/tmp/pw/pipewire-0" -e XDG_RUNTIME_DIR=/tmp/pw`, `apt install pipewire-jack`, run
+with `pw-jack`) and meets the same physical-port risk as above; I did not try it. `/dev/snd` pass-through
+(`--device /dev/snd`) only works if nothing else on the laptop holds the card, which PipeWire does.
+Files from the container's file manager and portals do not exist in a container (no desktop session):
+"Import files..." needs `zenity` (installed) and your X server, which works, or a portal, which does not.
+
+## 4. Checklist: what to try
+
+Run with `--terminal` so that you can see messages. Tick or note what happened; whatever fails, copy the
+terminal output and `~/verdandi-home/jackd.log` and `sclang.log` if present.
+
+**Window**
+- [ ] The device window opens (aluminium box, black screen, buttons MIX TAPE HOME PARAMS MIC GRID ARC KEYS
+      MAIDEN MANUAL, a fader OUT, K1-K3, E1-E3); it resizes without breaking; closing it ends norns.
+- [ ] With the script above loaded, or from HOME > SELECT, the screen shows the script's picture.
+- [ ] It looks right on your screen scale (HiDPI) and in X11 *and* Wayland if you can try both.
+
+**Keys and knobs**
+- [ ] Click K1-K3 (they light and norns reacts); drag a knob; scroll over E1-E3.
+- [ ] Keyboard (window focused): `1 2 3` = K1 K2 K3; `q w`, `a s`, `z x` turn E1, E2, E3; Shift = bigger steps.
+- [ ] The KEYS button (or F7): the piano window opens; click a key and type `a w s e d f ...`; `z`/`x` octave. With a
+      script that listens to MIDI, the notes arrive (device "Verdandi keys").
+
+**Grid and arc**
+- [ ] GRID (or F6): the grid window opens; a script with `grid.connect()` sees "virtual grid"; clicking a key
+      reaches the script; the script's LEDs show in the window; 64/128/256 buttons below the grid.
+- [ ] ARC (or F8): four knobs; scrolling turns, right-click pushes; LEDs from the script show.
+
+**Menu and files**
+- [ ] Right-click on the device or F10 opens the menu; mouse and arrow keys + Enter work; Escape closes it.
+- [ ] "Import files..." opens **your desktop's file dialog** (not zenity's grey one, if you have a portal);
+      choose a `.wav`: a note on the device says it was linked in `dust/audio/mac`; with "Copy samples into
+      dust" ticked it is copied. Also try dragging a `.wav` from the file manager onto the window (Shift held:
+      a copy).
+- [ ] A script's own file chooser (for example buffer 1 sample in PARAMS of a script that has it): your
+      desktop's dialog comes up next to norns' own browser.
+- [ ] "Show dust folder" and "Show tape folder" open your file manager.
+
+**Screenshot and GIF**
+- [ ] Menu > Screenshot (or Ctrl+Shift+S): a PNG appears in `~/Pictures` (or the folder from
+      `xdg-user-dirs`), four times the OLED size, crisp pixels.
+- [ ] Menu > Record GIF, wait a few seconds with something moving on the screen, menu > Stop GIF recording:
+      an animated GIF appears in the same folder and plays.
+
+**Audio** (only with `pw-jack`, see the risk above)
+- [ ] norns starts without "no ADC ports found"; a script with an engine makes sound; MIC on the device lights
+      when the microphone is connected; the OUT fader changes the volume.
+
+Please also note: your distribution and version, X11 or Wayland, the desktop (GNOME, KDE, ...), whether you
+use PipeWire (`pactl info | grep "Server Name"`), and the output of `pw-jack jack_lsp -p` if the audio line fails.
