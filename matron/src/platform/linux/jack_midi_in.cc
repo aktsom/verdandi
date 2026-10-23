@@ -18,7 +18,9 @@
 
 #include <atomic>
 
+#include "clocks/clock_midi.h"
 #include "device_list.h"
+#include "jack_client.h"
 #include "../macos/product.h"
 #include "readerwriterqueue.h"
 
@@ -31,6 +33,7 @@
 namespace {
 
 struct chunk_t {
+    uint32_t frame; // JACK frame time of the event (start of the cycle plus its offset)
     uint8_t len;
     uint8_t data[CHUNK];
 };
@@ -43,11 +46,15 @@ std::atomic<bool> stopping{false};
 std::atomic<unsigned> dropped{0};
 int pipe_rd = -1, pipe_wr = -1;
 pthread_t reader;
+// the device's "clock receive" switch (device_midi.cc gives the address); the clock is fed from here, with the
+// event's own time, and the device parser leaves clock messages of this device alone
+const bool *clock_enabled = NULL;
 
 // real-time thread: copy, no allocation, no locks (try_enqueue never allocates; sem_post is real-time safe)
 int process(jack_nframes_t nframes, void *) {
     void *buf = jack_port_get_buffer(port, nframes);
     jack_nframes_t count = jack_midi_get_event_count(buf);
+    jack_nframes_t cycle_start = jack_last_frame_time(client);
     bool any = false;
     for (jack_nframes_t i = 0; i < count; i++) {
         jack_midi_event_t ev;
@@ -56,6 +63,7 @@ int process(jack_nframes_t nframes, void *) {
         }
         for (size_t off = 0; off < ev.size; off += CHUNK) {
             chunk_t c;
+            c.frame = cycle_start + ev.time;
             c.len = (uint8_t)(ev.size - off > CHUNK ? CHUNK : ev.size - off);
             memcpy(c.data, ev.buffer + off, c.len);
             if (queue.try_enqueue(c)) {
@@ -79,6 +87,23 @@ void *reader_thread(void *) {
         }
         chunk_t c;
         while (queue.try_dequeue(c)) {
+            // clock messages: handled here, in order, with the time they happened (JACK delivers a period at once,
+            // handling time would be quantised to periods: intervals of 0, tempo errors of a few percent)
+            if (clock_enabled != NULL && *clock_enabled) {
+                bool realtime = c.len == 1 && (c.data[0] == 0xf8 || c.data[0] == 0xfa || c.data[0] == 0xfb || c.data[0] == 0xfc);
+                bool spp = c.len == 3 && c.data[0] == 0xf2;
+                if (realtime || spp) {
+                    // the event's time in the clock's time base: now, minus how long ago its frame was
+                    uint32_t cur = (uint32_t)jack_frame_time(client);
+                    double now = jack_client_get_current_time();
+                    double t = now - (double)(int32_t)(cur - c.frame) / jack_get_sample_rate(client);
+                    if (realtime) {
+                        clock_midi_handle_message_at(c.data[0], t);
+                    } else {
+                        clock_midi_handle_song_position((uint16_t)(c.data[1] | (c.data[2] << 7)));
+                    }
+                }
+            }
             // the pipe is blocking: if norns' MIDI thread is slow this thread waits, the queue (4096 entries)
             // absorbs it, and the real-time thread never waits
             ssize_t done = 0;
@@ -139,6 +164,10 @@ int jack_midi_in_start(void) {
     // the device list takes its own lock; dev_midi_init picks the pipe up (jack_midi_in_take_pipe)
     dev_list_add(DEV_TYPE_MIDI, JACK_MIDI_PATH, strdup(JACK_MIDI_DEVICE), NULL);
     return 0;
+}
+
+void jack_midi_in_set_clock_flag(const bool *flag) {
+    clock_enabled = flag;
 }
 
 int jack_midi_in_take_pipe(void) {

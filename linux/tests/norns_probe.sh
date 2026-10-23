@@ -92,6 +92,14 @@ pkill -9 -f "$REPO/build/norns/norns" 2>/dev/null
 pkill -x sclang 2>/dev/null
 pkill -x scsynth 2>/dev/null
 pkill -x jackd 2>/dev/null
+# the next run must not meet a jackd that is still shutting down ("default server already active")
+for _ in $(seq 50); do
+    pgrep -x jackd > /dev/null || break
+    sleep 0.2
+done
+pkill -9 -x jackd 2> /dev/null
+# sidecar processes of this run (they die with norns unless SIGHUP is ignored, as under nohup)
+pkill -f "sidecar \[norns\]" 2> /dev/null
 [ -n "$XVFB_PID" ] && kill "$XVFB_PID" 2>/dev/null
 rm -f "$FIFO"
 echo "norns_probe: done, log in $LOG"

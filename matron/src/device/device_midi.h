@@ -31,6 +31,8 @@ struct dev_midi {
     // the virtual keyboard window's device ("norns keys"): it reads a pipe, not a rawmidi port
     bool from_pipe;
     int pipe_rd;
+    // the JACK MIDI input feeds the clock itself, with the time of each message (jack_midi_in.cc)
+    bool clock_timed;
 #endif
 #endif
 };

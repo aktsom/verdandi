@@ -209,16 +209,23 @@ a 120 BPM "DAW" (start, a note, SPP 16 beats, stop, continue, start) with frame-
 `start 0.02` (beat), note on and off received, `stop 18.00` (SPP 16 beats at 3.0 s plus 2 beats), `continue 20.00`
 (**no reset**), second `start 0.00`. That run also proves the SPP bytes pass the device parser.
 
-**Tempo accuracy, measured, not yet fixed.** With the dummy JACK driver (period 1024 frames = 21.3 ms at 48 kHz) the
-tempo estimate read 122.3, then 117.2 and 122.2 (median) for a true 120. The beat position is exact (it counts
-ticks); only the tempo estimate and the extrapolation between ticks are affected. Likely cause: JACK delivers MIDI
-in period bursts, and the first version timestamps a message when the reader thread handles it, so arrival times are
-quantised to the period. **Option (needs your OK, shared code):** keep each event's frame offset through the queue and
-give `clock_midi` the exact JACK time (`clock_midi_handle_message_at(msg, time)`); the tick intervals would then be
-exact in the JACK time domain. I did not verify this explanation by building the option.
+**Tempo accuracy: found a defect, fixed with timestamps.** The first version stamped each message with the time
+the reader thread handled it. JACK delivers MIDI in period bursts (21.3 ms at 1024 frames/48 kHz), so arrival times
+were quantised: with the dummy driver the tempo read 122.3, 117.2, 122.2 for a true 120, and in a full test run
+the first start event printed an **infinite** tempo and beat (two ticks of one period have the same arrival time,
+interval 0). Fix, done in step 2 after measuring (I had offered it as an option; the infinite value made it a
+defect): the JACK client keeps each event's frame time (`jack_last_frame_time` plus the event offset), and the
+reader thread hands every clock message to `clock_midi_handle_message_at(msg, time)` with the event's time in the
+clock's time base (now minus how long ago its frame was); the device parser leaves the clock messages of this
+input alone (`clock_timed`), so start, continue, stop, SPP and ticks are all handled in one thread, in order.
+`clock_midi` also no longer divides by a zero interval: ticks with equal times count, and the interval is measured
+over the ticks since the last time stamp. Result in three consecutive runs: tempo `120.0`, beats `0.00`, `18.00`,
+`20.00`, `0.00` at the transport events; two new unit tests (timestamps with a frozen system clock give 120.000
+within 0.1%, a burst without timestamps keeps tempo and beat finite).
+Other MIDI sources (hardware, the keys window) still use handling time: unchanged behaviour.
 
 **Shared files changed in steps 1-2 (re-verify macOS):** `matron/src/clock.cc`, `clock.h` (new
 `clock_continue_from_source`), `matron/src/clocks/clock_midi.cc`, `clock_midi.h`, `matron/src/device/device_midi.cc`
-(SPP hook for every device; the JACK path is `NORNS_LINUX_DESKTOP` only), `tests/matron/clocks/common/helpers.{cpp,h}`
+(SPP hook for every device; the JACK path and `clock_timed` are `NORNS_LINUX_DESKTOP` only), `clock_midi.cc` (`clock_midi_handle_message_at`, burst handling), `tests/matron/clocks/common/helpers.{cpp,h}`
 (weak stub), `tests/matron/clocks/clock_midi/test_clock_midi.cpp`. `device_monitor.cc` and `norns/wscript` are Linux-only
 changes. On macOS: plain clock/start/stop behave as before; continue and SPP are new there too.

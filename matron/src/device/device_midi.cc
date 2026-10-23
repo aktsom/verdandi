@@ -86,6 +86,10 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
             return -1;
         }
         midi->from_pipe = true;
+        if (strcmp(base->path, JACK_MIDI_PATH) == 0) {
+            midi->clock_timed = true;
+            jack_midi_in_set_clock_flag(&midi->clock_enabled);
+        }
         midi->handle_in = NULL;
         midi->handle_out = NULL;
         base->start = &dev_midi_start;
@@ -322,7 +326,11 @@ static inline ssize_t dev_midi_consume_buffer(midi_input_state_t *state, ssize_t
         byte = state->buffer[i];
 
         if (byte >= 0xf8) {
+#ifdef NORNS_LINUX_DESKTOP
+            if (midi->clock_enabled && !midi->clock_timed) {
+#else
             if (midi->clock_enabled) {
+#endif
                 clock_midi_handle_message(byte);
             }
         }
@@ -335,7 +343,11 @@ static inline ssize_t dev_midi_consume_buffer(midi_input_state_t *state, ssize_t
 
         if (midi_input_msg_is_complete(state)) {
             // song position pointer: 0xf2, then 7 bits LSB and 7 bits MSB (midi beats)
+#ifdef NORNS_LINUX_DESKTOP
+            if (state->msg_len == 3 && state->msg_buf[0] == 0xf2 && midi->clock_enabled && !midi->clock_timed) {
+#else
             if (state->msg_len == 3 && state->msg_buf[0] == 0xf2 && midi->clock_enabled) {
+#endif
                 clock_midi_handle_song_position((uint16_t)(state->msg_buf[1] | (state->msg_buf[2] << 7)));
             }
             midi_input_msg_post(state, midi);

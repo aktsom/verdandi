@@ -16,6 +16,10 @@ static uint8_t beat_duration_buf_len = 0;
 static double mean_scale;
 static double mean_sum;
 
+// ticks counted since clock_midi_last_tick_time was set: normally 1; more when several ticks arrive at the same
+// instant (a burst: one JACK period, a USB packet) so that their interval can still be measured
+static int ticks_since_time = 0;
+
 // transport state. the beat counter is the number of clocks since the song start, minus one before the
 // first tick of a run: the next tick counts it up to the position it belongs to.
 static bool start_pending;    // start (0xfa) came: the first counted tick tells norns the transport started
@@ -30,6 +34,7 @@ void clock_midi_init() {
     spp_valid = false;
     spp_counter = 0;
     clock_midi_last_tick_time_set = false;
+    ticks_since_time = 0;
     mean_sum = 0;
     mean_scale = 1;
     // the smoothing buffer starts empty too (init used to leave it as it was: harmless when called once at
@@ -42,19 +47,31 @@ void clock_midi_init() {
     clock_reference_init(&clock_midi_reference);
 }
 
-static void clock_midi_handle_clock() {
+// one tick (0xf8) at current_time: the time the tick happened if the source knows it (JACK MIDI: the frame time of
+// the event), else the time it was handled
+static void clock_midi_handle_clock(double current_time) {
     double beat_duration;
-    double current_time = clock_get_system_time();
 
     if (clock_midi_last_tick_time_set == false) {
         clock_midi_last_tick_time_set = true;
         clock_midi_last_tick_time = current_time;
+        ticks_since_time = 0;
     } else {
-        beat_duration = (current_time - clock_midi_last_tick_time) * 24.0;
+        double dt = current_time - clock_midi_last_tick_time;
+        ticks_since_time++;
 
-        if (beat_duration > 4) { // assume clock stopped
-            clock_midi_last_tick_time = current_time;
+        if (dt <= 1e-6 && dt >= -1e-6) {
+            // ticks with the same time (a burst handled at one instant): they count, the interval is measured
+            // when time has moved (an interval of 0 would make the tempo infinite)
+            clock_midi_counter++;
         } else {
+            beat_duration = dt * 24.0 / ticks_since_time;
+
+            if (beat_duration > 4) { // assume clock stopped
+                clock_midi_last_tick_time = current_time;
+                ticks_since_time = 0;
+                return;
+            }
             if (beat_duration_buf_len < DURATION_BUFFER_LENGTH) {
                 beat_duration_buf_len++;
                 mean_scale = 1.0 / beat_duration_buf_len;
@@ -69,17 +86,21 @@ static void clock_midi_handle_clock() {
 
             clock_midi_counter++;
             clock_midi_last_tick_time = current_time;
+            ticks_since_time = 0;
+        }
 
+        // a tempo is known once a real interval was measured
+        if (beat_duration_buf_len > 0) {
             double reference_beat = clock_midi_counter / 24.0;
             clock_update_source_reference(&clock_midi_reference, reference_beat, mean_sum);
+        }
 
-            if (start_pending) {
-                start_pending = false;
-                clock_start_from_source(CLOCK_SOURCE_MIDI);
-            } else if (continue_pending) {
-                continue_pending = false;
-                clock_continue_from_source(CLOCK_SOURCE_MIDI);
-            }
+        if (start_pending) {
+            start_pending = false;
+            clock_start_from_source(CLOCK_SOURCE_MIDI);
+        } else if (continue_pending) {
+            continue_pending = false;
+            clock_continue_from_source(CLOCK_SOURCE_MIDI);
         }
     }
 }
@@ -121,12 +142,16 @@ void clock_midi_handle_song_position(uint16_t midi_beats) {
 }
 
 void clock_midi_handle_message(uint8_t message) {
+    clock_midi_handle_message_at(message, clock_get_system_time());
+}
+
+void clock_midi_handle_message_at(uint8_t message, double time) {
     switch (message) {
     case 0xfa:
         clock_midi_handle_start();
         break;
     case 0xf8:
-        clock_midi_handle_clock();
+        clock_midi_handle_clock(time);
         break;
     case 0xfb:
         clock_midi_handle_continue();

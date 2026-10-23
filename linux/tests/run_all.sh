@@ -117,7 +117,9 @@ if cc -std=gnu11 "$REPO/linux/tests/jack_midi_clock_test.c" -o "$T/jack_midi_clo
         awk -v a="${3:-99}" 'BEGIN { exit !(a < 1.5) }' || { echo "start 2 should be near beat 0: ${3:-none}"; bad=1; }
         [ -n "$stop" ] || { echo "missing: a stop event"; bad=1; }
         awk -v b="$(echo "$stop" | awk '{print $4}')" -v t="$(echo "$stop" | awk '{print $5}')" \
-            'BEGIN { exit !(b > 15.5 && t > 108 && t < 132) }' || { echo "stop: beat after SPP > 15.5 and tempo about 120 (+-10%: arrival times are quantised to JACK periods, 117-122 seen), got: $stop"; bad=1; }
+            'BEGIN { exit !(b > 15.5 && t > 119 && t < 121) }' || { echo "stop: beat after SPP > 15.5 and tempo 120 +-1 (frame-accurate times), got: $stop"; bad=1; }
+        # no transport line may show an infinite or undefined beat or tempo (ticks with equal arrival times)
+        if grep "PROBE transport" "$JLOG" | grep -qiE "inf|nan"; then echo "a transport event with an infinite or undefined beat/tempo"; bad=1; fi
         return $bad
     }
     run "clock:midi clock, start, SPP, stop, continue and notes through JACK MIDI" jackmidi_ok

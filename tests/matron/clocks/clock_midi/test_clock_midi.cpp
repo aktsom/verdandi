@@ -400,3 +400,41 @@ TEST_CASE("midi: continue and start fire their event at the first tick, not at t
     tick(5);
     CHECK(g_continues == 1); // once
 }
+
+// -----------------------------------------------------------------------------
+// timestamped messages (JACK MIDI): the time of the message, not the time it is handled
+// -----------------------------------------------------------------------------
+
+TEST_CASE("midi: messages with their own time give the tempo whatever the handling time") {
+    g_time = 100.0;
+    tests_set_now(g_time);
+    clock_midi_init();
+    reset_counts();
+    clock_midi_handle_message_at(0xfa, 100.0);
+    // the system clock does not move at all (every message is "handled" at the same instant, as when a
+    // whole JACK period arrives at once); the messages carry the true time of a 120 BPM clock
+    for (int i = 0; i < 100; ++i) {
+        clock_midi_handle_message_at(0xf8, 100.0 + i * DT);
+    }
+    CHECK(clock_midi_get_tempo() == doctest::Approx(120.0).epsilon(0.001));
+    CHECK(g_starts == 1);
+    CHECK(std::isfinite(clock_midi_get_beat()));
+}
+
+TEST_CASE("midi: ticks that arrive together without their own time do not make the tempo infinite") {
+    g_time = 100.0;
+    tests_set_now(g_time);
+    clock_midi_init();
+    clock_midi_handle_message(0xfa);
+    // two ticks handled at the same instant (a burst), then the clock goes on
+    clock_midi_handle_message(0xf8);
+    clock_midi_handle_message(0xf8);
+    clock_midi_handle_message(0xf8);
+    CHECK(std::isfinite(clock_midi_get_tempo()));
+    CHECK(clock_midi_get_tempo() > 0.0);
+    CHECK(std::isfinite(clock_midi_get_beat()));
+    g_time = 100.0;
+    tick(30);
+    CHECK(std::isfinite(clock_midi_get_tempo()));
+    CHECK(std::isfinite(clock_midi_get_beat()));
+}

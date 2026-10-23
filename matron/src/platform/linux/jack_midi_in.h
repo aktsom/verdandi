@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 #define JACK_MIDI_PATH "jackmidi:"
 
 #ifdef __cplusplus
@@ -26,6 +28,10 @@ extern int jack_midi_in_start(void);
 
 // device_midi.cc: the read end of the pipe for the device it is making (ownership goes with it), -1 if none
 extern int jack_midi_in_take_pipe(void);
+
+// device_midi.cc: the address of the device's "clock receive" flag (lua's switch). while it is true, the clock
+// messages of this input go to `clock_midi` from here with their exact JACK time
+extern void jack_midi_in_set_clock_flag(const bool *flag);
 
 // the JACK port name, for tests and messages
 extern const char *jack_midi_in_port_name(void);

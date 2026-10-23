@@ -66,5 +66,5 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
       play cursor and pressing play, the beat position is right (SPP) and continue does not jump to 0.
 - [ ] Notes: a keyboard through JACK MIDI (or Reaper's virtual keyboard) reaches a script as the device
       "Verdandi JACK in".
-- [ ] The tempo readout is steady enough for you (see "Tempo accuracy" in `phase-3.md`; a timestamped version
-      is on offer).
+- [ ] The tempo readout is steady with Reaper's clock (frame-accurate times are used; see "Tempo accuracy" in
+      `phase-3.md`). The test client reads exactly 120.0 on the dummy driver.
