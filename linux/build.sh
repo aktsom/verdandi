@@ -4,9 +4,14 @@
 
 set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-WAF="${WAF:-/opt/waf/waf}"
-[ -x "$WAF" ] || WAF="$(command -v waf || true)"
+. "$(dirname "$0")/waf-path.sh"
+WAF="$(find_waf)"
 [ -n "$WAF" ] || { echo "linux/build.sh: waf not found, run linux/setup-deps.sh"; exit 1; }
+[ -w "$(dirname "$WAF")" ] || {
+    echo "linux/build.sh: $WAF is in a folder you cannot write to, and waf unpacks its library next to itself."
+    echo "                run linux/setup-deps.sh (installs waf in ~/.local/share/waf), or copy it somewhere of yours and set WAF=..."
+    exit 1
+}
 cd "$REPO"
 git submodule update --init --recursive --depth 1
 "$WAF" configure --desktop

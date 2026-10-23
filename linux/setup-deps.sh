@@ -4,14 +4,16 @@
 # python's removed `imp`). needs root (or sudo) for apt and /usr/local.
 #
 # usage: linux/setup-deps.sh
-# writes: /usr/local (libmonome), /opt/waf/waf; override with WAF_DIR, PREFIX.
+# writes: /usr/local (libmonome, needs sudo), ~/.local/share/waf/waf (waf, owned by you: waf unpacks its library next to
+# itself, so a root-owned /opt/waf fails for a normal user); override with WAF_DIR, PREFIX.
 
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 PREFIX="${PREFIX:-/usr/local}"
-WAF_DIR="${WAF_DIR:-/opt/waf}"
+. "$HERE/waf-path.sh"
+WAF_DIR="${WAF_DIR:-$WAF_DEFAULT_DIR}"
 LIBMONOME_VERSION=1.4.9
 WAF_VERSION=2.1.9
 SUDO=""
@@ -45,11 +47,15 @@ if [ ! -f "$STAMP" ] || ! ldconfig -p | grep -q libmonome.so; then
     $SUDO ldconfig
 fi
 
-if [ ! -x "$WAF_DIR/waf" ]; then
+if [ ! -x "$WAF_DIR/waf" ] || ! [ -w "$WAF_DIR" ]; then
     echo "== waf $WAF_VERSION (built from the gitlab tag)"
     curl -sSfL "https://gitlab.com/ita1024/waf/-/archive/waf-$WAF_VERSION/waf-waf-$WAF_VERSION.tar.gz" | tar -xz -C "$T"
     (cd "$T/waf-waf-$WAF_VERSION" && python3 waf-light build)
-    $SUDO mkdir -p "$WAF_DIR"
-    $SUDO cp "$T/waf-waf-$WAF_VERSION/waf" "$WAF_DIR/waf"
+    # owned by the user who builds, not root. under "sudo setup-deps.sh" that is SUDO_USER
+    mkdir -p "$WAF_DIR"
+    cp "$T/waf-waf-$WAF_VERSION/waf" "$WAF_DIR/waf"
+    if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then
+        chown -R "$SUDO_USER:$(id -gn "$SUDO_USER")" "$WAF_DIR"
+    fi
 fi
 echo "linux/setup-deps.sh: done"

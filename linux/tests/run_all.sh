@@ -17,7 +17,8 @@ M=macos/tests
 T="$(mktemp -d)"
 # KEEP_LOGS=<dir>: copy every log of this run there before the temporary folder goes (to diagnose a failure)
 trap '[ -n "${KEEP_LOGS:-}" ] && { mkdir -p "$KEEP_LOGS" && cp "$T"/*.log "$KEEP_LOGS"/ 2> /dev/null; }; rm -rf "$T"' EXIT
-WAF="${WAF:-/opt/waf/waf}"
+. "$REPO/linux/waf-path.sh"
+WAF="$(find_waf)"
 
 FAILED=()
 KNOWN=()
