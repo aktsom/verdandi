@@ -82,6 +82,10 @@ __attribute__((weak)) void clock_start_from_source(clock_source_t source) {
     (void)source;
 }
 
+__attribute__((weak)) void clock_continue_from_source(clock_source_t source) {
+    (void)source;
+}
+
 __attribute__((weak)) void clock_stop_from_source(clock_source_t source) {
     (void)source;
 }

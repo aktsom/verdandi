@@ -7,6 +7,57 @@
 #include "clocks/clock_midi.h"
 #include "helpers.h"
 
+// what the clock tells the rest of norns: override the helpers stubs to count start, continue and stop
+// from the midi source
+static int g_starts = 0;
+static int g_continues = 0;
+static int g_stops = 0;
+
+void clock_start_from_source(clock_source_t source) {
+    if (source == CLOCK_SOURCE_MIDI) {
+        g_starts++;
+    }
+}
+
+void clock_continue_from_source(clock_source_t source) {
+    if (source == CLOCK_SOURCE_MIDI) {
+        g_continues++;
+    }
+}
+
+void clock_stop_from_source(clock_source_t source) {
+    if (source == CLOCK_SOURCE_MIDI) {
+        g_stops++;
+    }
+}
+
+// helpers for the song position / continue cases: a clock that has been running at 120 BPM for a while
+static const double DT = 0.5 / 24.0; // 120 BPM
+
+static double g_time;
+
+static void reset_counts() {
+    g_starts = g_continues = g_stops = 0;
+}
+
+static void tick(int n = 1) {
+    for (int i = 0; i < n; ++i) {
+        g_time += DT;
+        tests_set_now(g_time);
+        clock_midi_handle_message(0xf8);
+    }
+}
+
+// init, START, and enough ticks to fill the smoothing buffer; the counter is then well past 0
+static void running_clock(int ticks = 96) {
+    g_time = 100.0;
+    tests_set_now(g_time);
+    clock_midi_init();
+    reset_counts();
+    clock_midi_handle_message(0xfa);
+    tick(1 + ticks); // the first tick after init only sets the time base
+}
+
 TEST_CASE("midi: start + ticks update beat and converge tempo to 120") {
     double time = 200.0;
     tests_set_now(time);
@@ -240,4 +291,112 @@ TEST_CASE("midi: ticks beyond 4s threshold are treated as clock stopped") {
     double tempo_after = clock_midi_get_tempo();
     CHECK(std::isfinite(tempo_after));
     CHECK(!std::isnan(tempo_after));
+}
+
+// -----------------------------------------------------------------------------
+// song position pointer (0xf2) and continue (0xfb)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("midi: song position sets the beat, 6 clocks per midi beat (a sixteenth)") {
+    running_clock();
+    // 16 midi beats = 96 clocks = 4 beats
+    clock_midi_handle_song_position(16);
+    CHECK(clock_midi_get_beat() == doctest::Approx(4.0).epsilon(0.001));
+    // the next tick is the one AT the position (as after a start, whose first tick is beat 0): 25 ticks = 1 beat
+    tick(1);
+    CHECK(clock_midi_get_beat() == doctest::Approx(4.0).epsilon(0.001));
+    tick(24);
+    CHECK(clock_midi_get_beat() == doctest::Approx(5.0).epsilon(0.001));
+    // the largest position, 14 bits
+    clock_midi_handle_song_position(16383);
+    CHECK(clock_midi_get_beat() == doctest::Approx(16383 * 6 / 24.0).epsilon(0.001));
+    // and zero
+    clock_midi_handle_song_position(0);
+    CHECK(std::fabs(clock_midi_get_beat()) < 0.001);
+}
+
+TEST_CASE("midi: song position before any tick (no tempo known yet)") {
+    g_time = 100.0;
+    tests_set_now(g_time);
+    clock_midi_init();
+    reset_counts();
+    clock_midi_handle_song_position(8); // 2 beats
+    // the first tick sets the time base, the second one counts: the beat is then the position
+    tick(2);
+    CHECK(clock_midi_get_beat() == doctest::Approx(2.0).epsilon(0.01));
+}
+
+TEST_CASE("midi: continue keeps the beat counter and does not reset sync events") {
+    running_clock();
+    CHECK(g_starts == 1);
+    double before = clock_midi_get_beat();
+    CHECK(before > 3.0);
+
+    clock_midi_handle_message(0xfc); // stop
+    CHECK(g_stops == 1);
+    clock_midi_handle_message(0xfb); // continue
+    // no reset at the message itself; the beat is where it was
+    CHECK(std::fabs(clock_midi_get_beat() - before) < 0.001);
+    tick(1);
+    // the transport runs again: one continue, and no new start (a start would reset sync events to beat 0)
+    CHECK(g_continues == 1);
+    CHECK(g_starts == 1);
+    tick(24);
+    CHECK(clock_midi_get_beat() > before + 0.9);
+}
+
+TEST_CASE("midi: start after stop still resets the beat to 0") {
+    running_clock();
+    clock_midi_handle_message(0xfc);
+    clock_midi_handle_message(0xfa);
+    tick(3);
+    CHECK(g_starts == 2);
+    CHECK(clock_midi_get_beat() < 0.5);
+}
+
+TEST_CASE("midi: song position then continue resumes from the position") {
+    running_clock();
+    clock_midi_handle_message(0xfc);
+    clock_midi_handle_song_position(32); // 8 beats
+    clock_midi_handle_message(0xfb);
+    tick(1);
+    CHECK(g_continues == 1);
+    CHECK(g_starts == 1); // only the first one
+    CHECK(clock_midi_get_beat() == doctest::Approx(8.0).epsilon(0.001)); // the first tick is at the position
+}
+
+TEST_CASE("midi: start after a song position begins at that position, once") {
+    running_clock();
+    clock_midi_handle_message(0xfc);
+    clock_midi_handle_song_position(8); // 2 beats
+    clock_midi_handle_message(0xfa);
+    tick(1);
+    CHECK(g_starts == 2);
+    CHECK(clock_midi_get_beat() == doctest::Approx(2.0).epsilon(0.001));
+    // the position was used up: the next bare start begins at 0 again
+    clock_midi_handle_message(0xfc);
+    clock_midi_handle_message(0xfa);
+    tick(1);
+    CHECK(g_starts == 3);
+    CHECK(clock_midi_get_beat() < 0.5);
+}
+
+TEST_CASE("midi: a song position that came before a stop is not used by a later start") {
+    running_clock();
+    clock_midi_handle_song_position(8);
+    clock_midi_handle_message(0xfc); // stop forgets it
+    clock_midi_handle_message(0xfa);
+    tick(1);
+    CHECK(clock_midi_get_beat() < 0.5);
+}
+
+TEST_CASE("midi: continue and start fire their event at the first tick, not at the message") {
+    running_clock();
+    clock_midi_handle_message(0xfc);
+    clock_midi_handle_message(0xfb);
+    CHECK(g_continues == 0);
+    tick(1);
+    CHECK(g_continues == 1);
+    tick(5);
+    CHECK(g_continues == 1); // once
 }

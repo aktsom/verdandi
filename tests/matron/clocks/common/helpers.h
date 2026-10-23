@@ -31,6 +31,7 @@ double clock_get_reference_tempo(clock_reference_t *reference);
 
 // clock control stubs used by clock_crow, clock_internal, clock_midi, clock_link
 void clock_start_from_source(clock_source_t source);
+void clock_continue_from_source(clock_source_t source);
 void clock_stop_from_source(clock_source_t source);
 void clock_reschedule_sync_events_from_source(clock_source_t source);
 

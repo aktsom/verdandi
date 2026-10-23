@@ -29,6 +29,8 @@ void clock_update_source_reference(clock_reference_t *reference, double beats, d
 double clock_get_reference_beat(clock_reference_t *reference);
 double clock_get_reference_tempo(clock_reference_t *reference);
 void clock_start_from_source(clock_source_t source);
+// the transport runs again from where it stopped: like start, but pending sync events are not reset to beat 0
+void clock_continue_from_source(clock_source_t source);
 void clock_stop_from_source(clock_source_t source);
 void clock_reschedule_sync_events_from_source(clock_source_t source);
 void clock_set_source(clock_source_t source);

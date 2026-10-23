@@ -3,6 +3,7 @@
 #endif
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "../events.h"
 
@@ -332,6 +333,10 @@ static inline ssize_t dev_midi_consume_buffer(midi_input_state_t *state, ssize_t
         }
 
         if (midi_input_msg_is_complete(state)) {
+            // song position pointer: 0xf2, then 7 bits LSB and 7 bits MSB (midi beats)
+            if (state->msg_len == 3 && state->msg_buf[0] == 0xf2 && midi->clock_enabled) {
+                clock_midi_handle_song_position((uint16_t)(state->msg_buf[1] | (state->msg_buf[2] << 7)));
+            }
             midi_input_msg_post(state, midi);
             midi_input_msg_end(state);
         }
@@ -356,6 +361,7 @@ void *dev_midi_start(void *self) {
 #ifdef NORNS_LINUX_DESKTOP
     if (midi->from_pipe) {
         // the virtual keyboard window: the same parser, bytes from a pipe
+        memset(&state, 0, sizeof state);
         do {
             read = ::read(midi->pipe_rd, state.buffer, DEV_MIDI_INPUT_BUFFER_SIZE);
             if (read > 0 && dev_midi_consume_buffer(&state, read, midi) != read) {

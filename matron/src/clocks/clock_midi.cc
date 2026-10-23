@@ -16,11 +16,29 @@ static uint8_t beat_duration_buf_len = 0;
 static double mean_scale;
 static double mean_sum;
 
+// transport state. the beat counter is the number of clocks since the song start, minus one before the
+// first tick of a run: the next tick counts it up to the position it belongs to.
+static bool start_pending;    // start (0xfa) came: the first counted tick tells norns the transport started
+static bool continue_pending; // continue (0xfb) came: the first counted tick tells norns it runs again, no reset
+static bool spp_valid;        // a song position came and no start, continue or stop used it yet
+static int spp_counter;       // the counter that position gives (position * 6 - 1)
+
 void clock_midi_init() {
     clock_midi_counter = 0;
+    start_pending = false;
+    continue_pending = false;
+    spp_valid = false;
+    spp_counter = 0;
     clock_midi_last_tick_time_set = false;
     mean_sum = 0;
     mean_scale = 1;
+    // the smoothing buffer starts empty too (init used to leave it as it was: harmless when called once at
+    // startup, but a second init, as the tests do, then started with a stale buffer)
+    beat_duration_buf_pos = 0;
+    beat_duration_buf_len = 0;
+    for (int i = 0; i < DURATION_BUFFER_LENGTH; i++) {
+        duration_buf[i] = 0;
+    }
     clock_reference_init(&clock_midi_reference);
 }
 
@@ -55,19 +73,51 @@ static void clock_midi_handle_clock() {
             double reference_beat = clock_midi_counter / 24.0;
             clock_update_source_reference(&clock_midi_reference, reference_beat, mean_sum);
 
-            if (clock_midi_counter == 0) {
+            if (start_pending) {
+                start_pending = false;
                 clock_start_from_source(CLOCK_SOURCE_MIDI);
+            } else if (continue_pending) {
+                continue_pending = false;
+                clock_continue_from_source(CLOCK_SOURCE_MIDI);
             }
         }
     }
 }
 
 static void clock_midi_handle_start() {
-    clock_midi_counter = -1;
+    // a song position that came before begins the run there (once); otherwise the song start
+    clock_midi_counter = spp_valid ? spp_counter : -1;
+    spp_valid = false;
+    continue_pending = false;
+    start_pending = true;
+}
+
+static void clock_midi_handle_continue() {
+    // resume where it is (after a song position, there): the counter is not touched
+    spp_valid = false;
+    if (!start_pending) {
+        continue_pending = true;
+    }
 }
 
 static void clock_midi_handle_stop() {
+    // a position sent before the stop is not meant for the next start
+    spp_valid = false;
+    start_pending = false;
+    continue_pending = false;
     clock_stop_from_source(CLOCK_SOURCE_MIDI);
+}
+
+void clock_midi_handle_song_position(uint16_t midi_beats) {
+    midi_beats &= 0x3fff; // 14 bits
+    // the next tick is the one at this position
+    spp_counter = (int)midi_beats * 6 - 1;
+    spp_valid = true;
+    clock_midi_counter = spp_counter;
+    // with a tempo known the beat moves at once; without one the next ticks set it
+    if (beat_duration_buf_len > 0) {
+        clock_update_source_reference(&clock_midi_reference, (spp_counter + 1) / 24.0, mean_sum);
+    }
 }
 
 void clock_midi_handle_message(uint8_t message) {
@@ -77,6 +127,9 @@ void clock_midi_handle_message(uint8_t message) {
         break;
     case 0xf8:
         clock_midi_handle_clock();
+        break;
+    case 0xfb:
+        clock_midi_handle_continue();
         break;
     case 0xfc:
         clock_midi_handle_stop();

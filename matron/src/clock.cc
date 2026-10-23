@@ -119,6 +119,14 @@ void clock_start_from_source(clock_source_t source) {
     }
 }
 
+void clock_continue_from_source(clock_source_t source) {
+    if (clock_source == source) {
+        // scripts see the transport start again (_norns.clock.start), but where they were: no reset
+        union event_data *ev = event_data_new(EVENT_CLOCK_START);
+        event_post(ev);
+    }
+}
+
 void clock_stop_from_source(clock_source_t source) {
     if (clock_source == source) {
         union event_data *ev = event_data_new(EVENT_CLOCK_STOP);
