@@ -128,7 +128,7 @@ It runs `sudo` for these (apt, libmonome in `/usr/local`), and nothing else; waf
 Effects to know about: `jackd2` and `libjack-jackd2-dev` come in next to PipeWire (on Ubuntu both can be
 installed; `pw-jack` selects PipeWire's JACK library for one program, nothing system-wide changes); jackd2's
 installer may ask about real-time privileges (the script sets non-interactive, which answers no).
-Not touched: your PipeWire setup, your home folder (except what the build writes inside the repository
+Not touched: your PipeWire setup, your home folder (except `~/.local/share/waf` and what the build writes inside the repository
 folder: `build/`, `.waf3-*` and the submodules under `third-party/` and `crone/softcut/`).
 
 If you do not want the test tools, delete `xvfb xauth x11-apps xdotool imagemagick dbus python3-gi
