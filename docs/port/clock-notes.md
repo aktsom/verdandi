@@ -107,7 +107,34 @@ tempo map without extra conventions.
    Linux plugin is wanted.
 Do not promise norns-as-master towards Reaper: Reaper does not slave to MIDI clock.
 
-## 4. Decisions needed from Ken
+## 3b. Reaper Link extensions (read-only research, added after Ken's decisions)
+MIDI clock stays the primary path; this is for the Link fallback. Read from GitHub and the Cockos forum (the
+release page was read by a helper agent; nothing was installed or run):
+- **ReaBlink** ([ak5k/reablink](https://github.com/ak5k/reablink), MIT, 61 stars): "REAPER plug-in extension
+  providing ReaScript bindings for Ableton Link session, and Ableton Link Test Plan compliant implementations
+  (Master/Puppet modes)". Install from ReaPack or from the releases page; a `ReaBlink_Monitor.lua` script turns
+  Link on. It does not turn off REAPER's own MIDI sync, and only one REAPER instance may be Master.
+- **Latest release 0.5.7, 29 July 2025** (about 15 months old on 2026-10-23); the author calls it highly
+  experimental; forum reports of crashes and position problems; the author notes the Link protocol itself carries
+  tempo and beat phase, not a song position.
+- **Platforms** (release 0.5.7 assets): Windows `reaper_reablink-x64.dll`, `-x86.dll`; macOS
+  `reaper_reablink-arm64.dylib`, `-x86_64.dylib` and a universal `-arm64-x86_64.dylib`; Linux
+  `reaper_reablink-aarch64.so`, `-armv7l.so`, `-i686.so`. **An x86_64 Linux file is not in the 12 assets I could
+  see** (the page says 13; the 13th was not shown), so a 64-bit x86 Linux build is unconfirmed (release notes
+  mention "improve Linux compatibility" in 0.5.5 and "compile options for UNIX" in 0.5.7). The README did not
+  state supported platforms or REAPER versions.
+- I did not find another Reaper Link extension. Conclusion: ReaBlink exists for all three systems on paper;
+  its Linux x86_64 availability, and whether it works with Reaper's current version, must be tried by Ken
+  (added to the hardware checklist). Link therefore remains a fallback, as decided.
+
+## 4. Decisions (answered by Ken)
+1. Link extension in Reaper: yes, research it (section 3b); MIDI clock stays the primary path.
+2. JACK MIDI input in the Linux baseline after Phase 2 step 5; ALSA sequencer input later (PLAN.md, Phase 3).
+3. Linux VST3 plugin: wanted in principle, decided at Gate E; plugin transport (Option C) planned into Phase 7
+   and the AUv3.
+4. SPP and MIDI continue in `clock_midi`, with tests; continue must not reset the beat counter (PLAN.md, Phase 3).
+
+(The questions as asked:)
 1. Is a Link extension in Reaper acceptable (and should I check which one exists and works on Linux, macOS and
    Windows before we rely on it)?
 2. Should the JACK MIDI input (and later the ALSA sequencer input) be built in the Linux baseline, or after it?

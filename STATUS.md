@@ -27,7 +27,7 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   5. "keys" MIDI: DONE. A: internal norns device "Verdandi keys" (click and typed notes reach a script; close and
      reopen work). B: ALSA sequencer port written, runtime-optional, UNTESTED (no /dev/snd/seq here).
   Phase 2 stops here (steps 1-5 done); `HARDWARE-CHECKLIST.md` is updated.
-- Clock investigation DONE: `docs/port/clock-notes.md`. Waiting for Ken's decision (4 questions at its end).
+- Clock decisions received and planned (PLAN.md Phase 3 and Phase 7, WISHLIST.md, clock-notes.md 3b-4): SPP/continue, JACK MIDI input, ALSA seq input later, plugin transport. Not started (Phase 3 approach note comes first).
 
 ## Next
 - See above.

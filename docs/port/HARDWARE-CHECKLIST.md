@@ -52,3 +52,9 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 - [ ] Virtual arc (wishlist 1): drag knobs with the left button, push with the right button, scroll; LEDs follow
       a script. (Tested here: LEDs, wheel deltas, push; not tested: left-button drag turning, which uses a
       mouse capture.)
+
+## Clock (from `clock-notes.md`)
+- [ ] ReaBlink in your Reaper (ReaPack or the releases page): is there a Linux x86_64 build, does it load, does
+      norns (`clock_source` = link) follow Reaper's tempo? Same on macOS and Windows later.
+- [ ] Reaper > Preferences > MIDI Devices: the output that reaches norns has "send clock" on; norns follows tempo,
+      start, stop (and, after Phase 3, continue and SPP).

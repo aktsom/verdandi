@@ -25,6 +25,11 @@ Work top to bottom. Tick items off in `STATUS.md`. GATE = write to `DECISIONS.md
 - JACK (PipeWire-JACK on modern distros). Replace the macOS `audio_devices.c` enumeration; keep `audio.conf` semantics.
 - MIC/SYS/OFF input: SYS and APP modes via JACK/PipeWire port connections; remove the Core Audio tap dependency.
 - Real devices via the norns Linux paths (ALSA MIDI, udev, evdev) where upstream already supports them.
+- **External clock, MIDI first** (decided by Ken, `docs/port/clock-notes.md`; wishlist item 2). Approach note `docs/port/phase-3-clock.md` before code. In this order:
+  1. `clock_midi`: support Song Position Pointer (0xF2) and MIDI continue (0xFB), with unit tests (extend `tests/matron/clocks/clock_midi`). **Continue must not reset the beat counter** (start still does); SPP sets the beat position. Shared code: macOS behavior for plain clock/start/stop stays as is, re-verify on macOS.
+  2. **JACK MIDI input port** on matron's JACK client (`jack_client.cpp`) feeding the existing MIDI parser as a norns MIDI device (works with PipeWire and without `/dev/snd/seq`; a program such as Reaper sends clock to it). Part of the Linux baseline. Test headless: a JACK MIDI test client sends 0xF8/0xFA/0xFB/0xFC/SPP into the dummy-driver JACK graph and the tempo/beat are checked from Lua. Real Reaper goes to the hardware checklist.
+  3. **ALSA sequencer input** (client "Verdandi" with a writable port) later: after the JACK MIDI input works, not needed for the baseline gate. Needs `/dev/snd/seq`; untestable in the build container, hardware checklist.
+  4. Ableton Link stays as the secondary path (already built and working on Linux; Windows build define in Phase 6). Reaper side: ReaBlink (see clock-notes.md); MIDI clock is the primary path.
 
 ## Phase 4: Launcher and packaging
 - Linux equivalent of `macos/norns.sh` and `app-launcher.sh` (first run creates `~/norns`).
@@ -51,6 +56,8 @@ Goal: real grids and arcs through **serialosc**, and a **virtual grid/arc that w
 - Cross-compile or build in a Windows VM; anything not testable goes to the hardware checklist.
 
 ## Phase 7: Windows VST3
+- **Plugin transport (Option C of `docs/port/clock-notes.md`)**: design a transport message (tempo, PPQ position, playing) into the UDP bridge protocol (`bridge_protocol.h`) from the start; the bridge turns it into MIDI clock, start/stop/continue and SPP for an internal norns MIDI device (same pipe approach as the keys device), so `clock_midi` follows the DAW with no virtual MIDI driver. The same message is added to the macOS AUv3 (host musical context; cannot be tested here, hardware checklist). Written down in the Phase 7 approach note before code.
+- A **Linux VST3** is wanted in principle: decide at Gate E (it would give Option C on Linux; today PLAN.md has no Linux plugin).
 - Mirror the AUv3 design: thin plugin client talking UDP on 127.0.0.1 to a bridge next to norns. Read `macos/auv3/` and `auv3_bridge` for the protocol first.
-- **GATE E**: framework choice (JUCE under AGPL-3.0 compatible with this GPL-3.0 project, or the VST3 SDK directly; confirm current licenses before choosing).
+- **GATE E**: Linux VST3 yes/no and framework choice (JUCE under AGPL-3.0 compatible with this GPL-3.0 project, or the VST3 SDK directly; confirm current licenses before choosing).
 - Validate with a VST3 validator tool; final test in a DAW (Reaper) is Ken's.
