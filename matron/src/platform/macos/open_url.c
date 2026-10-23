@@ -35,11 +35,20 @@ int macos_open_url(const char *url) {
         fprintf(stderr, "open_url: refused\n");
         return -1;
     }
+#ifdef __APPLE__
     char *argv[] = {(char *)"open", (char *)url, NULL};
     pid_t pid;
     if (posix_spawn(&pid, "/usr/bin/open", NULL, NULL, argv, environ) != 0) {
         return -1;
     }
+#else
+    // xdg-open, found on PATH. a page or a folder; it hands the work to the desktop and returns
+    char *argv[] = {(char *)"xdg-open", (char *)url, NULL};
+    pid_t pid;
+    if (posix_spawnp(&pid, "xdg-open", NULL, NULL, argv, environ) != 0) {
+        return -1;
+    }
+#endif
     pthread_t t;
     if (pthread_create(&t, NULL, reap, (void *)(intptr_t)pid) == 0) {
         pthread_detach(t);

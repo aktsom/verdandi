@@ -186,16 +186,34 @@ def build(bld):
         crone_use = [u for u in crone_use if u not in linux_only]
         matron_includes += ['../matron/src/platform/macos/include']
 
-    if bld.env.NORNS_DESKTOP and not bld.env.NORNS_MACOS and not platform.machine().startswith(('arm', 'aarch')):
-        # desktop linux on a non-arm machine: no oled (ssd1322 is arm NEON), no battery, no i2c.
-        # the stubs are shared with the macOS port (see docs/port/INVENTORY.md)
+    # desktop Linux (Verdandi): the window, skins, virtual devices of platform/macos that are plain
+    # C/C++ on SDL2 + Cairo, with platform/linux for the pieces the macOS port does with Cocoa.
+    # no oled (ssd1322 is arm NEON), battery or i2c: stubs shared with the macOS port
+    linux_desktop = bld.env.NORNS_DESKTOP and not bld.env.NORNS_MACOS
+    norns_defines = []
+    if linux_desktop:
+        norns_defines += ['NORNS_LINUX_DESKTOP=1']
         replaced = [
             '../matron/src/hardware/battery.cc',
             '../matron/src/hardware/i2c.cc',
             '../matron/src/hardware/screen/ssd1322.cc',
         ]
         matron_sources = [f for f in matron_sources if f not in replaced] + [
+            '../matron/src/platform/linux/app_audio_linux.c',
+            '../matron/src/platform/linux/desktop_shell_linux.cc',
+            '../matron/src/platform/linux/hid_virtual.cc',
+            '../matron/src/platform/macos/device_skin.c',
+            '../matron/src/platform/macos/dust_import.c',
+            '../matron/src/platform/macos/gif_writer.c',
             '../matron/src/platform/macos/hardware_null.cc',
+            '../matron/src/platform/macos/open_url.c',
+            '../matron/src/platform/macos/sdl_bridge.cc',
+            '../matron/src/platform/macos/varc_skin.c',
+            '../matron/src/platform/macos/vgrid_device.c',
+            '../matron/src/platform/macos/vgrid_proto.c',
+            '../matron/src/platform/macos/vgrid_skin.c',
+            '../matron/src/platform/macos/vkeys_skin.c',
+            '../matron/src/platform/macos/window_keys.c',
         ]
 
     norns_sources = norns_sources + matron_sources + crone_sources
@@ -247,6 +265,7 @@ def build(bld):
         includes=norns_includes,
         use=norns_use,
         lib=norns_libs,
+        defines=norns_defines,
         cxxflags=norns_cxxflags,
         ldflags=norns_ldflags,
         framework=norns_frameworks)

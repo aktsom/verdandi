@@ -18,8 +18,10 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
 - Phase 2, steps per `docs/port/phase-2.md` section 6 (decisions in `DECISIONS.md`):
   1. libmonome pty patch: DONE (`c:vgrid` passes).
   2. dust_import portable copy: DONE (`c:dust_import`, also as an ordinary user; macOS `copyfile` path unchanged).
-  3. window (`sdl_bridge.cc` behind `desktop_shell.h`), 4. menu/picker/screenshot/GIF,
-  5. "norns keys" A + B: not started. Stop after step 5.
+  3. window (`sdl_bridge.cc` behind `desktop_shell.h`): DONE. The Verdandi window (device skin, oled,
+     mouse, computer keyboard as hid keyboard, virtual grid and arc incl. LEDs, deltas, keys) runs
+     under Xvfb; `window:` tests in `run_all.sh`.
+  4. menu/picker/screenshot/GIF: next. 5. "norns keys" A + B: after. Stop after step 5.
 - Then (read-only): clock investigation -> `docs/port/clock-notes.md`; wait for Ken's decision.
 
 ## Next

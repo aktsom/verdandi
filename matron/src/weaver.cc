@@ -53,7 +53,8 @@
 #include "time_since.h"
 #include "weaver.h"
 
-#ifdef __APPLE__
+#include "platform/common/desktop_platform.h"
+#ifdef NORNS_SDL_BRIDGE
 #include "platform/macos/open_url.h"
 #include "platform/macos/sdl_bridge.h"
 #endif
@@ -347,7 +348,7 @@ static int _wall_time_get_delta(lua_State *l);
 static int _platform(lua_State *l);
 static int _platform_factory(lua_State *l);
 static int _platform_shield(lua_State *l);
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
 static int _show_control(lua_State *l);
 static int _open_url(lua_State *l);
 static int _grid_window(lua_State *l);
@@ -685,12 +686,15 @@ void w_init(void) {
     lua_register_norns("platform", &_platform);
     lua_register_norns("platform_factory", &_platform_factory);
     lua_register_norns("platform_shield", &_platform_shield);
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
     lua_register_norns("show_control", &_show_control);
     lua_register_norns("open_url", &_open_url);
     lua_register_norns("grid_window", &_grid_window);
+#ifdef __APPLE__
+    // linux: another app's sound as input is phase 3 (lua then leaves the SYS / APP modes out)
     lua_register_norns("app_input", &_app_input);
     lua_register_norns("monitor_out", &_monitor_out);
+#endif
     lua_register_norns("choose_file", &_choose_file);
     lua_register_norns("choose_file_close", &_choose_file_close);
 #endif
@@ -2752,7 +2756,7 @@ void w_handle_clock_stop() {
 
 // gpio handler
 void w_handle_key(const int n, const int val) {
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
     sdl_bridge_show_control(SDL_BRIDGE_SHOW_KEY, n, val);
 #endif
     lua_getglobal(lvm, "_norns");
@@ -2778,7 +2782,7 @@ void w_handle_window_button(const int n) {
 
 // gpio handler
 void w_handle_enc(const int n, const int delta) {
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
     sdl_bridge_show_control(SDL_BRIDGE_SHOW_ENC, n, delta);
 #endif
     lua_getglobal(lvm, "_norns");
@@ -3596,7 +3600,7 @@ int _platform_shield(lua_State *l) {
     return 1;
 }
 
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
 /***
  * macOS window: show a key/enc event that lua sent to _norns.key/_norns.enc itself
  * (keyboard as hardware keys); events from matron are shown by w_handle_key/enc.
@@ -3643,6 +3647,7 @@ int _grid_window(lua_State *l) {
     return 0;
 }
 
+#ifdef __APPLE__
 /***
  * macOS: what the input hears besides the Mac's own input (lua/core/menu.lua, MIC button)
  * @function app_input
@@ -3666,6 +3671,8 @@ int _monitor_out(lua_State *l) {
     o_set_monitor_out(lua_toboolean(l, 1));
     return 0;
 }
+
+#endif // __APPLE__
 
 /***
  * macOS: the Finder's open panel for lua's fileselect; the choice comes back as

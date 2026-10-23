@@ -10,7 +10,8 @@
 #include "hardware/io.h"
 #include "hardware/screen/screens.h"
 
-#ifdef __APPLE__
+#include "platform/common/desktop_platform.h"
+#ifdef NORNS_SDL_BRIDGE
 #include "platform/macos/product.h"
 #include "platform/macos/sdl_bridge.h"
 #endif
@@ -87,7 +88,7 @@ static void screen_sdl_paint(matron_fb_t *fb) {
     pthread_mutex_lock(&paint_lock);
     if (!closed) {
         cairo_paint(fb->cairo);
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
         sdl_bridge_present(priv->window, priv->draw_surface);
 #else
         SDL_BlitScaled(priv->draw_surface, NULL, priv->window_surface, &windowSize);
@@ -113,7 +114,7 @@ static void screen_sdl_surface_destroy(void *data) {
         return;
     }
     // window first: a frame still queued for it reads draw_surface
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
     sdl_bridge_destroy_window(priv->window);
 #else
     SDL_DestroyWindow(priv->window);
@@ -125,7 +126,7 @@ static void screen_sdl_surface_destroy(void *data) {
 static cairo_surface_t *screen_sdl_surface_create(screen_sdl_priv_t *priv) {
     cairo_surface_t *surface;
 
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
     // SDL is initialized on the main thread by sdl_bridge_init()
     priv->window = sdl_bridge_create_window(MACOS_PRODUCT, windowSize.w, windowSize.h);
     priv->window_surface = NULL;

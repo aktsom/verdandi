@@ -4,6 +4,8 @@
 # headless test harness: boots norns (linux/norns.sh) on Xvfb with jackd's dummy driver and a fifo
 # on stdin, waits for post-startup, feeds the lua REPL one line at a time from <commands.lua>
 # ("#sleep N" waits N seconds, other lines starting with # are comments), stops everything.
+# more commands for the window (Xvfb): "#shot <png>" saves the screen, "#xdo <xdotool args>" sends
+# input (needs xdotool, imagemagick: linux/setup-deps.sh).
 # norns home: $NORNS_HOME, or a fresh temp dir with norns -> this checkout.
 
 set -u
@@ -45,8 +47,11 @@ done
 sleep 1
 
 while IFS= read -r line || [ -n "$line" ]; do
+    line="${line//@home/$NORNS_HOME}" # @home = the norns home, for "#shot @home/x.png"
     case "$line" in
     "#sleep "*) sleep "${line#\#sleep }" ;;
+    "#shot "*) xwd -root -display "$DISPLAY" | convert xwd:- "png:${line#\#shot }" ;;
+    "#xdo "*) xdotool ${line#\#xdo } ;;
     "#"* | "") ;;
     *) printf '%s\n' "$line" >&3 ;;
     esac

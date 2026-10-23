@@ -152,6 +152,14 @@ static const system_action_t system_actions[] = {
     {"reset", "touch \"$HOME/.norns-restart\"; sleep 0.5; pkill -TERM -a -x 'norns|Verdandi'", "norns-reset"},
     {"update", "echo 'Verdandi: update scripts in maiden, Verdandi itself with a new version of the app'", "norns-update"},
 };
+#elif defined(NORNS_LINUX_DESKTOP)
+// desktop Linux (linux/norns.sh supervises norns): the same as on macOS, without the computer's
+// own power control
+static const system_action_t system_actions[] = {
+    {"shutdown", "sleep 0.5; pkill -TERM -x norns", "norns-shutdown"},
+    {"reset", "touch \"$HOME/.norns-restart\"; sleep 0.5; pkill -TERM -x norns", "norns-reset"},
+    {"update", "echo 'Verdandi: update scripts in maiden, Verdandi itself with a new version of the app'", "norns-update"},
+};
 #else
 static const system_action_t system_actions[] = {
     {"shutdown", "sleep 0.5; sudo shutdown now", "norns-shutdown"},

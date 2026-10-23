@@ -86,6 +86,33 @@ boot_ok() {
 }
 run "boot:headless (xvfb, jackd dummy, crone, sclang, script)" boot_ok
 
+# the window on Xvfb: device skin, oled, mouse, keyboard, virtual grid and arc (needs xdotool, imagemagick)
+if command -v xdotool > /dev/null && command -v convert > /dev/null; then
+    WH="$(mktemp -d)"
+    ln -s "$REPO" "$WH/norns"
+    mkdir -p "$WH/dust/code/probe"
+    cp "$REPO/linux/tests/scripts/window_probe.lua" "$WH/dust/code/probe/"
+    WLOG="$T/window.log"
+    NORNS_HOME="$WH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_window.lua" "$WLOG" > /dev/null 2>&1
+    wl() { grep -q "$1" "$WLOG"; }
+    window_ok() {
+        wl "PROBE window init" && wl "PROBE window done" &&
+            wl "PROBE key.2.1" && wl "PROBE key.2.0" && wl "PROBE enc.2" && # mouse: K2, wheel on E2
+            wl "PROBE key.3.1" && wl "PROBE key.3.0" && wl "PROBE enc.1" && # keyboard: 3, w
+            wl "PROBE devices.virtual grid m0000001.monome arc virtual m0000002" &&
+            wl "PROBE gridkey.2.2.1" && wl "PROBE gridkey.2.2.0" && # a click on the grid window
+            wl "PROBE arcdelta.1.2" && wl "PROBE arckey.1.1" && wl "PROBE arckey.1.0"
+    }
+    run "window:mouse, keyboard, virtual grid and arc" window_ok
+    # the oled shows the script's rectangle (about 8% of it is white), the grid shows the lit key
+    oled_mean() { convert "$WH/window-device.png" -crop 420x220+235+440 -colorspace Gray -format "%[fx:mean]" info:; }
+    window_pixels() { awk -v m="$(oled_mean)" 'BEGIN { exit !(m > 0.03 && m < 0.3) }'; }
+    run "window:oled pixels" window_pixels
+    cp "$WH/window-device.png" "$WH/window-devices.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
+else
+    echo "SKIP  window (xdotool and imagemagick not installed)"
+fi
+
 echo
 echo "known failures: ${#KNOWN[@]}  unexpected failures: ${#FAILED[@]}"
 [ ${#FAILED[@]} -eq 0 ]

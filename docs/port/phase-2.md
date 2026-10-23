@@ -257,3 +257,35 @@ No source under `platform/macos/` or `macos/` changed in Phase 1, so the macOS-s
 (`drop_test.m`, `app_input_test.m`, `auval`) are unaffected by it.
 
 The `linux/` folder (scripts, tests) and `docs/port/*` are new and do not touch macOS.
+
+
+---
+
+# Phase 2: changes to shared files (running list, for macOS re-verification)
+
+Step 1 (libmonome): no repository source other than `matron/src/platform/macos/vgrid_device.c`
+(`#define _GNU_SOURCE` guarded; a no-op on macOS).
+
+Step 2 (dust_import): `matron/src/platform/macos/dust_import.c` (the `copyfile` code is unchanged
+under `__APPLE__`; `dust_import_volatile` returns the same result on macOS, the extra folders are
+`#ifndef __APPLE__`), `macos/tests/dust_import_test.c` (new cases, all valid on macOS too).
+
+Step 3 (window), all behind `NORNS_SDL_BRIDGE` (= `__APPLE__` or `NORNS_LINUX_DESKTOP`), so macOS
+sees the same code paths:
+- `matron/src/platform/macos/sdl_bridge.cc`: includes; `dispatch_semaphore` moved into four tiny
+  helpers (macOS keeps `dispatch_semaphore`); `mac_*`/`MAC_*` names replaced by `shell_*`/`SHELL_*`,
+  which are macros for the same functions on macOS (`platform/common/desktop_shell.h`);
+  `removefile` and the CoreMIDI keys code moved into small helper functions (`remove_taken`,
+  `keys_send`, `keys_backend_open/close`, `keys_is_open`) with the original code under
+  `#ifdef __APPLE__`; `ON_DEVICE_THREAD` macro around the two `device_runloop_sync` blocks; Linux
+  folder for screenshots; `where()` also knows "Pictures".
+- `matron/src/platform/macos/open_url.c`: `xdg-open` branch under `#else`.
+- `norns/main.cpp`: the main-thread window loop is `#ifdef NORNS_SDL_BRIDGE` instead of `__APPLE__`.
+- `matron/src/weaver.cc`, `matron/src/hardware/screen/sdl.cc`: `__APPLE__` -> `NORNS_SDL_BRIDGE`;
+  `app_input` and `monitor_out` stay macOS-only.
+- `matron/src/system_cmd.cc`: a third branch for Linux desktop; macOS and Pi branches unchanged.
+- `matron/src/device/device_hid.cc`, `device_monitor.cc`: `NORNS_LINUX_DESKTOP` branches only.
+- `norns/wscript`: Linux desktop source list; per-target define `NORNS_LINUX_DESKTOP`.
+- new: `matron/src/platform/common/{desktop_platform,desktop_shell}.h`.
+What to check on macOS: the build; `macos/norns.sh` window, menu bar, drop, virtual grid/arc/keys,
+a screenshot, a GIF; `window_keys`, `device_skin`, `vgrid`, `dust_import`, `gif` tests.

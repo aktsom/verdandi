@@ -23,6 +23,9 @@
 #include "device_monome.h"
 
 #include "events.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/linux/hid_virtual.h"
+#endif
 
 #define SUB_NAME_SIZE 32
 #define NODE_NAME_SIZE 128
@@ -130,6 +133,11 @@ void dev_monitor_deinit(void) {
 int dev_monitor_scan(void) {
     struct udev *udev;
     struct udev_device *dev;
+
+#ifdef NORNS_LINUX_DESKTOP
+    // the computer keyboard, through the norns window (platform/linux/hid_virtual.cc)
+    dev_list_add(DEV_TYPE_HID, LINUX_SDL_KEYBOARD_PATH, strdup("keyboard"), NULL);
+#endif
 
     udev = udev_new();
     if (udev == NULL) {

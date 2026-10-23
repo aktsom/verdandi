@@ -15,15 +15,20 @@
 
 #include "crone_main.h"
 #include "matron_main.h"
+#include "platform/common/desktop_platform.h"
 
 #include "sidecar.h"
 
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
+#include <pthread.h>
+
 #include "platform/macos/sdl_bridge.h"
 
 static int norns_argc;
 static char **norns_argv;
+#endif
 
+#ifdef __APPLE__
 // darwin has no PR_SET_PDEATHSIG: the sidecar watches its parent with kqueue instead
 static void *watch_parent(void *p) {
     (void)p;
@@ -35,8 +40,10 @@ static void *watch_parent(void *p) {
     }
     return NULL;
 }
+#endif
 
-// matron and crone run off the main thread; the main thread belongs to cocoa (sdl_bridge)
+#ifdef NORNS_SDL_BRIDGE
+// matron and crone run off the main thread; the main thread belongs to the window (sdl_bridge)
 static void crone_at_exit(void) {
     crone_stop();
 }
@@ -115,7 +122,7 @@ int main(int argc, char **argv) {
         // parent
         sidecar_client_init();
 
-#ifdef __APPLE__
+#ifdef NORNS_SDL_BRIDGE
         norns_argc = argc;
         norns_argv = argv;
         sdl_bridge_init();

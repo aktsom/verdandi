@@ -37,17 +37,25 @@
  */
 
 #include <cairo.h>
-#include <dispatch/dispatch.h>
 #include <math.h>
 #include <pthread.h>
 #include <pwd.h>
-#include <removefile.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+
+#ifdef __APPLE__
+#include <dispatch/dispatch.h>
+#include <removefile.h>
+#else
+#include <ftw.h>
+
+#include <condition_variable>
+#include <mutex>
+#endif
 
 #include <deque>
 #include <string>
@@ -60,13 +68,13 @@
 #include "app_audio.h"
 #include "device.h"
 #include "device_list.h"
-#include "device_monitor_macos.h"
+#ifdef __APPLE__
 #include "device_runloop.h"
+#endif
 #include "device_skin.h"
 #include "dust_import.h"
 #include "gif_writer.h"
-#include "mac_menu.h"
-#include "open_url.h"
+#include "platform/common/desktop_shell.h"
 #include "product.h"
 #include "sdl_bridge.h"
 #include "varc_skin.h"
@@ -87,8 +95,51 @@ typedef struct {
     int w, h;
     SDL_Window *window;
     SDL_Surface *src;
+#ifdef __APPLE__
     dispatch_semaphore_t done;
+#else
+    std::mutex *done_lock;
+    std::condition_variable *done_cv;
+    bool *done_flag;
+#endif
 } bridge_req_t;
+
+// the caller waits on the main thread's answer (bridge_call)
+#ifdef __APPLE__
+static void bridge_wait_init(bridge_req_t *req) {
+    req->done = dispatch_semaphore_create(0);
+}
+static void bridge_wait(bridge_req_t *req) {
+    dispatch_semaphore_wait(req->done, DISPATCH_TIME_FOREVER);
+}
+static void bridge_signal(bridge_req_t *req) {
+    dispatch_semaphore_signal(req->done);
+}
+static void bridge_wait_free(bridge_req_t *req) {
+    dispatch_release(req->done);
+}
+#else
+static void bridge_wait_init(bridge_req_t *req) {
+    req->done_lock = new std::mutex();
+    req->done_cv = new std::condition_variable();
+    req->done_flag = new bool(false);
+}
+static void bridge_wait(bridge_req_t *req) {
+    std::unique_lock<std::mutex> lk(*req->done_lock);
+    req->done_cv->wait(lk, [req] { return *req->done_flag; });
+}
+static void bridge_signal(bridge_req_t *req) {
+    // the waiter frees all three after it wakes: stay under the lock until notified
+    std::lock_guard<std::mutex> lk(*req->done_lock);
+    *req->done_flag = true;
+    req->done_cv->notify_all();
+}
+static void bridge_wait_free(bridge_req_t *req) {
+    delete req->done_flag;
+    delete req->done_cv;
+    delete req->done_lock;
+}
+#endif
 
 static Uint32 bridge_event_type = (Uint32)-1;
 static Uint32 show_event_type = (Uint32)-1;
@@ -260,7 +311,7 @@ static void bridge_do(bridge_req_t *req) {
             set_icon(req->window);
             the_window = req->window;
             // drops from apps other than the Finder
-            mac_drop_adopt_windows();
+            shell_adopt_windows();
         }
         break;
     case BRIDGE_PRESENT:
@@ -281,7 +332,7 @@ static void bridge_call(bridge_req_t *req) {
         bridge_do(req);
         return;
     }
-    req->done = dispatch_semaphore_create(0);
+    bridge_wait_init(req);
     SDL_Event ev;
     SDL_zero(ev);
     ev.type = bridge_event_type;
@@ -289,9 +340,9 @@ static void bridge_call(bridge_req_t *req) {
     if (SDL_PushEvent(&ev) < 1) {
         fprintf(stderr, "sdl_bridge: SDL_PushEvent failed: %s\n", SDL_GetError());
     } else {
-        dispatch_semaphore_wait(req->done, DISPATCH_TIME_FOREVER);
+        bridge_wait(req);
     }
-    dispatch_release(req->done);
+    bridge_wait_free(req);
 }
 
 //--- toasts: a short message on the box (main thread)
@@ -468,7 +519,7 @@ static SDL_Window *pane_open(pane_t *p, const char *title, int uw, int uh) {
     if (p->window != NULL) {
         SDL_SetWindowMinimumSize(p->window, uw / 3, uh / 3);
         set_icon(p->window);
-        mac_drop_adopt_windows();
+        shell_adopt_windows();
     }
     return p->window;
 }
@@ -757,21 +808,28 @@ static void grid_set_size(int size) {
     }
 }
 
+// macOS: devices are added and removed on the CoreMIDI/IOKit runloop thread. linux: the device
+// list has its own lock, any thread will do
+#ifdef __APPLE__
+#define ON_DEVICE_THREAD(...) device_runloop_sync(^{ __VA_ARGS__; })
+#else
+#define ON_DEVICE_THREAD(...)                                                                                          \
+    do {                                                                                                               \
+        __VA_ARGS__;                                                                                                   \
+    } while (0)
+#endif
+
 // a monome device for matron; libmonome has it open when this returns, so its link can go
 static void plug_in(vgrid_device_t *g, const char *name) {
     const char *path = vgrid_path(g);
-    device_runloop_sync(^{
-      dev_list_add(DEV_TYPE_MONOME, path, strdup(name), NULL);
-    });
+    ON_DEVICE_THREAD(dev_list_add(DEV_TYPE_MONOME, path, strdup(name), NULL));
     vgrid_unlink(g);
 }
 
 // matron closes its side first (dev_delete -> monome_close), then the pty goes
 static void unplug(vgrid_device_t *g) {
     const char *path = vgrid_path(g);
-    device_runloop_sync(^{
-      dev_list_remove(DEV_TYPE_MONOME, path);
-    });
+    ON_DEVICE_THREAD(dev_list_remove(DEV_TYPE_MONOME, path));
     vgrid_close(g);
 }
 
@@ -1068,21 +1126,35 @@ static void arc_wheel(const SDL_MouseWheelEvent *w) {
     arc_turn(n, dy * ARC_WHEEL_TICKS * turn_factor());
 }
 
-//--- virtual keyboard window: a CoreMIDI source matron picks up like any app's port
+//--- virtual keyboard window: a MIDI source matron picks up like any app's port
+// macOS: a CoreMIDI source. linux: shell_keys_* (platform/linux/keys_midi.cc)
 
+#ifdef __APPLE__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #define NORNS_KEYS_UID 0x6e726e6b // 'nrnk', so other apps remember the port
+#endif
 
 static vkeys_state_t vk = {};
 static vkeys_geom_t keys_geom = {};
+#ifdef __APPLE__
 static MIDIEndpointRef keys_src = 0;
+#endif
 static int keys_mouse = -1;        // key held by the left button
 static int keys_sounding[VKEYS_N]; // note sent for each key, -1 if silent
 static char keys_labels[VKEYS_N][16];
 
+static bool keys_is_open(void) {
+#ifdef __APPLE__
+    return keys_src != 0;
+#else
+    return shell_keys_is_open() != 0;
+#endif
+}
+
 static void keys_send(uint8_t status, uint8_t d1, uint8_t d2) {
+#ifdef __APPLE__
     if (keys_src == 0) {
         return;
     }
@@ -1093,6 +1165,33 @@ static void keys_send(uint8_t status, uint8_t d1, uint8_t d2) {
     if (MIDIPacketListAdd(list, sizeof buf, p, 0, 3, msg) != NULL) {
         MIDIReceived(keys_src, list);
     }
+#else
+    shell_keys_send(status, d1, d2);
+#endif
+}
+
+// false: the source could not be made
+static bool keys_backend_open(void) {
+#ifdef __APPLE__
+    MIDIClientRef client = coremidi_client();
+    if (client == 0 || MIDISourceCreate(client, CFSTR(MACOS_PRODUCT " keys"), &keys_src) != noErr) {
+        keys_src = 0;
+        return false;
+    }
+    MIDIObjectSetIntegerProperty(keys_src, kMIDIPropertyUniqueID, NORNS_KEYS_UID);
+    return true;
+#else
+    return shell_keys_open() == 0;
+#endif
+}
+
+static void keys_backend_close(void) {
+#ifdef __APPLE__
+    MIDIEndpointDispose(keys_src);
+    keys_src = 0;
+#else
+    shell_keys_close();
+#endif
 }
 
 static void keys_redraw(void) {
@@ -1186,10 +1285,9 @@ static void keys_control(int c) {
 }
 
 static void toggle_keys(void) {
-    if (keys_src != 0) {
+    if (keys_is_open()) {
         keys_release_all(VKEYS_HELD_MOUSE | VKEYS_HELD_LATCH | VKEYS_HELD_TYPED);
-        MIDIEndpointDispose(keys_src);
-        keys_src = 0;
+        keys_backend_close();
         pane_close(&keys_pane);
         keys_mouse = -1;
         skin.keys_open = 0;
@@ -1197,13 +1295,10 @@ static void toggle_keys(void) {
         redraw(true);
         return;
     }
-    MIDIClientRef client = coremidi_client();
-    if (client == 0 || MIDISourceCreate(client, CFSTR(MACOS_PRODUCT " keys"), &keys_src) != noErr) {
+    if (!keys_backend_open()) {
         fprintf(stderr, "sdl_bridge: virtual keyboard failed\n");
-        keys_src = 0;
         return;
     }
-    MIDIObjectSetIntegerProperty(keys_src, kMIDIPropertyUniqueID, NORNS_KEYS_UID);
     if (vk.velocity == 0) {
         vk.octave = 3;
         vk.velocity = 100;
@@ -1224,7 +1319,9 @@ static void toggle_keys(void) {
     keys_redraw();
 }
 
+#ifdef __APPLE__
 #pragma clang diagnostic pop
+#endif
 
 static int keys_hit(int x, int y, int *key, int *velocity) {
     double px, py;
@@ -1324,7 +1421,7 @@ static void keys_typed(const SDL_KeyboardEvent *k) {
 
 struct import_item {
     std::string path;
-    int mode;    // MAC_IMPORT_LINK, _COPY (audio into dust/audio), _TAKE (copy, then remove path)
+    int mode;    // SHELL_IMPORT_LINK, _COPY (audio into dust/audio), _TAKE (copy, then remove path)
     bool chosen; // a script's file from the open panel: back to lua's fileselect
 };
 
@@ -1356,8 +1453,21 @@ static bool in_dust(const std::string &path) {
 }
 
 // a file an app wrote for the drop, and its folder of its own (mac_menu.m)
+#ifndef __APPLE__
+static int remove_entry(const char *path, const struct stat *sb, int flag, struct FTW *ftw) {
+    (void)sb;
+    (void)flag;
+    (void)ftw;
+    return remove(path);
+}
+#endif
+
 static void remove_taken(const std::string &path) {
+#ifdef __APPLE__
     removefile(path.c_str(), NULL, REMOVEFILE_RECURSIVE);
+#else
+    nftw(path.c_str(), remove_entry, 16, FTW_DEPTH | FTW_PHYS);
+#endif
     size_t slash = path.rfind('/');
     if (slash != std::string::npos && slash > 0) {
         rmdir(path.substr(0, slash).c_str());
@@ -1422,7 +1532,7 @@ static void *import_worker(void *arg) {
         char dest[2048];
         int as_link = 0;
         // a link to a temporary file dies with it: a copy
-        bool link = item.mode == MAC_IMPORT_LINK &&
+        bool link = item.mode == SHELL_IMPORT_LINK &&
                     !dust_import_volatile(item.path.c_str(), getenv("TMPDIR"), user_home().c_str());
         if (kind == DUST_SKIP) {
             skipped++;
@@ -1454,7 +1564,7 @@ static void *import_worker(void *arg) {
                 call_lua("file_chosen", {item.path});
             }
         }
-        if (item.mode == MAC_IMPORT_TAKE) {
+        if (item.mode == SHELL_IMPORT_TAKE) {
             remove_taken(item.path);
         }
     }
@@ -1481,14 +1591,43 @@ static void import_path(const char *path, int mode) {
 
 // the open panel's choice for lua's fileselect (main thread)
 static void import_chosen(const char *path) {
-    import_queue_push({path, MAC_IMPORT_LINK, true});
+    import_queue_push({path, SHELL_IMPORT_LINK, true});
 }
 
 //--- the screen out: png and gif on the desktop
 
 // the user's own desktop (HOME is the norns home here)
 static std::string desktop_dir(void) {
+#ifdef __APPLE__
     std::string d = user_home() + "/Desktop";
+#else
+    // linux: the pictures folder (XDG_PICTURES_DIR from the environment or ~/.config/user-dirs.dirs)
+    std::string d = user_home() + "/Pictures";
+    const char *env = getenv("XDG_PICTURES_DIR");
+    if (env != NULL && env[0] == '/') {
+        d = env;
+    } else {
+        FILE *f = fopen((user_home() + "/.config/user-dirs.dirs").c_str(), "r");
+        char line[1024];
+        while (f != NULL && fgets(line, sizeof line, f) != NULL) {
+            // XDG_PICTURES_DIR="$HOME/Pictures"
+            const char *q = strstr(line, "XDG_PICTURES_DIR=\"");
+            if (q != NULL && line[0] != '#') {
+                std::string v = q + strlen("XDG_PICTURES_DIR=\"");
+                v = v.substr(0, v.find('"'));
+                if (v.compare(0, 6, "$HOME/") == 0) {
+                    v = user_home() + v.substr(5);
+                }
+                if (!v.empty() && v[0] == '/') {
+                    d = v;
+                }
+            }
+        }
+        if (f != NULL) {
+            fclose(f);
+        }
+    }
+#endif
     struct stat st;
     return stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? d : dust_dir();
 }
@@ -1508,7 +1647,10 @@ static std::string capture_path(const char *ext) {
 }
 
 static const char *where(const std::string &path) {
-    return path.find("/Desktop/") != std::string::npos ? "Desktop" : "dust";
+    if (path.find("/Desktop/") != std::string::npos) {
+        return "Desktop";
+    }
+    return path.find("/Pictures/") != std::string::npos ? "Pictures" : "dust";
 }
 
 #define CAPTURE_SCALE 4
@@ -1632,7 +1774,7 @@ static void gif_stop(void) {
     gif_take = NULL;
     recording = false;
     skin.recording = 0;
-    mac_menu_set_recording(0);
+    shell_set_recording(0);
     if (job->take->frames.empty()) {
         delete job->take;
         delete job;
@@ -1663,7 +1805,7 @@ static void gif_toggle(void) {
     gif_start = SDL_GetTicks();
     recording = true;
     skin.recording = 1;
-    mac_menu_set_recording(1);
+    shell_set_recording(1);
     // the screen as it is now: a still screen records too
     gif_add_frame();
     recording_toast();
@@ -1673,31 +1815,31 @@ static void gif_toggle(void) {
 
 static void show_in_finder(const std::string &dir) {
     mkdir(dir.c_str(), 0755);
-    macos_open_url(dir.c_str());
+    shell_open_url(dir.c_str());
 }
 
 static void menu_item(int id) {
     switch (id) {
-    case MAC_MENU_DUST:
+    case SHELL_MENU_DUST:
         show_in_finder(dust_dir());
         break;
-    case MAC_MENU_TAPE:
+    case SHELL_MENU_TAPE:
         mkdir((dust_dir() + "/audio").c_str(), 0755);
         show_in_finder(dust_dir() + "/audio/tape");
         break;
-    case MAC_MENU_SCREENSHOT:
+    case SHELL_MENU_SCREENSHOT:
         save_screenshot();
         break;
-    case MAC_MENU_GIF:
+    case SHELL_MENU_GIF:
         gif_toggle();
         break;
-    case MAC_MENU_GRID:
+    case SHELL_MENU_GRID:
         toggle_grid();
         break;
-    case MAC_MENU_ARC:
+    case SHELL_MENU_ARC:
         toggle_arc();
         break;
-    case MAC_MENU_KEYS:
+    case SHELL_MENU_KEYS:
         toggle_keys();
         break;
     default:
@@ -1737,7 +1879,7 @@ static void button_action(int control) {
     } else if (control == SKIN_MIC) {
         post_window_button(6);
     } else if (control == SKIN_MAIDEN) {
-        macos_open_url("http://127.0.0.1:5000/maiden");
+        shell_open_url("http://127.0.0.1:5000/maiden");
     } else if (control == SKIN_GRID) {
         toggle_grid();
     } else if (control == SKIN_ARC) {
@@ -1967,7 +2109,7 @@ static void handle_key(const SDL_KeyboardEvent *k) {
         post_enc(out.n, out.value);
         break;
     case WK_HID:
-        macos_hid_keyboard_event((uint16_t)out.n, out.value);
+        shell_hid_keyboard_event((uint16_t)out.n, out.value);
         break;
     case WK_MODE: {
         SDL_Window *window = SDL_GetWindowFromID(k->windowID);
@@ -1982,7 +2124,7 @@ static void handle_key(const SDL_KeyboardEvent *k) {
 // a key/enc event reached norns: move the control on screen
 static void handle_show(int kind, int n, int value) {
     if (kind == SDL_BRIDGE_SHOW_MIC) {
-        mac_menu_set_input(n);
+        shell_set_input(n);
         if (skin.input != n) {
             skin.input = n;
             redraw(true);
@@ -2037,7 +2179,7 @@ void sdl_bridge_init(void) {
     // the first click into the window already presses a key
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     // the menu SDL makes is named after the process
-    mac_set_app_name(MACOS_PRODUCT);
+    shell_set_app_name(MACOS_PRODUCT);
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
         fprintf(stderr, "sdl_bridge: SDL_Init failed: %s\n", SDL_GetError());
     }
@@ -2048,7 +2190,7 @@ void sdl_bridge_init(void) {
     device_event_type = bridge_event_type + 2;
     toast_event_type = bridge_event_type + 3;
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
-    mac_menu_install(menu_item, import_path, note_toast, input_chosen);
+    shell_install(menu_item, import_path, note_toast, input_chosen);
 }
 
 void sdl_bridge_show_control(int kind, int n, int value) {
@@ -2163,7 +2305,7 @@ void sdl_bridge_run(void) {
         if (ev.type == bridge_event_type) {
             bridge_req_t *req = (bridge_req_t *)ev.user.data1;
             bridge_do(req);
-            dispatch_semaphore_signal(req->done);
+            bridge_signal(req);
             continue;
         }
         if (ev.type == show_event_type) {
@@ -2179,10 +2321,10 @@ void sdl_bridge_run(void) {
                 check_app_input((unsigned)(uintptr_t)ev.user.data1);
             } else if (ev.user.code == DEV_CHOOSE) {
                 char *dir = (char *)ev.user.data1;
-                mac_menu_choose_file(dir, dust_dir().c_str(), import_chosen);
+                shell_choose_file(dir, dust_dir().c_str(), import_chosen);
                 free(dir);
             } else if (ev.user.code == DEV_CHOOSE_CLOSE) {
-                mac_menu_choose_file_close();
+                shell_choose_file_close();
             } else if (ev.user.code == DEV_ARC_LEDS) {
                 arc_redraw();
             } else {
@@ -2213,7 +2355,7 @@ void sdl_bridge_run(void) {
         case SDL_DROPFILE:
             if (ev.drop.file != NULL) {
                 // option held while dropping: a copy, as in the Finder
-                import_path(ev.drop.file, mac_option_held() ? MAC_IMPORT_COPY : MAC_IMPORT_LINK);
+                import_path(ev.drop.file, shell_option_held() ? SHELL_IMPORT_COPY : SHELL_IMPORT_LINK);
                 SDL_free(ev.drop.file);
             }
             break;

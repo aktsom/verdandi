@@ -22,5 +22,6 @@ dependencies beyond what upstream norns and the macOS port already use; this lis
 | FFTW3 | softcut/crone | GPL-2.0+ |
 | readline, ncurses | maiden-repl | GPL-3.0+, MIT |
 | Boost headers | build | BSL-1.0 |
-| Xvfb, xauth | headless tests only | MIT/X11 |
+| Xvfb, xauth, x11-apps (xwd), xdotool | headless tests only | MIT/X11, BSD-3-Clause for xdotool |
+| ImageMagick (`convert`) | headless tests only (screenshots) | ImageMagick license (Apache-2.0 style) |
 | git submodules: softcut-lib, Ableton Link, lua-cjson, concurrentqueue, readerwriterqueue, doctest, trompeloeil | as upstream | see each repository (Link: GPL-2.0+) |

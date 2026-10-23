@@ -11,6 +11,9 @@
 
 #include "device_hid.h"
 #include "events.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/linux/hid_virtual.h"
+#endif
 
 #define TEST_NULL_AND_FREE(p)                                    \
     if ((p) != NULL) {                                           \
@@ -89,6 +92,14 @@ int dev_hid_init(void *self) {
     struct libevdev *dev = NULL;
     int ret = 1;
     guint16 raw_guid[16];
+#ifdef NORNS_LINUX_DESKTOP
+    // the computer keyboard, through the norns window: no device file, no reader thread
+    if (strcmp(d->base.path, LINUX_SDL_KEYBOARD_PATH) == 0) {
+        base->start = NULL;
+        base->deinit = &dev_hid_deinit;
+        return hid_virtual_init(d);
+    }
+#endif
     int fd = open(d->base.path, O_RDONLY);
 
     if (fd < 0) {
@@ -152,6 +163,9 @@ void *dev_hid_start(void *self) {
 
 void dev_hid_deinit(void *self) {
     struct dev_hid *di = (struct dev_hid *)self;
+#ifdef NORNS_LINUX_DESKTOP
+    hid_virtual_deinit(di);
+#endif
     for (int i = 0; i < di->num_types; i++) {
         TEST_NULL_AND_FREE(di->codes[i]);
     }
