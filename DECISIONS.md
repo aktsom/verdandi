@@ -1,6 +1,6 @@
 # DECISIONS
 
-## GATE A: fork vs upstream-as-platform-folders (open)
+## GATE A: fork vs upstream-as-platform-folders (DECIDED: option 1, by Ken)
 
 **Question:** where does the Linux (and later Windows) code live, and do we approach ha1dcre?
 
