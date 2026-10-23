@@ -12,3 +12,6 @@ Nothing here is implemented unless Ken says so. The Linux baseline (matching mac
 - params should be midi mappable
 
 - font should be as close to original monome norns as possible
+
+- **Full-window screenshot**: an option to save the whole norns window (device skin, knobs, buttons) as a picture.
+  Ctrl+Shift+S currently saves only the OLED, four times its size.

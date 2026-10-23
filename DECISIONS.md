@@ -53,7 +53,8 @@ override each by port-name prefix (`out_ports=`, `in_ports=`); SYS uses the moni
 Details, the `wpctl` query and the risks: `docs/port/phase-3.md` ("Decision 9"). Hardware note: the RME Fireface is
 not class-compliant on Linux; Windows still needs ASIO (Gate D).
 
-## Decision 10 (OPEN, for Ken): SYS and feedback
-A sink monitor contains norns' own output, so SYS through it can loop (analysis in `docs/port/phase-3.md`, "Feedback
-analysis"). Default SYS = sink monitor with safeguards (monitor off, a visible warning), or default SYS = all
-applications except norns (loop-free)? Step 5 waits for this and for Ken's report anyway.
+## Decision 10 (DECIDED by Ken, built in step 5): SYS and feedback
+SYS = **all application clients except norns' own clients** (no feedback: norns' output is not among the sources).
+The sink monitor exists only as an **optional extra** (`NORNS_SYS_MONITOR=1` or `sys_monitor=1` in `audio.conf`), as its
+own input mode "sink monitor (hears norns too)" with a standing warning on the device screen while it is on and the input
+monitor switched off. Decision 9 (crone follows the default sink, `audio.conf` overrides) is unchanged.

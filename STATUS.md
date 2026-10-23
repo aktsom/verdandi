@@ -27,8 +27,13 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 `linux/tests/stress_boot.sh` repeats the check.
 
 ## In progress
-- **Phase 3 steps 1-4 are done** (Ken's decisions in `DECISIONS.md`); stopped before step 5 as asked;
-  step 5 (MIC/OFF by flag, SYS, APP list) waits for Ken's report; decision 10 is open.
+- **Phase 3 steps 1-5 are done** (Ken's decisions in `DECISIONS.md`; decision 10 decided: SYS = all apps but norns, the sink monitor
+  only as an option). Stopped here as asked: waiting for Ken. Open for Ken: the MIDI auto-connect design (`phase-3.md`), the two
+  investigations (`KNOWN-ISSUES.md` items 4 and 5: the metro thread bug is real and not harmless; the tempo page is upstream behavior).
+  5. MIC/OFF by physical flag, SYS (every application except norns' own clients), APP by name, optional sink monitor; in-window
+     menu lists the applications; tests: `tests/crone/test_input_route.cpp`, `linux/tests/input_test.sh` (fake card and streams).
+  Also fixed on real-machine reports (see the three bug fixes in RUN-ON-LAPTOP.md): libmonome waf via `python3`, waf in
+     `~/.local/share/waf`, the `pw-jack` re-run by absolute path (test with a pw-jack that really execs).
   4. audio.conf and SYSTEM > AUDIO on Linux (modes jackd / pipewire / jack, restart of our own jackd with the new
      settings, PIPEWIRE_QUANTUM request). Found and fixed: SYSTEM > RESTART/SLEEP never worked on desktop Linux
      (`sudo -n systemd-run` in the sidecar). Details: `phase-3.md` "Step 4 results". Full run_all.sh: 0 unexpected failures.
@@ -55,6 +60,10 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
   Not run again 36 times: the stress test of the readiness fix was 8 of 8 at the heaviest load before step 1.
   The leftover `sidecar [norns]` processes seen in my sandbox come from starting the tests with `nohup`
   (SIGHUP is then ignored, so they do not die with norns); a normal terminal is not affected.
+
+## Real-hardware findings (Ken's laptop)
+Recorded in `HARDWARE-CHECKLIST.md` ("Done on a real machine"): silent run, sound under PipeWire, Reaper clock/notes through the
+Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped several times (design for auto-connect only).
 
 ## Next
 - Ken: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS

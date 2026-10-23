@@ -410,3 +410,70 @@ watched them fail, then:
 - Not tested here: real ALSA cards, two different cards as input and output, PipeWire quantum requests, the page on
   a real window with a long device name (the stub cuts names by character count; the page uses real text extents).
   See `HARDWARE-CHECKLIST.md`, "After Phase 3 steps 3-4".
+
+## Step 5 results (MIC/OFF by flag, SYS, APP, optional sink monitor)
+
+Decision 10, as decided by Ken: **SYS = every application client except norns' own clients; the sink monitor only as an
+optional extra with a warning.** Decision 9 stands (crone follows the default sink, `audio.conf` overrides).
+Tests first (`tests/crone/test_input_route.cpp`, `linux/tests/input_test.sh` + `probe_input.lua` with a fake card, fake
+application streams and a late stream), then the code:
+
+- **`crone/src/InputRoute.h`** (pure logic): an *application* is a client with audio output ports, none of them physical, that
+  is not norns (`crone`, `softcut`, `SuperCollider`, `Verdandi`, `Verdandi ctl`, each also with a numeric suffix) and not a card
+  (a client that owns any physical port: its `monitor_*` ports are not an application). Streams of one name are one entry
+  (`Vivaldi`, `Vivaldi-73`). First port feeds `crone:input_1`, second `crone:input_2`, one port feeds both; several streams each
+  give a pair. MIC = the capture ports of the chosen card by flag (physical, output, audio; the card from `in_ports=` /
+  default source), never a MIDI port. Monitor = the `monitor_*` ports of the chosen output card.
+- **`app_audio_linux.cc`** (replaces the stub): a JACK client "Verdandi ctl" does the connections and reads the port list. While
+  SYS, APP or the monitor is on, a port/client registration callback wakes a thread that connects a new stream (a browser that
+  starts playing) after 150 ms, without polling. A mode change is exact (what is not wanted is disconnected from
+  `crone:input_1/2`); a new stream only adds. An application that is not running yet is picked up when it appears.
+- **`lua/core/menu.lua`**: on Linux (`_norns.mic_input` exists) MIC/OFF use the card's ports by flag instead of the literal
+  `system:capture_N`; SYS and APP are offered (`_norns.app_input`, `_norns.monitor_out` are now registered on Linux too);
+  the MIC button goes MIC > SYS > (SINK MONITOR, if enabled) > OFF; while the sink monitor is on the device shows "INPUT: sink
+  monitor hears norns too, feedback possible", otherwise the audio warning (if any) or nothing. SYS and APP switch crone's
+  input monitor off (as on macOS): the applications also play directly, so norns must not play them a second time, and
+  there is no loop because norns' own output is not an input source.
+- **In-window menu** (right click or F10): "Input: microphone", "Input: all apps", the sink monitor if enabled, one line per
+  running application (up to six, the list is made when the menu opens), "Input: off". The selection is kept for the next start
+  like on macOS.
+- Result in the fake-card test: SYS connects Vivaldi, Vivaldi-73 and mpv (FL to input 1, FR to input 2) and nothing of crone,
+  softcut, SuperCollider, the card's capture or monitor; a stream started later is connected within 3 s; APP "Vivaldi" has
+  both Vivaldi streams only; the monitor mode has the card's `monitor_FL/FR` only; MIC again has the capture ports only; OFF
+  has no peers; the app list has no suffix and no norns clients.
+- **Not tested:** real PipeWire streams (names with real applications; whether a stream's output port group always has the
+  JACK client name of the application and appears on the first sound or already at stream start), the menu items on screen,
+  a stream with a monitor-only or surround layout (more than two ports: the first two are used).
+  Changed shared files: `matron/src/weaver.cc` (`_app_input`, `_monitor_out` no longer macOS-only), `matron/src/platform/macos/app_audio.h`
+  (a new define), `matron/src/platform/common/desktop_shell.h` (menu ids), `lua/core/menu.lua` (guarded by
+  `_norns.mic_input` / `NORNS_SYS_MONITOR`, macOS unchanged), `norns/wscript`.
+
+## Design (not built, waits for Ken): optional auto-connect for MIDI input
+
+**Problem seen on Ken's laptop:** Reaper's "virtual" MIDI output has to be connected to `Verdandi:midi_in` by hand, and the link
+has been dropped several times although neither port disappeared (PipeWire's Midi-Bridge can drop a link when the bridge
+client restarts or Reaper reopens its device, without the JACK port vanishing).
+
+**Setting** (off by default): `midi_in_from=<prefix>` in `audio.conf`, or the environment variable `NORNS_MIDI_IN_FROM`
+(the environment wins, as for the other keys). The value is the start of a JACK **port name** (the whole `client:port` string,
+so `Midi-Bridge:Client-` matches every Midi-Bridge client of that kind and `Midi-Bridge:Reaper` a named one); several prefixes
+separated by `;`. Empty or absent: nothing is ever connected (today's behavior: no auto-connect, decision 6).
+
+**What it does:** the "Verdandi ctl" client (the one of step 5; it lives as long as norns) keeps a list of the prefixes and,
+for every **MIDI output port** (type MIDI, output) whose name starts with a prefix, wants a link to `Verdandi:midi_in`.
+- **Checks:** at start, on every port registration (registration callback, as for SYS), and on a timer every 2 seconds, because
+  the dropped links come without any registration (the timer is the answer to "keeps checking").
+- **Repair:** if a wanted link is missing, `jack_connect` it; log "midi: connected X to Verdandi:midi_in" the first time and
+  "reconnected" when it was there before; at most one log line per port per minute so a flapping link cannot flood the log.
+- **No more than asked:** only ports that match a prefix and only to `Verdandi:midi_in`; a link the user removes by hand
+  while the port keeps matching is made again within 2 seconds (that is the point of the setting; the way to stop is to empty
+  the setting). Ports of norns' own clients and MIDI **input** ports never match.
+- **Visible:** SYSTEM > DEVICES > MIDI shows nothing new; the AUDIO page gets one extra line "midi in: <n> linked" while the setting is
+  on (so a user can see it work). No toast on reconnects.
+- **Cost/risks:** a 2 s timer thread calling `jack_get_ports` and `jack_port_get_all_connections` (cheap); a prefix that matches a
+  port the user does not want (for example a hardware keyboard that is also sent to Verdandi on purpose by a patchbay): the
+  prefix is the user's choice, written to be as specific as needed. Not a replacement for the DAW-side fix of why the link drops.
+- **Tests (when built, first):** `InputRoute`-style pure logic in `crone/src/MidiRoute.h` (which ports match, which links are
+  missing), a fake MIDI source client that is connected, disconnected behind norns' back and must be reconnected within 3 s,
+  one that is registered later, and a non-matching one that must stay unconnected.
+- **Open question for Ken:** the 2 s interval, and whether the AUDIO page is the right place for the status line.

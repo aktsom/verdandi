@@ -90,3 +90,48 @@ try and what to send back, and `docs/port/phase-3.md` for the planned handling.
 ALSA sequencer port of the virtual keyboard; the real XDG file-chooser portal and kdialog; Wayland and any
 window manager (only bare Xvfb); the virtual arc turned by dragging the left button; macOS after the shared
 source edits; every real device (audio interface, grid, arc, crow, MIDI).
+
+## 4. `error code: 22 (Invalid argument) in "pthread_create"` on key presses (found on a real laptop; reproduced; NOT fixed)
+
+**What prints it.** `matron/src/metro.cc` (`metro_init`, upstream norns code): every metro runs in its own thread created
+with `pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN)`, i.e. a 16 KiB stack. A metro is (re)started with a new thread
+each time. `lua/core/keyboard.lua:209` calls `screen.ping()` for every keyboard event, and `screen.ping()` restarts the
+screensaver metro (`lua/core/screen.lua`, metro 36): **one thread per key press**. The menu's K1-hold metro (31) and nav
+vanish (35) start more of them: several messages per key.
+
+**Why EINVAL.** With glibc 2.34 and later (Ubuntu 24.04 has 2.39) the thread's static TLS block is carved out of its own
+stack, so a stack of `PTHREAD_STACK_MIN` is too small as soon as the process's static TLS is more than a few KiB. How
+much static TLS the process has depends on the libraries loaded (a desktop with a GPU driver, PipeWire's JACK library,
+Qt/GTK pulled in by dialogs) and it can grow when a library is loaded later, which is probably why it is "intermittent" on
+the laptop and absent in my headless container. (The Pi, with its old glibc and few libraries, never hits it.)
+
+**Reproduced here** with a preloaded library that adds static TLS (`__thread char big[N]`, `LD_PRELOAD`), nothing else
+changed: with N = 12000 and 24000 every metro start prints exactly `error code: 22 (Invalid argument) in "pthread_create"`
+(52 messages for 50 `screen.ping()` calls). Without it: 10000 restarts of the screensaver metro, no message.
+
+**Are key events lost? No.** 100 presses of key `3` under xdotool: 100 key-down and 100 key-up events reach the script both
+without the preload and with it (403 error messages in the second run). The keys are not affected, only the metro threads.
+
+**But it is not harmless.** A metro whose thread cannot be created **never runs**: a script's `metro.init(...):start()`
+with the large TLS preload produced 0 of 20 ticks (20 of 20 without). On the laptop the failing ones are, at least, the
+screensaver timer (it is never restarted, so the screen saver can no longer be postponed by keys) and the K1 long-hold
+detection of the menu; any script that starts a metro at a moment when the TLS is already large would fail silently too
+(`metro_init` returns without telling Lua).
+
+**Proposed fix (not applied):** in `metro_init` do not set such a small stack: skip `pthread_attr_setstacksize` (the default
+8 MiB is virtual memory, 36 metros cost nothing real) or use at least 256 KiB; fix the three error messages that all say
+"pthread_attr_init"; and let `metro_start` report a failed thread (print once per metro) so a script's metro that did not start
+is visible. Needs a test with the TLS preload (the reproduction above works as a test). Shared file (`metro.cc`): the Pi
+keeps working with a larger stack, memory is not an issue there either.
+
+## 5. PARAMS > CLOCK tempo does not refresh on its own with an external clock (investigated; same as upstream)
+
+With `clock_source` = midi (or link, crow) the tempo shown on PARAMS > CLOCK changes only when the cursor is moved.
+**This is upstream norns behavior, not specific to this port.** Compared with `monome/norns` main (fetched today):
+`lua/core/clock.lua` is identical in the relevant part: a coroutine updates the parameter every second with
+`params:set("clock_tempo", external_tempo, true)`: the `true` means "silent", no action and no menu redraw. The params page
+(`lua/core/menu/params.lua`) has no `refresh` function (`refresh = norns.none` in upstream too) and no hook on the tempo
+parameter, so nothing redraws it; it redraws on input and on a few events (midi learn, rebuilds). The value is also rounded to
+a whole number and refreshed once per second at most. A fix would be small (a `refresh` function for the params page, or a
+redraw after the silent `params:set` when the tempo changed and the CLOCK page is open) but it changes upstream behavior in
+a shared Lua file; not done, waiting for Ken.

@@ -86,3 +86,26 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
       and leaves `audio.conf.failed`. Two different cards as input and output are untested (clocks may drift).
 - [ ] SYSTEM > RESTART and SLEEP work (the sidecar used `sudo -n systemd-run` on Linux before this step; now a plain
       shell signals `norns.sh`, as on macOS).
+
+## Done on a real machine (Ken, Linux Mint 22.2, PipeWire 1.0.5, Reaper 7.82)
+- [x] Silent run (`NORNS_JACK_DRIVER=dummy`): window, K1-K3, encoders, virtual grid, arc and keys windows, file dialog from the tape page.
+- [x] Sound under PipeWire (started as `pw-jack <path>/linux/norns.sh --terminal`, before the re-run was fixed): tape playback, the
+      awake script, grid and arc control. `jack_lsp -c`: crone outputs to the built-in playback ports, inputs from the capture
+      ports. The ALSA sequencer port "norns keys" appears while the KEYS window is open.
+- [x] Reaper's "virtual" MIDI output (Midi-Bridge `Client-<n>` Virtual RawMIDI) connected by hand to `Verdandi:midi_in`: notes
+      arrive; clock source midi follows Reaper's tempo; stop, song position and continue arrive and `clock.transport.start/stop`
+      fire. Reaper's reset messages produce bursts of cc and pitchbend (expected: Reaper sends all-notes-off/reset controllers).
+- [ ] Still to see on the laptop: the three setup fixes in a fresh clone (`python3 ./waf`, waf in `~/.local/share/waf`, the
+      `pw-jack` re-run by absolute path); a dropped Midi-Bridge link (design only, `phase-3.md`).
+
+## After Phase 3 step 5 (SYS, APP, MIC by flag)
+- [ ] MIC button on the window: MIC > SYS > OFF (> SINK MONITOR only with `sys_monitor=1`). MIC off really silences the input
+      (`pw-jack jack_lsp -c`: nothing connected to `crone:input_1/2`); MIC on brings the built-in capture ports back.
+- [ ] SYS: play something in the browser: it appears in norns' input (a script that plays or records its input); norns' own
+      output is not in the input (no feedback with the input monitor on a script); a second browser stream (`Vivaldi-73`) joins; a
+      stream started after SYS was chosen joins within a second or two.
+- [ ] APP: right-click menu lists the applications that currently have a stream (without numbers, without norns, without the
+      sound card); choosing one hears only that one; the entry stays chosen when its stream stops and comes back with it.
+- [ ] The sink monitor (`sys_monitor=1`): the warning "INPUT: sink monitor hears norns too" is on the device screen; with a script
+      that plays its input it can feed back (keep the volume down).
+- [ ] The choice (SYS / APP) is still there after RESTART.

@@ -5,11 +5,22 @@ a = arc.connect()
 function g.key(x, y, z) print("PROBE gridkey", x, y, z) end
 function a.delta(n, d) print("PROBE arcdelta", n, d) end
 function a.key(n, z) print("PROBE arckey", n, z) end
--- vport 1 is the JACK MIDI input ("Verdandi JACK in", always there on Linux); the keys window's device is the next one
-m = midi.connect(2)
-m.event = function(data)
-  local d = midi.to_msg(data)
-  print("PROBE midi", d.type, d.note, d.vel, d.ch)
+-- every Verdandi MIDI device is listened to: "Verdandi JACK in" (vport 1, always there on Linux: a DAW or a keyboard
+-- through JACK MIDI) and "Verdandi keys" (the keys window, the next vport). vport 2 is connected whether or not the
+-- keys window is open yet, so that it keeps working when the window is opened later
+local function listen(n)
+  local port = midi.connect(n)
+  port.event = function(data)
+    local d = midi.to_msg(data)
+    print("PROBE midi", d.type, d.note, d.vel, d.ch, port.name)
+  end
+  return port
+end
+m = listen(2)
+midi_ports = {}
+for i = 1, 16 do
+  local name = midi.vports[i].name
+  if i ~= 2 and name ~= nil and name:find("^Verdandi") then midi_ports[i] = listen(i) end
 end
 function key(n, z) print("PROBE key", n, z) end
 function enc(n, d) print("PROBE enc", n, d) end

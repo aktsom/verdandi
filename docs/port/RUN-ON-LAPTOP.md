@@ -72,11 +72,27 @@ linux/norns.sh --terminal
 - **SYSTEM > AUDIO** (HOME page > SYSTEM > AUDIO): INPUT, OUTPUT and RATE
   show what is connected and PipeWire's rate (48000) and cannot be changed; BUFFER is an experimental request
   for a quantum (APPLY restarts norns; the request is made through `PIPEWIRE_QUANTUM`, PipeWire may refuse it).
-- **Not built yet (step 5), so on PipeWire today:** the MIC button/menu cannot switch the input off (it looks for
-  `system:capture_N` ports that PipeWire does not have: I expect it to seem to do nothing; I have not seen it on PipeWire); SYS and APP (another
-  program's sound as input) do not exist. The input is the live microphone of the **default source**: with
-  speakers and a script that plays its input, keep the volume low or use headphones (acoustic feedback).
-  Your browser's sound goes to the sink, not into norns.
+- **The input (MIC button, or right-click > Input):** MIC is the capture ports of the card norns chose (found by port flags,
+  not by name), SYS is the sound of **every application except norns** (a browser, a player: each stream is a JACK client
+  named after the application, `Vivaldi`, `Vivaldi-73`, ...), APP is one application of the list in the right-click menu,
+  OFF disconnects everything. Streams that start later join SYS by themselves. norns' own output is never in SYS (no
+  feedback). While SYS or APP is on, the applications keep playing directly and norns' input monitor is switched off.
+  An optional "sink monitor" input (all that the sound card plays, norns included, so it can feed back) is off unless you put
+  `sys_monitor=1` in `audio.conf` (or `NORNS_SYS_MONITOR=1`); the device then shows a warning while it is on.
+  With MIC on, the input is the live microphone of the **default source**: with speakers and a script that plays its input,
+  keep the volume low or use headphones (acoustic feedback).
+- **MIDI from a DAW (Reaper):** norns' JACK MIDI input is the port `Verdandi:midi_in` (device "Verdandi JACK in", vport 1).
+  Connect Reaper's MIDI output (under PipeWire a `Midi-Bridge` port such as `Client-<n> Virtual RawMIDI`) to it with
+  `pw-jack jack_connect "<Reaper's port>" Verdandi:midi_in` or qpwgraph; `pw-jack jack_lsp -t | grep -i midi` lists them. Set
+  `clock_source` to midi in PARAMS > CLOCK. The link is not made automatically yet (a design for that is in `phase-3.md`; you
+  reported it being dropped). The test script `window_probe.lua` now listens on every "Verdandi" MIDI device (the JACK input and
+  the keys window).
+- **Known problem, not fixed yet:** `error code: 22 (Invalid argument) in "pthread_create"` on key presses is the metro thread
+  of the screensaver timer failing to start (details and the reproduction in `KNOWN-ISSUES.md` item 4). Keys are not lost, but
+  a script's own `metro` can fail the same way: if one of your scripts' metros does nothing, that is why; tell me.
+- **Setup fixes from your reports** (all three are in `linux/`, nothing for you to change): the libmonome step runs its waf with
+  `python3`; waf is installed in `~/.local/share/waf`; the re-run under `pw-jack` uses the script's absolute path (run it
+  as plain `linux/norns.sh --terminal`; `pw-jack linux/norns.sh` also works).
 - Other overrides: `NORNS_AUDIO_SERVER=jackd` (own jackd, needs a card PipeWire does not hold; or
   `NORNS_JACK_DRIVER=dummy` for silence), `NORNS_AUDIO_SERVER=pipewire` (always `pw-jack`).
 - To look at it: `pw-jack jack_lsp -c` shows norns' connections (`crone:input_1` from `...:capture_FL`,
