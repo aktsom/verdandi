@@ -3,7 +3,7 @@
  *
  * the desktop pieces of the window on Linux: the in-window menu (menu_skin.c), the file dialogs
  * (file_picker.cc), opening folders (open_url.c: xdg-open), the keyboard as a hid device
- * (hid_virtual.cc). the "norns keys" MIDI port is step 5 of phase 2 and still a stub here.
+ * (hid_virtual.cc), the "norns keys" MIDI source (keys_midi.cc).
  */
 
 #include <SDL2/SDL.h>
@@ -17,6 +17,7 @@
 #include <string>
 
 #include "file_picker.h"
+#include "keys_midi.h"
 #include "menu_skin.h"
 #include "platform/common/desktop_shell.h"
 
@@ -25,7 +26,6 @@ static void (*cb_import)(const char *path, int mode) = NULL;
 static void (*cb_note)(const char *text) = NULL;
 static void (*cb_input)(const char *mode, const char *bundle, const char *name) = NULL;
 
-static int keys_up = 0;
 static menu_t menu = {};
 static int input_now = 1; // SKIN_INPUT_MIC until lua says otherwise
 static int recording = 0;
@@ -292,23 +292,20 @@ void shell_menu_draw(cairo_t *cr, int w, int h) {
     menu_skin_draw(cr, &menu);
 }
 
-//--- the "norns keys" MIDI port (step 5)
+//--- the "norns keys" MIDI source
 
 int shell_keys_open(void) {
-    keys_up = 1;
-    return 0;
+    return keys_midi_open();
 }
 
 void shell_keys_close(void) {
-    keys_up = 0;
+    keys_midi_close();
 }
 
 int shell_keys_is_open(void) {
-    return keys_up;
+    return keys_midi_is_open();
 }
 
 void shell_keys_send(uint8_t status, uint8_t d1, uint8_t d2) {
-    (void)status;
-    (void)d1;
-    (void)d2;
+    keys_midi_send(status, d1, d2);
 }

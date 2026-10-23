@@ -27,6 +27,11 @@ struct dev_midi {
 #else
     snd_rawmidi_t *handle_in;
     snd_rawmidi_t *handle_out;
+#ifdef NORNS_LINUX_DESKTOP
+    // the virtual keyboard window's device ("norns keys"): it reads a pipe, not a rawmidi port
+    bool from_pipe;
+    int pipe_rd;
+#endif
 #endif
 };
 

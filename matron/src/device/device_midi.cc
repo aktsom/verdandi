@@ -10,6 +10,12 @@
 
 #include "device.h"
 #include "device_midi.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include <errno.h>
+#include <unistd.h>
+
+#include "platform/linux/keys_midi.h"
+#endif
 
 #define DEV_MIDI_INPUT_BUFFER_SIZE 128
 
@@ -17,6 +23,12 @@
 unsigned int dev_midi_port_count(const char *path) {
     int card;
     int alsa_dev;
+
+#ifdef NORNS_LINUX_DESKTOP
+    if (strcmp(path, KEYS_MIDI_PATH) == 0) {
+        return 1;
+    }
+#endif
 
     if (sscanf(path, "/dev/snd/midiC%dD%d", &card, &alsa_dev) < 0) {
         // TODO: Insert error message here
@@ -63,6 +75,23 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
     unsigned int alsa_card;
     unsigned int alsa_dev;
     char *alsa_name;
+
+#ifdef NORNS_LINUX_DESKTOP
+    if (strcmp(base->path, KEYS_MIDI_PATH) == 0) {
+        // the virtual keyboard window: input only, from the pipe it writes
+        midi->pipe_rd = keys_midi_take_pipe();
+        if (midi->pipe_rd < 0) {
+            return -1;
+        }
+        midi->from_pipe = true;
+        midi->handle_in = NULL;
+        midi->handle_out = NULL;
+        base->start = &dev_midi_start;
+        base->deinit = &dev_midi_deinit;
+        midi->clock_enabled = true;
+        return 0;
+    }
+#endif
 
     sscanf(base->path, "/dev/snd/midiC%uD%u", &alsa_card, &alsa_dev);
 
@@ -138,6 +167,12 @@ void dev_midi_deinit(void *self) {
     // fprintf(stderr, "input handle  : %p\n", midi->handle_in);
     // fprintf(stderr, "output handle : %p\n", midi->handle_out);
 
+#ifdef NORNS_LINUX_DESKTOP
+    if (midi->from_pipe) {
+        close(midi->pipe_rd);
+        return;
+    }
+#endif
     if (midi->handle_in != NULL) {
         snd_rawmidi_close(midi->handle_in);
     }
@@ -317,6 +352,19 @@ void *dev_midi_start(void *self) {
     midi_input_state_t state;
     ssize_t read = 0;
     ssize_t xruns;
+
+#ifdef NORNS_LINUX_DESKTOP
+    if (midi->from_pipe) {
+        // the virtual keyboard window: the same parser, bytes from a pipe
+        do {
+            read = ::read(midi->pipe_rd, state.buffer, DEV_MIDI_INPUT_BUFFER_SIZE);
+            if (read > 0 && dev_midi_consume_buffer(&state, read, midi) != read) {
+                fprintf(stderr, "midi inconsistency for device: %s\n", base->name);
+            }
+        } while (read > 0 || (read < 0 && errno == EINTR));
+        return NULL;
+    }
+#endif
 
     if (midi->handle_in == NULL) {
         fprintf(stderr, "starting a reader thread for a non-input MIDI device; shouldn't get here!\n");

@@ -98,12 +98,30 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     NORNS_HOME="$WH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_window.lua" "$WLOG" > /dev/null 2>&1
     wl() { grep -q "$1" "$WLOG"; }
     window_ok() {
-        wl "PROBE window init" && wl "PROBE window done" &&
-            wl "PROBE key.2.1" && wl "PROBE key.2.0" && wl "PROBE enc.2" && # mouse: K2, wheel on E2
-            wl "PROBE key.3.1" && wl "PROBE key.3.0" && wl "PROBE enc.1" && # keyboard: 3, w
-            wl "PROBE devices.virtual grid m0000001.monome arc virtual m0000002" &&
-            wl "PROBE gridkey.2.2.1" && wl "PROBE gridkey.2.2.0" && # a click on the grid window
-            wl "PROBE arcdelta.1.2" && wl "PROBE arckey.1.1" && wl "PROBE arckey.1.0"
+        local bad=0
+        chk() { grep -q "$2" "$WLOG" || { echo "missing: $1"; bad=1; }; }
+        chk "script started" "PROBE window init"
+        chk "probe ran to the end" "PROBE window done"
+        chk "mouse: K2 down" "PROBE key.2.1"
+        chk "mouse: K2 up" "PROBE key.2.0"
+        chk "mouse wheel: E2" "PROBE enc.2"
+        chk "keyboard: 3 = K3 down" "PROBE key.3.1"
+        chk "keyboard: 3 = K3 up" "PROBE key.3.0"
+        chk "keyboard: w = E1" "PROBE enc.1"
+        chk "grid and arc connected" "PROBE devices.virtual grid m0000001.monome arc virtual m0000002"
+        chk "click on the grid window: down" "PROBE gridkey.2.2.1"
+        chk "click on the grid window: up" "PROBE gridkey.2.2.0"
+        chk "arc wheel" "PROBE arcdelta.1.2"
+        chk "arc key down" "PROBE arckey.1.1"
+        chk "arc key up" "PROBE arckey.1.0"
+        chk "keys window is a norns MIDI device" "PROBE midi device.Verdandi keys"
+        chk "click on a piano key: note on" "PROBE midi.note_on.52.111.1"
+        chk "click on a piano key: note off" "PROBE midi.note_off.52.0.1"
+        chk "typed d: note on" "PROBE midi.note_on.52.100.1"
+        chk "keys window closed: the device is gone" "PROBE midi closed.false"
+        chk "keys window opened again: the device is back" "PROBE midi reopened.true"
+        [ "$(grep -c "PROBE midi.note_on.52.100.1" "$WLOG")" = 2 ] || { echo "missing: a note after reopening"; bad=1; }
+        return $bad
     }
     run "window:mouse, keyboard, virtual grid and arc" window_ok
     # the oled shows the script's rectangle (about 8% of it is white), the grid shows the lit key

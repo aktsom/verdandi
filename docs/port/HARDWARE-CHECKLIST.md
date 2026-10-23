@@ -31,3 +31,24 @@ Things that cannot be tested in the build sandbox. Filled in as phases go.
 - [ ] Window under Wayland (SDL's wayland driver) and under X11 with a window manager: size, resize,
       keyboard focus, closing the window ends norns. (Tested here only on bare Xvfb without a window
       manager.)
+
+## After Phase 2 step 5 ("Verdandi keys" MIDI source)
+The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PRODUCT " keys"`).
+- [ ] **ALSA sequencer port (B), not tested at all here** (this container has no `/dev/snd/seq` and no
+      sound kernel modules; the code was only compiled, and the "no sequencer" fallback was exercised).
+      On a machine with `/dev/snd/seq` (the `snd-seq` module; PipeWire's ALSA-seq bridge is fine):
+      1. start norns, open the keys window (KEYS button or F7);
+      2. `aconnect -l` lists client "Verdandi", port 0 "norns keys";
+      3. `aseqdump -p Verdandi` (alsa-utils) prints note on/off while you click a key or type on the keys
+         window; `aconnect Verdandi:0 <a synth>` plays that synth;
+      4. in **Reaper** (Preferences > MIDI Devices): the port appears as an input device (enable it, arm a track
+         for MIDI input) and receives the notes;
+      5. closing the keys window removes the port; opening it again brings it back; no stuck notes (close the
+         window while holding a key);
+      6. norns' own device "Verdandi keys" keeps working while a program is subscribed, and when none is.
+- [ ] Reaper does not see "norns" as a MIDI **input** of norns (the other direction, the virtual port "norns" made
+      by `dev_midi_virtual_init`) unless `/dev/snd/seq` exists: look at the boot log for
+      "failed to open alsa virtual device". Needed for the clock/DAW wishlist item (see `clock-notes.md`).
+- [ ] Virtual arc (wishlist 1): drag knobs with the left button, push with the right button, scroll; LEDs follow
+      a script. (Tested here: LEDs, wheel deltas, push; not tested: left-button drag turning, which uses a
+      mouse capture.)

@@ -34,5 +34,28 @@ a:refresh()
 #sleep 0.3
 #xdo mouseup 3
 #sleep 0.5
+# the virtual keyboard window: norns sees a MIDI device, a click on a key and a typed d play notes
+_norns.grid_window("keys")
+#sleep 1.5
+print("PROBE midi device", midi.vports[1].name, midi.vports[2].name, midi.vports[3].name)
+#click ^keys$ 0.195 0.797
+#sleep 0.4
+#xdo search --name ^keys$ windowfocus
+#xdo keydown d
+#sleep 0.3
+#xdo keyup d
+#sleep 0.5
+# closing and opening the keys window again: the device goes and comes back, and still plays
+_norns.grid_window("keys")
+#sleep 1
+print("PROBE midi closed", midi.vports[1].connected)
+_norns.grid_window("keys")
+#sleep 1.5
+print("PROBE midi reopened", midi.vports[1].connected)
+#xdo search --name ^keys$ windowfocus
+#xdo keydown d
+#sleep 0.3
+#xdo keyup d
+#sleep 0.5
 #shot @home/window-devices.png
 print("PROBE window done")

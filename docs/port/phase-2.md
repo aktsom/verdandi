@@ -295,3 +295,8 @@ Step 4 (menu, file dialogs): new files only under `matron/src/platform/linux/` (
 normal event switch, QUIT case; macOS: `shell_menu_*` are macros that do nothing, `menu_event` is `#ifndef
 __APPLE__`), `desktop_shell.h` (the macOS no-op macros), `norns/main.cpp` (`_exit(0)` after crone has stopped,
 `#ifndef __APPLE__`: glibc hangs destroying `crone::BufDiskWorker::qCv`), wscript (`gio-2.0`, Linux only).
+
+Step 5 ("keys" MIDI): new `matron/src/platform/linux/keys_midi.{h,cc}`; `matron/src/device/device_midi.{h,cc}`
+(`NORNS_LINUX_DESKTOP` branches only: a `from_pipe` device that reads a pipe with the same parser); the
+`#ifdef __APPLE__` CoreMIDI code in `sdl_bridge.cc` was already moved behind helpers in step 3.
+Not tested here: the ALSA sequencer port (B).

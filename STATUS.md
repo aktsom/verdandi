@@ -24,8 +24,10 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   4. menu/picker/screenshot/GIF: DONE. In-window menu (right button, F10), file dialogs (portal via GDBus,
      zenity, kdialog), screenshot, GIF, Import, folders via xdg-open, Quit. Tested with a stub zenity and a mock
      portal; the real portal is on the hardware checklist.
-  5. "norns keys" A + B: next. Stop after step 5.
-- Then (read-only): clock investigation -> `docs/port/clock-notes.md`; wait for Ken's decision.
+  5. "keys" MIDI: DONE. A: internal norns device "Verdandi keys" (click and typed notes reach a script; close and
+     reopen work). B: ALSA sequencer port written, runtime-optional, UNTESTED (no /dev/snd/seq here).
+  Phase 2 stops here (steps 1-5 done); `HARDWARE-CHECKLIST.md` is updated.
+- Read-only clock investigation -> `docs/port/clock-notes.md`; then wait for Ken's decision.
 
 ## Next
 - See above.

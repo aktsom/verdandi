@@ -5,7 +5,8 @@
 # on stdin, waits for post-startup, feeds the lua REPL one line at a time from <commands.lua>
 # ("#sleep N" waits N seconds, other lines starting with # are comments), stops everything.
 # more commands for the window (Xvfb): "#shot <png>" saves the screen, "#xdo <xdotool args>" sends
-# input (needs xdotool, imagemagick: linux/setup-deps.sh), "#sh <command>" runs a shell command (append results to
+# input (needs xdotool, imagemagick: linux/setup-deps.sh), "#click <name regex> <fx> <fy> [button]"
+# clicks at a fraction of a window, "#sh <command>" runs a shell command (append results to
 # $MARKS, a file next to the log: the log is norns' own, its writes would overwrite yours).
 # norns home: $NORNS_HOME, or a fresh temp dir with norns -> this checkout.
 
@@ -53,6 +54,16 @@ while IFS= read -r line || [ -n "$line" ]; do
     "#sleep "*) sleep "${line#\#sleep }" ;;
     "#shot "*) xwd -root -display "$DISPLAY" | convert xwd:- "png:${line#\#shot }" ;;
     "#xdo "*) xdotool ${line#\#xdo } ;;
+    "#click "*) # "#click <window name regex> <x fraction> <y fraction> [button]": press and release in a window
+        set -- ${line#\#click }
+        id="$(xdotool search --name "$1" | head -1)"
+        eval "$(xdotool getwindowgeometry --shell "$id")"
+        cx="$(awk -v w="$WIDTH" -v f="$2" 'BEGIN { printf "%d", w * f }')"
+        cy="$(awk -v h="$HEIGHT" -v f="$3" 'BEGIN { printf "%d", h * f }')"
+        xdotool mousemove --window "$id" "$cx" "$cy" mousedown "${4:-1}"
+        sleep 0.3
+        xdotool mouseup "${4:-1}"
+        ;;
     "#sh "*) MARKS="$NORNS_HOME/probe.marks" bash -c "${line#\#sh }" ;; # a shell command; $MARKS: a file to note results in
     "#"* | "") ;;
     *) printf '%s\n' "$line" >&3 ;;
