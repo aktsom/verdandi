@@ -101,7 +101,7 @@ packages). libmonome and waf are built by the script on every system.
 
 ## 2. What `linux/setup-deps.sh` does (review it: it is about 50 lines)
 
-It runs `sudo` for these, and nothing else:
+It runs `sudo` for these (apt, libmonome in `/usr/local`), and nothing else; waf goes into your home without it:
 
 1. `apt-get update`, then `apt-get install -y --no-install-recommends` of:
    - **to build:** build-essential, ca-certificates, curl, git, pkg-config, python3, libasound2-dev,
@@ -119,7 +119,11 @@ It runs `sudo` for these, and nothing else:
    `/usr/local/lib`, header in `/usr/local/include`, a marker file `/usr/local/share/verdandi/libmonome-pty-serial`),
    then runs `ldconfig`. Skipped if the marker exists.
 3. Builds **waf 2.1.9** from the GitLab tag (the waf in the repository needs a python module that Python 3.12
-   removed) and installs it as **`/opt/waf/waf`**.
+   removed) and installs it as **`~/.local/share/waf/waf`**, owned by you (waf unpacks its library next to itself,
+   so an earlier version of the script that installed it as root into `/opt/waf` made `linux/build.sh` fail for a
+   normal user with "Cannot unpack waf lib into /opt/waf/..."). No `sudo` is used for this step. If you ran the old
+   script, run `linux/setup-deps.sh` again (libmonome is skipped, waf is installed in your home); `linux/build.sh`
+   and `run_all.sh` look in `~/.local/share/waf`, then the old `/opt/waf`, then the PATH, or use `WAF=/path/to/waf`.
 
 Effects to know about: `jackd2` and `libjack-jackd2-dev` come in next to PipeWire (on Ubuntu both can be
 installed; `pw-jack` selects PipeWire's JACK library for one program, nothing system-wide changes); jackd2's
