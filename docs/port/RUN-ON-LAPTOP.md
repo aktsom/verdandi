@@ -112,7 +112,9 @@ It runs `sudo` for these, and nothing else:
      sc3-plugins-language (SuperCollider brings Qt WebEngine: several hundred MB with its dependencies)
    - **for the tests only:** xvfb, xauth, x11-apps, xdotool, imagemagick, dbus, python3-gi,
      gir1.2-glib-2.0, zenity (zenity is also the file-dialog fallback at runtime)
-2. Builds **libmonome 1.4.9** (git tag from github.com/monome/libmonome) with this repository's patch
+2. Builds **libmonome 1.4.9** (git tag from github.com/monome/libmonome; its bundled waf is run as `python3 ./waf`,
+   because a stock Ubuntu/Mint has no `python` command: an earlier version of the script failed there with
+   "/usr/bin/env: 'python': No such file or directory") with this repository's patch
    (`linux/patches/libmonome-pty-serial.patch`) and installs it into **`/usr/local`** (libmonome in
    `/usr/local/lib`, header in `/usr/local/include`, a marker file `/usr/local/share/verdandi/libmonome-pty-serial`),
    then runs `ldconfig`. Skipped if the marker exists.

@@ -32,13 +32,15 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
 # libmonome with linux/patches/libmonome-pty-serial.patch (the virtual grid and arc are ptys).
+# its bundled ./waf starts with "#!/usr/bin/env python" and a stock Ubuntu has no `python`, only python3:
+# so it is run as `python3 ./waf` (waf 2.0.26 there works with python 3.12; no python2-compat package needed)
 # the stamp says that this build has the patch
 STAMP="$PREFIX/share/verdandi/libmonome-pty-serial"
 if [ ! -f "$STAMP" ] || ! ldconfig -p | grep -q libmonome.so; then
     echo "== libmonome $LIBMONOME_VERSION + pty serial patch"
     git clone -q --depth 1 --branch "v$LIBMONOME_VERSION" https://github.com/monome/libmonome.git "$T/libmonome"
     (cd "$T/libmonome" && git apply "$HERE/patches/libmonome-pty-serial.patch" &&
-        ./waf configure --prefix="$PREFIX" --libdir="$PREFIX/lib" && ./waf && $SUDO ./waf install)
+        python3 ./waf configure --prefix="$PREFIX" --libdir="$PREFIX/lib" && python3 ./waf && $SUDO python3 ./waf install)
     $SUDO mkdir -p "$(dirname "$STAMP")" && $SUDO touch "$STAMP"
     $SUDO ldconfig
 fi
