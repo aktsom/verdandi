@@ -127,6 +127,33 @@ else
     echo "SKIP  clock:jack midi (no jack headers)"
 fi
 
+# SYSTEM > AUDIO per audio server mode (own jackd, PipeWire, a server we do not own, the macOS default)
+for mode in jackd pipewire jack default; do
+    run "lua:audio page ($mode)" lua5.3 linux/tests/audio_page_test.lua "$([ $mode = default ] && echo "" || echo $mode)"
+done
+# the ALSA card list tool: builds, runs, every line is four TAB separated fields (a container has no cards)
+audio_tool_ok() {
+    cc -O2 -Wall linux/audio_devices.c -o "$T/audio_devices" $(pkg-config --cflags --libs alsa) || return 1
+    "$T/audio_devices" | awk -F'\t' 'NF != 4 { bad = 1 } END { exit bad }'
+}
+run "c:audio_devices (ALSA card list)" audio_tool_ok
+
+# SYSTEM > AUDIO apply on our own jackd: norns restarts (the sidecar runs the restart action without sudo/systemd)
+# and norns.sh restarts jackd with the new rate and period from audio.conf
+RH="$(mktemp -d)"
+ln -s "$REPO" "$RH/norns"
+NORNS_HOME="$RH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_audio_restart.lua" "$T/audio-restart.log" > /dev/null 2>&1
+audio_restart_ok() {
+    local bad=0
+    [ "$(cat "$RH/probe.marks.rate_before" 2> /dev/null)" = 48000 ] || { echo "rate before: not 48000"; bad=1; }
+    [ "$(cat "$RH/probe.marks.rate_after" 2> /dev/null)" = 44100 ] || { echo "rate after the restart: not 44100 ($(cat "$RH/probe.marks.rate_after" 2> /dev/null))"; bad=1; }
+    [ "$(cat "$RH/probe.marks.buf_after" 2> /dev/null)" = 256 ] || { echo "buffer after the restart: not 256"; bad=1; }
+    [ "$(cat "$RH/probe.marks.crone" 2> /dev/null || echo 0)" -gt 0 ] || { echo "crone is not back"; bad=1; }
+    grep -q "restarting audio" "$T/audio-restart.log" || { echo "norns.sh did not restart audio"; bad=1; }
+    return $bad
+}
+run "audio:apply on our own jackd restarts it with the new settings" audio_restart_ok
+
 # crone picks the sound card on a desktop: audio ports of one physical client (a physical MIDI port beside
 # them is not taken), by name prefix if given; no physical ports: norns boots unconnected with a warning
 run "audio:launcher decisions (stub pw-cli, pw-jack, wpctl)" "$REPO/linux/tests/launcher_test.sh"

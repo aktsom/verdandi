@@ -384,3 +384,29 @@ scenario), then the code. What it does, on the Linux desktop build only (`NORNS_
   Changed shared files: `crone/src/main.cpp`, `crone_main.h` (now `extern "C"` for both languages), `matron/src/weaver.cc`
   (Linux-only functions), `matron/src/platform/macos/sdl_bridge.{cc,h}` (standing note: no effect while none is set),
   `lua/core/menu.lua` (a hook that only exists when `_norns.audio_status` does). Add to the macOS re-verification list.
+
+## Step 4 results (audio.conf, SYSTEM > AUDIO on Linux)
+
+Tests first (`linux/tests/audio_page_test.lua` for four modes, new cases in `launcher_test.sh`, `probe_audio_restart.lua`),
+watched them fail, then:
+
+- `lua/core/menu/audio.lua`: `NORNS_AUDIO_SERVER_MODE` (set by `norns.sh`) selects the behavior; unset = macOS, unchanged.
+  `jackd`: as macOS, devices from `linux/audio_devices` (ALSA cards: `hw:CARD=<id>`, built by `linux/build.sh`).
+  `pipewire`: INPUT / OUTPUT show what crone connected to, RATE shows the system rate, all read-only; BUFFER asks for a
+  quantum and says "exp.". `jack` (a server we did not start): everything read-only, no APPLY. crone's warning is on the
+  bottom line in every mode. Writing `audio.conf` keeps `in_ports=`/`out_ports=` and any other line (the card choice by
+  prefix is made by editing the file; a picker is step 5 material if wanted).
+- `norns.sh`: reads `audio.conf` (`input= output= rate= period=`; environment wins), builds the jackd arguments
+  (`-C`/`-P` only for the alsa driver; one side chosen means the other is `hw:0`), falls back to defaults and
+  `audio.conf.failed` if jackd does not start with the chosen settings, restarts jackd when SYSTEM > AUDIO leaves the
+  audio mark (own jackd only), and under PipeWire turns `period=` into `PIPEWIRE_QUANTUM=<period>/<system rate>`
+  for everything it starts. `NORNS_DECIDE_ONLY` also prints `DECIDE-JACKD`, `DECIDE-RATE`, `DECIDE-QUANTUM` for the tests.
+- **Bug found and fixed on the way:** the sidecar's "detached" actions (SYSTEM > RESTART, SLEEP, and APPLY here) ran
+  `sudo -n systemd-run ...` on desktop Linux too; without passwordless sudo and systemd (a container: "System has not
+  been booted with systemd") the restart never happened. `norns/sidecar.cpp` now uses a plain shell for
+  `NORNS_LINUX_DESKTOP` as for macOS. Shared file changed (Pi unchanged: the `#if` covers macOS and Linux desktop only).
+- End to end (dummy driver, no card): apply writes `rate=44100`/`period=256`, norns restarts, jackd restarts with
+  those values, crone comes back (`run_all.sh`, "audio:apply on our own jackd ...").
+- Not tested here: real ALSA cards, two different cards as input and output, PipeWire quantum requests, the page on
+  a real window with a long device name (the stub cuts names by character count; the page uses real text extents).
+  See `HARDWARE-CHECKLIST.md`, "After Phase 3 steps 3-4".

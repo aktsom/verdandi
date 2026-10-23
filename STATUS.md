@@ -27,8 +27,11 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 `linux/tests/stress_boot.sh` repeats the check.
 
 ## In progress
-- **Phase 3 steps 1, 2 and 3 are done** (Ken's decisions in `DECISIONS.md`). Step 4 (audio.conf, SYSTEM > AUDIO) is next;
+- **Phase 3 steps 1-4 are done** (Ken's decisions in `DECISIONS.md`); stopped before step 5 as asked;
   step 5 (MIC/OFF by flag, SYS, APP list) waits for Ken's report; decision 10 is open.
+  4. audio.conf and SYSTEM > AUDIO on Linux (modes jackd / pipewire / jack, restart of our own jackd with the new
+     settings, PIPEWIRE_QUANTUM request). Found and fixed: SYSTEM > RESTART/SLEEP never worked on desktop Linux
+     (`sudo -n systemd-run` in the sidecar). Details: `phase-3.md` "Step 4 results". Full run_all.sh: 0 unexpected failures.
   3. crone on a desktop: audio-type, physical ports of **one** client only (a physical MIDI port or a second card is
      never mixed in), by name prefix (`NORNS_IN_PORTS`/`NORNS_OUT_PORTS`) else the first card; no physical ports:
      boots unconnected and the warning is on the device window ("AUDIO: not connected, see SYSTEM > AUDIO") and

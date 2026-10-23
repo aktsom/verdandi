@@ -11,4 +11,7 @@ cd "$REPO"
 git submodule update --init --recursive --depth 1
 "$WAF" configure --desktop
 "$WAF" build -j"$(nproc)"
+# SYSTEM > AUDIO: the card list for norns' own jackd
+mkdir -p "$REPO/build/linux"
+cc -O2 -Wall "$REPO/linux/audio_devices.c" -o "$REPO/build/linux/audio_devices" $(pkg-config --cflags --libs alsa)
 echo "linux/build.sh: $REPO/build/norns/norns"

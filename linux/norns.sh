@@ -35,8 +35,6 @@ TERMINAL=0
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 NORNS_HOME="${NORNS_HOME:-$(dirname "$REPO")}"
 JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
-JACK_RATE="${NORNS_JACK_RATE:-48000}"
-JACK_PERIOD="${NORNS_JACK_PERIOD:-1024}"
 
 jack_up() { jack_lsp >/dev/null 2>&1; }
 pw_up() { pw-cli info 0 >/dev/null 2>&1; }
@@ -87,10 +85,65 @@ decide_devices() {
     fi
 }
 
+# audio.conf (written by SYSTEM > AUDIO): input= output= (ALSA devices for our own jackd), rate=, period=;
+# NORNS_JACK_RATE / NORNS_JACK_PERIOD in the environment win. without a file: 48000 Hz, period 1024
+read_audio_conf() {
+    local v
+    JACK_IN="$(conf_get input)"
+    JACK_OUT="$(conf_get output)"
+    v="$(conf_get rate)"
+    case "$v" in 44100 | 48000 | 88200 | 96000) ;; *) v=48000 ;; esac
+    JACK_RATE="${NORNS_JACK_RATE:-$v}"
+    v="$(conf_get period)"
+    case "$v" in 64 | 128 | 256 | 512 | 1024) ;; *) v=1024 ;; esac
+    JACK_PERIOD="${NORNS_JACK_PERIOD:-$v}"
+}
+jackd_args() {
+    if [ "$JACK_DRIVER" = dummy ]; then
+        # the dummy driver needs no realtime; jackd -r keeps it quiet in containers
+        JACKD_ARGS=(-r -d dummy -r "$JACK_RATE" -p "$JACK_PERIOD")
+    else
+        JACKD_ARGS=(-d "$JACK_DRIVER" -r "$JACK_RATE" -p "$JACK_PERIOD")
+        # one device chosen: the other side is the first card, named, so jackd opens both
+        if [ "$JACK_DRIVER" = alsa ] && [ -n "$JACK_IN$JACK_OUT" ]; then
+            JACKD_ARGS+=(-C "${JACK_IN:-hw:0}" -P "${JACK_OUT:-hw:0}")
+        fi
+    fi
+}
+# PipeWire's sample rate: the system's, not ours
+pw_rate() { pw-metadata -n settings 0 clock.rate 2>/dev/null | sed -n "s/.*key:'clock\.rate' value:'\([0-9]*\)'.*/\1/p" | head -1; }
+
+# the rate shown on SYSTEM > AUDIO, and under PipeWire the buffer request (experimental): audio.conf period
+# becomes PIPEWIRE_QUANTUM for everything we start. an own PIPEWIRE_QUANTUM in the environment stays
+decide_rate() {
+    QUANTUM=""
+    case "$SERVER" in
+    jackd) AUDIO_RATE="$JACK_RATE" ;;
+    pipewire)
+        AUDIO_RATE="$(pw_rate)"
+        AUDIO_RATE="${AUDIO_RATE:-48000}"
+        local p
+        p="$(conf_get period)"
+        case "$p" in 64 | 128 | 256 | 512 | 1024 | 2048) QUANTUM="$p/$AUDIO_RATE" ;; esac
+        if [ -n "$QUANTUM" ] && [ -z "${PIPEWIRE_QUANTUM:-}" ]; then export PIPEWIRE_QUANTUM="$QUANTUM"; fi
+        ;;
+    *) AUDIO_RATE="$(jack_samplerate 2>/dev/null)" ;;
+    esac
+}
+
+JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
 decide_server
 decide_devices
+read_audio_conf
+decide_rate
 if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ]; then
     echo "DECIDE action=$ACTION server=$SERVER in=$IN_PORTS out=$OUT_PORTS"
+    if [ "$ACTION" = start-jackd ]; then
+        jackd_args
+        echo "DECIDE-JACKD ${JACKD_ARGS[*]}"
+    fi
+    echo "DECIDE-RATE ${AUDIO_RATE:-}"
+    echo "DECIDE-QUANTUM ${QUANTUM}"
     exit 0
 fi
 
@@ -174,30 +227,53 @@ esac
 echo "norns.sh: audio server: $SERVER${IN_PORTS:+, input '$IN_PORTS'}${OUT_PORTS:+, output '$OUT_PORTS'}"
 export NORNS_AUDIO_SERVER_MODE="$SERVER"
 
-if [ "$ACTION" = start-jackd ]; then
-    args=(-d "$JACK_DRIVER" -r "$JACK_RATE" -p "$JACK_PERIOD")
-    # the dummy driver needs no realtime; jackd -r keeps it quiet in containers
-    [ "$JACK_DRIVER" = "dummy" ] && args=(-r -d dummy -r "$JACK_RATE" -p "$JACK_PERIOD")
-    echo "norns.sh: starting jackd (${JACK_DRIVER}, ${JACK_RATE} Hz, period ${JACK_PERIOD})"
-    jackd "${args[@]}" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
+AUDIO_TOOL="$REPO/build/linux/audio_devices"
+export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
+export NORNS_AUDIO_RATE="${AUDIO_RATE:-}"
+AUDIO_CONF="$NORNS_HOME/audio.conf"
+
+# our own jackd with the settings of audio.conf; 1 if it does not come up
+run_jackd() {
+    jackd_args
+    echo "norns.sh: starting jackd (${JACK_DRIVER}, ${JACK_RATE} Hz, period ${JACK_PERIOD}${JACK_IN:+, input $JACK_IN}${JACK_OUT:+, output $JACK_OUT})"
+    jackd "${JACKD_ARGS[@]}" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
     JACK_PID=$!
     PIDS="$PIDS $JACK_PID"
-    n=0
+    local n=0
     until jack_up; do
         n=$((n + 1))
         if [ $n -gt 50 ] || ! kill -0 "$JACK_PID" 2>/dev/null; then
-            echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"
-            exit 1
+            return 1
         fi
         sleep 0.2
     done
+}
+start_jackd() {
+    read_audio_conf
+    run_jackd && return 0
+    # the chosen setting does not start (device gone, rate not supported): the defaults, and
+    # audio.conf.failed tells SYSTEM > AUDIO
+    if [ -f "$AUDIO_CONF" ]; then
+        echo "norns.sh: audio settings did not start, using the defaults"
+        tree "$JACK_PID"
+        mv -f "$AUDIO_CONF" "$AUDIO_CONF.failed"
+        read_audio_conf
+        run_jackd && return 0
+    fi
+    echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"
+    return 1
+}
+if [ "$ACTION" = start-jackd ]; then
+    start_jackd || exit 1
+    export NORNS_AUDIO_RATE="$JACK_RATE"
 fi
 
 WS="$REPO/build/ws-wrapper/ws-wrapper"
 NORNS_BIN="$REPO/build/norns/norns"
 [ -x "$NORNS_BIN" ] || { echo "norns.sh: $NORNS_BIN not built, run linux/build.sh"; exit 1; }
 RESTART_MARK="$NORNS_HOME/.norns-restart"
-rm -f "$RESTART_MARK"
+AUDIO_MARK="$NORNS_HOME/.norns-restart-audio"
+rm -f "$RESTART_MARK" "$AUDIO_MARK"
 
 start_norns() {
     export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
@@ -242,6 +318,19 @@ while :; do
         sleep 0.2
         n=$((n + 1))
     done
+    # new audio settings from SYSTEM > AUDIO: our own jackd restarts with them; for the other servers
+    # the devices and the buffer request are read again
+    if [ -f "$AUDIO_MARK" ]; then
+        rm -f "$AUDIO_MARK"
+        if [ -n "$JACK_PID" ]; then
+            echo "norns.sh: restarting audio"
+            tree "$JACK_PID"
+            wait "$JACK_PID" 2>/dev/null
+            start_jackd || break
+            export NORNS_AUDIO_RATE="$JACK_RATE"
+        fi
+    fi
     decide_devices
+    decide_rate
     start_norns
 done

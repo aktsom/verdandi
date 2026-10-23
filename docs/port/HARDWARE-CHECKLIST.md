@@ -68,3 +68,21 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
       "Verdandi JACK in".
 - [ ] The tempo readout is steady with Reaper's clock (frame-accurate times are used; see "Tempo accuracy" in
       `phase-3.md`). The test client reads exactly 120.0 on the dummy driver.
+
+## After Phase 3 steps 3-4 (sound card choice, audio server, SYSTEM > AUDIO)
+- [ ] `pw-jack`-less start on PipeWire: `linux/norns.sh --terminal` with no JACK server running prints
+      "starting again under pw-jack" and then "audio server: pipewire, input '<your mic card>', output '<your default sink>'".
+- [ ] The output goes to the **default sink** of the desktop (change it in the sound settings, restart norns: it
+      follows) and the input comes from the **default source**; a USB DAC set as default is used.
+- [ ] `audio.conf` in the norns home with `out_ports=<start of the card name>` (name as in `wpctl status`) beats the default.
+- [ ] A physical MIDI port (`Midi-Bridge:Midi Through`) is never connected as audio (check with `pw-jack jack_lsp -c`).
+- [ ] Unplug the chosen card (or name a card that is not there): norns still starts, the device window shows
+      "AUDIO: not connected, see SYSTEM > AUDIO" and SYSTEM > AUDIO shows crone's message at the bottom.
+- [ ] SYSTEM > AUDIO under PipeWire: INPUT / OUTPUT / RATE show the connected cards and the system rate and do not
+      change; BUFFER is marked "exp." and, after APPLY and the restart, `pw-top` shows the quantum you chose for
+      the norns clients (a request only: PipeWire may refuse it).
+- [ ] Under your own jackd (`NORNS_AUDIO_SERVER=jackd`, needs a card nothing else holds): SYSTEM > AUDIO lists your
+      ALSA cards, APPLY restarts jackd with them (`jackd.log`); a setting that does not start falls back to the defaults
+      and leaves `audio.conf.failed`. Two different cards as input and output are untested (clocks may drift).
+- [ ] SYSTEM > RESTART and SLEEP work (the sidecar used `sudo -n systemd-run` on Linux before this step; now a plain
+      shell signals `norns.sh`, as on macOS).

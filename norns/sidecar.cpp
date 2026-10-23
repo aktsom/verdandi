@@ -308,8 +308,9 @@ static void sidecar_server_detach_cmd(nng_socket sock, const char *unit, const c
         snprintf(group_prop, sizeof(group_prop), "Group=%u", (unsigned)getgid());
     }
 
-#ifdef __APPLE__
-    // no systemd: the macOS actions (system_cmd.cc) only signal norns.sh, a plain shell will do
+#if defined(__APPLE__) || defined(NORNS_LINUX_DESKTOP)
+    // no systemd, no sudo: the macOS and desktop Linux actions (system_cmd.cc) only signal the launcher
+    // script, a plain shell will do (on desktop Linux "sudo -n systemd-run" fails without a passwordless sudo)
     (void)unit_arg;
     (void)user_prop;
     (void)group_prop;

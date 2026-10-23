@@ -27,6 +27,11 @@ case "$2" in
 esac
 exit 0
 S
+cat > "$BIN/pw-metadata" <<'S'
+#!/bin/bash
+[ "${STUB_PW:-0}" = 1 ] && echo "update: id:0 key:'clock.rate' value:'${STUB_RATE:-48000}' type:''"
+exit 0
+S
 cat > "$BIN/pw-jack" <<'S'
 #!/bin/bash
 exit 0
@@ -36,7 +41,13 @@ chmod +x "$BIN"/*
 FAIL=0
 decide() { # env assignments..., prints the DECIDE line
     env -i PATH="$BIN:/usr/bin:/bin" HOME="$T" NORNS_HOME="$T/home" NORNS_DECIDE_ONLY=1 "$@" \
-        "$REPO/linux/norns.sh" 2>&1 | grep '^DECIDE' || echo "DECIDE (none)"
+        "$REPO/linux/norns.sh" 2>&1 | grep '^DECIDE ' || echo "DECIDE (none)"
+}
+decide_more() { # env assignments..., prints the line that starts with $1 (first argument)
+    local key="$1"
+    shift
+    env -i PATH="$BIN:/usr/bin:/bin" HOME="$T" NORNS_HOME="$T/home" NORNS_DECIDE_ONLY=1 "$@" \
+        "$REPO/linux/norns.sh" 2>&1 | grep "^$key" || echo "$key (none)"
 }
 expect() { # name, expected, actual
     if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1"; echo "       want: $2"; echo "       got:  $3"; FAIL=1; fi
@@ -81,4 +92,27 @@ rm -f "$T/home/audio.conf"
 expect "plain jack: no session default is asked" \
     "DECIDE action=use-running server=jack in= out=" \
     "$(decide STUB_JACK=1 STUB_SINK=Card STUB_SOURCE=Card)"
+
+# audio settings of SYSTEM > AUDIO (audio.conf), own jackd
+printf 'input=hw:CARD=Mic\noutput=hw:CARD=Dac\nrate=44100\nperiod=256\n' > "$T/home/audio.conf"
+expect "jackd alsa: devices, rate and period from audio.conf" \
+    "DECIDE-JACKD -d alsa -r 44100 -p 256 -C hw:CARD=Mic -P hw:CARD=Dac" "$(decide_more DECIDE-JACKD)"
+expect "jackd: the environment beats audio.conf" \
+    "DECIDE-JACKD -d alsa -r 96000 -p 256 -C hw:CARD=Mic -P hw:CARD=Dac" "$(decide_more DECIDE-JACKD NORNS_JACK_RATE=96000)"
+expect "jackd dummy: no device arguments" \
+    "DECIDE-JACKD -r -d dummy -r 44100 -p 256" "$(decide_more DECIDE-JACKD NORNS_JACK_DRIVER=dummy)"
+printf 'input=hw:CARD=Mic\n' > "$T/home/audio.conf"
+expect "jackd alsa: one device chosen, the other side is hw:0" \
+    "DECIDE-JACKD -d alsa -r 48000 -p 1024 -C hw:CARD=Mic -P hw:0" "$(decide_more DECIDE-JACKD)"
+rm -f "$T/home/audio.conf"
+expect "jackd alsa without audio.conf: the old defaults" \
+    "DECIDE-JACKD -d alsa -r 48000 -p 1024" "$(decide_more DECIDE-JACKD)"
+# pipewire: the quantum is a request (experimental), rate is the system's
+expect "pipewire: system rate" "DECIDE-RATE 48000" "$(decide_more DECIDE-RATE STUB_PW=1 STUB_JACK=1 NORNS_REEXEC=1)"
+expect "pipewire: other system rate" "DECIDE-RATE 44100" "$(decide_more DECIDE-RATE STUB_PW=1 STUB_JACK=1 NORNS_REEXEC=1 STUB_RATE=44100)"
+expect "pipewire: no period in audio.conf, no quantum request" "DECIDE-QUANTUM " "$(decide_more DECIDE-QUANTUM STUB_PW=1 STUB_JACK=1 NORNS_REEXEC=1)"
+printf 'period=256\nin_ports=X\n' > "$T/home/audio.conf"
+expect "pipewire: period from audio.conf becomes PIPEWIRE_QUANTUM" "DECIDE-QUANTUM 256/48000" \
+    "$(decide_more DECIDE-QUANTUM STUB_PW=1 STUB_JACK=1 NORNS_REEXEC=1)"
+rm -f "$T/home/audio.conf"
 exit $FAIL

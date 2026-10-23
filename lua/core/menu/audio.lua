@@ -2,6 +2,14 @@
 -- buffer for jackd. the choice goes to ~/audio.conf, and the launcher (macos/norns.sh)
 -- restarts jackd with it; if it does not start, the launcher falls back to the macOS
 -- defaults and leaves audio.conf.failed.
+--
+-- Linux (linux/norns.sh sets NORNS_AUDIO_SERVER_MODE):
+--   jackd     our own jackd: as on macOS, with ALSA devices (linux/audio_devices)
+--   pipewire  PipeWire's JACK: the system owns device and rate, so INPUT / OUTPUT / RATE only show what
+--             crone is connected to; BUFFER asks PipeWire for a quantum (PIPEWIRE_QUANTUM, experimental).
+--             the card can be chosen with in_ports= / out_ports= in audio.conf (kept when this page writes)
+--   jack      a JACK server we did not start: nothing here can be changed
+-- crone's warning (no sound card ports ...) is shown at the bottom in every mode.
 
 local util = require 'util'
 
@@ -10,7 +18,24 @@ local FAILED = "/home/we/audio.conf.failed"
 local MARK = "/home/we/.norns-restart-audio"
 local RATES = {44100, 48000, 88200, 96000}
 local PERIODS = {64, 128, 256, 512, 1024}
+local MODE = os.getenv("NORNS_AUDIO_SERVER_MODE") -- nil on macOS
 local ROWS = {"INPUT", "OUTPUT", "RATE", "BUFFER", "APPLY"}
+if MODE == "jack" then
+  ROWS = {"INPUT", "OUTPUT", "RATE", "BUFFER"}
+end
+local SYSTEM_RATE = tonumber(os.getenv("NORNS_AUDIO_RATE") or "") or 48000
+
+-- read-only rows: the system (PipeWire) or a server we do not own decides
+local function readonly(row)
+  return MODE == "jack" or (MODE == "pipewire" and row <= 3)
+end
+
+local function status()
+  if _norns.audio_status then
+    return _norns.audio_status()
+  end
+  return "", "", ""
+end
 
 local m = {
   pos = 1,
@@ -22,13 +47,14 @@ local m = {
 }
 
 local function read_conf(path)
-  local c = {input = "", output = "", rate = 48000, period = 256}
+  local c = {input = "", output = "", rate = 48000, period = 256, extra = {}}
   local f = io.open(path)
   if f then
     for line in f:lines() do
-      local k, v = line:match("^(%w+)=(.*)$")
+      local k, v = line:match("^([%w_]+)=(.*)$")
       if k == "rate" or k == "period" then c[k] = tonumber(v) or c[k]
-      elseif k then c[k] = v end
+      elseif k == "input" or k == "output" then c[k] = v
+      elseif k then table.insert(c.extra, line) end -- in_ports= and out_ports=: not ours to drop
     end
     f:close()
   end
@@ -63,6 +89,17 @@ local function choices(row)
 end
 
 local function value_text(row)
+  if MODE == "pipewire" or MODE == "jack" then
+    local _, inc, outc = status()
+    if row == 1 then return inc ~= "" and inc or "none"
+    elseif row == 2 then return outc ~= "" and outc or "none"
+    elseif row == 3 then return tostring(SYSTEM_RATE)
+    elseif MODE == "jack" then return "server's"
+    elseif row == 4 then
+      return string.format("%d  %.1fms exp.", PERIODS[m.sel[4]], PERIODS[m.sel[4]] / SYSTEM_RATE * 1000)
+    end
+    return ""
+  end
   local i = m.sel[row]
   if row == 1 then return m.inputs[i].name
   elseif row == 2 then return m.outputs[i].name
@@ -89,9 +126,12 @@ end
 local function apply()
   local f = io.open(CONF, "w")
   if f == nil then return end
-  f:write("input=" .. m.inputs[m.sel[1]].uid .. "\n")
-  f:write("output=" .. m.outputs[m.sel[2]].uid .. "\n")
-  f:write("rate=" .. RATES[m.sel[3]] .. "\n")
+  for _, line in ipairs(m.extra) do f:write(line .. "\n") end
+  if MODE ~= "pipewire" then
+    f:write("input=" .. m.inputs[m.sel[1]].uid .. "\n")
+    f:write("output=" .. m.outputs[m.sel[2]].uid .. "\n")
+    f:write("rate=" .. RATES[m.sel[3]] .. "\n")
+  end
   f:write("period=" .. PERIODS[m.sel[4]] .. "\n")
   f:close()
   os.remove(FAILED)
@@ -110,6 +150,7 @@ m.init = function()
   m.sel[2] = index_of(m.outputs, function(d) return d.uid == c.output end)
   m.sel[3] = index_of(RATES, function(r) return r == c.rate end)
   m.sel[4] = index_of(PERIODS, function(p) return p == c.period end)
+  m.extra = c.extra
   m.applying = false
 end
 
@@ -128,7 +169,7 @@ m.enc = function(n, delta)
   if m.applying then return end
   if n == 2 then
     m.pos = util.clamp(m.pos + delta, 1, #ROWS)
-  elseif n == 3 and m.pos <= 4 then
+  elseif n == 3 and m.pos <= 4 and not readonly(m.pos) then
     m.sel[m.pos] = util.clamp(m.sel[m.pos] + delta, 1, #choices(m.pos))
   end
   _menu.redraw()
@@ -145,12 +186,19 @@ m.redraw = function()
       screen.text_right(fit(value_text(i), 84))
     end
   end
-  screen.level(m.applying and 10 or 2)
+  local warning = status()
+  screen.level(m.applying and 10 or (warning ~= "" and 15 or 2))
   screen.move(0, 62)
-  if m.applying then
+  if warning ~= "" and not m.applying then
+    screen.text(fit(warning, 128))
+  elseif m.applying then
     screen.text("restarting audio.")
   elseif m.failed then
     screen.text("failed: back to default")
+  elseif MODE == "jack" then
+    screen.text("set by the audio server")
+  elseif MODE == "pipewire" then
+    screen.text("system sets card and rate")
   else
     screen.text("K3 on APPLY restarts audio")
   end
