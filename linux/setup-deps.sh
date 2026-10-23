@@ -1,12 +1,14 @@
 #!/bin/bash
 # Verdandi on Linux: install the build and runtime dependencies (Ubuntu 24.04), build
-# libmonome 1.4.9 and waf 2.1.9 (neither is usable from apt, and the waf in this repo needs
+# libmonome 1.4.9 (patched, see linux/patches) and waf 2.1.9 (neither is usable from apt, and the waf in this repo needs
 # python's removed `imp`). needs root (or sudo) for apt and /usr/local.
 #
 # usage: linux/setup-deps.sh
 # writes: /usr/local (libmonome), /opt/waf/waf; override with WAF_DIR, PREFIX.
 
 set -eu
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
 
 PREFIX="${PREFIX:-/usr/local}"
 WAF_DIR="${WAF_DIR:-/opt/waf}"
@@ -29,10 +31,15 @@ $SUDO apt-get install -y --no-install-recommends \
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
-if ! ldconfig -p | grep -q libmonome.so; then
-    echo "== libmonome $LIBMONOME_VERSION"
+# libmonome with linux/patches/libmonome-pty-serial.patch (the virtual grid and arc are ptys).
+# the stamp says that this build has the patch
+STAMP="$PREFIX/share/verdandi/libmonome-pty-serial"
+if [ ! -f "$STAMP" ] || ! ldconfig -p | grep -q libmonome.so; then
+    echo "== libmonome $LIBMONOME_VERSION + pty serial patch"
     git clone -q --depth 1 --branch "v$LIBMONOME_VERSION" https://github.com/monome/libmonome.git "$T/libmonome"
-    (cd "$T/libmonome" && ./waf configure --prefix="$PREFIX" --libdir="$PREFIX/lib" && ./waf && $SUDO ./waf install)
+    (cd "$T/libmonome" && git apply "$HERE/patches/libmonome-pty-serial.patch" &&
+        ./waf configure --prefix="$PREFIX" --libdir="$PREFIX/lib" && ./waf && $SUDO ./waf install)
+    $SUDO mkdir -p "$(dirname "$STAMP")" && $SUDO touch "$STAMP"
     $SUDO ldconfig
 fi
 

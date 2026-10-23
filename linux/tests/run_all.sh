@@ -54,9 +54,9 @@ CFLAGS="-std=gnu11 -D_GNU_SOURCE -I $P -I /usr/local/include"
 cc $CFLAGS "$M/window_keys_test.c" "$P/window_keys.c" -o "$T/wkt" && run "c:window_keys" "$T/wkt"
 cc $CFLAGS $(pkg-config --cflags cairo) "$M/device_skin_test.c" "$P/device_skin.c" "$P/vgrid_skin.c" \
     "$P/varc_skin.c" "$P/vkeys_skin.c" -o "$T/dst" $(pkg-config --libs cairo) -lm && run "c:device_skin" "$T/dst"
-# libmonome on linux asks udev for a serial and cannot open the pty (phase 2)
+# needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
-    -o "$T/vgt" && known "c:vgrid (libmonome opens the pty)" "$T/vgt"
+    -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
 # copyfile(3) is macOS only (phase 2)
 cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" 2> /dev/null \
     && run "c:dust_import" "$T/dit" || { echo "KNOWN c:dust_import (copyfile.h)"; KNOWN+=("c:dust_import"); }

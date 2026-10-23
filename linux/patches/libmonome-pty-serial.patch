@@ -1,0 +1,43 @@
+diff --git a/src/platform/linux_libudev.c b/src/platform/linux_libudev.c
+index 60903f3..44c21da 100644
+--- a/src/platform/linux_libudev.c
++++ b/src/platform/linux_libudev.c
+@@ -36,6 +36,30 @@ get_monome_information(struct udev_device *d)
+ 	return (serial) ? strdup(serial) : NULL;
+ }
+ 
++/* a pseudo-terminal has no udev data. a program that emulates a grid or arc
++ * (Verdandi's virtual devices) links its pty as <dir>/<name>-<serial>, the
++ * way darwin.c reads serials from tty names: take the serial from the name. */
++static char *
++get_pty_link_serial(const char *device)
++{
++	const char *base, *dash;
++	char *real, *serial = NULL;
++
++	if (!(real = realpath(device, NULL)))
++		return NULL;
++
++	if (!strncmp(real, "/dev/pts/", 9)) {
++		base = strrchr(device, '/');
++		base = base ? base + 1 : device;
++
++		if ((dash = strchr(base, '-')) && dash[1])
++			serial = strdup(dash + 1);
++	}
++
++	free(real);
++	return serial;
++}
++
+ char *
+ monome_platform_get_dev_serial(const char *device)
+ {
+@@ -61,6 +85,7 @@ monome_platform_get_dev_serial(const char *device)
+ 
+ err_no_device:
+ 	udev_unref(udev);
++	return get_pty_link_serial(device);
+ err_stat:
+ 	return NULL;
+ }

@@ -2,6 +2,11 @@
  * vgrid_device.c: see vgrid_device.h
  */
 
+// ptsname() / posix_openpt() on glibc (the waf build defines it too)
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>

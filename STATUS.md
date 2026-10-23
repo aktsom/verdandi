@@ -15,13 +15,15 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
     dust_import (copyfile).
 
 ## In progress
-- Phase 2 approach note written: `docs/port/phase-2.md` (libmonome pty, "norns keys" MIDI,
-  dust_import, menu/file picker, sharing `sdl_bridge.cc`, list of Phase 1 shared files for macOS
-  re-verification). **Waiting for Ken to confirm the four decisions at its end. No Phase 2 code yet.**
+- Phase 2, steps per `docs/port/phase-2.md` section 6 (decisions in `DECISIONS.md`):
+  1. libmonome pty patch: DONE (`c:vgrid` passes).
+  2. dust_import portable copy: next.
+  3. window (`sdl_bridge.cc` behind `desktop_shell.h`), 4. menu/picker/screenshot/GIF,
+  5. "norns keys" A + B: not started. Stop after step 5.
+- Then (read-only): clock investigation -> `docs/port/clock-notes.md`; wait for Ken's decision.
 
 ## Next
-- After Ken confirms: Phase 2 in the order of `docs/port/phase-2.md` section 6. Starting points: libmonome and the pty, `dust_import` without `copyfile`, SDL window
-  using the shared skins, quit handling, ALSA seq "norns keys".
+- See above.
 
 ## Not testable here / notes
 - macOS not rebuilt after the small edits to shared sources (checklist item).

@@ -25,3 +25,12 @@ tests unchanged meanwhile). Whether to approach ha1dcre is Ken's call, after Lin
 **Needed from Ken:** pick 1, 2 or 3 (and if 3, who contacts ha1dcre).
 
 Notification: not sent. `SANDBOX.md` (notification hook) is missing from the repo.
+
+## Phase 2 decisions (DECIDED by Ken)
+1. libmonome pty: patch (A) for now (`linux/patches/libmonome-pty-serial.patch`). Phase 5.5 (OSC / serialosc,
+   see PLAN.md) is meant to replace the pty trick on all platforms (Gate F).
+2. "norns keys": both the internal device (A) and the ALSA sequencer port (B). B is runtime-optional and
+   stays untested until the hardware checklist.
+3. `sdl_bridge.cc`: option A, the same file on Linux, platform seams behind `desktop_shell.h`.
+4. Menu: in-window menu (no menu bar). The dust link folder keeps the name `mac` for now.
+Order of work: `docs/port/phase-2.md` section 6; stop after step 5 with `HARDWARE-CHECKLIST.md` updated.
