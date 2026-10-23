@@ -74,7 +74,10 @@ enum {
     SHELL_MENU_COPY_SAMPLES,  // toggle: audio is copied into dust, not linked (the shell's own)
     SHELL_MENU_INPUT_MIC,     // (the shell calls on_input)
     SHELL_MENU_INPUT_OFF,
+    SHELL_MENU_INPUT_SYSTEM,  // all applications but norns
+    SHELL_MENU_INPUT_MONITOR, // the monitor of the output card (an option: it hears norns too)
     SHELL_MENU_QUIT,
+    SHELL_MENU_INPUT_APP = 40, // + n: the n-th application of the list
 };
 
 // how the import callback takes a path

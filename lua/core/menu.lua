@@ -189,8 +189,13 @@ local MIC_OFF = "/home/we/.mic-off"
 local INPUT_KEPT = "/home/we/.norns-input"
 local mic_links = {}
 local mic_checked = false
-local INPUT_SHOWN = {off = 0, mic = 1, system = 2, app = 3}
-local INPUT_LABEL = {off = "off", mic = "mic / interface", system = "all apps (system audio)"}
+local INPUT_SHOWN = {off = 0, mic = 1, system = 2, app = 3, monitor = 2}
+local INPUT_LABEL = {off = "off", mic = "mic / interface", system = "all apps (system audio)",
+  monitor = "sink monitor (hears norns too)"}
+-- Linux: SYS is every application except norns' own (no feedback). the monitor of the output card is an extra that
+-- hears norns itself too: only offered with NORNS_SYS_MONITOR=1 (audio.conf sys_monitor=1)
+local function monitor_ok() return _norns.mic_input ~= nil and os.getenv("NORNS_SYS_MONITOR") == "1" end
+local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 
 local function show_input()
   if _norns.show_control then _norns.show_control(4, INPUT_SHOWN[_menu.input] or 0, 0) end
@@ -211,6 +216,13 @@ local function capture_links()
 end
 
 local function set_capture(live)
+  if _norns.mic_input then
+    -- Linux: the capture ports of the card crone chose, by port flags (port names on PipeWire are the card's
+    -- name, not system:capture_N)
+    _norns.mic_input(live)
+    _menu.mic_live = live
+    return
+  end
   if live then
     for _, l in ipairs(mic_links) do _norns.execute("jack_connect " .. l[1] .. " " .. l[2]) end
     mic_links = {}
@@ -226,7 +238,8 @@ end
 -- mode "mic", "system", "app" (bundle id and name of the app) or "off"; quiet: no note on
 -- the device
 function _menu.set_input(mode, bundle, name, quiet)
-  if (mode == "system" or mode == "app") and not _norns.app_input then mode = "off" end
+  if (mode == "system" or mode == "app" or mode == "monitor") and not _norns.app_input then mode = "off" end
+  if mode == "monitor" and not monitor_ok() then mode = "off" end
   if mode == "app" and not bundle then mode = "off" end
   set_capture(mode == "mic")
   -- other apps keep playing: the monitor of them goes to TAPE only, not heard a second time
@@ -235,6 +248,8 @@ function _menu.set_input(mode, bundle, name, quiet)
     local label = not quiet and (INPUT_LABEL[mode] or name or bundle) or nil
     if mode == "system" then
       _norns.app_input("system", label)
+    elseif mode == "monitor" then
+      _norns.app_input("sink-monitor", label)
     elseif mode == "app" then
       _norns.app_input(bundle, label)
     else
@@ -242,13 +257,17 @@ function _menu.set_input(mode, bundle, name, quiet)
     end
   end
   _menu.input = mode
+  if _norns.set_warning then
+    -- the sink monitor may feed back: say so on the device while it is on, else the audio warning (if any)
+    _norns.set_warning(mode == "monitor" and MONITOR_WARNING or _menu.audio_note or "")
+  end
   if mode == "mic" then
     os.remove(MIC_OFF)
   else
     local f = io.open(MIC_OFF, "w")
     if f then f:close() end
   end
-  if mode == "system" or mode == "app" then
+  if mode == "system" or mode == "app" or mode == "monitor" then
     local f = io.open(INPUT_KEPT, "w")
     if f then
       f:write(mode, "\n", bundle or "", "\n", name or "", "\n")
@@ -272,12 +291,18 @@ end
 
 -- the tap stopped on its own (the window said why)
 _norns.input_ended = function()
-  if _menu.input == "system" or _menu.input == "app" then _menu.set_input("off", nil, nil, true) end
+  if _menu.input == "system" or _menu.input == "app" or _menu.input == "monitor" then
+    _menu.set_input("off", nil, nil, true)
+  end
 end
 
 -- the MIC button
-local INPUT_NEXT = {mic = "system", system = "off", off = "mic", app = "off"}
+local INPUT_NEXT = {mic = "system", system = "off", off = "mic", app = "off", monitor = "off"}
 function _menu.next_input()
+  if _menu.input == "system" and monitor_ok() then
+    _menu.set_input("monitor")
+    return
+  end
   local mode = INPUT_NEXT[_menu.input] or "mic"
   if mode == "system" and not _norns.app_input then mode = "off" end
   _menu.set_input(mode)
@@ -291,7 +316,7 @@ function _menu.check_mic()
   if f then
     local mode, bundle, name = f:read("l"), f:read("l"), f:read("l")
     f:close()
-    if mode == "system" or (mode == "app" and bundle and bundle ~= "") then
+    if mode == "system" or (mode == "monitor" and monitor_ok()) or (mode == "app" and bundle and bundle ~= "") then
       -- said on the device
       _menu.set_input(mode, bundle ~= "" and bundle or nil, name ~= "" and name or nil)
       return
@@ -361,7 +386,8 @@ if _norns.audio_status and _norns.set_warning then
     local warning = _norns.audio_status()
     if warning ~= "" then
       print("audio: " .. warning)
-      _norns.set_warning("AUDIO: not connected, see SYSTEM > AUDIO")
+      _menu.audio_note = "AUDIO: not connected, see SYSTEM > AUDIO"
+      _norns.set_warning(_menu.audio_note)
     end
   end)
 end

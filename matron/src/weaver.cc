@@ -59,6 +59,8 @@
 #include "platform/macos/sdl_bridge.h"
 #ifdef NORNS_LINUX_DESKTOP
 #include "crone_main.h"
+#include "platform/linux/input_route.h"
+#include "platform/macos/app_audio.h"
 #endif
 #endif
 
@@ -359,6 +361,8 @@ static int _app_input(lua_State *l);
 static int _monitor_out(lua_State *l);
 #ifdef NORNS_LINUX_DESKTOP
 static int _audio_status(lua_State *l);
+static int _mic_input(lua_State *l);
+static int _app_list(lua_State *l);
 static int _set_warning(lua_State *l);
 #endif
 static int _choose_file(lua_State *l);
@@ -697,10 +701,11 @@ void w_init(void) {
     lua_register_norns("show_control", &_show_control);
     lua_register_norns("open_url", &_open_url);
     lua_register_norns("grid_window", &_grid_window);
-#ifdef __APPLE__
-    // linux: another app's sound as input is phase 3 (lua then leaves the SYS / APP modes out)
     lua_register_norns("app_input", &_app_input);
     lua_register_norns("monitor_out", &_monitor_out);
+#ifdef NORNS_LINUX_DESKTOP
+    lua_register_norns("mic_input", &_mic_input);
+    lua_register_norns("app_list", &_app_list);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
     lua_register_norns("audio_status", &_audio_status);
@@ -3686,9 +3691,39 @@ int _set_warning(lua_State *l) {
 }
 #endif
 
-#ifdef __APPLE__
 /***
- * macOS: what the input hears besides the Mac's own input (lua/core/menu.lua, MIC button)
+ * Linux desktop: the sound card's own input (capture ports of the card crone chose) on or off crone's input
+ * @function mic_input
+ * @tparam boolean live
+ */
+#ifdef NORNS_LINUX_DESKTOP
+int _mic_input(lua_State *l) {
+    input_route_mic(lua_toboolean(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: the applications that can be heard as input (names without the stream number), then whether
+ * the optional sink monitor input is switched on
+ * @function app_list
+ * @treturn table names
+ * @treturn boolean monitor input enabled
+ */
+int _app_list(lua_State *l) {
+    app_audio_app_t apps[32];
+    int n = app_audio_list(apps, 32);
+    lua_createtable(l, n, 0);
+    for (int i = 0; i < n; i++) {
+        lua_pushstring(l, apps[i].name);
+        lua_rawseti(l, -2, i + 1);
+    }
+    lua_pushboolean(l, input_route_monitor_enabled());
+    return 2;
+}
+#endif
+
+/***
+ * what the input hears besides the Mac's own input (lua/core/menu.lua, MIC button)
  * @function app_input
  * @tparam string target "system" (every other app), an app's bundle id, or nil for none
  * @tparam string label for a note on the device ("input: <label>"), nil for none
@@ -3710,8 +3745,6 @@ int _monitor_out(lua_State *l) {
     o_set_monitor_out(lua_toboolean(l, 1));
     return 0;
 }
-
-#endif // __APPLE__
 
 /***
  * macOS: the Finder's open panel for lua's fileselect; the choice comes back as

@@ -229,6 +229,9 @@ pipewire-no-jack)
 esac
 echo "norns.sh: audio server: $SERVER${IN_PORTS:+, input '$IN_PORTS'}${OUT_PORTS:+, output '$OUT_PORTS'}"
 export NORNS_AUDIO_SERVER_MODE="$SERVER"
+# the optional sink monitor input (hears norns too); off unless asked: environment or audio.conf sys_monitor=1
+NORNS_SYS_MONITOR="${NORNS_SYS_MONITOR:-$(conf_get sys_monitor)}"
+export NORNS_SYS_MONITOR
 
 AUDIO_TOOL="$REPO/build/linux/audio_devices"
 export NORNS_AUDIO_TOOL="$AUDIO_TOOL"

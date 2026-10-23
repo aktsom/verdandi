@@ -28,6 +28,9 @@ extern int app_audio_list(app_audio_app_t *out, int max);
 // every app but norns' own processes (the Mac's whole sound, YouTube in a browser ...)
 #define APP_AUDIO_SYSTEM "system"
 
+// Linux only: the monitor of the chosen output card (it hears norns too, so it can feed back)
+#define APP_AUDIO_SINK_MONITOR "sink-monitor"
+
 // tap this app (bundle id) or APP_AUDIO_SYSTEM instead of the current one; NULL stops.
 // false if the helper could not be started
 extern int app_audio_select(const char *bundle);

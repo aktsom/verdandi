@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define MENU_MAX 24
+#define MENU_MAX 32
 
 typedef struct {
     int id;          // what the shell does with it (SHELL_MENU_*), 0 for a separator

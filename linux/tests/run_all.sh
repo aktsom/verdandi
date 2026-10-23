@@ -193,6 +193,61 @@ else
     echo "SKIP  audio: no jackd"
 fi
 
+# MIC / SYS / APP / OFF / sink monitor by port flags and names (fake card, fake application streams "Vivaldi",
+# "Vivaldi-73", "mpv", a late "Late App"): what feeds crone:input_1/2 in each state
+peers() { # file port: what jack_lsp -c lists under port, one per line
+    awk -v port="$2" '/^[^ \t]/ { cur = $0; next } cur == port { sub(/^[ \t]+/, ""); print }' "$1"
+}
+if command -v jackd > /dev/null; then
+    ILOG="$T/input.log"
+    "$REPO/linux/tests/input_test.sh" "$ILOG" > /dev/null 2>&1
+    input_ok() {
+        local bad=0 st
+        want() { # state port expected-peer: present
+            peers "$ILOG.$1" "$2" | grep -qx "$3" || { echo "$1: $2 is not fed by $3"; bad=1; }
+        }
+        not() { # state port peer: absent
+            peers "$ILOG.$1" "$2" | grep -qx "$3" && { echo "$1: $2 is fed by $3, it must not be"; bad=1; }
+        }
+        only() { # state port count: how many peers
+            [ "$(peers "$ILOG.$1" "$2" | wc -l)" = "$3" ] || { echo "$1: $2 has $(peers "$ILOG.$1" "$2" | wc -l) peers, want $3"; bad=1; }
+        }
+        grep -q "." "$ILOG.start" || { echo "no dump of the start state"; bad=1; }
+        # (the start state is crone's own default: the card)
+        want start crone:input_1 "Built-in Audio Analog Stereo:capture_FL"
+        only off crone:input_1 0
+        only off crone:input_2 0
+        want mic crone:input_1 "Built-in Audio Analog Stereo:capture_FL"
+        want mic crone:input_2 "Built-in Audio Analog Stereo:capture_FR"
+        only mic crone:input_1 1
+        for st in system system_late; do
+            want $st crone:input_1 "Vivaldi:output_FL"
+            want $st crone:input_2 "Vivaldi:output_FR"
+            want $st crone:input_1 "Vivaldi-73:output_FL"
+            want $st crone:input_1 "mpv:output_FL"
+            not $st crone:input_1 "Built-in Audio Analog Stereo:capture_FL"
+            not $st crone:input_1 "Built-in Audio Analog Stereo:monitor_FL"
+        done
+        want system_late crone:input_1 "Late App:output_FL"
+        not system crone:input_1 "Late App:output_FL"
+        want app crone:input_1 "Vivaldi:output_FL"
+        want app crone:input_2 "Vivaldi-73:output_FR"
+        not app crone:input_1 "mpv:output_FL"
+        not app crone:input_1 "Late App:output_FL"
+        want monitor crone:input_1 "Built-in Audio Analog Stereo:monitor_FL"
+        want monitor crone:input_2 "Built-in Audio Analog Stereo:monitor_FR"
+        only monitor crone:input_1 1
+        want mic_again crone:input_1 "Built-in Audio Analog Stereo:capture_FL"
+        only mic_again crone:input_1 1
+        grep -q "PROBE apps.*Vivaldi" "$ILOG" || { echo "app list lacks Vivaldi"; bad=1; }
+        grep -q "PROBE apps.*Vivaldi-73" "$ILOG" && { echo "app list shows the stream suffix"; bad=1; }
+        grep -q "PROBE apps.*crone" "$ILOG" && { echo "app list shows norns itself"; bad=1; }
+        grep -q "PROBE input done" "$ILOG" || { echo "probe did not finish"; bad=1; }
+        return $bad
+    }
+    run "input:MIC, SYS (all apps but norns), APP, sink monitor, OFF by port flags and names" input_ok
+fi
+
 # the window on Xvfb: device skin, oled, mouse, keyboard, virtual grid and arc (needs xdotool, imagemagick)
 if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     WH="$(mktemp -d)"

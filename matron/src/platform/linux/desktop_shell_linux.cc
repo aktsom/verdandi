@@ -16,7 +16,9 @@
 
 #include <string>
 
+#include "../macos/app_audio.h"
 #include "file_picker.h"
+#include "input_route.h"
 #include "keys_midi.h"
 #include "menu_skin.h"
 #include "platform/common/desktop_shell.h"
@@ -27,6 +29,8 @@ static void (*cb_note)(const char *text) = NULL;
 static void (*cb_input)(const char *mode, const char *bundle, const char *name) = NULL;
 
 static menu_t menu = {};
+#define MENU_APPS 6
+static char menu_app[MENU_APPS][128]; // the applications in the menu, as built
 static int input_now = 1; // SKIN_INPUT_MIC until lua says otherwise
 static int recording = 0;
 static int copy_samples = 0;
@@ -149,7 +153,22 @@ static void menu_build(void) {
     add_item(SHELL_MENU_ARC, "Virtual arc", "F8", 0);
     add_item(SHELL_MENU_KEYS, "Virtual keyboard", "F7", 0);
     add_separator();
+    // what norns hears: the sound card's input, every application but norns, one application, off
+    const char *cur = app_audio_current();
     add_item(SHELL_MENU_INPUT_MIC, "Input: microphone", "", input_now == 1);
+    add_item(SHELL_MENU_INPUT_SYSTEM, "Input: all apps", "", cur != NULL && strcmp(cur, APP_AUDIO_SYSTEM) == 0);
+    if (input_route_monitor_enabled()) {
+        add_item(SHELL_MENU_INPUT_MONITOR, "Input: sink monitor (hears norns)", "",
+                 cur != NULL && strcmp(cur, APP_AUDIO_SINK_MONITOR) == 0);
+    }
+    app_audio_app_t apps[MENU_APPS];
+    int n = app_audio_list(apps, MENU_APPS);
+    for (int i = 0; i < n; i++) {
+        char label[48];
+        snprintf(menu_app[i], sizeof menu_app[i], "%s", apps[i].bundle);
+        snprintf(label, sizeof label, "Input: %s", apps[i].name);
+        add_item(SHELL_MENU_INPUT_APP + i, label, "", cur != NULL && strcmp(cur, apps[i].bundle) == 0);
+    }
     add_item(SHELL_MENU_INPUT_OFF, "Input: off", "", input_now == 0);
     add_separator();
     add_item(SHELL_MENU_QUIT, "Quit", "Ctrl+Q", 0);
@@ -176,8 +195,22 @@ static void menu_do(int id) {
             cb_input("off", NULL, NULL);
         }
         break;
+    case SHELL_MENU_INPUT_SYSTEM:
+        if (cb_input != NULL) {
+            cb_input("system", NULL, NULL);
+        }
+        break;
+    case SHELL_MENU_INPUT_MONITOR:
+        if (cb_input != NULL) {
+            cb_input("monitor", NULL, NULL);
+        }
+        break;
     default:
-        if (cb_item != NULL) {
+        if (id >= SHELL_MENU_INPUT_APP && id < SHELL_MENU_INPUT_APP + MENU_APPS) {
+            if (cb_input != NULL) {
+                cb_input("app", menu_app[id - SHELL_MENU_INPUT_APP], menu_app[id - SHELL_MENU_INPUT_APP]);
+            }
+        } else if (cb_item != NULL) {
             cb_item(id);
         }
         break;
