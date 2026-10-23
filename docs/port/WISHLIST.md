@@ -9,3 +9,8 @@ Nothing here is implemented unless Ken says so. The Linux baseline (matching mac
 
 - font should be as close to original monome norns as possible
 
+- knobs and encoders should be mappable 
+
+- arc functions/ arc encoders should be mappable
+
+- the name verdandi can be replaced for norns os across everything
