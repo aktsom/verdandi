@@ -91,7 +91,7 @@ ALSA sequencer port of the virtual keyboard; the real XDG file-chooser portal an
 window manager (only bare Xvfb); the virtual arc turned by dragging the left button; macOS after the shared
 source edits; every real device (audio interface, grid, arc, crow, MIDI).
 
-## 4. `error code: 22 (Invalid argument) in "pthread_create"` on key presses (found on a real laptop; reproduced; NOT fixed)
+## 4. `error code: 22 (Invalid argument) in "pthread_create"` on key presses (found on a real laptop; reproduced; FIXED for the Linux desktop build)
 
 **What prints it.** `matron/src/metro.cc` (`metro_init`, upstream norns code): every metro runs in its own thread created
 with `pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN)`, i.e. a 16 KiB stack. A metro is (re)started with a new thread
@@ -118,7 +118,19 @@ screensaver timer (it is never restarted, so the screen saver can no longer be p
 detection of the menu; any script that starts a metro at a moment when the TLS is already large would fail silently too
 (`metro_init` returns without telling Lua).
 
-**Proposed fix (not applied):** in `metro_init` do not set such a small stack: skip `pthread_attr_setstacksize` (the default
+**Fixed (Ken's decision), desktop Linux build only (`NORNS_LINUX_DESKTOP`; Pi and macOS keep the 16 KiB stack and the old
+messages):** `metro_init` uses a 256 KiB stack, the failing call is named correctly (`pthread_attr_setstacksize`,
+`pthread_attr_setdetachstate`, `pthread_create`), the attribute object is destroyed, and a metro whose thread cannot be
+created says so once on stderr: `metro 31 did not start: pthread_create failed, error code 22 (Invalid argument). it will not tick`.
+Test: `linux/tests/tls_pressure.c` (the preload library of the reproduction) with `probe_metro.lua`; `run_all.sh`
+"metro:a script metro ticks under TLS pressure": 0 of 20 ticks and 23 messages before the fix, 20 of 20 and none after. With a
+400 KB TLS block (more than 256 KiB can take) the message appears once per metro.
+**Other small fixed-stack threads: none.** `grep` over `matron`, `crone`, `norns`, `linux` and the third-party code for
+`setstacksize`, `PTHREAD_STACK_MIN`, `stack_size`: only `metro.cc` sets a stack size. All other threads (clocks, input, hello,
+screen events, JACK MIDI reader, file picker, GIF/import workers, asio's threads in Link, `std::thread`) use the default 8 MiB.
+`ssd1322.cc` sets a scheduling policy only and is not built on desktop Linux.
+
+Original proposal, as made: in `metro_init` do not set such a small stack: skip `pthread_attr_setstacksize` (the default
 8 MiB is virtual memory, 36 metros cost nothing real) or use at least 256 KiB; fix the three error messages that all say
 "pthread_attr_init"; and let `metro_start` report a failed thread (print once per metro) so a script's metro that did not start
 is visible. Needs a test with the TLS preload (the reproduction above works as a test). Shared file (`metro.cc`): the Pi

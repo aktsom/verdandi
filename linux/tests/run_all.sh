@@ -193,6 +193,23 @@ else
     echo "SKIP  audio: no jackd"
 fi
 
+# metros are threads: with a lot of static TLS (a desktop with GPU drivers: simulated by LD_PRELOAD) a 16 KiB stack
+# cannot be created and the metro never ticked; a script metro must tick and nothing may print "pthread_create"
+if cc -shared -fPIC -o "$T/tls_pressure.so" linux/tests/tls_pressure.c 2> /dev/null; then
+    MH="$(mktemp -d)"
+    ln -s "$REPO" "$MH/norns"
+    MLOG="$T/metro.log"
+    LD_PRELOAD="$T/tls_pressure.so" NORNS_HOME="$MH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_metro.lua" "$MLOG" > /dev/null 2>&1
+    metro_ok() {
+        local bad=0
+        grep -aq "PROBE metro ticks.20" "$MLOG" || { echo "the script metro did not tick 20 times: $(grep -a 'PROBE metro ticks' "$MLOG")"; bad=1; }
+        grep -aq "pthread_create" "$MLOG" && { echo "a metro thread could not be created ($(grep -ac pthread_create "$MLOG") messages)"; bad=1; }
+        grep -aq "PROBE metro done" "$MLOG" || { echo "probe did not finish"; bad=1; }
+        return $bad
+    }
+    run "metro:a script metro ticks under TLS pressure (24 KB static TLS)" metro_ok
+fi
+
 # MIC / SYS / APP / OFF / sink monitor by port flags and names (fake card, fake application streams "Vivaldi",
 # "Vivaldi-73", "mpv", a late "Late App"): what feeds crone:input_1/2 in each state
 peers() { # file port: what jack_lsp -c lists under port, one per line

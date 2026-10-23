@@ -130,6 +130,23 @@ static void metro_reset(struct metro *t, int stage) {
     pthread_mutex_unlock(&(t->stage_lock));
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+// desktop Linux: a thread's static TLS lives in its own stack with glibc 2.34+, so a stack of PTHREAD_STACK_MIN (16 KiB)
+// fails with EINVAL on a desktop whose libraries (GPU drivers, PipeWire's JACK) add TLS, and the metro then never runs
+// (docs/port/KNOWN-ISSUES.md item 4). 256 KiB of (virtual) stack is plenty for a metro. the Pi and macOS keep the old size.
+#define METRO_STACK_SIZE (256 * 1024)
+static bool metro_start_failed_told[MAX_NUM_METROS_OK];
+
+// said once per metro: a metro that did not start would otherwise just never tick
+static void metro_tell_failed(const struct metro *t, int code, const char *what) {
+    if (t->idx >= 0 && t->idx < MAX_NUM_METROS_OK && !metro_start_failed_told[t->idx]) {
+        metro_start_failed_told[t->idx] = true;
+        fprintf(stderr, "metro %d did not start: %s failed, error code %d (%s). it will not tick\n", t->idx, what, code,
+                strerror(code));
+    }
+}
+#endif
+
 void metro_init(struct metro *t, uint64_t nsec, int count) {
     int res;
     pthread_attr_t attr;
@@ -141,6 +158,20 @@ void metro_init(struct metro *t, uint64_t nsec, int count) {
     }
 
     // set other thread attributes here...
+#ifdef NORNS_LINUX_DESKTOP
+    res = pthread_attr_setstacksize(&attr, METRO_STACK_SIZE);
+    if (res != 0) {
+        metro_handle_error(res, "pthread_attr_setstacksize");
+        metro_tell_failed(t, res, "pthread_attr_setstacksize");
+        return;
+    }
+    res = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (res != 0) {
+        metro_handle_error(res, "pthread_attr_setdetachstate");
+        metro_tell_failed(t, res, "pthread_attr_setdetachstate");
+        return;
+    }
+#else
     res = pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN);
     if (res != 0) {
         metro_handle_error(res, "pthread_attr_init");
@@ -151,12 +182,20 @@ void metro_init(struct metro *t, uint64_t nsec, int count) {
         metro_handle_error(res, "pthread_attr_init");
         return;
     }
+#endif
 
     t->delta = nsec;
     t->count = count;
     res = pthread_create(&(t->tid), &attr, &metro_thread_loop, (void *)t);
+#ifdef NORNS_LINUX_DESKTOP
+    pthread_attr_destroy(&attr);
+#endif
     if (res != 0) {
+#ifdef NORNS_LINUX_DESKTOP
+        metro_tell_failed(t, res, "pthread_create");
+#else
         metro_handle_error(res, "pthread_create");
+#endif
         return;
     } else {
         pthread_setname_np(t->tid, "metro_loop");
