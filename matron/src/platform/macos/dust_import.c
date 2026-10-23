@@ -2,9 +2,20 @@
  * dust_import.c: see dust_import.h
  */
 
+#if !defined(__APPLE__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE // copy_file_range
+#endif
+
+#ifdef __APPLE__
 #include <copyfile.h>
+#else
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#endif
 #include <dirent.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -183,6 +194,172 @@ void dust_prune_links(const char *dust) {
     closedir(d);
 }
 
+#ifdef __APPLE__
+static int copy_path(const char *path, const char *dest, int dir) {
+    copyfile_flags_t flags = COPYFILE_DATA | COPYFILE_STAT | COPYFILE_EXCL;
+    if (dir) {
+        flags |= COPYFILE_RECURSIVE;
+    }
+    return copyfile(path, dest, NULL, flags) == 0;
+}
+#else
+// everywhere else: what COPYFILE_DATA | COPYFILE_STAT | COPYFILE_EXCL | COPYFILE_RECURSIVE do.
+// nothing that exists is overwritten; links inside a folder are copied as links; a failed
+// copy removes what it made (copy_path)
+#define COPY_MAX_DEPTH 32
+
+static int copy_data(int in, int out) {
+    int use_range = 1;
+    char buf[1 << 16];
+    for (;;) {
+        if (use_range) {
+            ssize_t n = copy_file_range(in, NULL, out, NULL, 1 << 24, 0);
+            if (n > 0) {
+                continue;
+            }
+            if (n == 0) {
+                return 1;
+            }
+            // another file system, an old kernel: read and write
+            if (errno != EXDEV && errno != ENOSYS && errno != EINVAL && errno != EOPNOTSUPP && errno != EBADF) {
+                return 0;
+            }
+            use_range = 0;
+        }
+        ssize_t n = read(in, buf, sizeof buf);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return 0;
+        }
+        if (n == 0) {
+            return 1;
+        }
+        for (ssize_t done = 0; done < n;) {
+            ssize_t w = write(out, buf + done, (size_t)(n - done));
+            if (w < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                return 0;
+            }
+            done += w;
+        }
+    }
+}
+
+static int copy_file(const char *src, const char *dst, const struct stat *st) {
+    int in = open(src, O_RDONLY | O_CLOEXEC);
+    if (in < 0) {
+        return 0;
+    }
+    int out = open(dst, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    if (out < 0) {
+        close(in);
+        return 0;
+    }
+    int ok = copy_data(in, out);
+    struct timespec times[2] = {st->st_atim, st->st_mtim};
+    ok = ok && fchmod(out, st->st_mode & 07777) == 0;
+    // times are best effort (some file systems refuse)
+    futimens(out, times);
+    ok = close(out) == 0 && ok;
+    close(in);
+    if (!ok) {
+        unlink(dst);
+    }
+    return ok;
+}
+
+static int copy_tree(const char *src, const char *dst, int depth);
+
+static int copy_dir(const char *src, const char *dst, const struct stat *st, int depth) {
+    if (depth > COPY_MAX_DEPTH || mkdir(dst, 0700) != 0) {
+        return 0;
+    }
+    DIR *d = opendir(src);
+    if (d == NULL) {
+        return 0;
+    }
+    int ok = 1;
+    struct dirent *e;
+    while (ok && (e = readdir(d)) != NULL) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) {
+            continue;
+        }
+        char from[2048], to[2048];
+        if (snprintf(from, sizeof from, "%s/%s", src, e->d_name) >= (int)sizeof from ||
+            snprintf(to, sizeof to, "%s/%s", dst, e->d_name) >= (int)sizeof to) {
+            ok = 0;
+            break;
+        }
+        ok = copy_tree(from, to, depth + 1);
+    }
+    closedir(d);
+    // the folder's own mode last: a read-only folder could not be filled before
+    return ok && chmod(dst, st->st_mode & 07777) == 0;
+}
+
+static int copy_tree(const char *src, const char *dst, int depth) {
+    struct stat st;
+    if (lstat(src, &st) != 0) {
+        return 0;
+    }
+    if (S_ISDIR(st.st_mode)) {
+        return copy_dir(src, dst, &st, depth);
+    }
+    if (S_ISLNK(st.st_mode)) {
+        char target[2048];
+        ssize_t n = readlink(src, target, sizeof target - 1);
+        if (n < 0) {
+            return 0;
+        }
+        target[n] = '\0';
+        return symlink(target, dst) == 0;
+    }
+    if (S_ISREG(st.st_mode)) {
+        return copy_file(src, dst, &st);
+    }
+    return 1; // sockets, fifos, devices: nothing to import
+}
+
+static void remove_tree(const char *path) {
+    struct stat st;
+    if (lstat(path, &st) != 0) {
+        return;
+    }
+    if (S_ISDIR(st.st_mode)) {
+        chmod(path, 0700);
+        DIR *d = opendir(path);
+        if (d != NULL) {
+            struct dirent *e;
+            while ((e = readdir(d)) != NULL) {
+                char sub[2048];
+                if (strcmp(e->d_name, ".") && strcmp(e->d_name, "..") &&
+                    snprintf(sub, sizeof sub, "%s/%s", path, e->d_name) < (int)sizeof sub) {
+                    remove_tree(sub);
+                }
+            }
+            closedir(d);
+        }
+        rmdir(path);
+    } else {
+        unlink(path);
+    }
+}
+
+static int copy_path(const char *path, const char *dest, int dir) {
+    (void)dir;
+    if (copy_tree(path, dest, 0)) {
+        return 1;
+    }
+    // no half copy may look like an imported sample
+    remove_tree(dest);
+    return 0;
+}
+#endif
+
 static int copy_into(const char *path, const char *dest, dust_kind_t kind) {
     struct stat st;
     int dir = stat(path, &st) == 0 && S_ISDIR(st.st_mode);
@@ -195,13 +372,15 @@ static int copy_into(const char *path, const char *dest, dust_kind_t kind) {
         if (snprintf(file, sizeof file, "%s/%s", dest, base_of(path)) >= (int)sizeof file) {
             return 0;
         }
-        return copyfile(path, file, NULL, COPYFILE_DATA | COPYFILE_STAT | COPYFILE_EXCL) == 0;
+        if (copy_path(path, file, 0)) {
+            return 1;
+        }
+#ifndef __APPLE__
+        rmdir(dest);
+#endif
+        return 0;
     }
-    copyfile_flags_t flags = COPYFILE_DATA | COPYFILE_STAT | COPYFILE_EXCL;
-    if (dir) {
-        flags |= COPYFILE_RECURSIVE;
-    }
-    return copyfile(path, dest, NULL, flags) == 0;
+    return copy_path(path, dest, dir);
 }
 
 int dust_import(const char *dust, const char *path, int link, char *dest, size_t n, int *linked) {
@@ -257,6 +436,16 @@ int dust_import_volatile(const char *path, const char *tmpdir, const char *home)
             return 1;
         }
     }
-    return under(path, tmpdir) || under_home(path, home, "Library/Caches") || under_home(path, home, ".Trash") ||
-           strstr(path, "/.Trashes/") != NULL;
+    if (under(path, tmpdir) || under_home(path, home, "Library/Caches") || under_home(path, home, ".Trash") ||
+        strstr(path, "/.Trashes/") != NULL) {
+        return 1;
+    }
+#ifndef __APPLE__
+    // linux: the user's runtime and cache folders, the trash, a disk's trash
+    const char *runtime = getenv("XDG_RUNTIME_DIR"), *cache = getenv("XDG_CACHE_HOME");
+    return under(path, runtime) || under(path, cache) || under_home(path, home, ".cache") ||
+           under_home(path, home, ".local/share/Trash") || strstr(path, "/.Trash-") != NULL;
+#else
+    return 0;
+#endif
 }

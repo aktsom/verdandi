@@ -17,7 +17,7 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
 ## In progress
 - Phase 2, steps per `docs/port/phase-2.md` section 6 (decisions in `DECISIONS.md`):
   1. libmonome pty patch: DONE (`c:vgrid` passes).
-  2. dust_import portable copy: next.
+  2. dust_import portable copy: DONE (`c:dust_import`, also as an ordinary user; macOS `copyfile` path unchanged).
   3. window (`sdl_bridge.cc` behind `desktop_shell.h`), 4. menu/picker/screenshot/GIF,
   5. "norns keys" A + B: not started. Stop after step 5.
 - Then (read-only): clock investigation -> `docs/port/clock-notes.md`; wait for Ken's decision.

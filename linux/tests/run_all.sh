@@ -57,9 +57,10 @@ cc $CFLAGS $(pkg-config --cflags cairo) "$M/device_skin_test.c" "$P/device_skin.
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
     -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
-# copyfile(3) is macOS only (phase 2)
-cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" 2> /dev/null \
-    && run "c:dust_import" "$T/dit" || { echo "KNOWN c:dust_import (copyfile.h)"; KNOWN+=("c:dust_import"); }
+cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" && run "c:dust_import" "$T/dit"
+# the same as an ordinary user: root can read every file, so the failed-copy case only runs here
+chmod 755 "$T" && setpriv --reuid=65534 --regid=65534 --clear-groups true 2> /dev/null &&
+    run "c:dust_import (as nobody)" setpriv --reuid=65534 --regid=65534 --clear-groups "$T/dit"
 echo "SKIP  c:gif (links ImageIO), objc: drop_test app_input_test"
 
 run "waf:unit tests" "$WAF" test

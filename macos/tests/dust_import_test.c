@@ -9,11 +9,13 @@
  * copied where it does not.
  */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "dust_import.h"
@@ -131,6 +133,64 @@ static void test_other_disk(const char *base) {
     remove_root();
 }
 
+// what a copy keeps and what a failed copy leaves behind
+static void test_copy_details(void) {
+    snprintf(root, sizeof root, "/tmp/dust_import_XXXXXX");
+    if (mkdtemp(root) == NULL) {
+        failures++;
+        return;
+    }
+    dir("in");
+    dir("dust");
+    dir("in/kit");
+    dir("in/kit/sub");
+    put("in/kit/a.wav", "aaa");
+    put("in/kit/sub/b.wav", "bbb");
+    chmod(at("in/kit/a.wav"), 0640);
+    if (symlink("a.wav", at("in/kit/link.wav")) != 0) {
+        failures++;
+    }
+    // a time in the past, to see it kept
+    struct timespec old[2] = {{1000000000, 0}, {1000000000, 0}};
+    utimensat(AT_FDCWD, at("in/kit/a.wav"), old, 0);
+    char dest[1024], dust[1100];
+    snprintf(dust, sizeof dust, "%s", at("dust"));
+    int linked = -1;
+    CHECK(dust_import(dust, at("in/kit"), 0, dest, sizeof dest, &linked), "copy a folder with a link inside");
+    struct stat st;
+    CHECK(lstat(at("dust/audio/kit/link.wav"), &st) == 0 && S_ISLNK(st.st_mode), "a link inside is copied as a link");
+    CHECK(same_text("dust/audio/kit/sub/b.wav", "bbb"), "nested file copied");
+    CHECK(stat(at("dust/audio/kit/a.wav"), &st) == 0 && (st.st_mode & 0777) == 0640, "mode kept");
+    CHECK(st.st_mtime == 1000000000, "modification time kept (%ld)", (long)st.st_mtime);
+    // a big file goes through whole
+    {
+        FILE *f = fopen(at("in/big.wav"), "w");
+        for (int i = 0; i < 20000; i++) {
+            fputs("0123456789abcdef0123456789abcdef", f);
+        }
+        fclose(f);
+        CHECK(dust_import(dust, at("in/big.wav"), 0, dest, sizeof dest, &linked), "copy a 640 KB file");
+        struct stat a, b;
+        CHECK(stat(at("in/big.wav"), &a) == 0 && stat(at("dust/audio/big.wav"), &b) == 0 && a.st_size == b.st_size &&
+                  b.st_size == 640000,
+              "big file copied whole");
+    }
+    // a failing copy leaves nothing: an unreadable file inside a folder (root can read everything)
+    if (geteuid() != 0) {
+        dir("in/bad");
+        put("in/bad/ok.wav", "ok");
+        put("in/bad/secret.wav", "no");
+        chmod(at("in/bad/secret.wav"), 0);
+        CHECK(!dust_import(dust, at("in/bad"), 0, dest, sizeof dest, &linked), "unreadable file: import fails");
+        CHECK(!exists("dust/audio/bad"), "a failed copy leaves no half copy");
+        chmod(at("in/bad/secret.wav"), 0600);
+    }
+    // a script with a missing source file leaves no empty folder
+    CHECK(!dust_import(dust, at("in/ghost.lua"), 0, dest, sizeof dest, &linked), "missing script refused");
+    CHECK(!exists("dust/code/ghost"), "no folder for a missing script");
+    remove_root();
+}
+
 int main(int argc, char **argv) {
     snprintf(root, sizeof root, "/tmp/dust_import_XXXXXX");
     if (mkdtemp(root) == NULL) {
@@ -214,6 +274,7 @@ int main(int argc, char **argv) {
     CHECK(!exists("dust/audio/notes.txt") && !exists("dust/audio/mac/notes.txt") && !exists("dust/code/notes.txt"),
           "txt left out");
     remove_root();
+    test_copy_details();
 
     // files that go away on their own are copied, not linked
     const char *tmp = "/var/folders/ab/xyz/T/", *home = "/Users/me";
