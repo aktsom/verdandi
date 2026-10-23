@@ -79,12 +79,15 @@ function enc(n, d) print("PROBE enc", n, d) end
 LUA
 NORNS_HOME="$NORNS_HOME" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_boot.lua" "$PROBE_LOG" > /dev/null 2>&1
 boot_ok() {
-    grep -q "running post-startup" "$PROBE_LOG" &&
-        grep -q "PROBE engines.5" "$PROBE_LOG" &&
-        grep -q "PROBE script init ok" "$PROBE_LOG" &&
-        grep -q "PROBE loaded.probe.PolyPerc" "$PROBE_LOG" &&
-        grep -q "PROBE key.2.1" "$PROBE_LOG" &&
-        grep -q "PROBE enc.1" "$PROBE_LOG"
+    local bad=0
+    chk() { grep -q "$2" "$PROBE_LOG" || { echo "missing: $1"; bad=1; }; }
+    chk "matron reached post-startup" "running post-startup"
+    chk "engines listed by sclang (crone ready)" "PROBE engines.5"
+    chk "script init" "PROBE script init ok"
+    chk "script loaded with its engine" "PROBE loaded.probe.PolyPerc"
+    chk "key event" "PROBE key.2.1"
+    chk "encoder event" "PROBE enc.1"
+    return $bad
 }
 run "boot:headless (xvfb, jackd dummy, crone, sclang, script)" boot_ok
 
