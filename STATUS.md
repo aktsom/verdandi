@@ -19,5 +19,4 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   `docs/port/HARDWARE-CHECKLIST.md`.
 - `SANDBOX.md` (referenced in CLAUDE.md for the notification hook) does not exist in the repo,
   so no notification was fired. Ken needs to see the Gate A entry in `DECISIONS.md`.
-- The Phase 0 commit is local only: `git push` to `origin/linux-port` returned 403 (the Claude
-  GitHub App has no access to aktsom/verdandi). Push after access is fixed.
+- Phase 0 commits are pushed to `origin/linux-port` (an earlier 403 was fixed by Ken).
