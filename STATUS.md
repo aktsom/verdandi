@@ -27,17 +27,29 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 `linux/tests/stress_boot.sh` repeats the check.
 
 ## In progress
-- **Phase 3 steps 1 and 2 only** (Ken's decisions in `DECISIONS.md`); steps 3-5 wait for Ken's laptop output.
-  1. `clock_midi`: song position (0xF2) and continue (0xFB), tests first: DONE, pushed. 15 clock test cases pass
-     (8 new); full `run_all.sh` green. The SPP byte parsing in `device_midi.cc` is tested end to end in step 2.
-  2. JACK MIDI input ("Verdandi" client, device "Verdandi JACK in", no auto-connect): DONE, see below.
-- Nothing. Phase 2 is complete. The Phase 3 approach note is written (`docs/port/phase-3.md`, audio, devices and
-  the clock items); **no Phase 3 code until Ken confirms** (8 decisions at its end).
+- **Phase 3 steps 1 and 2 are done** (Ken's decisions in `DECISIONS.md`); **stopped here as asked**. Steps 3-5
+  (crone without physical ports, `norns.sh` under `pw-jack`, `audio.conf` under PipeWire, MIC/SYS/APP) wait for
+  Ken's laptop output (`docs/port/RUN-ON-LAPTOP.md`, section 4).
+  1. `clock_midi`: song position (0xF2) and continue (0xFB), tests first. Continue does not reset the counter;
+     start after SPP begins at the position (once); stop forgets a waiting position. 17 clock test cases pass.
+  2. JACK MIDI input: client "Verdandi", port `midi_in`, device "Verdandi JACK in", no auto-connect,
+     `NORNS_JACK_MIDI=0` switches it off. Clock messages use the event's exact JACK frame time
+     (`clock_midi_handle_message_at`): in the test the tempo reads 120.0 and beats 0 / 18 / 20 / 0 at start, stop
+     (after SPP 16 beats), continue (no reset) and the second start. Found and fixed on the way: an arrival-time
+     version gave tempo 117-122 and once an infinite tempo (ticks of one JACK period have equal arrival times);
+     `clock_midi_init` did not reset the smoothing buffer.
+  Test infrastructure: the probe waits for norns/sclang readiness (applied, decision 2), and waits for `jackd` to be
+  gone between runs (a race that made the portal scenario fail after the zenity scenario).
+- Full `linux/tests/run_all.sh`: 0 unexpected failures at the end of step 2 (one run after the last change).
+  Not run again 36 times: the stress test of the readiness fix was 8 of 8 at the heaviest load before step 1.
+  The leftover `sidecar [norns]` processes seen in my sandbox come from starting the tests with `nohup`
+  (SIGHUP is then ignored, so they do not die with norns); a normal terminal is not affected.
 
 ## Next
 - Ken: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
-- Then answer the decisions in `docs/port/phase-3.md` section 8; Phase 3 code starts after that.
+- Then Ken sends the laptop output; steps 3-5 of `docs/port/phase-3.md` follow (decisions 3, 4, 5 are recorded in `DECISIONS.md`).
+- macOS: re-verify with the shared-file list at the end of `docs/port/phase-3.md` (clock and device_midi changes).
 
 ## Not testable here / notes
 - macOS not rebuilt after the edits to shared sources (list in `docs/port/phase-2.md`).
