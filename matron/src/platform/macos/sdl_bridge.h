@@ -51,6 +51,10 @@ extern void sdl_bridge_app_input(const char *target, const char *label);
 extern void sdl_bridge_choose_file(const char *dir);
 extern void sdl_bridge_choose_file_close(void);
 
+// any thread, does not block: a note that stays on the device screen until cleared with "" (Linux:
+// audio problems). other messages show over it for a few seconds
+extern void sdl_bridge_set_warning(const char *text);
+
 #ifdef __cplusplus
 }
 #endif

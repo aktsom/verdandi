@@ -3,6 +3,7 @@
 //
 
 #include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -13,6 +14,10 @@
 #include "SoftcutClient.h"
 
 #include "crone.h"
+#include "crone_main.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "AudioStatus.h"
+#endif
 
 static inline void sleep(int ms) {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
@@ -87,4 +92,11 @@ int main() {
     crone_cleanup();
 
  }
+#endif
+#ifdef NORNS_LINUX_DESKTOP
+// which: 0 warning text (empty if none), 1 input client crone connected to, 2 output client
+void crone_audio_status(int which, char *out, size_t n) {
+    std::string v = crone::AudioStatus::get(which);
+    snprintf(out, n, "%s", v.c_str());
+}
 #endif

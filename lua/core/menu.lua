@@ -354,6 +354,18 @@ end
 
 hook.system_post_startup:register("menu-out", show_output)
 
+-- Linux desktop: a problem with the sound card (no ports, a device name that matches nothing) stays on
+-- the device screen, not only in the log (crone starts unconnected then)
+if _norns.audio_status and _norns.set_warning then
+  hook.system_post_startup:register("menu-audio-warning", function()
+    local warning = _norns.audio_status()
+    if warning ~= "" then
+      print("audio: " .. warning)
+      _norns.set_warning("AUDIO: not connected, see SYSTEM > AUDIO")
+    end
+  end)
+end
+
 -- the mouse on the oled (x 0-127, y 0-63; kind "down", "drag", "up", "wheel" with its
 -- steps), for the menu page that takes it (MIX)
 _norns.screen_mouse = function(x, y, kind, value)

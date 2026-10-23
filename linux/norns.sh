@@ -17,6 +17,15 @@
 #   NORNS_JACK_DRIVER   jackd driver, default "alsa"; "dummy" for headless runs
 #   NORNS_JACK_RATE / NORNS_JACK_PERIOD   default 48000 / 1024
 #   NORNS_NO_SCLANG=1   do not start sclang
+#   NORNS_AUDIO_SERVER  "auto" (default): use a JACK server that answers; else, if PipeWire runs, run
+#                       this script again under pw-jack; else start jackd. "jackd": always start our own
+#                       jackd. "pipewire": always use PipeWire's JACK through pw-jack.
+#                       NORNS_JACK_DRIVER given (and no server answering) also means our own jackd.
+#   NORNS_IN_PORTS / NORNS_OUT_PORTS   sound card to use, as the start of its JACK client name (the
+#                       card's name in PipeWire). default: the session's default source / sink under
+#                       PipeWire (wpctl), else the first card. audio.conf in the norns home may hold
+#                       in_ports=... and out_ports=... (the environment wins)
+#   NORNS_DECIDE_ONLY=1 print the decision ("DECIDE action=... server=... in=... out=...") and exit
 
 set -u
 
@@ -28,6 +37,62 @@ NORNS_HOME="${NORNS_HOME:-$(dirname "$REPO")}"
 JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
 JACK_RATE="${NORNS_JACK_RATE:-48000}"
 JACK_PERIOD="${NORNS_JACK_PERIOD:-1024}"
+
+jack_up() { jack_lsp >/dev/null 2>&1; }
+pw_up() { pw-cli info 0 >/dev/null 2>&1; }
+PW_JACK="${NORNS_PW_JACK:-$(command -v pw-jack || true)}"
+# a key from audio.conf in the norns home (the last one wins)
+conf_get() { sed -n "s/^$1=//p" "$NORNS_HOME/audio.conf" 2>/dev/null | tail -1; }
+# the name of PipeWire's default sink / source: also the name of its JACK client
+pw_default() { wpctl inspect "$1" 2>/dev/null | sed -n 's/.*node\.description = "\(.*\)".*/\1/p' | head -1; }
+
+# which audio server: SERVER (jackd, pipewire, jack = something else answering), ACTION
+decide_server() {
+    local want="${NORNS_AUDIO_SERVER:-auto}"
+    SERVER=jack
+    if jack_up; then
+        ACTION=use-running
+        if [ "${NORNS_REEXEC:-0}" = 1 ] || { pw_up && jack_lsp 2>/dev/null | grep -q '^Midi-Bridge:'; }; then
+            SERVER=pipewire
+        fi
+        return
+    fi
+    if [ "$want" = jackd ] || { [ "$want" = auto ] && { [ -n "${NORNS_JACK_DRIVER:-}" ] || ! pw_up; }; }; then
+        ACTION=start-jackd
+        SERVER=jackd
+        return
+    fi
+    SERVER=pipewire
+    if [ "${NORNS_REEXEC:-0}" = 1 ]; then
+        ACTION=pipewire-no-jack
+    elif pw_up && [ -x "$PW_JACK" ]; then
+        ACTION=reexec-pw-jack
+    else
+        ACTION=need-pw-jack
+    fi
+}
+
+# the card to use, as a prefix of its JACK client name ("" = the first one)
+decide_devices() {
+    IN_PORTS="${NORNS_IN_PORTS:-$(conf_get in_ports)}"
+    OUT_PORTS="${NORNS_OUT_PORTS:-$(conf_get out_ports)}"
+    if [ "$SERVER" = pipewire ]; then
+        local d
+        if [ -z "$IN_PORTS" ]; then
+            d="$(pw_default @DEFAULT_AUDIO_SOURCE@)"
+            case "$d" in "Monitor of "*) d="" ;; esac
+            IN_PORTS="$d"
+        fi
+        [ -z "$OUT_PORTS" ] && OUT_PORTS="$(pw_default @DEFAULT_AUDIO_SINK@)"
+    fi
+}
+
+decide_server
+decide_devices
+if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ]; then
+    echo "DECIDE action=$ACTION server=$SERVER in=$IN_PORTS out=$OUT_PORTS"
+    exit 0
+fi
 
 export HOME="$NORNS_HOME"
 export JACK_NO_START_SERVER=1
@@ -89,9 +154,27 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-jack_up() { jack_lsp >/dev/null 2>&1; }
+case "$ACTION" in
+reexec-pw-jack)
+    echo "norns.sh: no JACK server, but PipeWire runs: starting again under pw-jack"
+    export NORNS_REEXEC=1
+    exec "$PW_JACK" "$0" "$@"
+    ;;
+need-pw-jack)
+    echo "norns.sh: PipeWire is the sound server here but pw-jack is not available (or PipeWire is not running)."
+    echo "          install it (Debian/Ubuntu: sudo apt install pipewire-jack), or use our own JACK:"
+    echo "          NORNS_AUDIO_SERVER=jackd NORNS_JACK_DRIVER=dummy linux/norns.sh   (silent)"
+    exit 1
+    ;;
+pipewire-no-jack)
+    echo "norns.sh: no JACK server answers even under pw-jack. Is pipewire-jack installed and PipeWire running?"
+    exit 1
+    ;;
+esac
+echo "norns.sh: audio server: $SERVER${IN_PORTS:+, input '$IN_PORTS'}${OUT_PORTS:+, output '$OUT_PORTS'}"
+export NORNS_AUDIO_SERVER_MODE="$SERVER"
 
-if ! jack_up; then
+if [ "$ACTION" = start-jackd ]; then
     args=(-d "$JACK_DRIVER" -r "$JACK_RATE" -p "$JACK_PERIOD")
     # the dummy driver needs no realtime; jackd -r keeps it quiet in containers
     [ "$JACK_DRIVER" = "dummy" ] && args=(-r -d dummy -r "$JACK_RATE" -p "$JACK_PERIOD")
@@ -117,6 +200,7 @@ RESTART_MARK="$NORNS_HOME/.norns-restart"
 rm -f "$RESTART_MARK"
 
 start_norns() {
+    export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
     if [ $TERMINAL -eq 1 ]; then
         # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin
         "$NORNS_BIN" <&0 &
@@ -158,5 +242,6 @@ while :; do
         sleep 0.2
         n=$((n + 1))
     done
+    decide_devices
     start_norns
 done

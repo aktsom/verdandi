@@ -21,6 +21,12 @@
 #include <sstream>
 
 #include "Commands.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include <cstdlib>
+#include <vector>
+#include "AudioStatus.h"
+#include "PortSelect.h"
+#endif
 
 namespace crone {
 
@@ -159,6 +165,46 @@ class Client {
         jack_deactivate(client);
     }
 
+#ifdef NORNS_LINUX_DESKTOP
+    // desktop Linux: PipeWire/JACK show MIDI bridges, monitors and app streams next to the card.
+    // pick audio ports of one physical client (optionally by name prefix); never throw for missing
+    // ports: crone starts unconnected and the warning is shown in the window
+    void connectPhysical(bool input, const char *envName, int numChannels) {
+        const char *what = input ? "input" : "output";
+        const char **all = jack_get_ports(client, nullptr, nullptr,
+                                          JackPortIsPhysical | (input ? JackPortIsOutput : JackPortIsInput));
+        std::vector<PortSelect::Port> cand;
+        for (int i = 0; all != nullptr && all[i] != nullptr; ++i) {
+            jack_port_t *p = jack_port_by_name(client, all[i]);
+            bool audio = p != nullptr && std::string(jack_port_type(p)) == JACK_DEFAULT_AUDIO_TYPE;
+            cand.push_back(PortSelect::Port{all[i], audio, true});
+        }
+        if (all != nullptr) {
+            jack_free(all);
+        }
+        const char *prefix = std::getenv(envName);
+        PortSelect::Result r = PortSelect::select(cand, prefix != nullptr ? prefix : "", what);
+        AudioStatus::addWarning(r.warning);
+        if (r.ports.empty()) {
+            std::cerr << "crone: " << r.warning << std::endl;
+            return;
+        }
+        for (int i = 0; i < numChannels && i < 2; ++i) {
+            const char *mine = jack_port_name(input ? inPort[i] : outPort[i]);
+            int err = input ? jack_connect(client, r.ports[i].c_str(), mine)
+                            : jack_connect(client, mine, r.ports[i].c_str());
+            if (err != 0) {
+                AudioStatus::addWarning(std::string("could not connect ") + what + " " + r.ports[i]);
+                std::cerr << "crone: failed to connect " << what << " port " << r.ports[i] << std::endl;
+            }
+        }
+        AudioStatus::setClient(input, r.client);
+        std::cerr << "crone: " << what << " connected to '" << r.client << "'" << std::endl;
+    }
+
+    void connectAdcPorts() { connectPhysical(true, "NORNS_IN_PORTS", NumIns); }
+    void connectDacPorts() { connectPhysical(false, "NORNS_OUT_PORTS", NumOuts); }
+#else
     void connectAdcPorts() {
         const char **ports = jack_get_ports(client, nullptr, nullptr,
                                             JackPortIsPhysical | JackPortIsOutput);
@@ -209,6 +255,8 @@ class Client {
         }
         free(ports);
     }
+
+#endif
 
     //---- getters
     const char *getInputPortName(int idx) {

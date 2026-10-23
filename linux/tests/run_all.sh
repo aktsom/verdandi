@@ -127,6 +127,44 @@ else
     echo "SKIP  clock:jack midi (no jack headers)"
 fi
 
+# crone picks the sound card on a desktop: audio ports of one physical client (a physical MIDI port beside
+# them is not taken), by name prefix if given; no physical ports: norns boots unconnected with a warning
+run "audio:launcher decisions (stub pw-cli, pw-jack, wpctl)" "$REPO/linux/tests/launcher_test.sh"
+connected() { # file port peer: is peer listed under port in jack_lsp -c output
+    awk -v port="$2" -v peer="$3" '/^[^ \t]/ { cur = $0; next } { sub(/^[ \t]+/, ""); if (cur == port && $0 == peer) found = 1 } END { exit !found }' "$1"
+}
+if command -v jackd > /dev/null; then
+    ALOG="$T/audio-two.log"
+    "$REPO/linux/tests/audio_ports_test.sh" two-cards "$ALOG" > /dev/null 2>&1
+    audio_two_ok() {
+        local bad=0
+        grep -q "PROBE audio in.Fake Card A" "$ALOG" || { echo "missing: input from the first card"; bad=1; }
+        grep -q "PROBE audio out.Fake Card B" "$ALOG" || { echo "missing: output to the card named by NORNS_OUT_PORTS"; bad=1; }
+        grep -q "PROBE audio warning.$" "$ALOG" || { echo "a warning where none is due"; bad=1; }
+        connected "$ALOG.conn" "Fake Card A:capture_FL" "crone:input_1" || { echo "input 1 not from Fake Card A:capture_FL"; bad=1; }
+        connected "$ALOG.conn" "Fake Card A:capture_FR" "crone:input_2" || { echo "input 2 not from Fake Card A:capture_FR"; bad=1; }
+        connected "$ALOG.conn" "crone:output_1" "Fake Card B:playback_FL" || { echo "output 1 not to Fake Card B:playback_FL"; bad=1; }
+        connected "$ALOG.conn" "crone:output_2" "Fake Card B:playback_FR" || { echo "output 2 not to Fake Card B:playback_FR"; bad=1; }
+        connected "$ALOG.conn" "crone:output_1" "Fake Card A:playback_FL" && { echo "output also on the other card"; bad=1; }
+        awk '/^[^ \t]/ { midi = ($0 ~ /midi_/); next } midi { found = 1 } END { exit !found }' "$ALOG.conn" && { echo "a MIDI port got connected"; bad=1; }
+        return $bad
+    }
+    run "audio:crone picks one card by prefix, ignores physical MIDI ports" audio_two_ok
+    NLOG="$T/audio-none.log"
+    "$REPO/linux/tests/audio_ports_test.sh" none "$NLOG" > /dev/null 2>&1
+    audio_none_ok() {
+        local bad=0
+        grep -q "PROBE audio done" "$NLOG" || { echo "norns did not boot without sound card ports"; bad=1; }
+        grep -q "PROBE audio warning.no sound card input ports" "$NLOG" || { echo "missing: the input warning"; bad=1; }
+        grep -q "no sound card output ports" "$NLOG" || { echo "missing: the output warning"; bad=1; }
+        grep -q "cannot start audio" "$NLOG" && { echo "crone still refuses to start"; bad=1; }
+        return $bad
+    }
+    run "audio:no physical ports: boots unconnected with a warning" audio_none_ok
+else
+    echo "SKIP  audio: no jackd"
+fi
+
 # the window on Xvfb: device skin, oled, mouse, keyboard, virtual grid and arc (needs xdotool, imagemagick)
 if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     WH="$(mktemp -d)"

@@ -350,3 +350,37 @@ What this settles (replaces my earlier "unverified"):
   decision 10 below whether the loop-free variant should be the default instead.
 - **Decision 10 (new, for Ken):** SYS as sink monitor (decision 9) with the three safeguards above, or SYS as
   all-applications-except-norns (no loop) as the default, with the sink monitor as an advanced option?
+
+
+## Step 3 results (crone ports, server detection)
+
+Built tests first (all failed before: no `PortSelect.h`; the old binary stopped with "no ADC ports found" in the no-ports
+scenario), then the code. What it does, on the Linux desktop build only (`NORNS_LINUX_DESKTOP`; Pi and macOS keep the old
+`connectAdcPorts`/`connectDacPorts`):
+
+- `crone/src/PortSelect.h` (pure logic): candidates must be **audio type and physical**; one client only (the first
+  one, or the first whose name starts with the prefix); up to two ports, a single port feeds both channels; a prefix that
+  matches nothing warns and falls back to the default; nothing at all returns no ports and a warning.
+- `Client.h` reads `NORNS_IN_PORTS`/`NORNS_OUT_PORTS`, records the warning and the chosen client names in
+  `AudioStatus.h` and **does not throw**; `_norns.audio_status()` returns warning, input client, output client.
+- Window: `sdl_bridge_set_warning` keeps a standing note on the device screen ("AUDIO: not connected, see SYSTEM > AUDIO");
+  other toasts show over it and it returns. The full text is printed in the log. (A first version put the whole text in the
+  window and it was cut off; short text now, full text on the AUDIO page in step 4.)
+- `linux/norns.sh`: decision table (tested with stubs, `NORNS_DECIDE_ONLY=1`):
+
+  | situation | action |
+  |---|---|
+  | a JACK server answers | use it (server "pipewire" if we re-ran under pw-jack or it has `Midi-Bridge:` ports) |
+  | none answers, `NORNS_JACK_DRIVER` given or `NORNS_AUDIO_SERVER=jackd` or PipeWire not running | start own jackd |
+  | none answers, PipeWire runs, pw-jack found | run this script again under `pw-jack` |
+  | PipeWire runs, no pw-jack | message with `apt install pipewire-jack`, exit 1 |
+  | still no JACK under pw-jack | message, exit 1 (no loop) |
+
+  Device prefixes, strongest first: environment, `audio.conf` (`in_ports=`, `out_ports=` in the norns home), the session's
+  default source/sink read with `wpctl inspect` (`node.description`, which is the JACK client name; a default source that
+  is a "Monitor of ..." is not taken as an input).
+- Not verified on a real PipeWire: that `wpctl`'s `node.description` equals the JACK client name on every system (it
+  was on Ken's laptop data), and the pw-jack re-run itself (tested with stubs and, earlier, by hand in the container).
+  Changed shared files: `crone/src/main.cpp`, `crone_main.h` (now `extern "C"` for both languages), `matron/src/weaver.cc`
+  (Linux-only functions), `matron/src/platform/macos/sdl_bridge.{cc,h}` (standing note: no effect while none is set),
+  `lua/core/menu.lua` (a hook that only exists when `_norns.audio_status` does). Add to the macOS re-verification list.

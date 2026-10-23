@@ -382,12 +382,19 @@ static void recording_toast(void) {
     show_toast("REC  GIF  \xc2\xb7  shift-cmd-G stops", 0);
 }
 
+// a standing note (audio problems on Linux): back on screen whenever a toast has gone
+static std::string sticky_text;
+
 static void toast_expired(unsigned gen) {
     if (gen != toast_gen) {
         return;
     }
     if (recording) {
         recording_toast();
+        return;
+    }
+    if (!sticky_text.empty()) {
+        show_toast(sticky_text, 0);
         return;
     }
     toast_text.clear();
@@ -402,6 +409,18 @@ static void post_toast(const std::string &text) {
     ev.type = toast_event_type;
     ev.user.code = 0;
     ev.user.data1 = strdup(text.c_str());
+    if (SDL_PushEvent(&ev) < 1) {
+        free(ev.user.data1);
+    }
+}
+
+// any thread: the standing note, "" to clear it
+void sdl_bridge_set_warning(const char *text) {
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 2;
+    ev.user.data1 = strdup(text != NULL ? text : "");
     if (SDL_PushEvent(&ev) < 1) {
         free(ev.user.data1);
     }
@@ -2405,6 +2424,19 @@ void sdl_bridge_run(void) {
         if (ev.type == toast_event_type) {
             if (ev.user.code == 1) {
                 toast_expired((unsigned)(uintptr_t)ev.user.data1);
+            } else if (ev.user.code == 2) {
+                char *text = (char *)ev.user.data1;
+                sticky_text = text;
+                free(text);
+                if (!recording) {
+                    if (sticky_text.empty()) {
+                        toast_text.clear();
+                        skin.toast = NULL;
+                        redraw(true);
+                    } else {
+                        show_toast(sticky_text, 0);
+                    }
+                }
             } else {
                 char *text = (char *)ev.user.data1;
                 show_toast(text);

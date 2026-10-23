@@ -57,6 +57,9 @@
 #ifdef NORNS_SDL_BRIDGE
 #include "platform/macos/open_url.h"
 #include "platform/macos/sdl_bridge.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "crone_main.h"
+#endif
 #endif
 
 extern "C" {
@@ -354,6 +357,10 @@ static int _open_url(lua_State *l);
 static int _grid_window(lua_State *l);
 static int _app_input(lua_State *l);
 static int _monitor_out(lua_State *l);
+#ifdef NORNS_LINUX_DESKTOP
+static int _audio_status(lua_State *l);
+static int _set_warning(lua_State *l);
+#endif
 static int _choose_file(lua_State *l);
 static int _choose_file_close(lua_State *l);
 #endif
@@ -694,6 +701,10 @@ void w_init(void) {
     // linux: another app's sound as input is phase 3 (lua then leaves the SYS / APP modes out)
     lua_register_norns("app_input", &_app_input);
     lua_register_norns("monitor_out", &_monitor_out);
+#endif
+#ifdef NORNS_LINUX_DESKTOP
+    lua_register_norns("audio_status", &_audio_status);
+    lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
     lua_register_norns("choose_file_close", &_choose_file_close);
@@ -3646,6 +3657,34 @@ int _grid_window(lua_State *l) {
     sdl_bridge_toggle_window(which);
     return 0;
 }
+
+#ifdef NORNS_LINUX_DESKTOP
+/***
+ * Linux desktop: what crone connected to and what went wrong with the sound card
+ * @function audio_status
+ * @treturn string warning ("" if none)
+ * @treturn string input device (JACK client) crone reads, "" if none
+ * @treturn string output device crone plays to, "" if none
+ */
+int _audio_status(lua_State *l) {
+    for (int i = 0; i < 3; i++) {
+        char buf[1024];
+        crone_audio_status(i, buf, sizeof(buf));
+        lua_pushstring(l, buf);
+    }
+    return 3;
+}
+
+/***
+ * Linux desktop: a note that stays on the device screen until cleared with ""
+ * @function set_warning
+ * @tparam string text
+ */
+int _set_warning(lua_State *l) {
+    sdl_bridge_set_warning(luaL_checkstring(l, 1));
+    return 0;
+}
+#endif
 
 #ifdef __APPLE__
 /***

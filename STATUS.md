@@ -27,9 +27,17 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 `linux/tests/stress_boot.sh` repeats the check.
 
 ## In progress
-- **Phase 3 steps 1 and 2 are done** (Ken's decisions in `DECISIONS.md`); **stopped here as asked**. Steps 3-5
-  (crone without physical ports, `norns.sh` under `pw-jack`, `audio.conf` under PipeWire, MIC/SYS/APP) wait for
-  Ken's laptop output (`docs/port/RUN-ON-LAPTOP.md`, section 4).
+- **Phase 3 steps 1, 2 and 3 are done** (Ken's decisions in `DECISIONS.md`). Step 4 (audio.conf, SYSTEM > AUDIO) is next;
+  step 5 (MIC/OFF by flag, SYS, APP list) waits for Ken's report; decision 10 is open.
+  3. crone on a desktop: audio-type, physical ports of **one** client only (a physical MIDI port or a second card is
+     never mixed in), by name prefix (`NORNS_IN_PORTS`/`NORNS_OUT_PORTS`) else the first card; no physical ports:
+     boots unconnected and the warning is on the device window ("AUDIO: not connected, see SYSTEM > AUDIO") and
+     in the log; `_norns.audio_status()`. `linux/norns.sh`: JACK server that answers is used; else PipeWire running
+     means a re-run under `pw-jack`; else own jackd; `NORNS_AUDIO_SERVER`, `NORNS_JACK_DRIVER` given means own
+     jackd; default sink/source from `wpctl` become the prefixes under PipeWire; `audio.conf` `in_ports=`/`out_ports=`.
+     Tests: `tests/crone/test_port_select.cpp`, `linux/tests/launcher_test.sh`, `linux/tests/audio_ports_test.sh`
+     (fake cards incl. physical MIDI ports; no-ports case). Pi/macOS: crone Client.h change is under
+     `NORNS_LINUX_DESKTOP` only.
   1. `clock_midi`: song position (0xF2) and continue (0xFB), tests first. Continue does not reset the counter;
      start after SPP begins at the position (once); stop forgets a waiting position. 17 clock test cases pass.
   2. JACK MIDI input: client "Verdandi", port `midi_in`, device "Verdandi JACK in", no auto-connect,
@@ -48,7 +56,7 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 ## Next
 - Ken: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
-- Then Ken sends the laptop output; steps 3-5 of `docs/port/phase-3.md` follow (decisions 3, 4, 5 are recorded in `DECISIONS.md`).
+- Steps 4-5 of `docs/port/phase-3.md` follow (step 5 only after Ken's report).
 - macOS: re-verify with the shared-file list at the end of `docs/port/phase-3.md` (clock and device_midi changes).
 
 ## Not testable here / notes

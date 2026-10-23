@@ -74,7 +74,7 @@ Logs: `docs/port/known-issues-logs/boot-stress-fail-<run>.log` (matron/probe out
 `...-fail-<run>.sclang.log`, `...-fail-<run>.jackd.log` for each of the 14 failing runs, and
 `boot-stress-summary.txt` (one line per run).
 
-## 2. crone needs physical JACK ports; PipeWire is not verified (risk found while preparing the laptop guide)
+## 2. crone needs physical JACK ports (RESOLVED for the Linux desktop in Phase 3 step 3; text kept as history)
 
 `crone/src/Client.h` (`connectAdcPorts`, `connectDacPorts`) throws "no ADC ports found" / "no DAC ports found"
 if the JACK server shows no port flagged `JackPortIsPhysical` (capture and playback). Experiment in this
