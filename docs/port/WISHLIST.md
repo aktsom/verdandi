@@ -15,3 +15,7 @@ Nothing here is implemented unless Ken says so. The Linux baseline (matching mac
 
 - **Full-window screenshot**: an option to save the whole norns window (device skin, knobs, buttons) as a picture.
   Ctrl+Shift+S currently saves only the OLED, four times its size.
+
+- **Tempo page refresh** (decided: not now): with an external clock the tempo on PARAMS > CLOCK only refreshes when the cursor
+  moves. That is upstream norns behavior (`docs/port/KNOWN-ISSUES.md` item 5). If wanted later: a `refresh` function for the
+  params page, or a redraw after the silent `params:set("clock_tempo", ...)` when the value changed and the page is open.
