@@ -81,9 +81,13 @@ linux/norns.sh --terminal
   `sys_monitor=1` in `audio.conf` (or `NORNS_SYS_MONITOR=1`); the device then shows a warning while it is on.
   With MIC on, the input is the live microphone of the **default source**: with speakers and a script that plays its input,
   keep the volume low or use headphones (acoustic feedback).
-- **Known problem (found by your bisect, not fixed yet):** with SYS or APP on, the internal clock can freeze or crawl under PipeWire with
-  WirePlumber (`KNOWN-ISSUES.md` item 6: the clock reads JACK's frame time, whose base jumps when applications are linked into crone).
-  MIC and OFF are not affected. Run `NORNS_CLOCK_DEBUG=1 linux/norns.sh --terminal` to see `clock: jack frame time jumped by ...` lines.
+- **The internal clock under SYS (fixed):** your bisect found that with SYS or APP on, the internal clock froze or crawled under PipeWire with WirePlumber
+  (the clock reads JACK's frame time, whose base jumps when applications are linked into crone). It is fixed in this build (`KNOWN-ISSUES.md` item 6). **To check
+  your own machine with `NORNS_CLOCK_DEBUG`:** start norns with the variable set, `NORNS_CLOCK_DEBUG=1 linux/norns.sh --terminal`, choose SYS (MIC button or the right-click
+  menu), and watch the terminal for lines like `clock: jack frame time jumped by 560.691 s (forward, accepted)` or `... by -503.146 s (backward, new base followed)`.
+  One forward line at start is normal. A line appears only for jumps of more than a second; none during normal running. If a backward line appears and the tempo is still
+  right (`clock.get_tempo()`, and in a script `clock.get_beats()` growing by 2 per second at 120 BPM), the fix is working; if the clock is slow again, send the lines.
+  A forward jump after the start is still accepted and can make a coroutine waiting on `clock.sync` fire in a burst once (measured, see `KNOWN-ISSUES.md`: handling proposed, not applied).
 - **MIDI from a DAW (Reaper):** norns' JACK MIDI input is the port `Verdandi:midi_in` (device "Verdandi JACK in", vport 1).
   Connect Reaper's MIDI output (under PipeWire a `Midi-Bridge` port such as `Client-<n> Virtual RawMIDI`) to it with
   `pw-jack jack_connect "<Reaper's port>" Verdandi:midi_in` or qpwgraph; `pw-jack jack_lsp -t | grep -i midi` lists them. Set

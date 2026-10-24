@@ -267,8 +267,7 @@ if command -v jackd > /dev/null; then
 fi
 
 # the internal clock at 120 BPM must run at 2 beats per second while the input is SYS in a graph with several clients.
-# (the jackd flavor passes; the PipeWire flavor with WirePlumber is the bug of docs/port/KNOWN-ISSUES.md item 6: it is listed
-# as known until the fix is decided)
+# (the PipeWire flavor with WirePlumber is the bug of docs/port/KNOWN-ISSUES.md item 6, fixed in jack_client.cpp)
 clock_rate_ok() { # log: RATE within 5% of 2.0
     awk '/^RATE/ { exit !($2 > 1.9 && $2 < 2.1) }' "$1.rate" || { echo "internal clock: $(cat "$1.rate" 2> /dev/null), want about 2.000 beats/s"; return 1; }
 }
@@ -281,7 +280,7 @@ if command -v pipewire > /dev/null && command -v wireplumber > /dev/null && comm
     command -v dbus-run-session > /dev/null; then
     CLOGP="$T/clockrate-pipewire.log"
     "$REPO/linux/tests/clock_rate_test.sh" pipewire "$CLOGP" > /dev/null 2>&1
-    known "clock:internal clock 2 beats per second with SYS input under PipeWire + WirePlumber (KNOWN-ISSUES 6)" clock_rate_ok "$CLOGP"
+    run "clock:internal clock 2 beats per second with SYS input under PipeWire + WirePlumber" clock_rate_ok "$CLOGP"
 else
     echo "SKIP  clock: PipeWire flavor (needs pipewire, wireplumber, pw-jack, dbus-run-session)"
 fi

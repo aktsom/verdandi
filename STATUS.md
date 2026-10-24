@@ -65,12 +65,15 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
   The leftover `sidecar [norns]` processes seen in my sandbox come from starting the tests with `nohup`
   (SIGHUP is then ignored, so they do not die with norns); a normal terminal is not affected.
 
-## Clock freeze with SYS under PipeWire + WirePlumber (Ken's bisect: 78eedb02)
-Reproduced in a private PipeWire + WirePlumber (0.06 beats/s instead of 2), mechanism found (JACK frame time is the driver's counter; its base jumps when
-SYS links applications into crone; the code ignores backward deltas, so time freezes), fix PROPOSED not applied (`KNOWN-ISSUES.md` item 6,
-`clock-fix-proposal.diff`), regression test added (`linux/tests/clock_rate_test.sh`; the PipeWire flavor is KNOWN until the fix). MIDI auto-connect now
-excludes norns' own ALSA MIDI clients and `Midi Through` and supports `*` in patterns. Clean-clone build as non-root without `python`: OK at 770a5ca.
-**Nothing from this round is pushed (Ken: wait for confirmation); the commits are local.**
+## Clock freeze with SYS under PipeWire + WirePlumber (Ken's bisect: 78eedb02): FIXED
+Mechanism and numbers: `KNOWN-ISSUES.md` item 6. Fix applied (option A, desktop Linux only: a backward jump of more than 1 s in JACK's frame time is a new base to follow);
+`clock_rate_test.sh` PipeWire flavor is now a normal check (2.000 beats per second with SYS). `NORNS_CLOCK_DEBUG=1` kept and described in `RUN-ON-LAPTOP.md`.
+**Follow-ups, Ken to decide:** (1) the accepted forward jump: measured (a transient +1120 beats read for up to one tick, a 10-event `clock.sync` burst followed by a 5 s
+gap, one early wake per `clock.sleep` coroutine; the beat counter itself does not advance) and a handling proposed in `docs/port/clock-forward-jump-proposal.diff` (verified in
+a scratch copy, not applied); (2) `CLOCK_MONOTONIC` for the internal clock, documented as a follow-up option.
+**Default input at boot: MIC** (`_menu.input = "mic"`, identical at 37d244b5 and now; with no saved choice nothing is connected or disconnected at boot). What changed at
+78eedb02 is that a **saved choice is restored at boot**: `~/verdandi-home/.norns-input` (SYS, APP or the sink monitor) or `.mic-off` (OFF). Before 78eedb02 SYS/APP did not exist
+on Linux, so a SYS choice could not be made or restored. If your laptop's norns home has a `.norns-input` file from pressing the MIC button once (MIC > SYS), it starts in SYS.
 
 ## Real-hardware findings (Ken's laptop)
 Recorded in `HARDWARE-CHECKLIST.md` ("Done on a real machine"): silent run, sound under PipeWire, Reaper clock/notes through the

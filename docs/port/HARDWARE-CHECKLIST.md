@@ -121,6 +121,6 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 ## After the clock-freeze investigation and the MIDI exclusions
 - [ ] On the laptop, with SYS chosen: `NORNS_CLOCK_DEBUG=1 linux/norns.sh --terminal` prints `clock: jack frame time jumped by ...` lines when the
       clock freezes (forward then backward); the same forward/backward pair as in the container confirms the mechanism.
-- [ ] After the fix is applied (when decided): the internal clock gives 2 beats per second with SYS on.
+- [ ] The internal clock gives 2 beats per second with SYS on (fix applied; try it with the browser and Reaper running).
 - [ ] With the ALSA sequencer present: `midi_in_from=Midi-Bridge:` links Reaper's port but **not** norns' own `Client-<n>` virtual RawMIDI port,
       "Verdandi" (keys window) or `Midi Through` (check `pw-jack jack_lsp -c`); `midi_in_from=Midi-Bridge:Client-* Virtual RawMIDI` links only Reaper's.

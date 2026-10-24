@@ -1,0 +1,38 @@
+--- a/matron/src/jack_client.cpp
++++ b/matron/src/jack_client.cpp
+@@ -2,6 +2,7 @@
+ #include <pthread.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <time.h>
+ 
+ #include <jack/jack.h>
+ 
+@@ -18,6 +19,7 @@
+ #ifdef NORNS_LINUX_DESKTOP
+ // the raw 32-bit frame time of the last accepted reading: it follows a change of base (see jack_client_get_current_time)
+ static uint32_t g_last_raw_frames = 0;
++static double g_last_mono = 0.0;
+ #endif
+ 
+ // protects access to g_last_total_frames.
+@@ -86,6 +88,19 @@
+ #endif
+     // only advance if delta is positive.
+     // ignores backward jitter or extremely long stalls (>12h).
++#ifdef NORNS_LINUX_DESKTOP
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    double mono = (double)ts.tv_sec + ts.tv_nsec / 1e9;
++    double elapsed = mono - g_last_mono;
++    bool first = g_last_mono == 0.0;
++    g_last_mono = mono;
++    if (!first && delta > (int32_t)jack_sample_rate && (double)delta / jack_sample_rate > elapsed + 1.0) {
++        // a forward jump that the wall clock does not explain: a new base, not time that passed. follow the wall clock
++        g_last_total_frames += (uint64_t)(elapsed * jack_sample_rate);
++        g_last_raw_frames = current_frames;
++    } else
++#endif
+     if (delta > 0) {
+         g_last_total_frames += (uint64_t)delta;
+ #ifdef NORNS_LINUX_DESKTOP

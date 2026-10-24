@@ -148,7 +148,7 @@ a whole number and refreshed once per second at most. A fix would be small (a `r
 redraw after the silent `params:set` when the tempo changed and the CLOCK page is open) but it changes upstream behavior in
 a shared Lua file; not done, waiting for Ken.
 
-## 6. The internal clock freezes (0.06 beats/s instead of 2) with SYS/APP under PipeWire + WirePlumber (found by Ken's bisect; reproduced; mechanism found; fix PROPOSED, not applied)
+## 6. The internal clock freezes (0.06 beats/s instead of 2) with SYS/APP under PipeWire + WirePlumber (found by Ken's bisect; reproduced; FIXED for the Linux desktop build)
 
 **Ken's bisect:** healthy at 37d244b5 (about 21 beats in 11 s at 120 BPM), slow at 78eedb02 (0.625 beats in 11 s) and everything after.
 
@@ -187,18 +187,39 @@ and Reaper, as on the laptop, are not available here. `NORNS_CLOCK_DEBUG=1` (a d
 only, off by default) prints every jump of the frame time: on the laptop it would show whether the same forward/backward pair
 happens there.
 
-**Proposed fix (not applied; `docs/port/clock-fix-proposal.diff`, 12 lines in `jack_client.cpp`):** keep the raw frame time of the
+**Fix (option A, Ken's decision; applied in `jack_client.cpp`, `NORNS_LINUX_DESKTOP` only, macOS and Pi unchanged):** keep the raw frame time of the
 last accepted reading separately from the total, and treat a backward jump of more than one second as a **new base** to follow
 (the total does not go back, and does not stand still until the old base is reached): `last_raw = current`. Small backward
 jitter is ignored as before, wrap-around is unchanged. Verified in a scratch copy: the existing `test_matron_jack_client` cases
 pass (4 of 4) and SYS under PipeWire + WirePlumber runs at 2.000 beats per second. A forward jump (the other direction of a
 base change) is still accepted: harmless for the clock (its catch-up logic skips ahead), but it moves Link and MIDI-clock
 timestamps once; `clock_get_system_time` stays what it is. Wider alternative: take the internal clock's time from `CLOCK_MONOTONIC`
-and use JACK time only where audio frames matter. Needs Ken's decision (shared file; Pi and macOS would get the same
-change unless guarded by `NORNS_LINUX_DESKTOP`).
+and use JACK time only where audio frames matter. Applied: the PipeWire flavor of `clock_rate_test.sh` is now a normal check in `run_all.sh` (2.000 beats per second with SYS).
 
-**Regression test (added):** `linux/tests/clock_rate_test.sh` measures beats per second of the internal clock while the input is SYS
-(applications linked into crone) in a busy graph: the jackd flavor passes in `run_all.sh`; the PipeWire + WirePlumber flavor is
-listed as KNOWN until the fix is applied (it then becomes a normal check: change `known` to `run`).
+**Regression test:** `linux/tests/clock_rate_test.sh` measures beats per second of the internal clock while the input is SYS
+(applications linked into crone) in a busy graph: the jackd flavor and the PipeWire + WirePlumber flavor are both normal checks in `run_all.sh`.
 
 **Until it is fixed:** do not use SYS or APP on a PipeWire desktop with WirePlumber if the internal clock matters (MIC and OFF are fine).
+
+### What the accepted forward jump does (measured; NOT fixed, handling proposed)
+After the fix a **backward** base change is followed, but a **forward** one (the base jumping up, as the first jump of 560 s in the
+failing run) is still accepted as time that passed. Measured with `linux/tests/forward_jump_test.sh` (an `LD_PRELOAD` shim adds 560 s to
+`jack_frame_time` once; internal clock 120 BPM; a script with one coroutine on `clock.sync(1)`, eight on `clock.sleep(0.5)`, and a 2 ms metro
+that records the largest beat it reads):
+- **The beat counter itself does not advance by 1000 beats.** Beats were 16 before and 18.9 one second after the jump, on schedule: the clock
+  thread publishes one tick, then its catch-up logic skips ahead.
+- **But a reader sees +1120 beats for up to one tick (about 21 ms):** `clock_get_reference_beat` is `reference.beat + (now - last_beat_time) / beat_duration`,
+  and `now` is already 560 s later while `last_beat_time` is still the last tick's. The 2 ms metro read at most **1136.96** beats (real: about 17).
+- **A burst:** the scheduler thread (1 ms loop) saw that transient value: the `clock.sync` coroutine fired **10 times within about 10 ms** (all with beat 1136.94 to
+  1136.96) and then stood still for about 5 s (10 beats) before it ran normally again (events 9 to 18 at 4.00 s, event 19 at 9.05 s). Each of the eight
+  `clock.sleep` coroutines woke **once early** (the sleep deadline is in clock time; 8 extra events), then ran normally.
+- Handling proposed (not applied; `docs/port/clock-forward-jump-proposal.diff`, desktop Linux only): a forward delta of more than a second that the wall clock
+  (`CLOCK_MONOTONIC`) does not explain (more than the elapsed time plus one second) is also a new base: advance by the elapsed wall time and re-base on the new raw value.
+  Verified in a scratch copy with the same measurement: no transient (largest beat read 20.17, real 20.17), no burst (sync events every 0.5 s without a gap), no early
+  sleep wake-ups (200 sleep events at the end as expected). The first reading at start-up is exempt (the base is taken as it is). The existing unit tests do not run with
+  `NORNS_LINUX_DESKTOP`, so they are unaffected.
+
+### Follow-up option, documented (not planned now): `CLOCK_MONOTONIC` for the internal clock
+The cleaner long-term version is to take the internal clock's time from `CLOCK_MONOTONIC` and use JACK's frame time only where audio frames matter (Link, MIDI timestamps,
+engine sync): then no change of the graph's driver can disturb the clock. It touches how every clock source relates to JACK time, so it is a design step of its own
+(shared code: Pi and macOS too), not a patch.

@@ -15,6 +15,10 @@ std::atomic<uint32_t> xrun_count{0};
 // maintain a 64-bit frame counter from jack's 32-bit frame time.
 // extends wraparound at 48khz from ~25 hours to millions of years.
 static uint64_t g_last_total_frames = 0ULL;
+#ifdef NORNS_LINUX_DESKTOP
+// the raw 32-bit frame time of the last accepted reading: it follows a change of base (see jack_client_get_current_time)
+static uint32_t g_last_raw_frames = 0;
+#endif
 
 // protects access to g_last_total_frames.
 // a mutex is safe here as time is not read from the audio thread.
@@ -63,24 +67,40 @@ double jack_client_get_current_time() {
 
     pthread_mutex_lock(&g_time_lock);
 
+#ifdef NORNS_LINUX_DESKTOP
+    uint32_t last_frames_32 = g_last_raw_frames;
+#else
     uint32_t last_frames_32 = (uint32_t)g_last_total_frames;
+#endif
 
     // calculate delta using modulo arithmetic properties
     int32_t delta = (int32_t)(current_frames - last_frames_32);
 
 #ifdef NORNS_LINUX_DESKTOP
-    // diagnostic (NORNS_CLOCK_DEBUG=1): a jump of JACK's frame time, forward or backward, is what freezes or skips the clock
+    // diagnostic (NORNS_CLOCK_DEBUG=1): a jump of more than a second in JACK's frame time (a new base, see below)
     static const bool dbg = getenv("NORNS_CLOCK_DEBUG") != NULL;
-    if (dbg && (delta > (int32_t)jack_sample_rate || delta < 0)) {
+    if (dbg && (delta > (int32_t)jack_sample_rate || delta < -(int32_t)jack_sample_rate)) {
         fprintf(stderr, "clock: jack frame time jumped by %.3f s (%s)\n", (double)delta / jack_sample_rate,
-                delta > 0 ? "forward, accepted" : "backward, ignored");
+                delta > 0 ? "forward, accepted" : "backward, new base followed");
     }
 #endif
     // only advance if delta is positive.
     // ignores backward jitter or extremely long stalls (>12h).
     if (delta > 0) {
         g_last_total_frames += (uint64_t)delta;
+#ifdef NORNS_LINUX_DESKTOP
+        g_last_raw_frames = current_frames;
+#endif
     }
+#ifdef NORNS_LINUX_DESKTOP
+    else if (delta < -(int32_t)jack_sample_rate) {
+        // more than a second back is not jitter but a new base: under PipeWire the frame time counts the frames of the
+        // graph's driver, and it starts from another number when the driver of norns' nodes changes (SYS links
+        // applications into crone). time does not go back, and it does not stand still until the old base is
+        // reached again (the clock froze for minutes): follow the new base from here (docs/port/KNOWN-ISSUES.md item 6)
+        g_last_raw_frames = current_frames;
+    }
+#endif
 
     uint64_t result = g_last_total_frames;
 
@@ -121,6 +141,9 @@ void jack_client_free_port_list(const char **list) {
 void jack_client_test_set_time_state(uint64_t frames) {
     pthread_mutex_lock(&g_time_lock);
     g_last_total_frames = frames;
+#ifdef NORNS_LINUX_DESKTOP
+    g_last_raw_frames = (uint32_t)frames;
+#endif
     pthread_mutex_unlock(&g_time_lock);
 }
 
