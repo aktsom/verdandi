@@ -223,3 +223,88 @@ that records the largest beat it reads):
 The cleaner long-term version is to take the internal clock's time from `CLOCK_MONOTONIC` and use JACK's frame time only where audio frames matter (Link, MIDI timestamps,
 engine sync): then no change of the graph's driver can disturb the clock. It touches how every clock source relates to JACK time, so it is a design step of its own
 (shared code: Pi and macOS too), not a patch.
+
+## 7. SYS: a microphone capture stream is taken as an application; and SYS is not heard at the output (Ken's laptop test; investigated, NO code changed, options for Ken)
+
+### 7.1 Reaper's microphone capture is linked into crone as if it were an application (bug in step 5)
+**Observed (Ken):** `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL/FR` linked to `crone:input_1/2` next to the browser; clapping at the
+laptop microphone moved the input and monitor lanes; after closing Reaper it stopped.
+
+**Cause (code):** `crone/src/InputRoute.h`, `listApps()`: an application is "a client with audio output ports, none physical, not norns, not a card". It
+looks at the client and at flags only, **never at the port's name or direction of the stream**. In PipeWire's JACK view a *capture* stream (Reaper
+reading the microphone through the ALSA plugin) is a client whose output ports are called `monitor_FL/FR` (the signal it receives from the source), not
+`output_FL/FR`. It has no physical flag, is not norns, owns no physical port: it passes every test. My unit tests and the fake clients only had
+playback-stream clients (`output_*`), so the case was not covered.
+
+**Reproduced here** (`jackd` dummy, fake clients: a card with a 440 Hz tone on its capture ports, a client "Vivaldi" with `output_FL/FR` and 440 Hz, a client
+`PipeWire ALSA [reaper]/ALSA Capture [reaper]` whose ports are `monitor_FL/FR` with 440 Hz, SYS chosen): `jack_lsp -c` shows
+`crone:input_1` fed by `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL` **and** `Vivaldi:output_FL`, input 2 likewise with `_FR`: exactly Ken's graph.
+
+**Options (for 7.1):**
+1. **Port-name rule (recommended):** SYS and APP take only ports whose name part starts with `output` (playback streams: `output_FL`, `output_1`, `out`...) and never
+   ones starting with `monitor` or `capture`. Small, testable (add a capture-stream client to the fake graph and to `test_input_route.cpp`). Weakness: an
+   application whose JACK-visible ports have unusual names (a real JACK application with `out_1`, `audio_out`...) would need the rule to be "not monitor/capture"
+   (a deny-list) rather than "output" (an allow-list): the deny-list is the safer choice, a playback stream not named `output*` then still works.
+2. **Also exclude by client name:** clients whose name contains "Capture" (`ALSA Capture [..]`, `... Input ...`): fragile, translation- and version-dependent. As an addition
+   only, not alone.
+3. **Ask PipeWire:** `pw-dump` / the node's `media.class` (`Stream/Output/Audio` is playback, `Stream/Input/Audio` is capture) is the exact answer; the JACK API does not expose it
+   (only the pretty-name metadata), so it needs a `pw-dump` call (a program per refresh, JSON parse) or the PipeWire API itself (a new dependency): heavier.
+
+### 7.2 In SYS the output lane does not move and nothing is heard from norns (by design of one flag; not a missing connection)
+**Cause (code), with evidence:**
+- `lua/core/menu.lua:246` (`_menu.set_input`): `_norns.monitor_out(mode ~= "system" and mode ~= "app")`: **in SYS and APP the input monitor is switched off**
+  (`o_set_monitor_out(0)` -> `crone_set_enabled_monitor_out(0)`). I put it there, copying the macOS logic, on the reasoning that the application also plays
+  directly, so norns must not play it a second time.
+- `crone/src/MixerClient.cpp`: with `enabled.monitor_out == false` the ADC monitor is **not mixed into the DAC bus** (`processFx`: `if (enabled.monitor_out) bus.ins_in.mixFrom(bus.adc_monitor...)`
+  and not into the reverb send either), and in the tape writer it goes **to the tape only** (`tape_sink = dac_sink + adc_monitor`). So in SYS the dry input is never in the output.
+- The lanes: **monitor lane** = `monPeak`, updated from `bus.adc_monitor` every block whether or not it is mixed into the output; **input lane** = `inPeak` (the ADC); **output
+  lane** = `outPeak` of `SinkDac`, i.e. what is really sent to the card. So with SYS: input and monitor lanes move, the output lane does not: exactly Ken's observation. In MIC
+  the monitor is on, so claps show in the output lane. awake's own audio reaches the output through the engine (`ext_source`), unaffected by the flag, which is why it shows in SYS.
+- **Measured** (`jackd` dummy, 440 Hz tone on the card's capture ports and on a browser-like client; default engine; meter values 0..64 as in the MIX page):
+
+  | input | input lane | **output lane** | monitor lane | engine lane |
+  |---|---|---|---|---|
+  | MIC | 46 | **50** | 46 | 33 |
+  | SYS | 40 | **32** | 40 | 32 |
+  | OFF | 0 | 24 | 0 | 25 |
+
+  (24 and 25 are the meters' floor with nothing playing; SYS's 32 is only the engine's path, MIC's 50 the monitor on top.)
+- **What does work in SYS today:** (1) **recording and sampling**: the input goes to `softcut` (`adc -> cut`), to the tape (`tape_sink` takes the monitor when `monitor_out` is off,
+  so tape records the application), and to SuperCollider (`ext_sink = adc_source`); (2) **processing**: an engine or softcut voice that processes the input plays its result through
+  `ext_source` / `cut_source` into the output, which is heard (and the output lane moves). Ken's test script (awake) does not process the input, so there was nothing to hear; the
+  sound he heard was the application's direct path to the sound card.
+- What is missing is only **hearing the dry input through norns**, and that is off on purpose to avoid the double sound.
+- **Related bug found while reading (sink-monitor mode):** `mode ~= "system" and mode ~= "app"` is **true for the optional "monitor" mode**, so the input monitor stays ON there, although
+  `HARDWARE-CHECKLIST.md` and `phase-3.md` say it is switched off. With the sink monitor (which contains norns' own output) that is the loop the warning is about. To be fixed
+  with whatever is decided below (one condition: add `and mode ~= "monitor"`).
+
+### 7.3 Hearing processed SYS audio without hearing the application twice: options
+In PipeWire the browser is a stream linked to the sound card's playback ports (`Vivaldi:output_FL -> Built-in Audio Analog Stereo:playback_FL`, Ken's `jack_lsp -c`). norns also
+receives it (a second link from the same port to `crone:input_1`). Hearing the result of processing while the dry sound also reaches the card is the "twice".
+1. **Leave as is (today).** Dry sound direct, only the processed/wet part from norns. Right for send-style effects (reverb, delay: dry direct + wet from norns) and for recording/sampling.
+   Wrong for effects that replace the sound (pitch shift, filter, granular): you hear the original and the result together. No work.
+2. **norns unlinks the application's direct link to the sound card while SYS/APP is on, and plays the dry sound itself (input monitor ON).**
+   norns (the "Verdandi ctl" client, which already tracks ports and streams) calls `jack_disconnect(app_port, card_playback_port)` for the applications it takes (all for SYS, the one for APP),
+   remembers the links, and puts them back when SYS/APP ends, when norns quits and, as a safety net, in `linux/norns.sh`'s cleanup. This is what the macOS code comment describes
+   ("the app is muted while it is tapped: its sound comes out of norns"). The dry sound then goes through norns' monitor path (level and reverb send on the MIX page, tape, engines), so it is
+   heard once, with the wet part added by scripts. *Pros:* exactly "process and hear the result". *Cons / risks (not tested on a real machine, no pulse streams here):*
+   - **latency:** the application's sound now takes the round trip through norns (one quantum in, one out: about 21 ms each at 1024/48000, lower with `PIPEWIRE_QUANTUM`): a video's picture
+     and sound drift apart by tens of milliseconds;
+   - **WirePlumber may link it again** (when the stream restarts, the default sink changes, or on its own rescans); norns would have to unlink new links too (a port-connection callback; a race
+     with the session manager is possible);
+   - **if norns crashes** the links stay removed: the applications stay silent until restored (mitigation: a saved list in the norns home that `norns.sh` restores at start and in its exit trap);
+   - the unlink touches other applications' routing: needs to be obvious (a note on the device, "apps now heard through norns") and per choice (SYS = all applications, APP = one);
+   - **applications that are not linked to the card** (already routed elsewhere, to Reaper, say) are left alone; a link to a different sink than the card is a choice to respect: only links to the
+     card crone plays to are removed.
+   Try it by hand first: `pw-jack jack_disconnect "Vivaldi:output_FL" "Built-in Audio Analog Stereo:playback_FL"` (and `_FR`) while SYS is on and the browser plays: if you then hear the browser only
+   through norns, and the link does not come back by itself after a minute and a track change, option 2 is viable on your system.
+3. **Make it an explicit mode instead of changing SYS:** keep SYS as it is (record, sample, wet-only processing) and add a fourth input mode "SYS through norns" (option 2's behavior), chosen on purpose
+   (MIC > SYS > SYS+ > OFF, and in the menu). Safer for users who do not want norns touching routing; the cost is one more mode and a clear name.
+4. **A virtual sink instead of unlinking** (`pw-loopback` / a null sink "Verdandi capture" created by norns; the applications are moved to it; norns reads its monitor and plays to the card): robust
+   against WirePlumber re-linking, and applications can be chosen per stream, but it changes the default sink and the user's stream routing (pulse `move-sink-input`), needs `pactl`/`pw-cli`/
+   `pw-metadata`, and is much more invasive. Not recommended as a first step.
+5. **Mute the stream** (`wpctl set-mute`, `pw-cli` volume): does not work: the mute/volume is applied inside the stream node, so the ports norns reads carry silence too.
+6. **Lower the application's volume to taste and use wet-only effects**: no code; a workaround for option 1.
+
+**Recommendation:** fix 7.1 now with option 1 (port-name deny-list) plus the fixture and test; fix the `monitor` condition in 7.2; offer 7.3 option 3 (an explicit "SYS through norns" mode with option 2's unlink and restore,
+tested first by hand by Ken as above) rather than changing what SYS means. Awaiting Ken's decision; nothing is implemented.
