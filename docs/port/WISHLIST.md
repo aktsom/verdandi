@@ -13,9 +13,21 @@ Nothing here is implemented unless the owner says so. The Linux baseline (matchi
 
 - font should be as close to original monome norns as possible
 
-- **Full-window screenshot**: an option to save the whole norns window (device skin, knobs, buttons) as a picture.
-  Ctrl+Shift+S currently saves only the OLED, four times its size.
+- **Screenshot** (decided: no change): the OLED-only screenshot (Ctrl+Shift+S, the screen at four times its size) stays as it is. A full-window screenshot is not wanted.
 
 - **Tempo page refresh** (decided: not now): with an external clock the tempo on PARAMS > CLOCK only refreshes when the cursor
   moves. That is upstream norns behavior (`docs/port/KNOWN-ISSUES.md` item 5). If wanted later: a `refresh` function for the
   params page, or a redraw after the silent `params:set("clock_tempo", ...)` when the value changed and the page is open.
+
+## Interface ideas (rough, to be discussed before any work)
+
+Nothing here is designed or scheduled; each entry is a first note only.
+
+1. **Window proportions** (idea, not designed): the OLED screen looks too small compared to the box. Make it larger relative to the box, and proportion
+   and align the keys (K1 to K3) and the encoders (E1 to E3) so that they fit the screen and the box.
+2. **No text labels on the keys and encoders** (idea, not designed): remove the labels next to the keys and encoders (K1 to K3, E1 to E3) for now.
+3. **User-editable colors with named presets** (idea, not designed): colors can be edited, and a set of colors can be saved, loaded and deleted under a name
+   (a preset). The colors cover the box and the other elements: knobs, screen levels, lit buttons, and the grid and arc windows. Presets are stored as files
+   in the norns home folder, not in the repository. Some default presets will be decided later.
+4. **MIDI control of the on-screen controls** (idea, not designed): MIDI control of the on-screen keys, encoders, OUT fader and MUTE button. Before designing,
+   check how this relates to PARAMS > MAP and the `.pmap` files, which map a script's own parameters (these controls belong to the window, not to a script).
