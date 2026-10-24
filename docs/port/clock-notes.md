@@ -76,7 +76,7 @@ from delivery time so USB/driver jitter shows; the user must set up a port and e
   build needs `LINK_PLATFORM_WINDOWS` and the asio/winsock bits (Phase 6; not tried).
 - Gives tempo, beat phase and optional start/stop, with no port plumbing and nothing OS-specific for norns.
 - Needs a Link source **inside Reaper** (third-party extension, status unknown), which is a dependency on a
-  plugin Ken must install on each OS. Link aligns phase on the network clock, it is not sample-locked to
+  plugin the owner must install on each OS. Link aligns phase on the network clock, it is not sample-locked to
   Reaper's timeline and has no SPP-style jump.
 
 **Option C, the DAW plugin carries the transport (AUv3 now, VST3 in Phase 7)**
@@ -97,7 +97,7 @@ tempo map without extra conventions.
 
 1. **Link first, as the common denominator.** It is the only option that is already built, already verified
    working on Linux, identical on macOS, and needs no per-OS port plumbing in norns; Windows needs one build
-   define in Phase 6. Condition: Ken confirms a Link source for Reaper on each OS that he is willing to use
+   define in Phase 6. Condition: the owner confirms a Link source for Reaper on each OS that the owner is willing to use
    (the third-party extension, unverified). Cost for norns: about nothing (UI/param polish only).
 2. **MIDI clock inbound as the fallback that needs no Reaper add-on:** macOS works; on Linux add the JACK MIDI
    input port first (works with PipeWire and without `/dev/snd/seq`), the ALSA sequencer port second; on
@@ -107,7 +107,7 @@ tempo map without extra conventions.
    Linux plugin is wanted.
 Do not promise norns-as-master towards Reaper: Reaper does not slave to MIDI clock.
 
-## 3b. Reaper Link extensions (read-only research, added after Ken's decisions)
+## 3b. Reaper Link extensions (read-only research, added after the owner's decisions)
 MIDI clock stays the primary path; this is for the Link fallback. Read from GitHub and the Cockos forum (the
 release page was read by a helper agent; nothing was installed or run):
 - **ReaBlink** ([ak5k/reablink](https://github.com/ak5k/reablink), MIT, 61 stars): "REAPER plug-in extension
@@ -124,10 +124,10 @@ release page was read by a helper agent; nothing was installed or run):
   mention "improve Linux compatibility" in 0.5.5 and "compile options for UNIX" in 0.5.7). The README did not
   state supported platforms or REAPER versions.
 - I did not find another Reaper Link extension. Conclusion: ReaBlink exists for all three systems on paper;
-  its Linux x86_64 availability, and whether it works with Reaper's current version, must be tried by Ken
+  its Linux x86_64 availability, and whether it works with Reaper's current version, must be tried by the owner
   (added to the hardware checklist). Link therefore remains a fallback, as decided.
 
-## 4. Decisions (answered by Ken)
+## 4. Decisions (answered by the owner)
 1. Link extension in Reaper: yes, research it (section 3b); MIDI clock stays the primary path.
 2. JACK MIDI input in the Linux baseline after Phase 2 step 5; ALSA sequencer input later (PLAN.md, Phase 3).
 3. Linux VST3 plugin: wanted in principle, decided at Gate E; plugin transport (Option C) planned into Phase 7

@@ -16,7 +16,7 @@ Where I know of a risk I say so. What your laptop data changed is in `phase-3.md
 ```bash
 # 1. get the code, on the branch, in a folder of its own
 mkdir -p ~/verdandi-home
-git clone -b linux-port https://github.com/aktsom/verdandi ~/verdandi-home/norns
+git clone -b linux-port <url of this repository> ~/verdandi-home/norns
 cd ~/verdandi-home/norns
 
 # 2. dependencies (section 2 says exactly what it does; read it first). needs sudo

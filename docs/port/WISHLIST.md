@@ -1,9 +1,9 @@
-# Ken's changes (after the Linux baseline)
+# The owner's changes (after the Linux baseline)
 
-Nothing here is implemented unless Ken says so. The Linux baseline (matching macOS behavior) comes first.
+Nothing here is implemented unless the owner says so. The Linux baseline (matching macOS behavior) comes first.
 
 1. **Virtual arc**: the virtual arc must work in the Linux version. (Linux baseline status: works for LEDs, wheel and push; left-drag untested, see the hardware checklist.)
-2. **External clock**: norns' clock must be able to follow an external or DAW clock, universally across Linux, Windows and macOS. The DAW Ken tests with is Reaper. Decided (`docs/port/clock-notes.md`):
+2. **External clock**: norns' clock must be able to follow an external or DAW clock, universally across Linux, Windows and macOS. The DAW the owner tests with is Reaper. Decided (`docs/port/clock-notes.md`):
    - **MIDI clock is the primary path.** Linux: JACK MIDI input in the baseline (Phase 3), ALSA sequencer input later; Windows: with the MIDI backend (Phase 6); macOS: works today.
    - `clock_midi` gets **SPP and MIDI continue**, with tests; continue must not reset the beat counter (Phase 3).
    - Ableton Link is secondary (already works on Linux; Reaper needs the ReaBlink extension).

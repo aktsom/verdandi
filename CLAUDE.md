@@ -1,13 +1,13 @@
 # Verdandi port: Linux first, then Windows (VST3)
 
-This is Ken's own version of the port (a fork of ha1dcre/verdandi). It is not meant to be offered upstream; layout and changes are decided for this project only.
+This is the owner's own version of the port (a fork of ha1dcre/verdandi). It is not meant to be offered upstream; layout and changes are decided for this project only.
 
 ## Goal
 Port Verdandi (norns running natively on a desktop, as a standalone app plus a DAW plugin) to:
 1. **Linux**: standalone app, plug-and-play (Flatpak or AppImage; decision gate B).
 2. **Windows**: standalone app plus a **VST3** plugin (no CLAP). Starts only after Linux is accepted (gate C).
 
-Order of work: **Linux baseline first, matching the macOS behavior** (what `readme-macos.md` lists: norns window with device skin, maiden, virtual grid/arc/keyboard, real grid/arc/crow/MIDI over USB, MIC/SYS/OFF input, sample drop and file picker, MIX page, screenshots/GIFs, and later the plugin equivalent of the AUv3). **Then Ken's own visual and workflow changes**, collected in `docs/port/WISHLIST.md`. Nothing from the wishlist is implemented unless Ken says so.
+Order of work: **Linux baseline first, matching the macOS behavior** (what `readme-macos.md` lists: norns window with device skin, maiden, virtual grid/arc/keyboard, real grid/arc/crow/MIDI over USB, MIC/SYS/OFF input, sample drop and file picker, MIX page, screenshots/GIFs, and later the plugin equivalent of the AUv3). **Then the owner's own visual and workflow changes**, collected in `docs/port/WISHLIST.md`. Nothing from the wishlist is implemented unless the owner says so.
 
 ## Known architecture (from readme-macos.md; verify against code)
 - Mac-specific code lives in `matron/src/platform/macos/` and `macos/`. Everything else is the norns code base this fork started from.
@@ -18,11 +18,11 @@ Order of work: **Linux baseline first, matching the macOS behavior** (what `read
 
 ## Working agreement (important)
 - **Never write to `main`.** Work on branch `linux-port`, then `windows-port`. Commit small and often with clear messages so a resumed session loses nothing.
-- **Push only to the linux-port branch (and later windows-port) of this fork. Never push to main.** Do not open issues or PRs, or contact anyone, including ha1dcre or monome. Those need Ken's approval.
+- **Push only to the linux-port branch (and later windows-port) of this fork. Never push to main.** Do not open issues or PRs, or contact anyone, including ha1dcre or monome. Those need the owner's approval.
 - **Keep `STATUS.md` current**: what is done, what is in progress, what is next. After any interruption or resume, read `STATUS.md` and `PLAN.md` first, then continue from there.
 - **Decision gates**: when `PLAN.md` says GATE, or you hit any choice that is not obviously reversible (licensing, packaging format, dropping a feature, large refactors of shared code), write the question to `DECISIONS.md` with options and your recommendation, fire the notification hook (see `SANDBOX.md`), then continue with any independent task. Do not block on a gate if other work is available.
-- **Explain before changing**: for each phase, write a short approach note (`docs/port/phase-N.md`) before editing code. For gates it is the note itself that Ken reviews.
-- **Do not fake results.** If something cannot be tested here (real audio hardware, real grids, a DAW such as Reaper, Windows), say so in `STATUS.md` and add it to `docs/port/HARDWARE-CHECKLIST.md` for Ken.
+- **Explain before changing**: for each phase, write a short approach note (`docs/port/phase-N.md`) before editing code. For gates it is the note itself that the owner reviews.
+- **Do not fake results.** If something cannot be tested here (real audio hardware, real grids, a DAW such as Reaper, Windows), say so in `STATUS.md` and add it to `docs/port/HARDWARE-CHECKLIST.md` for the owner.
 - Keep macOS behavior unchanged. Run the existing macOS-independent tests after every change.
 - Licensing: this is GPL-3.0. Do not add dependencies with incompatible licenses; list every new dependency and its license in `docs/port/DEPS.md`.
 
@@ -31,4 +31,4 @@ Order of work: **Linux baseline first, matching the macOS behavior** (what `read
 - Boots norns headless (Xvfb plus a dummy JACK driver), loads a script, and passes the Lua and C tests that do not need hardware.
 - Window, device skin, virtual grid/arc/keys, drop and file picker, screenshot/GIF, and MIC/SYS/OFF input are implemented.
 - Packaged artifact exists and installs without manual dependency steps.
-- `HARDWARE-CHECKLIST.md` lists everything Ken must verify with real hardware.
+- `HARDWARE-CHECKLIST.md` lists everything the owner must verify with real hardware.

@@ -118,7 +118,7 @@ screensaver timer (it is never restarted, so the screen saver can no longer be p
 detection of the menu; any script that starts a metro at a moment when the TLS is already large would fail silently too
 (`metro_init` returns without telling Lua).
 
-**Fixed (Ken's decision), desktop Linux build only (`NORNS_LINUX_DESKTOP`; Pi and macOS keep the 16 KiB stack and the old
+**Fixed (the owner's decision), desktop Linux build only (`NORNS_LINUX_DESKTOP`; Pi and macOS keep the 16 KiB stack and the old
 messages):** `metro_init` uses a 256 KiB stack, the failing call is named correctly (`pthread_attr_setstacksize`,
 `pthread_attr_setdetachstate`, `pthread_create`), the attribute object is destroyed, and a metro whose thread cannot be
 created says so once on stderr: `metro 31 did not start: pthread_create failed, error code 22 (Invalid argument). it will not tick`.
@@ -146,11 +146,11 @@ With `clock_source` = midi (or link, crow) the tempo shown on PARAMS > CLOCK cha
 parameter, so nothing redraws it; it redraws on input and on a few events (midi learn, rebuilds). The value is also rounded to
 a whole number and refreshed once per second at most. A fix would be small (a `refresh` function for the params page, or a
 redraw after the silent `params:set` when the tempo changed and the CLOCK page is open) but it changes upstream behavior in
-a shared Lua file; not done, waiting for Ken.
+a shared Lua file; not done, waiting for the owner.
 
-## 6. The internal clock freezes (0.06 beats/s instead of 2) with SYS/APP under PipeWire + WirePlumber (found by Ken's bisect; reproduced; FIXED for the Linux desktop build)
+## 6. The internal clock freezes (0.06 beats/s instead of 2) with SYS/APP under PipeWire + WirePlumber (found by the owner's bisect; reproduced; FIXED for the Linux desktop build)
 
-**Ken's bisect:** healthy at 37d244b5 (about 21 beats in 11 s at 120 BPM), slow at 78eedb02 (0.625 beats in 11 s) and everything after.
+**The owner's bisect:** healthy at 37d244b5 (about 21 beats in 11 s at 120 BPM), slow at 78eedb02 (0.625 beats in 11 s) and everything after.
 
 **Mechanism.** The internal clock's time comes from `jack_client_get_current_time()` (`matron/src/jack_client.cpp`): the 32-bit
 `jack_frame_time()` of the client "matron-clock", extended to 64 bits. Under PipeWire that value is the frame counter of the
@@ -161,7 +161,7 @@ accepts a forward jump and **ignores every backward delta** ("backward jitter").
 `jack frame time jumped by +560.691 s (forward, accepted)` once, then `-503.146 s (backward, ignored)` on every reading for the rest
 of the run: the clock's time stands still for the 503 s it takes the new base to catch up with the stored value. The clock thread
 (`clock_internal.cc`) sleeps `tick + (next_tick - now)`; with `now` frozen that grows by one tick per tick, so the beat rate falls
-off: 0.54 beats in 8 s (0.067 beats/s; Ken: 0.625 in 11 s).
+off: 0.54 beats in 8 s (0.067 beats/s; the owner: 0.625 in 11 s).
 
 **Why step 5 and not before:** SYS/APP are the first thing in norns that links other applications' ports into crone. MIC and OFF
 (and links made by hand from outside) leave the group's driver as it was.
@@ -187,7 +187,7 @@ and Reaper, as on the laptop, are not available here. `NORNS_CLOCK_DEBUG=1` (a d
 only, off by default) prints every jump of the frame time: on the laptop it would show whether the same forward/backward pair
 happens there.
 
-**Fix (option A, Ken's decision; applied in `jack_client.cpp`, `NORNS_LINUX_DESKTOP` only, macOS and Pi unchanged):** keep the raw frame time of the
+**Fix (option A, the owner's decision; applied in `jack_client.cpp`, `NORNS_LINUX_DESKTOP` only, macOS and Pi unchanged):** keep the raw frame time of the
 last accepted reading separately from the total, and treat a backward jump of more than one second as a **new base** to follow
 (the total does not go back, and does not stand still until the old base is reached): `last_raw = current`. Small backward
 jitter is ignored as before, wrap-around is unchanged. Verified in a scratch copy: the existing `test_matron_jack_client` cases
@@ -224,10 +224,10 @@ The cleaner long-term version is to take the internal clock's time from `CLOCK_M
 engine sync): then no change of the graph's driver can disturb the clock. It touches how every clock source relates to JACK time, so it is a design step of its own
 (shared code: Pi and macOS too), not a patch.
 
-## 7. SYS: a microphone capture stream is taken as an application; and SYS is not heard at the output (Ken's laptop test; 7.1 and the monitor-mode condition FIXED, unlinking NOT built)
+## 7. SYS: a microphone capture stream is taken as an application; and SYS is not heard at the output (the owner's laptop test; 7.1 and the monitor-mode condition FIXED, unlinking NOT built)
 
 ### 7.1 Reaper's microphone capture is linked into crone as if it were an application (bug in step 5)
-**Observed (Ken):** `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL/FR` linked to `crone:input_1/2` next to the browser; clapping at the
+**Observed (the owner):** `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL/FR` linked to `crone:input_1/2` next to the browser; clapping at the
 laptop microphone moved the input and monitor lanes; after closing Reaper it stopped.
 
 **Cause (code):** `crone/src/InputRoute.h`, `listApps()`: an application is "a client with audio output ports, none physical, not norns, not a card". It
@@ -238,7 +238,7 @@ playback-stream clients (`output_*`), so the case was not covered.
 
 **Reproduced here** (`jackd` dummy, fake clients: a card with a 440 Hz tone on its capture ports, a client "Vivaldi" with `output_FL/FR` and 440 Hz, a client
 `PipeWire ALSA [reaper]/ALSA Capture [reaper]` whose ports are `monitor_FL/FR` with 440 Hz, SYS chosen): `jack_lsp -c` shows
-`crone:input_1` fed by `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL` **and** `Vivaldi:output_FL`, input 2 likewise with `_FR`: exactly Ken's graph.
+`crone:input_1` fed by `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL` **and** `Vivaldi:output_FL`, input 2 likewise with `_FR`: exactly the owner's graph.
 
 **Options (for 7.1):**
 1. **Port-name rule (recommended):** SYS and APP take only ports whose name part starts with `output` (playback streams: `output_FL`, `output_1`, `out`...) and never
@@ -258,7 +258,7 @@ playback-stream clients (`output_*`), so the case was not covered.
 - `crone/src/MixerClient.cpp`: with `enabled.monitor_out == false` the ADC monitor is **not mixed into the DAC bus** (`processFx`: `if (enabled.monitor_out) bus.ins_in.mixFrom(bus.adc_monitor...)`
   and not into the reverb send either), and in the tape writer it goes **to the tape only** (`tape_sink = dac_sink + adc_monitor`). So in SYS the dry input is never in the output.
 - The lanes: **monitor lane** = `monPeak`, updated from `bus.adc_monitor` every block whether or not it is mixed into the output; **input lane** = `inPeak` (the ADC); **output
-  lane** = `outPeak` of `SinkDac`, i.e. what is really sent to the card. So with SYS: input and monitor lanes move, the output lane does not: exactly Ken's observation. In MIC
+  lane** = `outPeak` of `SinkDac`, i.e. what is really sent to the card. So with SYS: input and monitor lanes move, the output lane does not: exactly the owner's observation. In MIC
   the monitor is on, so claps show in the output lane. awake's own audio reaches the output through the engine (`ext_source`), unaffected by the flag, which is why it shows in SYS.
 - **Measured** (`jackd` dummy, 440 Hz tone on the card's capture ports and on a browser-like client; default engine; meter values 0..64 as in the MIX page):
 
@@ -271,15 +271,15 @@ playback-stream clients (`output_*`), so the case was not covered.
   (24 and 25 are the meters' floor with nothing playing; SYS's 32 is only the engine's path, MIC's 50 the monitor on top.)
 - **What does work in SYS today:** (1) **recording and sampling**: the input goes to `softcut` (`adc -> cut`), to the tape (`tape_sink` takes the monitor when `monitor_out` is off,
   so tape records the application), and to SuperCollider (`ext_sink = adc_source`); (2) **processing**: an engine or softcut voice that processes the input plays its result through
-  `ext_source` / `cut_source` into the output, which is heard (and the output lane moves). Ken's test script (awake) does not process the input, so there was nothing to hear; the
-  sound he heard was the application's direct path to the sound card.
+  `ext_source` / `cut_source` into the output, which is heard (and the output lane moves). The owner's test script (awake) does not process the input, so there was nothing to hear; the
+  sound that was heard was the application's direct path to the sound card.
 - What is missing is only **hearing the dry input through norns**, and that is off on purpose to avoid the double sound.
 - **Related bug found while reading (sink-monitor mode):** `mode ~= "system" and mode ~= "app"` is **true for the optional "monitor" mode**, so the input monitor stays ON there, although
   `HARDWARE-CHECKLIST.md` and `phase-3.md` say it is switched off. With the sink monitor (which contains norns' own output) that is the loop the warning is about. To be fixed
   with whatever is decided below (one condition: add `and mode ~= "monitor"`).
 
 ### 7.3 Hearing processed SYS audio without hearing the application twice: options
-In PipeWire the browser is a stream linked to the sound card's playback ports (`Vivaldi:output_FL -> Built-in Audio Analog Stereo:playback_FL`, Ken's `jack_lsp -c`). norns also
+In PipeWire the browser is a stream linked to the sound card's playback ports (`Vivaldi:output_FL -> Built-in Audio Analog Stereo:playback_FL`, the owner's `jack_lsp -c`). norns also
 receives it (a second link from the same port to `crone:input_1`). Hearing the result of processing while the dry sound also reaches the card is the "twice".
 1. **Leave as is (today).** Dry sound direct, only the processed/wet part from norns. Right for send-style effects (reverb, delay: dry direct + wet from norns) and for recording/sampling.
    Wrong for effects that replace the sound (pitch shift, filter, granular): you hear the original and the result together. No work.
@@ -307,16 +307,16 @@ receives it (a second link from the same port to `crone:input_1`). Hearing the r
 6. **Lower the application's volume to taste and use wet-only effects**: no code; a workaround for option 1.
 
 **Recommendation:** fix 7.1 now with option 1 (port-name deny-list) plus the fixture and test; fix the `monitor` condition in 7.2; offer 7.3 option 3 (an explicit "SYS through norns" mode with option 2's unlink and restore,
-tested first by hand by Ken as above) rather than changing what SYS means. Awaiting Ken's decision; nothing is implemented.
+tested first by hand by the owner as above) rather than changing what SYS means. Awaiting the owner's decision; nothing is implemented.
 
-### Decisions on item 7 (Ken) and what was done
+### Decisions on item 7 (the owner) and what was done
 - **7.1 fixed (option 1, as a deny-list):** `InputRoute.h` `isDeniedPort()`: SYS and APP skip every port whose name part starts with `monitor` or `capture` (case-insensitive);
   anything else, `output_*` or not, still counts. A client that has only such ports is no application at all; a client with both takes its `output_*` ports only.
   Tests first: the fake graph has the capture stream `PipeWire ALSA [reaper]/ALSA Capture [reaper]` with `monitor_FL/FR` (`fake_card ... capstream`), `tests/crone/test_input_route.cpp`
   has the same client in its desktop fixture plus four new cases, `run_all.sh` checks that neither SYS nor APP is fed by it and that it is not in the app list.
 - **Sink-monitor condition fixed:** `lua/core/menu.lua` now switches the input monitor off for `monitor` mode too (`mode ~= "system" and mode ~= "app" and mode ~= "monitor"`). Test:
   `linux/tests/input_monitor_test.lua` (MIC and OFF hear the monitor; SYS, APP and the sink monitor do not; the warning is shown in the sink monitor mode); it failed before the change.
-- **Unlinking (7.3 options 2 and 3) is NOT built (Ken's decision).** Ken's hand test on the laptop: a stream whose direct link to the sound card he removed
+- **Unlinking (7.3 options 2 and 3) is NOT built (the owner's decision).** The owner's hand test on the laptop: a stream whose direct link to the sound card was removed
   (`jack_disconnect`) **stayed unlinked for over a minute and through pause/play**, but **a brand new stream (`Vivaldi-123`) was created with the direct link in place**. So WirePlumber
   does not re-link an existing stream that lost its link, but links every new stream: unlinking would need **continuous re-checking** (a port-registration or port-connect callback
-  that removes the card link of each new stream as it appears, with the race against the session manager, plus restoring on exit). Revisit after Ken has used SYS for a while.
+  that removes the card link of each new stream as it appears, with the race against the session manager, plus restoring on exit). Revisit after the owner has used SYS for a while.

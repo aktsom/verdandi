@@ -4,7 +4,7 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
 
 ## Done
 - Phase 0 inventory: `docs/port/INVENTORY.md`.
-- Gate A decided by Ken: option 1, platform folders in this fork (`DECISIONS.md`).
+- Gate A decided by the owner: option 1, platform folders in this fork (`DECISIONS.md`).
 - Phase 1, headless Linux build and boot (`docs/port/phase-1.md`): `linux/setup-deps.sh`, `linux/build.sh`,
   `linux/norns.sh`, `linux/tests/`. Builds on Ubuntu 24.04 x86_64, boots with Xvfb + jackd dummy + crone + sclang.
 - **Phase 2, all five steps of `docs/port/phase-2.md` section 6 are done and pushed:**
@@ -27,13 +27,13 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
 `linux/tests/stress_boot.sh` repeats the check.
 
 ## In progress
-- **Phase 3 steps 1-5 are done** (Ken's decisions in `DECISIONS.md`; decision 10 decided: SYS = all apps but norns, the sink monitor
-  only as an option). Stopped here as asked: waiting for Ken. Open for Ken: nothing
+- **Phase 3 steps 1-5 are done** (the owner's decisions in `DECISIONS.md`; decision 10 decided: SYS = all apps but norns, the sink monitor
+  only as an option). Stopped here as asked: waiting for the owner. Open for the owner: nothing
   pending from my side; the laptop checks of step 5, the metro fix and the MIDI auto-connect are in `HARDWARE-CHECKLIST.md`.
-  6. Ken's decisions applied: metro stack fix for the Linux desktop build (256 KiB, correct messages, a failed metro says so;
+  6. The owner's decisions applied: metro stack fix for the Linux desktop build (256 KiB, correct messages, a failed metro says so;
      test with a TLS-pressure preload: 20 of 20 ticks, was 0); no other fixed-stack thread in the repo; tempo page refresh put on the
      wishlist; MIDI auto-connect built (`midi_in_from=` / `NORNS_MIDI_IN_FROM`, 2 s re-check, status under SYSTEM > DEVICES > MIDI).
-     Full run_all.sh: 0 unexpected failures. Stopped, waiting for Ken.
+     Full run_all.sh: 0 unexpected failures. Stopped, waiting for the owner.
   5. MIC/OFF by physical flag, SYS (every application except norns' own clients), APP by name, optional sink monitor; in-window
      menu lists the applications; tests: `tests/crone/test_input_route.cpp`, `linux/tests/input_test.sh` (fake card and streams).
   Also fixed on real-machine reports (see the three bug fixes in RUN-ON-LAPTOP.md): libmonome waf via `python3`, waf in
@@ -65,30 +65,30 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
   The leftover `sidecar [norns]` processes seen in my sandbox come from starting the tests with `nohup`
   (SIGHUP is then ignored, so they do not die with norns); a normal terminal is not affected.
 
-## Clock freeze with SYS under PipeWire + WirePlumber (Ken's bisect: 78eedb02): FIXED
+## Clock freeze with SYS under PipeWire + WirePlumber (the owner's bisect: 78eedb02): FIXED
 Mechanism and numbers: `KNOWN-ISSUES.md` item 6. Fix applied (option A, desktop Linux only: a backward jump of more than 1 s in JACK's frame time is a new base to follow);
 `clock_rate_test.sh` PipeWire flavor is now a normal check (2.000 beats per second with SYS). `NORNS_CLOCK_DEBUG=1` kept and described in `RUN-ON-LAPTOP.md`.
-**Follow-ups, Ken to decide:** (1) the accepted forward jump: measured (a transient +1120 beats read for up to one tick, a 10-event `clock.sync` burst followed by a 5 s
+**Follow-ups, the owner to decide:** (1) the accepted forward jump: measured (a transient +1120 beats read for up to one tick, a 10-event `clock.sync` burst followed by a 5 s
 gap, one early wake per `clock.sleep` coroutine; the beat counter itself does not advance) and a handling proposed in `docs/port/clock-forward-jump-proposal.diff` (verified in
 a scratch copy, not applied); (2) `CLOCK_MONOTONIC` for the internal clock, documented as a follow-up option.
 **Default input at boot: MIC** (`_menu.input = "mic"`, identical at 37d244b5 and now; with no saved choice nothing is connected or disconnected at boot). What changed at
 78eedb02 is that a **saved choice is restored at boot**: `~/verdandi-home/.norns-input` (SYS, APP or the sink monitor) or `.mic-off` (OFF). Before 78eedb02 SYS/APP did not exist
 on Linux, so a SYS choice could not be made or restored. If your laptop's norns home has a `.norns-input` file from pressing the MIC button once (MIC > SYS), it starts in SYS.
 
-## SYS fixes after Ken's laptop test (KNOWN-ISSUES item 7)
+## SYS fixes after the owner's laptop test (KNOWN-ISSUES item 7)
 Fixed: SYS and APP no longer take capture streams (ports named `monitor*` / `capture*`, a deny-list; Reaper's `ALSA Capture [reaper]:monitor_FL/FR` was feeding the microphone into crone),
 and the optional sink-monitor mode now really switches the input monitor off. Tests first (fake capture-stream client, unit cases, `input_monitor_test.lua`). Why SYS is silent at the output
-(the input monitor is off in SYS/APP on purpose; recording, sampling and processing work) is explained in item 7.2. **Not built (Ken's decision):** unlinking the applications' direct link to
-the sound card (his hand test: an unlinked stream stays unlinked, but a new stream is linked again, so it would need continuous re-checking); revisit after Ken has used SYS for a while.
+(the input monitor is off in SYS/APP on purpose; recording, sampling and processing work) is explained in item 7.2. **Not built (the owner's decision):** unlinking the applications' direct link to
+the sound card (the owner's hand test: an unlinked stream stays unlinked, but a new stream is linked again, so it would need continuous re-checking); revisit after the owner has used SYS for a while.
 
-## Real-hardware findings (Ken's laptop)
+## Real-hardware findings (the owner's laptop)
 Recorded in `HARDWARE-CHECKLIST.md` ("Done on a real machine"): silent run, sound under PipeWire, Reaper clock/notes through the
 Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped several times (design for auto-connect only).
 
 ## Next
-- Ken: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
+- The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
-- Steps 4-5 of `docs/port/phase-3.md` follow (step 5 only after Ken's report).
+- Steps 4-5 of `docs/port/phase-3.md` follow (step 5 only after the owner's report).
 - macOS: re-verify with the shared-file list at the end of `docs/port/phase-3.md` (clock and device_midi changes).
 
 ## Not testable here / notes

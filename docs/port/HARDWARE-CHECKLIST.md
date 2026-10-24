@@ -1,4 +1,4 @@
-# Hardware checklist for Ken
+# Hardware checklist for the owner
 
 Things that cannot be tested in the build sandbox. Filled in as phases go.
 
@@ -87,7 +87,7 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 - [ ] SYSTEM > RESTART and SLEEP work (the sidecar used `sudo -n systemd-run` on Linux before this step; now a plain
       shell signals `norns.sh`, as on macOS).
 
-## Done on a real machine (Ken, Linux Mint 22.2, PipeWire 1.0.5, Reaper 7.82)
+## Done on a real machine (the owner, Linux Mint 22.2, PipeWire 1.0.5, Reaper 7.82)
 - [x] Silent run (`NORNS_JACK_DRIVER=dummy`): window, K1-K3, encoders, virtual grid, arc and keys windows, file dialog from the tape page.
 - [x] Sound under PipeWire (started as `pw-jack <path>/linux/norns.sh --terminal`, before the re-run was fixed): tape playback, the
       awake script, grid and arc control. `jack_lsp -c`: crone outputs to the built-in playback ports, inputs from the capture

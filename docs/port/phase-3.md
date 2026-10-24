@@ -1,8 +1,8 @@
-# Phase 3: audio, devices and the external clock (approach note, for Ken to confirm)
+# Phase 3: audio, devices and the external clock (approach note, for the owner to confirm)
 
 Status: **approach only, no Phase 3 code.** Facts below come from reading the code, from the Phase 1-2 runs, and
 from one PipeWire experiment in the build container (no sound card, no session manager: it proves little about a
-real laptop, and I say where). Ken's clock decisions are in `docs/port/clock-notes.md` section 4 and `PLAN.md`.
+real laptop, and I say where). The owner's clock decisions are in `docs/port/clock-notes.md` section 4 and `PLAN.md`.
 
 PLAN.md Phase 3 asks for: JACK/PipeWire audio with the `audio.conf` semantics kept; MIC/SYS/OFF input without
 the Core Audio tap; real devices through the Linux paths (ALSA MIDI, udev, evdev). Added since: the clock items.
@@ -95,7 +95,7 @@ continue, SPP), and the PipeWire exposure of ALSA MIDI.
 `JackPortIsPhysical` capture and playback ports and **throw** if there are none. That is right for a device with a
 sound card and is what the Pi and macOS rely on. In my PipeWire experiment (`pw-jack`), norns connected to
 PipeWire's JACK and stopped here: no physical ports in a PipeWire without a sound card. Real laptops have them: verified on
-Ken's laptop (see "Laptop results" below).
+The owner's laptop (see "Laptop results" below).
 
 **Proposal (crone change, small).**
 1. As today: connect to the first two physical ports when they exist.
@@ -232,7 +232,7 @@ changes. On macOS: plain clock/start/stop behave as before; continue and SPP are
 
 ---
 
-# Laptop results (Ken, Linux Mint 22.2, PipeWire 1.0.5 with WirePlumber; pw-jack and jackd2 installed)
+# Laptop results (the owner, Linux Mint 22.2, PipeWire 1.0.5 with WirePlumber; pw-jack and jackd2 installed)
 
 Hardware today: the built-in card, and a USB DAC for the second test. **No external audio interface on Linux for
 now.** The RME Fireface is not USB class-compliant, so it cannot be used on Linux (on Windows it still needs ASIO:
@@ -273,7 +273,7 @@ What this settles (replaces my earlier "unverified"):
 8. Per-stream JACK clients named after the application, with a numeric suffix for further streams (`Vivaldi-73`):
    APP grouping (step 5) must tolerate the suffix.
 
-## Decision 9 (approved by Ken): which device crone uses when several have physical ports
+## Decision 9 (approved by the owner): which device crone uses when several have physical ports
 - **Output:** follow the **system default sink**. Overridable in `audio.conf` by **port-name prefix** (key
   `out_ports=`, for example `out_ports=AudioQuest DragonFly`). Same for the **input**: the default source,
   overridable with `in_ports=`. A prefix matches the JACK **client** part of the name (`<prefix>...:port`).
@@ -300,7 +300,7 @@ What this settles (replaces my earlier "unverified"):
   (`NORNS_IN_PORTS` / `NORNS_OUT_PORTS`), else the first group (with a warning when a prefix was asked for and not
   found), connect its first two ports (a mono group feeds both channels), never mix ports of two devices. No
   physical audio ports at all: **do not throw**; start unconnected.
-- **The warning must be seen in the window and menu, not only in the log** (Ken): crone records warnings
+- **The warning must be seen in the window and menu, not only in the log** (the owner): crone records warnings
   (`crone_audio_warning()`); at start-up Lua shows them as a **persistent message on the norns window** and as a line on
   SYSTEM > AUDIO; `_norns.audio_warning()` returns the text (nil if none). Wording for the cases: no output ports
   ("no audio output: connect crone:output_1/2 yourself"), no input ports, a prefix not found.
@@ -321,7 +321,7 @@ What this settles (replaces my earlier "unverified"):
   device rows work as on macOS, fed by a new `linux/audio_devices.c` (ALSA).
 - The page also shows what crone connected ("out: <device>, in: <device>") and the warning, if any.
 
-## Step 5 design updates (not built, waits for Ken)
+## Step 5 design updates (not built, waits for the owner)
 - **MIC/OFF:** find the capture ports by flag: output + physical + **audio** type; connect/disconnect those of the
   group crone chose (not the literal `system:capture_N`).
 - **SYS (decision 9):** the monitor ports of the chosen output device (`<client>:monitor_FL/FR` to `crone:input_1/2`).
@@ -338,7 +338,7 @@ What this settles (replaces my earlier "unverified"):
   routes input to output (the input monitor `monitor_level`, an engine like SimplePassThru, softcut/tape recording
   the input) feeds itself, a loop through the sound card's sink at unity gain (it can sustain, and grows with
   reverb or gain). The macOS tap avoids it because it taps "every app but norns' own processes". Prevention and warning I
-  will build in step 5 unless Ken decides otherwise:
+  will build in step 5 unless the owner decides otherwise:
   1. **Switch the input monitor off while SYS is on** (`_norns.monitor_out(false)`, as the macOS code does for SYS/APP):
      this breaks the direct input-to-output path.
   2. **Warn on the window and on the MIC line** whenever SYS is active through a sink monitor that norns itself plays
@@ -348,7 +348,7 @@ What this settles (replaces my earlier "unverified"):
      matches "every app but norns" exactly. APP never has the loop (one application's own ports).
   This differs from decision 9 as worded ("SYS uses the monitor ports"); I keep decision 9 as the default and ask in
   decision 10 below whether the loop-free variant should be the default instead.
-- **Decision 10 (new, for Ken):** SYS as sink monitor (decision 9) with the three safeguards above, or SYS as
+- **Decision 10 (new, for the owner):** SYS as sink monitor (decision 9) with the three safeguards above, or SYS as
   all-applications-except-norns (no loop) as the default, with the sink monitor as an advanced option?
 
 
@@ -380,7 +380,7 @@ scenario), then the code. What it does, on the Linux desktop build only (`NORNS_
   default source/sink read with `wpctl inspect` (`node.description`, which is the JACK client name; a default source that
   is a "Monitor of ..." is not taken as an input).
 - Not verified on a real PipeWire: that `wpctl`'s `node.description` equals the JACK client name on every system (it
-  was on Ken's laptop data), and the pw-jack re-run itself (tested with stubs and, earlier, by hand in the container).
+  was on the owner's laptop data), and the pw-jack re-run itself (tested with stubs and, earlier, by hand in the container).
   Changed shared files: `crone/src/main.cpp`, `crone_main.h` (now `extern "C"` for both languages), `matron/src/weaver.cc`
   (Linux-only functions), `matron/src/platform/macos/sdl_bridge.{cc,h}` (standing note: no effect while none is set),
   `lua/core/menu.lua` (a hook that only exists when `_norns.audio_status` does). Add to the macOS re-verification list.
@@ -413,7 +413,7 @@ watched them fail, then:
 
 ## Step 5 results (MIC/OFF by flag, SYS, APP, optional sink monitor)
 
-Decision 10, as decided by Ken: **SYS = every application client except norns' own clients; the sink monitor only as an
+Decision 10, as decided by the owner: **SYS = every application client except norns' own clients; the sink monitor only as an
 optional extra with a warning.** Decision 9 stands (crone follows the default sink, `audio.conf` overrides).
 Tests first (`tests/crone/test_input_route.cpp`, `linux/tests/input_test.sh` + `probe_input.lua` with a fake card, fake
 application streams and a late stream), then the code:
@@ -448,9 +448,9 @@ application streams and a late stream), then the code:
   (a new define), `matron/src/platform/common/desktop_shell.h` (menu ids), `lua/core/menu.lua` (guarded by
   `_norns.mic_input` / `NORNS_SYS_MONITOR`, macOS unchanged), `norns/wscript`.
 
-## Design (not built, waits for Ken): optional auto-connect for MIDI input
+## Design (not built, waits for the owner): optional auto-connect for MIDI input
 
-**Problem seen on Ken's laptop:** Reaper's "virtual" MIDI output has to be connected to `Verdandi:midi_in` by hand, and the link
+**Problem seen on the owner's laptop:** Reaper's "virtual" MIDI output has to be connected to `Verdandi:midi_in` by hand, and the link
 has been dropped several times although neither port disappeared (PipeWire's Midi-Bridge can drop a link when the bridge
 client restarts or Reaper reopens its device, without the JACK port vanishing).
 
@@ -476,9 +476,9 @@ for every **MIDI output port** (type MIDI, output) whose name starts with a pref
 - **Tests (when built, first):** `InputRoute`-style pure logic in `crone/src/MidiRoute.h` (which ports match, which links are
   missing), a fake MIDI source client that is connected, disconnected behind norns' back and must be reconnected within 3 s,
   one that is registered later, and a non-matching one that must stay unconnected.
-- **Open question for Ken:** the 2 s interval, and whether the AUDIO page is the right place for the status line.
+- **Open question for the owner:** the 2 s interval, and whether the AUDIO page is the right place for the status line.
 
-## MIDI auto-connect: built (Ken's decision: as designed, 2 s re-check; status under SYSTEM > DEVICES > MIDI)
+## MIDI auto-connect: built (the owner's decision: as designed, 2 s re-check; status under SYSTEM > DEVICES > MIDI)
 
 As in the design above, plus these details. Off unless `midi_in_from=<prefixes>` is in `audio.conf` or `NORNS_MIDI_IN_FROM` is set
 (environment wins; prefixes separated by `;`, each the start of the whole `client:port` name). `linux/norns.sh` exports the value,
@@ -496,12 +496,12 @@ per minute). `NORNS_MIDI_POKE=0` turns the registration wake-up off (tests, to p
   `linux/tests/devices_midi_test.lua` for the page.
 - **Not tested:** the real Midi-Bridge and Reaper (the dropped-link case on the laptop).
 
-## Metro stack fix (Ken's decision)
+## Metro stack fix (the owner's decision)
 See `KNOWN-ISSUES.md` item 4 (now FIXED for the Linux desktop build): 256 KiB stack, correct error names, a metro that cannot start says so
 once; test with a TLS-pressure preload library (`linux/tests/tls_pressure.c`). No other small fixed-stack thread exists in the repo.
 Shared file changed: `matron/src/metro.cc` (everything under `NORNS_LINUX_DESKTOP`; the macOS and Pi paths are textually the same as before).
 
-## MIDI auto-connect: own MIDI ports and loopbacks are excluded; wildcard patterns (after Ken's question)
+## MIDI auto-connect: own MIDI ports and loopbacks are excluded; wildcard patterns (after the owner's question)
 - **Before this change** the code excluded only norns' own **JACK** clients (`crone`, `softcut`, `SuperCollider`, `Verdandi`, `Verdandi ctl`),
   so a prefix like `Midi-Bridge:Client-` would also have matched norns' own virtual RawMIDI device (an ALSA client named `Client-<n>`,
   made by `snd_rawmidi_open(..., "virtual")`) and its keys window (ALSA client "Verdandi"), and `Midi Through`: a loop. **"Midi

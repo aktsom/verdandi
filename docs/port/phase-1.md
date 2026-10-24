@@ -68,6 +68,6 @@ PolySub, SimplePassThru, PolyPerc, TestSine, None.
 8. This build is the upstream `--desktop` window (`screen:sdl`), which the headless run drives
    under Xvfb; it is not yet the Verdandi window with device skin (Phase 2).
 9. Unverified: that the macOS build still works after these edits (no macOS here). The changes
-   are guarded or syntax-neutral, but Ken should run the macOS build and tests once
+   are guarded or syntax-neutral, but the owner should run the macOS build and tests once
    (`docs/port/HARDWARE-CHECKLIST.md`).
 10. Audio goes through jackd's dummy driver only; real devices are Phase 3.

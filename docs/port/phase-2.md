@@ -1,4 +1,4 @@
-# Phase 2: desktop layer for Linux (approach note, for Ken to confirm)
+# Phase 2: desktop layer for Linux (approach note, for the owner to confirm)
 
 Status: **approach only, no Phase 2 code written.** Everything below that says "verified" was
 checked by reading code or by a throwaway experiment outside the repository; nothing in the
@@ -50,14 +50,14 @@ fallback of about 8 lines in `linux_libudev.c`; `vgrid_test.c` then passes compl
    `linux/setup-deps.sh` while building libmonome 1.4.9. Ubuntu 24.04 has no `libmonome-dev`, so we
    build libmonome ourselves anyway, and a package bundle ships that build.
 2. The patch only fires when udev gives no serial, so real grids, arcs and the Pi are unaffected.
-   It is written so it could be offered upstream to monome/libmonome later (Ken's call).
+   It is written so it could be offered upstream to monome/libmonome later (the owner's call).
 3. `c:vgrid` moves from KNOWN to PASS in `linux/tests/run_all.sh`.
 4. Side issue found on the way: with `-std=gnu11` and no `_GNU_SOURCE`, `ptsname` is implicitly
    declared and returns `int` (pointer truncation on 64-bit). The waf build defines `_GNU_SOURCE`,
    so the app is fine, but `vgrid_device.c` gets an explicit `#define _GNU_SOURCE` (harmless on
    macOS) so the standalone test compiles correctly.
 
-Risk: the patch changes a third-party library we build ourselves; if Ken prefers not to carry a
+Risk: the patch changes a third-party library we build ourselves; if the owner prefers not to carry a
 patch, option C is the alternative at a higher price.
 
 ---
@@ -94,12 +94,12 @@ of other apps are **not** visible to matron, on Linux upstream or here.
 4. Testing here: A is fully testable without hardware (inject bytes, check lua `midi.vports`
    and an event through `_norns.midi.event`, extend `norns_probe` to do so). B cannot be tested
    in this container (no `/dev/snd/seq`); it goes into `HARDWARE-CHECKLIST.md` with an exact
-   `aconnect -l` / `aseqdump` recipe. I will not claim B works until Ken has run it.
+   `aconnect -l` / `aseqdump` recipe. I will not claim B works until the owner has run it.
 5. Inbound ports of other apps ("norns" virtual destination, other apps' sources) are **not** in
    Phase 2's scope beyond what upstream already does; Phase 3 ("real devices via the norns Linux
    paths") covers hotplug and decides whether a seq-subscription monitor is worth building.
 
-Open question for Ken: is publishing "norns keys" to other Linux apps (B) wanted in the first
+Open question for the owner: is publishing "norns keys" to other Linux apps (B) wanted in the first
 Linux release, or is norns-internal keys enough for now?
 
 ---
@@ -125,7 +125,7 @@ POSIX and platform-neutral. The Linux file-manager and temp locations differ fro
    branch under `#ifndef __APPLE__`; macOS list unchanged.
 4. The link folder name stays `dust/audio/mac` for now (lua and `readme-macos.md` refer to it;
    renaming is a user-visible compatibility question that I will not decide silently). I propose
-   to keep `mac` as an internal constant and to ask Ken later whether Linux should show another
+   to keep `mac` as an internal constant and to ask the owner later whether Linux should show another
    name.
 5. `dust_import_test.c` already tests behavior only; it runs unchanged on Linux. I will add cases
    for: copy of a folder tree, EXCL on an existing target, a failing copy leaves nothing behind, a
