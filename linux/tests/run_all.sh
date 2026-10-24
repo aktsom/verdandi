@@ -46,6 +46,7 @@ known() { # name, command...: a failure is expected and recorded
 
 run "lua:devices midi status" lua5.3 linux/tests/devices_midi_test.lua
 run "lua:input monitor per mode" lua5.3 linux/tests/input_monitor_test.lua
+run "lua:device window notes" lua5.3 linux/tests/grid_note_test.lua
 for t in menu_pages input_modes fileselect_finder output_fader; do
     run "lua:$t" lua5.3 "$M/${t}_test.lua"
 done
@@ -289,6 +290,37 @@ if command -v pipewire > /dev/null && command -v wireplumber > /dev/null && comm
     run "clock:internal clock 2 beats per second with SYS input under PipeWire + WirePlumber" clock_rate_ok "$CLOGP"
 else
     echo "SKIP  clock: PipeWire flavor (needs pipewire, wireplumber, pw-jack, dbus-run-session)"
+fi
+
+# another process on the grid's serial port (serialosc-device): the check, from process lists given as data, and against fake
+# processes with serialosc's command lines (no root, no real serialosc)
+serialosc_unit_ok() {
+    g++ -std=c++14 -I third-party/doctest -I matron/src linux/tests/serialosc_conflict_test.cpp -o "$T/serialosc_conflict_test" || return 1
+    "$T/serialosc_conflict_test"
+}
+run "serialosc:conflict logic (process lists as data)" serialosc_unit_ok
+if command -v jackd > /dev/null; then
+    SLOG="$T/serialosc.log"
+    "$REPO/linux/tests/serialosc_test.sh" "$SLOG" > /dev/null 2>&1
+    serialosc_ok() {
+        local bad=0
+        grep -aq "PROBE check without a device process.nil\|PROBE check without a device process$" "$SLOG" || { echo "serialoscd and the detector alone were reported"; bad=1; }
+        grep -aq "PROBE note 1.nil" "$SLOG" || { echo "a note without a conflict"; bad=1; }
+        grep -aq "PROBE text 2.*serialosc has this grid" "$SLOG" || { echo "the conflict was not found: $(grep -a 'PROBE text 2' "$SLOG")"; bad=1; }
+        grep -aq "PROBE note 2.*serialosc has this grid" "$SLOG" || { echo "no note on the device window: $(grep -a 'PROBE note 2' "$SLOG")"; bad=1; }
+        [ "$(grep -ac "serialosc: .*sudo systemctl stop serialosc.service" "$SLOG")" = 1 ] || { echo "the log line must appear exactly once, found $(grep -ac "sudo systemctl stop serialosc.service" "$SLOG")"; bad=1; }
+        grep -aq "sudo systemctl start serialosc.service" "$SLOG" || { echo "the log line lacks the start command"; bad=1; }
+        grep -aq "PROBE text 3.nil" "$SLOG" || { echo "the conflict is still reported after the process ended"; bad=1; }
+        grep -aq "PROBE note 3.nil" "$SLOG" || { echo "the note stayed after the conflict was gone"; bad=1; }
+        return $bad
+    }
+    run "serialosc:fake serialosc-device on the grid: one log line, a note, gone when it goes" serialosc_ok
+    SLOG2="$T/serialosc-off.log"
+    "$REPO/linux/tests/serialosc_test.sh" "$SLOG2" disabled > /dev/null 2>&1
+    serialosc_off_ok() {
+        grep -aq "PROBE note 2.nil" "$SLOG2" && ! grep -aq "sudo systemctl stop serialosc.service" "$SLOG2" || { echo "reported although NORNS_SERIALOSC_CHECK=0"; return 1; }
+    }
+    run "serialosc:NORNS_SERIALOSC_CHECK=0 turns the check off" serialosc_off_ok
 fi
 
 # the optional MIDI auto-connect (midi_in_from= in audio.conf, or NORNS_MIDI_IN_FROM): a port matching a prefix is linked to

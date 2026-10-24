@@ -124,3 +124,13 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 - [ ] The internal clock gives 2 beats per second with SYS on (fix applied; try it with the browser and Reaper running).
 - [ ] With the ALSA sequencer present: `midi_in_from=Midi-Bridge:` links Reaper's port but **not** norns' own `Client-<n>` virtual RawMIDI port,
       "Verdandi" (keys window) or `Midi Through` (check `pw-jack jack_lsp -c`; norns' own client is found by the thread id ALSA reports as well as the process id); `midi_in_from=Midi-Bridge:Client-* Virtual RawMIDI` links only Reaper's.
+
+## serialosc and a real grid
+- [ ] With `serialosc.service` running (`pgrep -a serialosc` shows a `serialosc-device ... /dev/ttyACM0` process) and a grid plugged in: the log has one
+      `serialosc: serialosc has this monome device open as well as norns ...` line with the stop/start commands and the replug hint, and the device window shows
+      `GRID: serialosc has this grid, see log`. The line does not repeat.
+- [ ] After `sudo systemctl stop serialosc.service` and a replug: the note is gone within a few seconds, no new line, and the grid events are clean.
+      (Without the replug the note also goes: the serialosc-device process has ended.)
+- [ ] Plug the grid into a different USB port (another ttyACM number) or use the by-id name: the check still finds the right process.
+- [ ] `NORNS_SERIALOSC_CHECK=0` or `serialosc_check=0` in `audio.conf`: nothing is reported.
+- [ ] An arc (same serial path): the same check.

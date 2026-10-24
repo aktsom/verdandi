@@ -238,3 +238,18 @@ terminal output and `~/verdandi-home/jackd.log` and `sclang.log` if present.
 
 Please also note: your distribution and version, X11 or Wayland, the desktop (GNOME, KDE, ...), whether you
 use PipeWire (`pactl info | grep "Server Name"`), and the output of `pw-jack jack_lsp -p` if the audio line fails.
+
+## A real grid and serialosc (read this before plugging in a grid)
+If serialosc is installed as a system service (`serialosc.service`, started at boot), its `serialosc-device` process opens the grid's serial port
+(`/dev/ttyACM0`, the number changes between plug-ins; also reachable as `/dev/serial/by-id/usb-monome_grid_m...-if00`) **at the same time as norns**. Two
+programs reading one serial stream steal each other's bytes: grid events lag, arrive out of order, or invalid (a row 33 on an 8-row grid). norns now
+**checks** for this when it opens a grid or arc (at start and at every plug-in) and every 3 seconds afterwards, and only **tells you**; it stops nothing:
+- **a line in the log** (once per plug-in), in plain words, with the commands: `sudo systemctl stop serialosc.service` to stop serialosc for this session and
+  `sudo systemctl start serialosc.service` to start it again later. **Replug the grid after stopping it.**
+- **a standing note on the device window:** `GRID: serialosc has this grid, see log`. It goes away by itself when the conflict is gone (a few seconds after
+  serialosc stops or the grid is unplugged). If the audio is not connected as well, the grid note is shown first.
+- How it looks: it scans `/proc/*/cmdline` for a `serialosc-device` process whose last argument is the same device as norns opened (by-id symlinks and the
+  changing ttyACM number are resolved) and the open files of serialosc processes where readable; `serialoscd` and `serialosc-detector` alone are not a conflict.
+  It needs no root; processes it cannot read are skipped.
+- **Turn the check off:** `NORNS_SERIALOSC_CHECK=0` in the environment, or `serialosc_check=0` in `~/verdandi-home/audio.conf` (the environment wins).
+  Norns never uses serialosc's OSC route here (that is a later item).

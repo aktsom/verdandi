@@ -60,6 +60,7 @@
 #ifdef NORNS_LINUX_DESKTOP
 #include "crone_main.h"
 #include "platform/linux/input_route.h"
+#include "platform/linux/serialosc_check.h"
 #include "platform/macos/app_audio.h"
 #endif
 #endif
@@ -364,6 +365,8 @@ static int _audio_status(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
+static int _serialosc_check(lua_State *l);
+static int _grid_conflict_text(lua_State *l);
 static int _midi_in_status(lua_State *l);
 static int _set_warning(lua_State *l);
 #endif
@@ -709,6 +712,8 @@ void w_init(void) {
     lua_register_norns("mic_input", &_mic_input);
     lua_register_norns("app_list", &_app_list);
     lua_register_norns("midi_in_from", &_midi_in_from);
+    lua_register_norns("serialosc_check", &_serialosc_check);
+    lua_register_norns("grid_conflict_text", &_grid_conflict_text);
     lua_register_norns("midi_in_status", &_midi_in_status);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
@@ -2374,6 +2379,20 @@ int _wall_time_get_delta(lua_State *l) {
 void w_handle_monome_add(void *mdev) {
     struct dev_monome *md = (struct dev_monome *)mdev;
     int id = md->dev.id;
+#ifdef NORNS_LINUX_DESKTOP
+    // another process (serialosc) on this grid's serial port? one log line, a note on the device window
+    serialosc_device_added(id, md->dev.path);
+    {
+        lua_getglobal(lvm, "_norns");
+        lua_getfield(lvm, -1, "grid_conflict_changed");
+        lua_remove(lvm, -2);
+        if (lua_isfunction(lvm, -1)) {
+            l_report(lvm, l_docall(lvm, 0, 0));
+        } else {
+            lua_pop(lvm, 1);
+        }
+    }
+#endif
     const char *serial = md->dev.serial;
     const char *name = md->dev.name;
     _push_norns_func("monome", "add");
@@ -2385,6 +2404,9 @@ void w_handle_monome_add(void *mdev) {
 }
 
 void w_handle_monome_remove(int id) {
+#ifdef NORNS_LINUX_DESKTOP
+    serialosc_device_removed(id);
+#endif
     _push_norns_func("monome", "remove");
     lua_pushinteger(lvm, id + 1); // convert to 1-base
     l_report(lvm, l_docall(lvm, 1, 0));
@@ -3734,6 +3756,32 @@ int _app_list(lua_State *l) {
 int _midi_in_from(lua_State *l) {
     lua_pushboolean(l, midi_autoconnect_start(luaL_checkstring(l, 1)));
     return 1;
+}
+
+/***
+ * Linux desktop: the note for the device window if serialosc has a grid or arc that norns has open, else nil
+ * @function grid_conflict_text
+ * @treturn string note
+ */
+int _grid_conflict_text(lua_State *l) {
+    const char *t = serialosc_conflict_text();
+    if (t != NULL) {
+        lua_pushstring(l, t);
+    } else {
+        lua_pushnil(l);
+    }
+    return 1;
+}
+
+/***
+ * Linux desktop: check a device path as if norns had just opened it (what a plug-in does); the note, or nil (tests)
+ * @function serialosc_check
+ * @tparam string path
+ * @treturn string note
+ */
+int _serialosc_check(lua_State *l) {
+    serialosc_device_added(-1000, luaL_checkstring(l, 1));
+    return _grid_conflict_text(l);
 }
 
 /***

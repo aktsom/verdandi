@@ -197,6 +197,13 @@ local INPUT_LABEL = {off = "off", mic = "mic / interface", system = "all apps (s
 local function monitor_ok() return _norns.mic_input ~= nil and os.getenv("NORNS_SYS_MONITOR") == "1" end
 local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 
+-- the standing note on the device window (Linux): one at a time, the most urgent first: the sink monitor may feed back, serialosc has
+-- the grid, the audio is not connected
+function _menu.show_note()
+  if not _norns.set_warning then return end
+  _norns.set_warning(_menu.input == "monitor" and MONITOR_WARNING or _menu.grid_note or _menu.audio_note or "")
+end
+
 local function show_input()
   if _norns.show_control then _norns.show_control(4, INPUT_SHOWN[_menu.input] or 0, 0) end
 end
@@ -258,10 +265,7 @@ function _menu.set_input(mode, bundle, name, quiet)
     end
   end
   _menu.input = mode
-  if _norns.set_warning then
-    -- the sink monitor may feed back: say so on the device while it is on, else the audio warning (if any)
-    _norns.set_warning(mode == "monitor" and MONITOR_WARNING or _menu.audio_note or "")
-  end
+  _menu.show_note()
   if mode == "mic" then
     os.remove(MIC_OFF)
   else
@@ -390,13 +394,35 @@ if _norns.midi_in_from then
   end)
 end
 
+-- Linux: serialosc (serialosc-device) has the grid or arc that norns opened too: a note on the device window while it does; the log line
+-- says what to do. looked at when a grid is plugged in (the C side calls grid_conflict_changed) and every 3 seconds (metro 33)
+if _norns.grid_conflict_text and _norns.set_warning then
+  local function grid_note_update()
+    local t = _norns.grid_conflict_text()
+    if t ~= _menu.grid_note then
+      _menu.grid_note = t
+      _menu.show_note()
+    end
+  end
+  _norns.grid_conflict_changed = grid_note_update
+  hook.system_post_startup:register("menu-grid-conflict", function()
+    grid_note_update()
+    -- a metro, not a clock coroutine: a script change cancels every coroutine. 33 and 34 are reserved with 31-36
+    local poll = metro[33]
+    poll.time = 3
+    poll.count = -1
+    poll.event = grid_note_update
+    poll:start()
+  end)
+end
+
 if _norns.audio_status and _norns.set_warning then
   hook.system_post_startup:register("menu-audio-warning", function()
     local warning = _norns.audio_status()
     if warning ~= "" then
       print("audio: " .. warning)
       _menu.audio_note = "AUDIO: not connected, see SYSTEM > AUDIO"
-      _norns.set_warning(_menu.audio_note)
+      _menu.show_note()
     end
   end)
 end

@@ -75,6 +75,11 @@ a scratch copy, not applied); (2) `CLOCK_MONOTONIC` for the internal clock, docu
 78eedb02 is that a **saved choice is restored at boot**: `~/verdandi-home/.norns-input` (SYS, APP or the sink monitor) or `.mic-off` (OFF). Before 78eedb02 SYS/APP did not exist
 on Linux, so a SYS choice could not be made or restored. If your laptop's norns home has a `.norns-input` file from pressing the MIC button once (MIC > SYS), it starts in SYS.
 
+## serialosc conflict on the grid's serial port (Level 1)
+Norns now detects another process (serialosc's `serialosc-device`) on the serial port of a grid or arc it opened, logs one plain line per plug-in with the stop/start commands and the
+replug hint, and shows a standing note on the device window while it lasts; off with `NORNS_SERIALOSC_CHECK=0` / `serialosc_check=0`. Detect and warn only: nothing is stopped, no OSC. Details:
+`phase-3.md`, `RUN-ON-LAPTOP.md`, `HARDWARE-CHECKLIST.md`.
+
 ## MIDI auto-connect: own ALSA client found by thread id
 Fixed after a real-laptop test: ALSA reports the id of the thread that created a client, so norns' own virtual RawMIDI port (`Client-128`, a thread of norns) was linked back into `Verdandi:midi_in`
 along with Reaper's. Own clients are now matched against the process id, all thread ids and the ids of processes norns started; tests use a client list as data (no ALSA needed).

@@ -528,3 +528,15 @@ too: the sidecar, sclang). Read from `/proc` at every check. Tests (`tests/crone
 reported with a thread id of norns is excluded and Reaper's is wanted; with the process id alone it would be missed (the old rule, as a test of the bug); kernel clients
 (pid 0 or -1) are never norns'; descendants of a process, not of unrelated ones, no hang on a loop. The `/proc` scan was also run by hand: a process with one thread and one
 child reports the process id, the thread id and the child's id.
+
+## serialosc conflict on the grid's serial port (Level 1: detect and warn only)
+Evidence (a real laptop): a real 128 grid at `/dev/ttyACM0` and `serialosc-device -c /var/lib/serialosc /dev/ttyACM0` (started by the system's `serialosc.service`) both
+reading it: lagging, out-of-order and invalid events (row 33 on an 8-row grid); clean after `systemctl stop serialosc.service` and a replug.
+Built (Linux desktop only; macOS and the Pi unchanged): `serialosc_conflict.h` (pure: process lists as data; `serialosc-device` found by name, `serialosc-devic` when cut at 15
+characters, its last argument resolved with `realpath` against the device norns opened; open files of serialosc-named processes; `serialoscd` and `serialosc-detector` alone
+never; norns' own pid never), `serialosc_check.cc` (reads `/proc`, no root, unreadable entries skipped, one log line per episode, nothing stopped), a hook in `w_handle_monome_add`
+and `_remove` (every plug-in and the start-up scan), a 3 s metro (33) in `lua/core/menu.lua`, and one standing note composed with the other notes (`_menu.show_note`: sink monitor
+warning, then serialosc, then audio). Switch: `NORNS_SERIALOSC_CHECK=0` / `serialosc_check=0` in `audio.conf`. Tests first: `linux/tests/serialosc_conflict_test.cpp` (13 cases: conflict, none,
+`serialoscd`/detector alone, another device, a changed ttyACM number, a by-id symlink both ways, unreadable entries, open file, own pid, names, the log line, the note, the switch), the
+headless `serialosc_test.sh` with fake processes carrying serialosc's command lines (`exec -a serialosc-devic`), and `grid_note_test.lua`. Not tested here: a real grid and a real serialosc.
+Not built (by instruction): stopping the service, anything with OSC.

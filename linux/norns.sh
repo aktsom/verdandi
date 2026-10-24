@@ -235,6 +235,9 @@ export NORNS_SYS_MONITOR
 # the optional MIDI auto-connect: JACK MIDI output port name prefixes (";" between) to link to Verdandi:midi_in. off by default
 NORNS_MIDI_IN_FROM="${NORNS_MIDI_IN_FROM:-$(conf_get midi_in_from)}"
 export NORNS_MIDI_IN_FROM
+# serialosc (serialosc-device) on the grid's serial port is reported; NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf turns that off
+NORNS_SERIALOSC_CHECK="${NORNS_SERIALOSC_CHECK:-$(conf_get serialosc_check)}"
+export NORNS_SERIALOSC_CHECK
 
 AUDIO_TOOL="$REPO/build/linux/audio_devices"
 export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
