@@ -16,7 +16,7 @@ P=matron/src/platform/macos
 M=macos/tests
 T="$(mktemp -d)"
 # KEEP_LOGS=<dir>: copy every log of this run there before the temporary folder goes (to diagnose a failure)
-trap '[ -n "${KEEP_LOGS:-}" ] && { mkdir -p "$KEEP_LOGS" && cp "$T"/*.log "$KEEP_LOGS"/ 2> /dev/null; }; rm -rf "$T"' EXIT
+trap '[ -n "${KEEP_LOGS:-}" ] && { mkdir -p "$KEEP_LOGS" && cp "$T"/*.log "$T"/*.rate "$KEEP_LOGS"/ 2> /dev/null; }; rm -rf "$T"' EXIT
 . "$REPO/linux/waf-path.sh"
 WAF="$(find_waf)"
 
@@ -264,6 +264,26 @@ if command -v jackd > /dev/null; then
         return $bad
     }
     run "input:MIC, SYS (all apps but norns), APP, sink monitor, OFF by port flags and names" input_ok
+fi
+
+# the internal clock at 120 BPM must run at 2 beats per second while the input is SYS in a graph with several clients.
+# (the jackd flavor passes; the PipeWire flavor with WirePlumber is the bug of docs/port/KNOWN-ISSUES.md item 6: it is listed
+# as known until the fix is decided)
+clock_rate_ok() { # log: RATE within 5% of 2.0
+    awk '/^RATE/ { exit !($2 > 1.9 && $2 < 2.1) }' "$1.rate" || { echo "internal clock: $(cat "$1.rate" 2> /dev/null), want about 2.000 beats/s"; return 1; }
+}
+if command -v jackd > /dev/null; then
+    CLOG="$T/clockrate-jackd.log"
+    "$REPO/linux/tests/clock_rate_test.sh" jackd "$CLOG" > /dev/null 2>&1
+    run "clock:internal clock 2 beats per second with SYS input in a busy jackd graph" clock_rate_ok "$CLOG"
+fi
+if command -v pipewire > /dev/null && command -v wireplumber > /dev/null && command -v pw-jack > /dev/null &&
+    command -v dbus-run-session > /dev/null; then
+    CLOGP="$T/clockrate-pipewire.log"
+    "$REPO/linux/tests/clock_rate_test.sh" pipewire "$CLOGP" > /dev/null 2>&1
+    known "clock:internal clock 2 beats per second with SYS input under PipeWire + WirePlumber (KNOWN-ISSUES 6)" clock_rate_ok "$CLOGP"
+else
+    echo "SKIP  clock: PipeWire flavor (needs pipewire, wireplumber, pw-jack, dbus-run-session)"
 fi
 
 # the optional MIDI auto-connect (midi_in_from= in audio.conf, or NORNS_MIDI_IN_FROM): a port matching a prefix is linked to

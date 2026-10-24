@@ -65,6 +65,13 @@ under load) but **not applied**: `docs/port/KNOWN-ISSUES.md`, logs in `docs/port
   The leftover `sidecar [norns]` processes seen in my sandbox come from starting the tests with `nohup`
   (SIGHUP is then ignored, so they do not die with norns); a normal terminal is not affected.
 
+## Clock freeze with SYS under PipeWire + WirePlumber (Ken's bisect: 78eedb02)
+Reproduced in a private PipeWire + WirePlumber (0.06 beats/s instead of 2), mechanism found (JACK frame time is the driver's counter; its base jumps when
+SYS links applications into crone; the code ignores backward deltas, so time freezes), fix PROPOSED not applied (`KNOWN-ISSUES.md` item 6,
+`clock-fix-proposal.diff`), regression test added (`linux/tests/clock_rate_test.sh`; the PipeWire flavor is KNOWN until the fix). MIDI auto-connect now
+excludes norns' own ALSA MIDI clients and `Midi Through` and supports `*` in patterns. Clean-clone build as non-root without `python`: OK at 770a5ca.
+**Nothing from this round is pushed (Ken: wait for confirmation); the commits are local.**
+
 ## Real-hardware findings (Ken's laptop)
 Recorded in `HARDWARE-CHECKLIST.md` ("Done on a real machine"): silent run, sound under PipeWire, Reaper clock/notes through the
 Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped several times (design for auto-connect only).

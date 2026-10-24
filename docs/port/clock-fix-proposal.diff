@@ -1,0 +1,42 @@
+--- a/matron/src/jack_client.cpp
++++ b/matron/src/jack_client.cpp
+@@ -14,6 +14,8 @@
+ // maintain a 64-bit frame counter from jack's 32-bit frame time.
+ // extends wraparound at 48khz from ~25 hours to millions of years.
+ static uint64_t g_last_total_frames = 0ULL;
++// the raw 32-bit frame time of the last accepted reading (follows a change of base, see jack_client_get_current_time)
++static uint32_t g_last_raw_frames = 0;
+ 
+ // protects access to g_last_total_frames.
+ // a mutex is safe here as time is not read from the audio thread.
+@@ -62,7 +64,7 @@
+ 
+     pthread_mutex_lock(&g_time_lock);
+ 
+-    uint32_t last_frames_32 = (uint32_t)g_last_total_frames;
++    uint32_t last_frames_32 = g_last_raw_frames;
+ 
+     // calculate delta using modulo arithmetic properties
+     int32_t delta = (int32_t)(current_frames - last_frames_32);
+@@ -71,6 +73,13 @@
+     // ignores backward jitter or extremely long stalls (>12h).
+     if (delta > 0) {
+         g_last_total_frames += (uint64_t)delta;
++        g_last_raw_frames = current_frames;
++    } else if (delta < -(int32_t)jack_sample_rate) {
++        // more than a second back: not jitter but a new base. under PipeWire the frame time counts the frames of
++        // the graph's driver, and it starts counting from another number when the driver of norns' nodes changes
++        // (SYS links applications into crone). time does not go back, and it does not stand still until the old
++        // base is reached again: follow the new base from here
++        g_last_raw_frames = current_frames;
+     }
+ 
+     uint64_t result = g_last_total_frames;
+@@ -112,6 +121,7 @@
+ void jack_client_test_set_time_state(uint64_t frames) {
+     pthread_mutex_lock(&g_time_lock);
+     g_last_total_frames = frames;
++    g_last_raw_frames = (uint32_t)frames;
+     pthread_mutex_unlock(&g_time_lock);
+ }
+ 

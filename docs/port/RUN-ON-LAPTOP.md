@@ -81,11 +81,14 @@ linux/norns.sh --terminal
   `sys_monitor=1` in `audio.conf` (or `NORNS_SYS_MONITOR=1`); the device then shows a warning while it is on.
   With MIC on, the input is the live microphone of the **default source**: with speakers and a script that plays its input,
   keep the volume low or use headphones (acoustic feedback).
+- **Known problem (found by your bisect, not fixed yet):** with SYS or APP on, the internal clock can freeze or crawl under PipeWire with
+  WirePlumber (`KNOWN-ISSUES.md` item 6: the clock reads JACK's frame time, whose base jumps when applications are linked into crone).
+  MIC and OFF are not affected. Run `NORNS_CLOCK_DEBUG=1 linux/norns.sh --terminal` to see `clock: jack frame time jumped by ...` lines.
 - **MIDI from a DAW (Reaper):** norns' JACK MIDI input is the port `Verdandi:midi_in` (device "Verdandi JACK in", vport 1).
   Connect Reaper's MIDI output (under PipeWire a `Midi-Bridge` port such as `Client-<n> Virtual RawMIDI`) to it with
   `pw-jack jack_connect "<Reaper's port>" Verdandi:midi_in` or qpwgraph; `pw-jack jack_lsp -t | grep -i midi` lists them. Set
   `clock_source` to midi in PARAMS > CLOCK. To have it made (and made again when it is dropped) put
-  `midi_in_from=Midi-Bridge:Client-` in `~/verdandi-home/audio.conf` (the start of the port's whole name as `jack_lsp` shows it;
+  `midi_in_from=Midi-Bridge:Client-* Virtual RawMIDI` in `~/verdandi-home/audio.conf` (the start of the port's whole name as `jack_lsp` shows it, a `*` for the client number that changes between runs; norns' own MIDI ports and `Midi Through` are never linked;
   several prefixes separated by `;`; `NORNS_MIDI_IN_FROM=...` in the environment wins). It is off without that line. norns checks every
   2 seconds, logs `midi: connected/reconnected ...`, and SYSTEM > DEVICES > MIDI shows "AUTO-LINK: n linked". The test script `window_probe.lua` now listens on every "Verdandi" MIDI device (the JACK input and
   the keys window).

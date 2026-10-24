@@ -500,3 +500,20 @@ per minute). `NORNS_MIDI_POKE=0` turns the registration wake-up off (tests, to p
 See `KNOWN-ISSUES.md` item 4 (now FIXED for the Linux desktop build): 256 KiB stack, correct error names, a metro that cannot start says so
 once; test with a TLS-pressure preload library (`linux/tests/tls_pressure.c`). No other small fixed-stack thread exists in the repo.
 Shared file changed: `matron/src/metro.cc` (everything under `NORNS_LINUX_DESKTOP`; the macOS and Pi paths are textually the same as before).
+
+## MIDI auto-connect: own MIDI ports and loopbacks are excluded; wildcard patterns (after Ken's question)
+- **Before this change** the code excluded only norns' own **JACK** clients (`crone`, `softcut`, `SuperCollider`, `Verdandi`, `Verdandi ctl`),
+  so a prefix like `Midi-Bridge:Client-` would also have matched norns' own virtual RawMIDI device (an ALSA client named `Client-<n>`,
+  made by `snd_rawmidi_open(..., "virtual")`) and its keys window (ALSA client "Verdandi"), and `Midi Through`: a loop. **"Midi
+  Through" was not excluded either.**
+- **Now:** (1) a port is never linked if its name contains, as a whole word, the name of one of norns' own ALSA sequencer clients
+  (found at each check through the ALSA sequencer: the clients whose pid is norns', plus `Client-<id>`); the number changes between
+  runs, the pid does not; (2) never a port whose name contains `Midi Through`, even if the prefix names it; (3) a `*` in a
+  `midi_in_from` entry stands for any text (anchored at the start, open at the end; without `*` it is a prefix as before).
+  Tests (`tests/crone/test_midi_route.cpp`): own clients `Client-128` and `Verdandi` excluded while `Client-129` is wanted;
+  `Client-128` is not `Client-1280`; `Midi Through` never; the wildcard cases. **Not tested here:** the ALSA sequencer part (there is
+  no `/dev/snd/seq` in the container); it is in `HARDWARE-CHECKLIST.md`.
+- **For Reaper's virtual port with a changing client number:** run `pw-jack jack_lsp -t | grep -i midi` with Reaper's output enabled and
+  copy the port's exact name, for example `Midi-Bridge:Client-20 Virtual RawMIDI:(capture_0)`, replace the number by `*`:
+  `midi_in_from=Midi-Bridge:Client-* Virtual RawMIDI` (it matches Reaper's port, not norns' own, which is excluded by the rule above, and
+  not `Midi Through`). If another program also has a "Virtual RawMIDI" port, add whatever distinguishes Reaper's in the full name.

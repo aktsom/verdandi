@@ -147,3 +147,58 @@ parameter, so nothing redraws it; it redraws on input and on a few events (midi 
 a whole number and refreshed once per second at most. A fix would be small (a `refresh` function for the params page, or a
 redraw after the silent `params:set` when the tempo changed and the CLOCK page is open) but it changes upstream behavior in
 a shared Lua file; not done, waiting for Ken.
+
+## 6. The internal clock freezes (0.06 beats/s instead of 2) with SYS/APP under PipeWire + WirePlumber (found by Ken's bisect; reproduced; mechanism found; fix PROPOSED, not applied)
+
+**Ken's bisect:** healthy at 37d244b5 (about 21 beats in 11 s at 120 BPM), slow at 78eedb02 (0.625 beats in 11 s) and everything after.
+
+**Mechanism.** The internal clock's time comes from `jack_client_get_current_time()` (`matron/src/jack_client.cpp`): the 32-bit
+`jack_frame_time()` of the client "matron-clock", extended to 64 bits. Under PipeWire that value is the frame counter of the
+**driver of the graph the client's node is in**, not a wall clock. All JACK clients share one group (`node.group = group.dsp.0`: norns'
+clients and every other application's, seen with `pw-dump`), so when the graph is re-organised (here: SYS links application
+streams into crone, which makes the group run under the sound card's / null sink's driver) the counter's base changes. The code
+accepts a forward jump and **ignores every backward delta** ("backward jitter"). Measured in the failing run:
+`jack frame time jumped by +560.691 s (forward, accepted)` once, then `-503.146 s (backward, ignored)` on every reading for the rest
+of the run: the clock's time stands still for the 503 s it takes the new base to catch up with the stored value. The clock thread
+(`clock_internal.cc`) sleeps `tick + (next_tick - now)`; with `now` frozen that grows by one tick per tick, so the beat rate falls
+off: 0.54 beats in 8 s (0.067 beats/s; Ken: 0.625 in 11 s).
+
+**Why step 5 and not before:** SYS/APP are the first thing in norns that links other applications' ports into crone. MIC and OFF
+(and links made by hand from outside) leave the group's driver as it was.
+
+**Reproduction** (private PipeWire + WirePlumber with a null sink as driver, seven fake JACK clients with application-like and
+card-like ports, `linux/tests/clock_rate_test.sh`, internal clock at 120 BPM, beats per second over 8 s; expected 2.000):
+
+| build / setup | input at start | beats per second |
+|---|---|---|
+| 78eedb02..HEAD, PipeWire + WirePlumber | SYS | **0.067, 0.062** (0.54 and 0.50 beats in 8 s) |
+| same, with 5 stream clients appearing and vanishing | SYS | 0.067 |
+| same | MIC | 2.000 |
+| same | OFF (MIC off) | 1.990 |
+| same, stream churn only | MIC | 2.000 |
+| same, links made by hand from outside | MIC | 2.000 |
+| HEAD, PipeWire **without** WirePlumber | SYS (also with churn) | 2.000 |
+| HEAD, own jackd (dummy driver) | SYS | 2.000 |
+| 37d244b5 (before step 5), PipeWire + WirePlumber | (no SYS there) | 2.000 |
+| scratch copy of HEAD with the proposed fix, PipeWire + WirePlumber | SYS | **2.000** |
+
+Not reproduced without WirePlumber (the driver does not change), nor with the dummy driver of jackd; a real sound card driver
+and Reaper, as on the laptop, are not available here. `NORNS_CLOCK_DEBUG=1` (a diagnostic added to `jack_client.cpp`, desktop Linux
+only, off by default) prints every jump of the frame time: on the laptop it would show whether the same forward/backward pair
+happens there.
+
+**Proposed fix (not applied; `docs/port/clock-fix-proposal.diff`, 12 lines in `jack_client.cpp`):** keep the raw frame time of the
+last accepted reading separately from the total, and treat a backward jump of more than one second as a **new base** to follow
+(the total does not go back, and does not stand still until the old base is reached): `last_raw = current`. Small backward
+jitter is ignored as before, wrap-around is unchanged. Verified in a scratch copy: the existing `test_matron_jack_client` cases
+pass (4 of 4) and SYS under PipeWire + WirePlumber runs at 2.000 beats per second. A forward jump (the other direction of a
+base change) is still accepted: harmless for the clock (its catch-up logic skips ahead), but it moves Link and MIDI-clock
+timestamps once; `clock_get_system_time` stays what it is. Wider alternative: take the internal clock's time from `CLOCK_MONOTONIC`
+and use JACK time only where audio frames matter. Needs Ken's decision (shared file; Pi and macOS would get the same
+change unless guarded by `NORNS_LINUX_DESKTOP`).
+
+**Regression test (added):** `linux/tests/clock_rate_test.sh` measures beats per second of the internal clock while the input is SYS
+(applications linked into crone) in a busy graph: the jackd flavor passes in `run_all.sh`; the PipeWire + WirePlumber flavor is
+listed as KNOWN until the fix is applied (it then becomes a normal check: change `known` to `run`).
+
+**Until it is fixed:** do not use SYS or APP on a PipeWire desktop with WirePlumber if the internal clock matters (MIC and OFF are fine).

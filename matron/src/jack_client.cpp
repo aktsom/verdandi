@@ -1,6 +1,7 @@
 #include <atomic>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <jack/jack.h>
 
@@ -67,6 +68,14 @@ double jack_client_get_current_time() {
     // calculate delta using modulo arithmetic properties
     int32_t delta = (int32_t)(current_frames - last_frames_32);
 
+#ifdef NORNS_LINUX_DESKTOP
+    // diagnostic (NORNS_CLOCK_DEBUG=1): a jump of JACK's frame time, forward or backward, is what freezes or skips the clock
+    static const bool dbg = getenv("NORNS_CLOCK_DEBUG") != NULL;
+    if (dbg && (delta > (int32_t)jack_sample_rate || delta < 0)) {
+        fprintf(stderr, "clock: jack frame time jumped by %.3f s (%s)\n", (double)delta / jack_sample_rate,
+                delta > 0 ? "forward, accepted" : "backward, ignored");
+    }
+#endif
     // only advance if delta is positive.
     // ignores backward jitter or extremely long stalls (>12h).
     if (delta > 0) {

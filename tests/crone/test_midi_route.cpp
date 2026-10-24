@@ -60,3 +60,42 @@ TEST_CASE("a log line at most once a minute per port") {
     CHECK(t.allow("B:o", 130.0));
     CHECK(t.allow("A:o", 161.0));
 }
+
+// ---- norns' own ALSA MIDI clients and loopbacks must never be linked into Verdandi:midi_in (that would be a loop)
+
+TEST_CASE("wildcard: '*' stands for any text (the client number changes between runs); the end is open") {
+    CHECK(matchesPattern("Midi-Bridge:Client-20 Virtual RawMIDI:(capture_0)", "Midi-Bridge:Client-* Virtual RawMIDI"));
+    CHECK(matchesPattern("Midi-Bridge:Client-1234 Virtual RawMIDI:(capture_0)", "Midi-Bridge:Client-* Virtual RawMIDI"));
+    CHECK_FALSE(matchesPattern("Midi-Bridge:Client-20 Other:(capture_0)", "Midi-Bridge:Client-* Virtual RawMIDI"));
+    CHECK_FALSE(matchesPattern("Other:Client-20 Virtual RawMIDI", "Midi-Bridge:Client-* Virtual RawMIDI"));
+    CHECK(matchesPattern("Fake DAW:out", "Fake DAW")); // without '*': a prefix, as before
+    CHECK(matchesPattern("Fake DAW:out", "*DAW:out"));
+    CHECK_FALSE(matchesPattern("Fake DAW:out", "DAW"));
+}
+
+TEST_CASE("norns' own ALSA clients are never wanted, whatever the prefix") {
+    // norns' own: the virtual RawMIDI device (a client named Client-128 this run) and the keys window ("Verdandi")
+    std::vector<std::string> own = {"Client-128", "Verdandi"};
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Client-128 Virtual RawMIDI:(capture_0)"),
+                                   out("Midi-Bridge:Client-129 Virtual RawMIDI:(capture_0)"),
+                                   out("Midi-Bridge:Verdandi:(capture_0) norns keys")};
+    auto w = wanted(ports, parsePrefixes("Midi-Bridge:"), own);
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Client-129 Virtual RawMIDI:(capture_0)"); // Reaper's, another number
+}
+
+TEST_CASE("own client names match whole words: Client-128 is not Client-1280, Verdandi is not Verdandi2") {
+    std::vector<std::string> own = {"Client-128"};
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Client-1280 Virtual RawMIDI:(capture_0)")};
+    CHECK(wanted(ports, parsePrefixes("Midi-Bridge"), own).size() == 1);
+    CHECK(wanted({out("Midi-Bridge:Verdandi2:(capture_0)")}, parsePrefixes("Midi-Bridge"), {"Verdandi"}).size() == 1);
+}
+
+TEST_CASE("the ALSA loopback \"Midi Through\" is never wanted: what is written to it comes out again") {
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Midi Through:(capture_0)"), out("Midi-Bridge:Reaper:(capture_0)")};
+    auto w = wanted(ports, parsePrefixes("Midi-Bridge:"));
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Reaper:(capture_0)");
+    // even if the prefix names it
+    CHECK(wanted(ports, parsePrefixes("Midi-Bridge:Midi Through")).empty());
+}

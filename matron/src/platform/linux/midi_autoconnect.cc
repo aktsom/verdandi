@@ -7,12 +7,14 @@
  * crone/src/MidiRoute.h (tested).
  */
 
+#include <alsa/asoundlib.h>
 #include <jack/jack.h>
 #include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <mutex>
@@ -43,6 +45,33 @@ static double now_s(void) {
     return (double)ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
+// the names of norns' own ALSA sequencer clients (the virtual RawMIDI device, the keys window, ...): the clients whose pid
+// is ours. they show up in JACK as Midi-Bridge ports and must never be linked back into Verdandi:midi_in
+static std::vector<std::string> own_alsa_clients(void) {
+    static snd_seq_t *seq = NULL;
+    static bool tried = false;
+    std::vector<std::string> own;
+    if (!tried) {
+        tried = true;
+        if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) < 0) {
+            seq = NULL; // no ALSA sequencer here: norns has no ALSA MIDI clients either
+        }
+    }
+    if (seq == NULL) {
+        return own;
+    }
+    snd_seq_client_info_t *info;
+    snd_seq_client_info_alloca(&info);
+    snd_seq_client_info_set_client(info, -1);
+    while (snd_seq_query_next_client(seq, info) >= 0) {
+        if (snd_seq_client_info_get_pid(info) == (int)getpid()) {
+            own.push_back(snd_seq_client_info_get_name(info));
+            own.push_back("Client-" + std::to_string(snd_seq_client_info_get_client(info)));
+        }
+    }
+    return own;
+}
+
 static void apply(jack_client_t *c) {
     std::vector<MidiPort> ports;
     const char **names = jack_get_ports(c, NULL, JACK_DEFAULT_MIDI_TYPE, 0);
@@ -68,7 +97,7 @@ static void apply(jack_client_t *c) {
         jack_free(conns);
     }
 
-    std::vector<std::string> want = wanted(ports, prefixes);
+    std::vector<std::string> want = wanted(ports, prefixes, own_alsa_clients());
     for (const auto &w : missingFrom(want, linked)) {
         int err = jack_connect(c, w.c_str(), MIDI_IN);
         if (err != 0 && err != EEXIST) {

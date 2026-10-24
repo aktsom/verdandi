@@ -39,15 +39,77 @@ inline std::vector<std::string> parsePrefixes(const std::string &s) {
     return out;
 }
 
-// the MIDI output ports whose whole name starts with a prefix; never one of norns' own clients
-inline std::vector<std::string> wanted(const std::vector<MidiPort> &ports, const std::vector<std::string> &prefixes) {
+// pattern against a port name: anchored at the start, open at the end; '*' stands for any text (the number in
+// "Client-20 Virtual RawMIDI" changes between runs). without a '*' it is a plain prefix
+inline bool matchesPattern(const std::string &name, const std::string &pattern) {
+    size_t n = 0, p = 0, star = std::string::npos, mark = 0;
+    while (n < name.size()) {
+        if (p < pattern.size() && pattern[p] == '*') {
+            star = p++;
+            mark = n;
+        } else if (p < pattern.size() && pattern[p] == name[n]) {
+            n++;
+            p++;
+        } else if (p == pattern.size()) {
+            return true; // the pattern is used up: the rest of the name is the open end
+        } else if (star != std::string::npos) {
+            p = star + 1;
+            n = ++mark;
+        } else {
+            return false;
+        }
+    }
+    while (p < pattern.size() && pattern[p] == '*') {
+        p++;
+    }
+    return p == pattern.size();
+}
+
+inline bool isWordChar(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+// does the port name contain this client name as a whole word ("Client-128" is not in "Client-1280")
+inline bool containsWord(const std::string &name, const std::string &word) {
+    if (word.empty()) {
+        return false;
+    }
+    for (size_t i = name.find(word); i != std::string::npos; i = name.find(word, i + 1)) {
+        bool before = i == 0 || !isWordChar(name[i - 1]);
+        bool after = i + word.size() >= name.size() || !isWordChar(name[i + word.size()]);
+        if (before && after) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ports that are never linked: norns' own ALSA MIDI clients (the virtual RawMIDI device, the keys window; own = their
+// client names, found by the glue through the ALSA sequencer) and the ALSA loopback "Midi Through" (whatever is
+// written to it comes out again: norns' own output would come back into its input)
+inline bool neverLinked(const std::string &name, const std::vector<std::string> &own) {
+    if (name.find("Midi Through") != std::string::npos) {
+        return true;
+    }
+    for (const auto &o : own) {
+        if (containsWord(name, o)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// the MIDI output ports that match a pattern (see matchesPattern); never one of norns' own JACK clients, and nothing
+// that neverLinked says no to
+inline std::vector<std::string> wanted(const std::vector<MidiPort> &ports, const std::vector<std::string> &prefixes,
+                                       const std::vector<std::string> &own = {}) {
     std::vector<std::string> out;
     for (const auto &p : ports) {
-        if (!p.midi || !p.output || InputRoute::isOwnClient(PortSelect::clientOf(p.name))) {
+        if (!p.midi || !p.output || InputRoute::isOwnClient(PortSelect::clientOf(p.name)) || neverLinked(p.name, own)) {
             continue;
         }
         for (const auto &pre : prefixes) {
-            if (p.name.compare(0, pre.size(), pre) == 0) {
+            if (matchesPattern(p.name, pre)) {
                 out.push_back(p.name);
                 break;
             }
