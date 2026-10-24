@@ -16,6 +16,7 @@ sleep 0.4
 "$T/fake_card" "Vivaldi" app &
 "$T/fake_card" "Vivaldi-73" app &
 "$T/fake_card" "mpv" app &
+"$T/fake_card" "PipeWire ALSA [reaper]/ALSA Capture [reaper]" capstream &
 sleep 0.5
 export FAKE="$T/fake_card" NORNS_SYS_MONITOR=1
 NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_input.lua" "$LOG" > /dev/null 2>&1

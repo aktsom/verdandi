@@ -31,6 +31,9 @@ static std::vector<PortInfo> desktop() {
             out("softcut:output_1"),
             out("SuperCollider:out_1"),
             out("Verdandi:midi_in", false, false),
+            // Reaper reading the microphone through the ALSA plugin: a capture stream, whose output ports are monitor_*
+            out("PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL"),
+            out("PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FR"),
             in("crone:input_1")};
 }
 
@@ -148,4 +151,43 @@ TEST_CASE("surplus links: what feeds crone's inputs 1 and 2 and is not wanted") 
                               {"X:o", "crone:input_2"}};
     auto s = surplus(want, have);
     CHECK(s.size() == 2);
+}
+
+TEST_CASE("a capture stream (monitor_* ports) is not an application: not listed, not linked by SYS or APP") {
+    for (const auto &a : listApps(desktop())) {
+        CHECK(a.name.find("Capture") == std::string::npos);
+        CHECK(a.name.find("reaper") == std::string::npos);
+    }
+    for (const char *mode : {"system", "app"}) {
+        auto l = desired(mode, "PipeWire ALSA [reaper]/ALSA Capture [reaper]", desktop(), "", "");
+        for (const auto &k : l) {
+            CHECK(k.from.find("ALSA Capture") == std::string::npos);
+        }
+    }
+}
+
+TEST_CASE("the deny-list: monitor* and capture* ports are skipped, any other name still counts") {
+    CHECK(isDeniedPort("PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL"));
+    CHECK(isDeniedPort("X:monitor_1"));
+    CHECK(isDeniedPort("X:capture_FL"));
+    CHECK(isDeniedPort("X:capture_MONO"));
+    CHECK_FALSE(isDeniedPort("Vivaldi:output_FL"));
+    CHECK_FALSE(isDeniedPort("mpv:output_1"));
+    CHECK_FALSE(isDeniedPort("Tuner:out"));          // a plain JACK application
+    CHECK_FALSE(isDeniedPort("Synth:audio_out_L"));  // not named output*: still an application
+}
+
+TEST_CASE("a client with both output and monitor ports: only the output ports are taken") {
+    std::vector<PortInfo> p = {out("Player:output_FL"), out("Player:output_FR"), out("Player:monitor_FL"),
+                               out("Player:monitor_FR")};
+    auto l = desired("system", "", p, "", "");
+    CHECK(l.size() == 2);
+    CHECK(has(l, "Player:output_FL", "crone:input_1"));
+    CHECK(has(l, "Player:output_FR", "crone:input_2"));
+}
+
+TEST_CASE("a client that only has monitor ports is no application at all") {
+    std::vector<PortInfo> p = {out("Rec:monitor_FL"), out("Rec:monitor_FR")};
+    CHECK(listApps(p).empty());
+    CHECK(desired("system", "", p, "", "").empty());
 }

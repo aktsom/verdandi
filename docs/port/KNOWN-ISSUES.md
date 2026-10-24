@@ -224,7 +224,7 @@ The cleaner long-term version is to take the internal clock's time from `CLOCK_M
 engine sync): then no change of the graph's driver can disturb the clock. It touches how every clock source relates to JACK time, so it is a design step of its own
 (shared code: Pi and macOS too), not a patch.
 
-## 7. SYS: a microphone capture stream is taken as an application; and SYS is not heard at the output (Ken's laptop test; investigated, NO code changed, options for Ken)
+## 7. SYS: a microphone capture stream is taken as an application; and SYS is not heard at the output (Ken's laptop test; 7.1 and the monitor-mode condition FIXED, unlinking NOT built)
 
 ### 7.1 Reaper's microphone capture is linked into crone as if it were an application (bug in step 5)
 **Observed (Ken):** `PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL/FR` linked to `crone:input_1/2` next to the browser; clapping at the
@@ -308,3 +308,15 @@ receives it (a second link from the same port to `crone:input_1`). Hearing the r
 
 **Recommendation:** fix 7.1 now with option 1 (port-name deny-list) plus the fixture and test; fix the `monitor` condition in 7.2; offer 7.3 option 3 (an explicit "SYS through norns" mode with option 2's unlink and restore,
 tested first by hand by Ken as above) rather than changing what SYS means. Awaiting Ken's decision; nothing is implemented.
+
+### Decisions on item 7 (Ken) and what was done
+- **7.1 fixed (option 1, as a deny-list):** `InputRoute.h` `isDeniedPort()`: SYS and APP skip every port whose name part starts with `monitor` or `capture` (case-insensitive);
+  anything else, `output_*` or not, still counts. A client that has only such ports is no application at all; a client with both takes its `output_*` ports only.
+  Tests first: the fake graph has the capture stream `PipeWire ALSA [reaper]/ALSA Capture [reaper]` with `monitor_FL/FR` (`fake_card ... capstream`), `tests/crone/test_input_route.cpp`
+  has the same client in its desktop fixture plus four new cases, `run_all.sh` checks that neither SYS nor APP is fed by it and that it is not in the app list.
+- **Sink-monitor condition fixed:** `lua/core/menu.lua` now switches the input monitor off for `monitor` mode too (`mode ~= "system" and mode ~= "app" and mode ~= "monitor"`). Test:
+  `linux/tests/input_monitor_test.lua` (MIC and OFF hear the monitor; SYS, APP and the sink monitor do not; the warning is shown in the sink monitor mode); it failed before the change.
+- **Unlinking (7.3 options 2 and 3) is NOT built (Ken's decision).** Ken's hand test on the laptop: a stream whose direct link to the sound card he removed
+  (`jack_disconnect`) **stayed unlinked for over a minute and through pause/play**, but **a brand new stream (`Vivaldi-123`) was created with the direct link in place**. So WirePlumber
+  does not re-link an existing stream that lost its link, but links every new stream: unlinking would need **continuous re-checking** (a port-registration or port-connect callback
+  that removes the card link of each new stream as it appears, with the race against the session manager, plus restoring on exit). Revisit after Ken has used SYS for a while.

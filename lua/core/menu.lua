@@ -243,7 +243,8 @@ function _menu.set_input(mode, bundle, name, quiet)
   if mode == "app" and not bundle then mode = "off" end
   set_capture(mode == "mic")
   -- other apps keep playing: the monitor of them goes to TAPE only, not heard a second time
-  if _norns.monitor_out then _norns.monitor_out(mode ~= "system" and mode ~= "app") end
+  -- (the sink monitor contains norns' own output: its input monitor must be off too, or it is a loop)
+  if _norns.monitor_out then _norns.monitor_out(mode ~= "system" and mode ~= "app" and mode ~= "monitor") end
   if _norns.app_input then
     local label = not quiet and (INPUT_LABEL[mode] or name or bundle) or nil
     if mode == "system" then

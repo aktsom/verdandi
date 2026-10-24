@@ -7,6 +7,8 @@
 // streams ("Vivaldi", "Vivaldi-73"). norns' own clients and sound cards are not applications.
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -47,6 +49,27 @@ inline std::string portPart(const std::string &name) {
     return i == std::string::npos ? name : name.substr(i + 1);
 }
 
+// ports SYS and APP never take, whatever the client: the name part starts with "monitor" or "capture". under PipeWire a
+// capture stream (Reaper reading the microphone through the ALSA plugin) is a client whose output ports are monitor_FL/FR:
+// the microphone, not an application's playback. a deny-list, not "only output*": a playback stream or a plain JACK
+// application with other port names (out, audio_out_L) is still an application
+inline bool isDeniedPort(const std::string &name) {
+    std::string part = portPart(name);
+    auto starts = [&](const char *w) {
+        size_t n = strlen(w);
+        if (part.size() < n) {
+            return false;
+        }
+        for (size_t i = 0; i < n; i++) {
+            if (tolower((unsigned char)part[i]) != w[i]) {
+                return false;
+            }
+        }
+        return true;
+    };
+    return starts("monitor") || starts("capture");
+}
+
 // the applications: clients with audio output ports, none of them physical, that are not norns and not a card
 // (a client that owns any physical port, input or output, is a card)
 inline std::vector<App> listApps(const std::vector<PortInfo> &ports) {
@@ -58,7 +81,7 @@ inline std::vector<App> listApps(const std::vector<PortInfo> &ports) {
     }
     std::vector<App> apps;
     for (const auto &p : ports) {
-        if (!p.audio || !p.output || p.physical) {
+        if (!p.audio || !p.output || p.physical || isDeniedPort(p.name)) {
             continue;
         }
         std::string client = PortSelect::clientOf(p.name);

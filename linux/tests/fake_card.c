@@ -1,6 +1,6 @@
 /* fake_card <client name> [nomidi|app]: a JACK client that looks like a sound card under PipeWire:
  * capture_FL/FR (output, physical, terminal), playback_FL/FR (input, physical, terminal), monitor_FL/FR
- * (output, not physical) and a physical MIDI port beside them. "app": an application stream instead:
+ * (output, not physical) and a physical MIDI port beside them. "capstream": a capture stream (monitor_FL/FR only). "app": an application stream instead:
  * output_FL/FR (output, not physical) only. for linux/tests/audio_ports_test.sh. runs until killed. */
 #include <jack/jack.h>
 #include <jack/midiport.h>
@@ -26,6 +26,16 @@ int main(int argc, char **argv) {
     if (!c) {
         fprintf(stderr, "fake_card: no jack\n");
         return 1;
+    }
+    if (argc > 2 && strcmp(argv[2], "capstream") == 0) {
+        /* Reaper reading the microphone through the ALSA plugin: a capture stream, its output ports are monitor_FL/FR */
+        out[0] = jack_port_register(c, "monitor_FL", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+        out[1] = jack_port_register(c, "monitor_FR", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+        jack_set_process_callback(c, process, NULL);
+        jack_activate(c);
+        for (;;) {
+            sleep(1);
+        }
     }
     if (argc > 2 && strcmp(argv[2], "app") == 0) {
         out[0] = jack_port_register(c, "output_FL", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);

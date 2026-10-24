@@ -45,6 +45,7 @@ known() { # name, command...: a failure is expected and recorded
 }
 
 run "lua:devices midi status" lua5.3 linux/tests/devices_midi_test.lua
+run "lua:input monitor per mode" lua5.3 linux/tests/input_monitor_test.lua
 for t in menu_pages input_modes fileselect_finder output_fader; do
     run "lua:$t" lua5.3 "$M/${t}_test.lua"
 done
@@ -245,7 +246,11 @@ if command -v jackd > /dev/null; then
             want $st crone:input_1 "mpv:output_FL"
             not $st crone:input_1 "Built-in Audio Analog Stereo:capture_FL"
             not $st crone:input_1 "Built-in Audio Analog Stereo:monitor_FL"
+            # Reaper's microphone capture stream is not an application
+            not $st crone:input_1 "PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL"
+            not $st crone:input_2 "PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FR"
         done
+        not app crone:input_1 "PipeWire ALSA [reaper]/ALSA Capture [reaper]:monitor_FL"
         want system_late crone:input_1 "Late App:output_FL"
         not system crone:input_1 "Late App:output_FL"
         want app crone:input_1 "Vivaldi:output_FL"
@@ -260,6 +265,7 @@ if command -v jackd > /dev/null; then
         grep -q "PROBE apps.*Vivaldi" "$ILOG" || { echo "app list lacks Vivaldi"; bad=1; }
         grep -q "PROBE apps.*Vivaldi-73" "$ILOG" && { echo "app list shows the stream suffix"; bad=1; }
         grep -q "PROBE apps.*crone" "$ILOG" && { echo "app list shows norns itself"; bad=1; }
+        grep -q "PROBE apps.*\(Capture\|reaper\)" "$ILOG" && { echo "app list shows a capture stream"; bad=1; }
         grep -q "PROBE input done" "$ILOG" || { echo "probe did not finish"; bad=1; }
         return $bad
     }
