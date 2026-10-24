@@ -517,3 +517,14 @@ Shared file changed: `matron/src/metro.cc` (everything under `NORNS_LINUX_DESKTO
   copy the port's exact name, for example `Midi-Bridge:Client-20 Virtual RawMIDI:(capture_0)`, replace the number by `*`:
   `midi_in_from=Midi-Bridge:Client-* Virtual RawMIDI` (it matches Reaper's port, not norns' own, which is excluded by the rule above, and
   not `Midi Through`). If another program also has a "Virtual RawMIDI" port, add whatever distinguishes Reaper's in the full name.
+
+## MIDI auto-connect: norns' own ALSA clients found by thread id too (bug found on a real laptop)
+The first version compared the pid that the ALSA sequencer reports for a client with norns' **process id**. On the laptop norns was process 43048
+and its own virtual RawMIDI client (`Client-128`) was reported with pid 43118, a **thread** of norns (ALSA reports the thread that created the client);
+Reaper's client (`Client-129`, pid 42602) was a different process. So norns' own port was not excluded and both were linked into `Verdandi:midi_in`.
+Now (`MidiRoute.h` `ownAlsaNames()`, `descendants()`; `midi_autoconnect.cc` `own_ids()`): a client is norns' own if its reported id is the process id, **any thread id**
+(`/proc/<pid>/task`) of norns, or the process or thread id of any **process norns started** (children and grandchildren from `/proc/*/stat`, which may create ALSA clients
+too: the sidecar, sclang). Read from `/proc` at every check. Tests (`tests/crone/test_midi_route.cpp`, no ALSA sequencer needed, the client list is data): a client
+reported with a thread id of norns is excluded and Reaper's is wanted; with the process id alone it would be missed (the old rule, as a test of the bug); kernel clients
+(pid 0 or -1) are never norns'; descendants of a process, not of unrelated ones, no hang on a loop. The `/proc` scan was also run by hand: a process with one thread and one
+child reports the process id, the thread id and the child's id.

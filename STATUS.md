@@ -75,6 +75,10 @@ a scratch copy, not applied); (2) `CLOCK_MONOTONIC` for the internal clock, docu
 78eedb02 is that a **saved choice is restored at boot**: `~/verdandi-home/.norns-input` (SYS, APP or the sink monitor) or `.mic-off` (OFF). Before 78eedb02 SYS/APP did not exist
 on Linux, so a SYS choice could not be made or restored. If your laptop's norns home has a `.norns-input` file from pressing the MIC button once (MIC > SYS), it starts in SYS.
 
+## MIDI auto-connect: own ALSA client found by thread id
+Fixed after a real-laptop test: ALSA reports the id of the thread that created a client, so norns' own virtual RawMIDI port (`Client-128`, a thread of norns) was linked back into `Verdandi:midi_in`
+along with Reaper's. Own clients are now matched against the process id, all thread ids and the ids of processes norns started; tests use a client list as data (no ALSA needed).
+
 ## SYS fixes after the owner's laptop test (KNOWN-ISSUES item 7)
 Fixed: SYS and APP no longer take capture streams (ports named `monitor*` / `capture*`, a deny-list; Reaper's `ALSA Capture [reaper]:monitor_FL/FR` was feeding the microphone into crone),
 and the optional sink-monitor mode now really switches the input monitor off. Tests first (fake capture-stream client, unit cases, `input_monitor_test.lua`). Why SYS is silent at the output

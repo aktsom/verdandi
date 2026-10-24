@@ -8,6 +8,7 @@
  */
 
 #include <alsa/asoundlib.h>
+#include <dirent.h>
 #include <jack/jack.h>
 #include <semaphore.h>
 #include <stdio.h>
@@ -17,6 +18,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <map>
 #include <mutex>
 #include <set>
 #include <string>
@@ -45,12 +47,67 @@ static double now_s(void) {
     return (double)ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
-// the names of norns' own ALSA sequencer clients (the virtual RawMIDI device, the keys window, ...): the clients whose pid
-// is ours. they show up in JACK as Midi-Bridge ports and must never be linked back into Verdandi:midi_in
+// the process ids and thread ids that are norns': the process, all its threads, and the same for every process it started
+// (a child may create ALSA clients too). ALSA reports, for a client, the id of the thread that created it, so the process id alone
+// does not find norns' own clients. read from /proc each time (threads come and go)
+static std::set<int> own_ids(void) {
+    std::map<int, int> parent;
+    DIR *d = opendir("/proc");
+    while (d != NULL) {
+        struct dirent *e = readdir(d);
+        if (e == NULL) {
+            break;
+        }
+        int pid = atoi(e->d_name);
+        if (pid <= 0) {
+            continue;
+        }
+        char path[64], line[512];
+        snprintf(path, sizeof path, "/proc/%d/stat", pid);
+        FILE *f = fopen(path, "r");
+        if (f != NULL) {
+            if (fgets(line, sizeof line, f) != NULL) {
+                // "pid (comm) S ppid ...": the command may hold spaces and parentheses, so look after the last ')'
+                char *rp = strrchr(line, ')');
+                int ppid = 0;
+                if (rp != NULL && sscanf(rp + 1, " %*c %d", &ppid) == 1) {
+                    parent[pid] = ppid;
+                }
+            }
+            fclose(f);
+        }
+    }
+    if (d != NULL) {
+        closedir(d);
+    }
+    std::set<int> own;
+    for (int pid : descendants(parent, (int)getpid())) {
+        own.insert(pid);
+        char path[64];
+        snprintf(path, sizeof path, "/proc/%d/task", pid);
+        DIR *t = opendir(path);
+        while (t != NULL) {
+            struct dirent *e = readdir(t);
+            if (e == NULL) {
+                break;
+            }
+            int tid = atoi(e->d_name);
+            if (tid > 0) {
+                own.insert(tid);
+            }
+        }
+        if (t != NULL) {
+            closedir(t);
+        }
+    }
+    return own;
+}
+
+// the names of norns' own ALSA sequencer clients (the virtual RawMIDI device, the keys window, ...): they show up in JACK as
+// Midi-Bridge ports and must never be linked back into Verdandi:midi_in
 static std::vector<std::string> own_alsa_clients(void) {
     static snd_seq_t *seq = NULL;
     static bool tried = false;
-    std::vector<std::string> own;
     if (!tried) {
         tried = true;
         if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) < 0) {
@@ -58,18 +115,17 @@ static std::vector<std::string> own_alsa_clients(void) {
         }
     }
     if (seq == NULL) {
-        return own;
+        return {};
     }
+    std::vector<AlsaClient> clients;
     snd_seq_client_info_t *info;
     snd_seq_client_info_alloca(&info);
     snd_seq_client_info_set_client(info, -1);
     while (snd_seq_query_next_client(seq, info) >= 0) {
-        if (snd_seq_client_info_get_pid(info) == (int)getpid()) {
-            own.push_back(snd_seq_client_info_get_name(info));
-            own.push_back("Client-" + std::to_string(snd_seq_client_info_get_client(info)));
-        }
+        clients.push_back(AlsaClient{snd_seq_client_info_get_client(info), snd_seq_client_info_get_name(info),
+                                     snd_seq_client_info_get_pid(info)});
     }
-    return own;
+    return ownAlsaNames(clients, own_ids());
 }
 
 static void apply(jack_client_t *c) {

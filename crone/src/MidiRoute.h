@@ -5,6 +5,7 @@
 // pure logic, no JACK calls (the glue is matron/src/platform/linux/midi_autoconnect.cc).
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -82,6 +83,44 @@ inline bool containsWord(const std::string &name, const std::string &word) {
         }
     }
     return false;
+}
+
+// an ALSA sequencer client as the sequencer reports it. pid: **the id of the thread that created the client** (a thread id of
+// the creating process, not necessarily the process id), 0 or -1 for kernel clients
+struct AlsaClient {
+    int id;
+    std::string name;
+    int pid;
+};
+
+// norns' own clients: those whose reported id is one of norns' process ids or thread ids (own = the process, all its threads,
+// and the same for the processes it started). the names to keep out: the client's name and "Client-<id>"
+inline std::vector<std::string> ownAlsaNames(const std::vector<AlsaClient> &clients, const std::set<int> &own) {
+    std::vector<std::string> out;
+    for (const auto &c : clients) {
+        if (c.pid > 0 && own.count(c.pid) > 0) {
+            out.push_back(c.name);
+            out.push_back("Client-" + std::to_string(c.id));
+        }
+    }
+    return out;
+}
+
+// the process and all that descend from it (children, grandchildren ...), from a table pid -> parent pid. a loop in the
+// table cannot hang it
+inline std::set<int> descendants(const std::map<int, int> &parent, int root) {
+    std::set<int> out = {root};
+    bool grew = true;
+    while (grew) {
+        grew = false;
+        for (const auto &kv : parent) {
+            if (out.count(kv.second) > 0 && out.count(kv.first) == 0) {
+                out.insert(kv.first);
+                grew = true;
+            }
+        }
+    }
+    return out;
 }
 
 // ports that are never linked: norns' own ALSA MIDI clients (the virtual RawMIDI device, the keys window; own = their

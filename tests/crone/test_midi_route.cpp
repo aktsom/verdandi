@@ -99,3 +99,49 @@ TEST_CASE("the ALSA loopback \"Midi Through\" is never wanted: what is written t
     // even if the prefix names it
     CHECK(wanted(ports, parsePrefixes("Midi-Bridge:Midi Through")).empty());
 }
+
+// ---- which ALSA sequencer clients are norns' own: ALSA reports the id of the THREAD that created the client, not the process id
+
+TEST_CASE("an ALSA client whose reported id is a thread of norns is norns' own (Client-128, pid 43118 in norns 43048)") {
+    // a real laptop: norns is process 43048 with thread 43118; Reaper is process 42602
+    std::vector<AlsaClient> clients = {{128, "Client-128", 43118}, {129, "Client-129", 42602}, {14, "Midi Through", 0}};
+    std::set<int> own = {43048, 43118, 43119}; // the process id and all of its thread ids
+    auto names = ownAlsaNames(clients, own);
+    CHECK(std::find(names.begin(), names.end(), "Client-128") != names.end());
+    CHECK(std::find(names.begin(), names.end(), "Client-129") == names.end());
+    // so Client-128's port is never wanted and Client-129's (Reaper) is
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Client-128 Virtual RawMIDI:(capture_0)"),
+                                   out("Midi-Bridge:Client-129 Virtual RawMIDI:(capture_0)")};
+    auto w = wanted(ports, parsePrefixes("Midi-Bridge:Client-* Virtual RawMIDI"), names);
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Client-129 Virtual RawMIDI:(capture_0)");
+}
+
+TEST_CASE("with only the process id (the old rule) the thread id is missed: that was the bug") {
+    std::vector<AlsaClient> clients = {{128, "Client-128", 43118}};
+    auto names = ownAlsaNames(clients, std::set<int>{43048});
+    CHECK(std::find(names.begin(), names.end(), "Client-128") == names.end());
+}
+
+TEST_CASE("clients without a pid (kernel clients, pid 0 or -1) are never norns' own") {
+    std::vector<AlsaClient> clients = {{0, "System", 0}, {14, "Midi Through", 0}, {20, "Kernel", -1}};
+    CHECK(ownAlsaNames(clients, std::set<int>{43048}).empty());
+}
+
+TEST_CASE("descendants: children and grandchildren of norns' process, not unrelated processes") {
+    // pid -> parent
+    std::map<int, int> parent = {{43048, 1}, {43200, 43048}, {43201, 43200}, {42602, 1}, {42700, 42602}, {5, 4}};
+    auto d = descendants(parent, 43048);
+    CHECK(d.count(43048) == 1);
+    CHECK(d.count(43200) == 1);
+    CHECK(d.count(43201) == 1);
+    CHECK(d.count(42602) == 0);
+    CHECK(d.count(42700) == 0);
+    CHECK(d.count(5) == 0);
+}
+
+TEST_CASE("descendants: a loop in the parent table cannot hang it") {
+    std::map<int, int> parent = {{10, 11}, {11, 10}};
+    auto d = descendants(parent, 10);
+    CHECK(d.count(10) == 1);
+}
