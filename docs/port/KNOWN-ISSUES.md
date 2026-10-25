@@ -320,3 +320,82 @@ tested first by hand by the owner as above) rather than changing what SYS means.
   (`jack_disconnect`) **stayed unlinked for over a minute and through pause/play**, but **a brand new stream (`Vivaldi-123`) was created with the direct link in place**. So WirePlumber
   does not re-link an existing stream that lost its link, but links every new stream: unlinking would need **continuous re-checking** (a port-registration or port-connect callback
   that removes the card link of each new stream as it appears, with the race against the session manager, plus restoring on exit). Revisit after the owner has used SYS for a while.
+
+## 8. A script's "install missing libraries" (K3) fetched Raspberry Pi binaries and then broke SuperCollider on every start (investigated read-only; nothing built; proposals below)
+
+**What happened (owner's laptop):** the script "twins" offered to install missing dependencies with K3; it appeared to run; the script then said it could not connect to matron; norns
+had to be closed. After that SuperCollider failed on every start: `~/verdandi-home/.local/share/SuperCollider/Extensions/supercollider-plugins/` held `AnalogChew_scsynth.so`,
+`AnalogDegrade_scsynth.so` and `AnalogLoss_scsynth.so`, "ELF 32-bit LSB shared object, ARM" (`wrong ELF class: ELFCLASS32` in `sclang.log`). Moving the folder away fixed it.
+
+### 8.1 What the K3 install does, and where it comes from (not this repository)
+The install is **the script's own code**, not a norns feature. norns itself has no "install dependencies" function: this repository has only the system updater (`lua/core/menu/update.lua`,
+`update/update.sh`, for the Pi). The screen "Missing SuperCollider Libraries ... K3: Install" is `lib/installer/installer.lua` of the script (a library that several community scripts copy;
+read from the script's public source for this note: `installer.lua`, `twins.lua` line 50:
+`installer:new{requirements = {"AnalogChew","AnalogLoss","AnalogDegrade"}, zip = "https://github.com/schollz/portedplugins/releases/download/v0.4.6/PortedPlugins-RaspberryPi.zip"}`).
+Sequence:
+1. **At script load** `Installer:scan()` runs `find` over `/usr/local/share/SuperCollider/Extensions`, `/home/we/.local/share/SuperCollider/Extensions` and `/home/we/dust/code` for, per
+   requirement, `<Name>.sc` **and** `<Name>_scsynth.so` (also `<Name>.so`), skipping `*ignore*`. Both halves must be found, else the library counts as missing and the script shows the install screen
+   instead of loading its engine (`engine.name = installer:ready() and 'twins' or nil`).
+2. **K3: `install_libs()`** builds one shell command and runs it with `norns.system_cmd` (the sidecar, 4 minute limit):
+   `rm -rf /tmp/norns-installer/ignore && mkdir -p /tmp/norns-installer/ignore '/home/we/.local/share/SuperCollider/Extensions/supercollider-plugins' && wget -q -O .../bundle.zip '<zip>' && cd ... && unzip -o -q bundle.zip && find . \( -name 'AnalogChew.sc' -o -name 'AnalogChew.so' -o -name 'AnalogChew_scsynth.so' ... \) -type f -exec cp {} '/home/we/.local/share/SuperCollider/Extensions/supercollider-plugins/' ';' && cd /tmp && rm -rf norns-installer`.
+   The bundle is **hard-coded to the Raspberry Pi build**; the script does not look at the machine's architecture.
+3. **Result check:** it scans again; if nothing is missing it shows "Libraries Installed. Restart to Load the Engine / K3: Restart".
+4. **K3 again: `do_restart()`** runs, with Lua's `os.execute` (synchronous, in matron's thread):
+   `sudo systemctl restart norns-jack.service norns-crone.service norns-matron.service` and shows "Restarting..." (it never leaves that state by itself).
+5. A later "update" path of the same library: `git -C <script> fetch/pull --ff-only` through `norns.system_cmd`, then `norns.rerun()` or the same restart for a changed engine.
+
+I downloaded the release asset to look inside: `PortedPlugins-RaspberryPi.zip` (236 KB) holds `Classes/*.sc` and `*_scsynth.so` files, and `AnalogChew_scsynth.so` is "ELF 32-bit LSB shared object, ARM": exactly the
+files on the laptop. (Names I tried for a Linux or x86_64 asset of that release tag, `PortedPlugins-Linux.zip` and three more, return 404; I could not list the release's assets because the API is blocked from here.)
+
+### 8.2 Which steps behave differently on the Linux desktop build
+| Step | On the Pi | On this build |
+|---|---|---|
+| paths `/home/we/...` in the commands | the real folder | translated by `lua/core/virtual_home.lua` (`os.execute`, `norns.system_cmd`) to the norns home: the files land in `~/verdandi-home/.local/share/SuperCollider/Extensions/supercollider-plugins/`, **which sclang and scsynth do read** because `HOME` is the norns home |
+| `wget`, `unzip`, `find -printf`, `git`, `nice`, `timeout` | present | present on a desktop (GNU userland); `wget` and `unzip` are not guaranteed (not installed by `linux/setup-deps.sh`) |
+| the downloaded Raspberry Pi **binaries** | run | **cannot load on x86_64**: scsynth stops at the first `dlopen` error. Reproduced here: with the three ARM files in place `sclang.log` shows `*** ERROR: dlopen '...AnalogDegrade_scsynth.so' err '...: wrong ELF class: ELFCLASS32'` followed by `Server 'localhost' exited with exit code 0`, no engine registers (`PROBE engines 0`), matron times out and shows `### SCRIPT ERROR: SUPERCOLLIDER FAIL` (`lua/core/startup.lua`): **every start fails until the files are moved** |
+| `sudo systemctl restart norns-jack.service norns-crone.service norns-matron.service` | restarts norns (older unit names; a current Pi has `norns-main`/`norns-sclang`) | **there are no such units** (norns is started by `linux/norns.sh`); `sudo` may ask for a password; nothing restarts |
+| the restart mechanism that does exist here | `systemctl` units | `_norns.restart()` / `norns.restart`: leaves `.norns-restart` and ends norns, `linux/norns.sh` starts it again (`matron/src/system_cmd.cc`, desktop table); scripts that call `systemctl` themselves bypass it |
+| the SYSTEM > UPDATE of norns | updates the system | not available: the "update" action only prints a note (`system_cmd.cc`) |
+
+### 8.3 Why "could not connect to matron" (what the code allows to say, and what it does not)
+- **Not a missing OSC or websocket route, not a missing maiden as such:** the install itself never talks to matron; it runs inside it. What can say "cannot connect to matron" is a *client of matron's socket*
+  (the `maiden-repl` terminal client, `maiden-repl/src/io.c`: "connection failed", or the script editor/REPL over the websocket on 127.0.0.1:5555), when matron does not answer.
+- **The likely cause is the restart step**, which is synchronous and runs `sudo` in matron's own thread (`os.execute`, which `virtual_home.lua` only translates, it does not detach). In `--terminal` mode `sudo` asks for the
+  password on the terminal and **blocks matron's Lua thread and event loop** until it is answered or times out (minutes); with a passwordless sudo the command returns at once with "Unit norns-jack.service not found" and
+  the script sits on "Restarting...". In either case the window or a connected REPL appears dead, which fits "could not connect to matron" and "norns had to be closed". There is no maiden in the Linux build (the web editor is not built),
+  so a web maiden cannot be the source.
+- **I cannot prove which of the two it was** without the terminal output of that moment: the exact message, and whether a `sudo` password prompt was on screen. If it recurs, please keep the text.
+- Command not available here: yes, `systemctl restart norns-*` (see the table); also `sudo` itself in non-interactive use.
+
+### 8.4 What kinds of scripts work on this build as they are, and what kinds do not
+Based on the static scan of the 351-script community catalog made for the macOS port (`macos/docs/02-katalog-scan.md`, `catalog-scan.json`; nothing was executed, so these are expectations, not test results for Linux):
+- **Work as they are (about half):** 177 scripts with no shell calls, no `/home/we` paths, only core UGens and no binaries: softcut, MIDI, grid/arc and clock scripts, scripts with the built-in engines (PolyPerc, PolySub ...): 140 scripts use no engine at all, 49 a built-in one.
+- **Work with what the build or the package provides (about 40%, category B):** `/home/we` paths (82; translated), POSIX shell commands (`mkdir`, `rm`, `cp`, `curl`, `git`, `find` ... : present on Linux, GNU `stat`, `sha256sum`, `timeout`, `shuf` fine on Linux),
+  sc3-plugins UGens (71 scripts: Decimator, SVF, MoogLadder ...: `sc3-plugins-server` is installed by `linux/setup-deps.sh`; mi-UGens (MiRings, MiClouds) and the ChowDSP "Analog*" plugins are **not** in the Ubuntu packages and need x86_64 builds),
+  cjson (15 scripts ship a Linux/ARM `cjson.so`; the build registers cjson as the global `_json` but a script's own `require "cjson"` goes through Lua's package search: a bundled ARM `.so` would fail the same way; not checked here),
+  engines from other catalog scripts (41; an engine needs the other script installed, as on norns).
+- **Do not work as they are:**
+  - **Prebuilt Pi (ARM) binaries**, downloaded by an installer or shipped in the repository: the PortedPlugins bundle above, `*_scsynth.so` UGens (FormantTriPTR, PulsePTR, TrianglePTR), `audiowaveform`, `soxgo`, `jack_capture`, `aubioonset` (about 20 repositories). They load or run only on ARM.
+  - **System commands of the device:** `sudo systemctl ...` (norns-*), `apt`/`apt-get` (2), `dpkg`, `ldconfig`, `iwgetid`, `powershell`; `pkill` (5 scripts; could match other processes); `jack_connect`/`jack_disconnect` (5 scripts) work only if the port names exist (`system:capture_N` does not under PipeWire).
+  - **Hardware:** GPIO keys and encoders are replaced by the window, keyboard and MIDI mapping; the battery gauge, i2c (headphone amp, ADC) and the OLED controller are stand-ins that do nothing (`hardware_null.cc`: battery, i2c and ssd1322 are empty), so scripts that read the battery, set the headphone gain or rely on display hardware settings get no effect.
+  - **Wi-Fi/system menu actions and the SYSTEM > UPDATE:** not available.
+  - **Hard-coded `/home/we` inside SuperCollider engine files** (`.sc` code): not translated (only Lua file calls and shell command strings are).
+- **Category C (25) and D (8)** of the scan (shell commands built at run time, single cases) can only be judged by running them.
+
+### 8.5 Proposals (nothing built; for the owner to decide)
+**A. A startup check for plug-ins of the wrong architecture** (like the serialosc and audio notes):
+- When: in `linux/norns.sh`, **before** norns and sclang start (the failure is fatal for the whole SuperCollider server, so it has to be known before sclang boots), and again when a script finishes installing (the next start).
+- Scan: the SuperCollider extension folders that scsynth reads: `$HOME/.local/share/SuperCollider/Extensions` (that is the norns home), `/usr/local/share/SuperCollider/Extensions`, `/usr/share/SuperCollider/Extensions`, recursive; every `*.so` and `*.scx`.
+- Test: read the ELF header (first 20 bytes: byte 4 is the class, 1 = 32-bit, 2 = 64-bit; bytes 18-19 are the machine, 0x3E x86_64, 0xB7 aarch64, 0x28 ARM) and compare with `uname -m`. A file that is not ELF is ignored. A few lines of `od` or a small C tool; testable without root, with fake headers written by `printf`.
+- Report: one log line per file, in plain words, with the exact file name and the command that moves it, for example
+  `SuperCollider plug-in .../AnalogChew_scsynth.so is a 32-bit ARM file and cannot load on x86_64; SuperCollider will not start with it. Move it away: mkdir -p ~/verdandi-home/.local/share/SuperCollider/disabled-plugins && mv '.../AnalogChew_scsynth.so' ~/verdandi-home/.local/share/SuperCollider/disabled-plugins/`,
+  and a standing note on the device window (the same `_menu.show_note` chain: `EXTENSIONS: wrong-architecture plug-in, see log`), plus, if SuperCollider has already failed, the same line next to "SUPERCOLLIDER FAIL" (the symptom `wrong ELF class` in `sclang.log` can be recognised as well).
+- **Optional safe quarantine** (off by default; `quarantine_plugins=1` in `audio.conf` or `NORNS_QUARANTINE_PLUGINS=1`): moves, never deletes, each mismatching file **and the sibling `.sc` class files of the same name** (otherwise the script's installer sees half a library and offers the same download again) into
+  `~/.local/share/SuperCollider/disabled-plugins/<date>/` with the relative path kept and a `MANIFEST` of what moved, so it can be put back by hand; only under the norns home (system folders are reported, never touched); logged; then sclang starts. Recommendation: **report always, quarantine on request**, because the failure otherwise repeats at every start and the move is reversible.
+
+**B. Could a script update pick the matching architecture?** Not by itself: the bundle URL is fixed in each script, and the installer has no architecture logic. Options, none built:
+1. **Provide the plug-ins ourselves** as x86_64 builds (PortedPlugins and mi-UGens built from source, GPL-3, listed in `docs/port/DEPS.md`) in `/usr/local/share/SuperCollider/Extensions`: the installer's own `find` looks there (point 1 above), so the script finds both halves and **never offers the install**: the cleanest fix, no interception, and it also serves the other scripts that need those UGens. Needs a build step in `linux/setup-deps.sh` (and CI), and a decision about which plug-in packs.
+2. **A `wget`/`curl` shim** on `PATH` for norns' shell commands (the launcher prepends a `linux/shims/` folder) that recognises known Raspberry Pi bundle URLs and substitutes a matching-architecture bundle when one exists (and refuses with a clear message when it does not). Works for any script that downloads a Pi bundle; needs the x86_64 bundles from option 1 anyway.
+3. **Shims for the device commands** the same way: `sudo` passing through, `systemctl restart norns-*` mapped to the launcher's restart (`.norns-restart` + end norns), `apt`/`apt-get` printing "not available on this build". This would also have made K3 "Restart" work here (and not block matron).
+4. **Ask the script author** to choose the asset by `uname -m` (the library is shared by several scripts): outside this project.
+Recommendation: A (report, quarantine on request) first, then B1 for the plug-ins the catalog needs most, then B3's restart shim. Nothing here is implemented.
