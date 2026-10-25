@@ -197,11 +197,11 @@ local INPUT_LABEL = {off = "off", mic = "mic / interface", system = "all apps (s
 local function monitor_ok() return _norns.mic_input ~= nil and os.getenv("NORNS_SYS_MONITOR") == "1" end
 local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 
--- the standing note on the device window (Linux): one at a time, the most urgent first: the sink monitor may feed back, serialosc has
--- the grid, the audio is not connected
+-- the standing note on the device window (Linux): one at a time, the most urgent first: the sink monitor may feed back, a SuperCollider
+-- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.input == "monitor" and MONITOR_WARNING or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.input == "monitor" and MONITOR_WARNING or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -404,14 +404,36 @@ if _norns.grid_conflict_text and _norns.set_warning then
       _menu.show_note()
     end
   end
+  -- SuperCollider plug-ins built for another machine (linux/plugin_arch_check wrote the list before sclang started): the note goes when
+  -- the files are gone
+  local function plugin_note_update()
+    local t = _norns.plugin_note_text and _norns.plugin_note_text() or nil
+    if t ~= _menu.plugin_note then
+      _menu.plugin_note = t
+      _menu.show_note()
+    end
+  end
   _norns.grid_conflict_changed = grid_note_update
   hook.system_post_startup:register("menu-grid-conflict", function()
     grid_note_update()
+    plugin_note_update()
     -- a metro, not a clock coroutine: a script change cancels every coroutine. 33 and 34 are reserved with 31-36
     local poll = metro[33]
     poll.time = 3
     poll.count = -1
-    poll.event = grid_note_update
+    poll.event = function()
+      grid_note_update()
+      plugin_note_update()
+      -- a script ran "sudo systemctl restart norns-*" (a script's installer): linux/shims/systemctl left a request instead of the Raspberry Pi's
+      -- services: restart norns the clean way
+      local req = io.open("/home/we/.norns-request-restart")
+      if req then
+        req:close()
+        os.remove("/home/we/.norns-request-restart")
+        print("norns: a script asked for a restart (systemctl restart norns-*, no systemd on this build): restarting norns")
+        _norns.restart()
+      end
+    end
     poll:start()
   end)
 end

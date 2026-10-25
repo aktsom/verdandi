@@ -203,6 +203,7 @@ def build(bld):
             '../matron/src/platform/linux/app_audio_linux.cc',
             '../matron/src/platform/linux/midi_autoconnect.cc',
             '../matron/src/platform/linux/serialosc_check.cc',
+            '../matron/src/platform/linux/plugin_arch_note.cc',
             '../matron/src/platform/linux/desktop_shell_linux.cc',
             '../matron/src/platform/linux/file_picker.cc',
             '../matron/src/platform/linux/hid_virtual.cc',

@@ -399,3 +399,30 @@ Based on the static scan of the 351-script community catalog made for the macOS 
 3. **Shims for the device commands** the same way: `sudo` passing through, `systemctl restart norns-*` mapped to the launcher's restart (`.norns-restart` + end norns), `apt`/`apt-get` printing "not available on this build". This would also have made K3 "Restart" work here (and not block matron).
 4. **Ask the script author** to choose the asset by `uname -m` (the library is shared by several scripts): outside this project.
 Recommendation: A (report, quarantine on request) first, then B1 for the plug-ins the catalog needs most, then B3's restart shim. Nothing here is implemented.
+
+### 8.6 What was built from 8.5 (SuperCollider plug-in check, restart shims) and what was decided
+**Plug-in check (8.5 A, report only):** `linux/plugin_arch_check` (built by `linux/build.sh`) is run by `linux/norns.sh` **before** norns and sclang start (and at every restart). It reads the ELF
+header (class and machine) of every `.so` and `.scx` in `~/<norns home>/.local/share/SuperCollider/Extensions`, `/usr/local/share/SuperCollider/Extensions` and `/usr/share/SuperCollider/Extensions`, and of
+`*_scsynth.so` and `.scx` in `dust/code` (Lua libraries such as `cjson.so` live there too and SuperCollider does not read them), and compares with `uname -m`. For each mismatch it prints **one** line
+(`norns.sh: SuperCollider plug-in <path> is built for 32-bit ARM, this machine is x86_64: ... stops at the first bad file ... the list of bad files may be longer than the one error in sclang.log ...
+mkdir -p '<home>/disabled-plugins' && mv '<file or folder>' '<home>/disabled-plugins/'`); when every plug-in in a folder inside an extension folder is wrong the command moves the folder, else the file. It
+**never moves, changes or deletes anything** (the integration test compares checksums). It writes the paths to `<home>/.plugin-mismatch`; matron re-checks only those files (a stat and 64 bytes each)
+every 3 seconds and shows the standing note `PLUGINS: wrong-architecture plug-in, see log` (most urgent after the sink-monitor warning, before the serialosc and audio notes) until none is left.
+Off: `NORNS_PLUGIN_CHECK=0` or `plugin_check=0` in `audio.conf`. Not done: the quarantine (8.5 A, optional part) and anything about the script's installer. Tests: `plugin_arch_test.cpp` (fake ELF headers as data:
+x86_64, 32-bit ARM, aarch64 on an x86_64 machine, x86 32-bit, big endian, non-ELF, empty, short, unreadable, unknown machine), `plugin_check_test.sh` (a fake extension folder: five mismatches, one line each, nothing changed,
+the aarch64 view, the switch, after moving by hand), `plugin_note_test.sh` (norns.sh, the log line once, the note, gone when moved, off). **Limit:** SuperCollider stops at the first bad file, so `sclang.log`
+shows one error while the list can be longer; a file this check cannot read (permissions) is skipped; a plug-in whose header is fine but whose libraries are missing is not found by it.
+
+**Restart commands from scripts (8.5 B3, smallest safe fix):** `linux/shims/sudo` and `linux/shims/systemctl`, first on the `PATH` of norns itself (matron and so its sidecar and `os.execute`; not jackd or sclang;
+`NORNS_NO_SHIMS=1` switches it off). I checked first how commands run here: `os.execute` is Lua's `system()` (`virtual_home.lua` only translates the path), `norns.system_cmd` and the detached actions are
+`/bin/sh -c` in the sidecar (`norns/sidecar_shell.cpp`, `sidecar.cpp`), all with the environment norns started with: so a `PATH` shim covers both without touching Lua's `os.execute`.
+- `sudo systemctl restart|try-restart|reload-or-restart norns-*` and `systemctl ...` the same: a restart **request** (`~/.norns-request-restart`), exit 0 **at once**, one line on stderr saying what was done and why. Lua (`lua/core/menu.lua`, the 3 s metro) takes
+  the request and calls `_norns.restart()`, the clean restart that already exists (state saved, `linux/norns.sh` starts norns again). If nobody takes the request within `NORNS_SHIM_WATCHDOG` seconds (default 20) the
+  shim does what `_norns.reset` does itself (`.norns-restart` and an end signal), so a stuck matron is restarted too. The background job holds none of the caller's pipes.
+- `start|reload|enable` of a norns unit: nothing to do, exit 0 with a line; `stop|disable|kill`: refused with a line, exit 1 (close the window instead).
+- any other `sudo` command: the real `sudo -n` (never a password prompt that blocks matron's thread; an own `-n` is not doubled); any other `systemctl` command, also with sudo, goes on unchanged to the real programs.
+- Tests: `shim_test.sh` (fake real programs: restart variants and options, start, stop, other units, other sudo commands, no doubled `-n`, the watchdog fires and does not fire, the output pipe closes at once), `shim_restart_test.sh`
+  (headless norns: the sidecar sees the shims, `os.execute("sudo systemctl restart norns-jack.service norns-crone.service norns-matron.service")` returns in 0.0 s, one shim line, Lua takes the request, `linux/norns.sh` restarts norns and sclang, crone is back).
+- **Decision taken (shall be confirmed): shims for these command strings, not a global `os.execute` interception.** A global interception in Lua (replacing `os.execute`/`io.popen` for every script) would also catch commands the
+  shims cannot (an absolute `/usr/bin/sudo`, `sh -c "sudo ..."` with a changed `PATH`), but it changes every script's shell calls, hides what runs, and does not cover the sidecar; the `PATH` shims touch only these two names.
+  Not covered: a script that calls `/bin/systemctl` or `/usr/bin/sudo` by absolute path, or one that clears or replaces `PATH`. Also not built: `apt`/`apt-get` shims, a `wget` shim, x86_64 plug-in bundles (8.5 B1, B2).

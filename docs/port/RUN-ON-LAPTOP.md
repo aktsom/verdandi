@@ -253,3 +253,15 @@ programs reading one serial stream steal each other's bytes: grid events lag, ar
   It needs no root; processes it cannot read are skipped.
 - **Turn the check off:** `NORNS_SERIALOSC_CHECK=0` in the environment, or `serialosc_check=0` in `~/verdandi-home/audio.conf` (the environment wins).
   Norns never uses serialosc's OSC route here (that is a later item).
+
+## Scripts that install SuperCollider libraries, and scripts that restart norns
+- **A script's own installer (K3 "Install") may download Raspberry Pi files** (for example `PortedPlugins-RaspberryPi.zip`). Those 32-bit ARM `.so` files cannot load on your
+  machine, and SuperCollider then does not start at all ("SUPERCOLLIDER FAIL", no engines, `wrong ELF class: ELFCLASS32` in `sclang.log`). norns now **checks for this before SuperCollider starts**:
+  it reads the header of every plug-in in `~/verdandi-home/.local/share/SuperCollider/Extensions`, `/usr/local/share/SuperCollider/Extensions`, `/usr/share/SuperCollider/Extensions`
+  (and `*_scsynth.so` in `dust/code`) and compares it with this machine. For each wrong file it prints **one line** in the terminal with the file, what it is ("32-bit ARM, this machine is x86_64"), why SuperCollider will fail,
+  and the exact command to move it (or its folder) into `~/verdandi-home/disabled-plugins` (it **never** moves or deletes anything itself), and the device window shows
+  `PLUGINS: wrong-architecture plug-in, see log` until no wrong file is left. SuperCollider stops at the first bad file, so `sclang.log` shows only one of them: the list from norns can be longer. After moving the files, restart norns.
+  Turn the check off with `NORNS_PLUGIN_CHECK=0` or `plugin_check=0` in `~/verdandi-home/audio.conf`.
+- **"sudo systemctl restart norns-..." from a script** (a script's installer asks for a restart this way, for the Raspberry Pi's services): on this build norns now answers it itself. The command returns at
+  once with exit 0, prints one line (`norns: there is no systemd for norns on this build ... norns restarts itself instead`), and norns restarts within a few seconds (through its own restart, `linux/norns.sh` starts it again). Other
+  `sudo` commands from scripts run with `sudo -n`: if a password would be needed they fail at once instead of waiting and freezing norns. `NORNS_NO_SHIMS=1` switches this off. A script that calls `/usr/bin/sudo` by its full path is not covered.

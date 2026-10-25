@@ -1,0 +1,31 @@
+#!/bin/bash
+# sudo shim, see norns-shim-lib.sh. "sudo systemctl ..." goes to the systemctl logic; any other command goes to the real sudo with -n added
+# (never ask for a password: a prompt would block the thread that ran the command)
+. "$(dirname "$0")/norns-shim-lib.sh"
+args=("$@")
+i=0
+cmd=""
+while [ $i -lt ${#args[@]} ]; do
+    a="${args[$i]}"
+    case "$a" in
+    -u | -g | -p | -C | -D | -R | -r | -t | -T | -U | -h) i=$((i + 2)) ;; # options that take a value
+    -*) i=$((i + 1)) ;;
+    *)
+        cmd="$a"
+        break
+        ;;
+    esac
+done
+if [ "${cmd##*/}" = systemctl ] && shim_systemctl_is_norns "${args[@]:$((i + 1))}"; then
+    shim_systemctl "${args[@]:$((i + 1))}"
+    exit $?
+fi
+real="$(shim_real sudo)"
+if [ -z "$real" ]; then
+    echo "sudo: not available" >&2
+    exit 127
+fi
+for a in "$@"; do
+    [ "$a" = "-n" ] && exec "$real" "$@"
+done
+exec "$real" -n "$@"

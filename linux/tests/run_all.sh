@@ -323,6 +323,57 @@ if command -v jackd > /dev/null; then
     run "serialosc:NORNS_SERIALOSC_CHECK=0 turns the check off" serialosc_off_ok
 fi
 
+# SuperCollider plug-ins built for another machine than this one (a script's installer fetched a Raspberry Pi bundle: scsynth stops at the first
+# bad file and SuperCollider does not start): the ELF header logic on fake headers, the scanner on a fake extension folder, and the note
+# on the device window. report only: nothing is moved
+plugin_unit_ok() {
+    g++ -std=c++14 -I third-party/doctest -I matron/src linux/tests/plugin_arch_test.cpp -o "$T/plugin_arch_test" || return 1
+    "$T/plugin_arch_test"
+}
+run "plugins:ELF header logic (fake headers as data)" plugin_unit_ok
+plugin_check_ok() {
+    local out
+    out="$("$REPO/linux/tests/plugin_check_test.sh")" || { echo "$out" | grep FAIL; return 1; }
+}
+run "plugins:scanner on a fake extension folder (nothing is moved)" plugin_check_ok
+if command -v jackd > /dev/null; then
+    PLOG="$T/plugin-note.log"
+    "$REPO/linux/tests/plugin_note_test.sh" "$PLOG" > /dev/null 2>&1
+    plugin_note_ok() {
+        local bad=0
+        [ "$(grep -ac "^norns.sh: SuperCollider plug-in .*Fake_scsynth.so is built for 32-bit ARM" "$PLOG")" = 1 ] || { echo "the log line must appear exactly once"; bad=1; }
+        grep -aq "PROBE plugin note 1.PLUGINS: wrong-architecture plug-in, see log" "$PLOG" || { echo "no note on the device window"; bad=1; }
+        grep -aq "PROBE plugin note 2.nil" "$PLOG" || { echo "the note stayed after the file was moved away"; bad=1; }
+        return $bad
+    }
+    run "plugins:norns.sh reports before sclang starts, note on the device window, gone when moved" plugin_note_ok
+    PLOG2="$T/plugin-note-off.log"
+    "$REPO/linux/tests/plugin_note_test.sh" "$PLOG2" disabled > /dev/null 2>&1
+    plugin_off_ok() {
+        grep -aq "PROBE plugin note 1.nil" "$PLOG2" && ! grep -aq "SuperCollider plug-in" "$PLOG2" || { echo "reported although NORNS_PLUGIN_CHECK=0"; return 1; }
+    }
+    run "plugins:NORNS_PLUGIN_CHECK=0 turns the check off" plugin_off_ok
+fi
+
+# "sudo systemctl restart norns-*" from a script (a script's installer, os.execute): the shims in linux/shims turn it into a restart request,
+# at once, without sudo or a password; other sudo commands get -n; the other systemctl commands go on unchanged
+run "shims:sudo and systemctl for norns-* units (fake real programs)" "$REPO/linux/tests/shim_test.sh"
+if command -v jackd > /dev/null; then
+    HLOG="$T/shim-restart.log"
+    "$REPO/linux/tests/shim_restart_test.sh" "$HLOG" > /dev/null 2>&1
+    shim_restart_ok() {
+        local bad=0
+        grep -aq "PROBE sidecar which.*linux/shims/sudo .*linux/shims/systemctl" "$HLOG" || { echo "the sidecar does not see the shims on its PATH"; bad=1; }
+        grep -aq "PROBE execute returned.true.0\.[0-9] s" "$HLOG" || { echo "os.execute did not return at once: $(grep -a 'PROBE execute' "$HLOG")"; bad=1; }
+        [ "$(grep -ac "^norns: there is no systemd for norns on this build" "$HLOG")" = 1 ] || { echo "the shim's line must appear exactly once"; bad=1; }
+        grep -aq "norns: a script asked for a restart" "$HLOG" || { echo "lua did not take the request"; bad=1; }
+        grep -aq "norns.sh: restarting norns and sclang" "$HLOG" || { echo "norns.sh did not restart norns"; bad=1; }
+        [ "$(cat "$HLOG.crone" 2> /dev/null || echo 0)" -gt 0 ] || { echo "norns is not back after the restart"; bad=1; }
+        return $bad
+    }
+    run "shims:a script's sudo systemctl restart norns-* returns at once and norns restarts itself" shim_restart_ok
+fi
+
 # the optional MIDI auto-connect (midi_in_from= in audio.conf, or NORNS_MIDI_IN_FROM): a port matching a prefix is linked to
 # Verdandi:midi_in, a link cut behind norns' back is made again, a client that appears later is linked, a port that does
 # not match is not

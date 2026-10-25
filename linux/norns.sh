@@ -25,6 +25,7 @@
 #                       card's name in PipeWire). default: the session's default source / sink under
 #                       PipeWire (wpctl), else the first card. audio.conf in the norns home may hold
 #                       in_ports=... and out_ports=... (the environment wins)
+#   NORNS_NO_SHIMS=1    do not put linux/shims (sudo, systemctl for norns-* units) first on the PATH of norns
 #   NORNS_DECIDE_ONLY=1 print the decision ("DECIDE action=... server=... in=... out=...") and exit
 
 set -u
@@ -238,6 +239,10 @@ export NORNS_MIDI_IN_FROM
 # serialosc (serialosc-device) on the grid's serial port is reported; NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf turns that off
 NORNS_SERIALOSC_CHECK="${NORNS_SERIALOSC_CHECK:-$(conf_get serialosc_check)}"
 export NORNS_SERIALOSC_CHECK
+# SuperCollider plug-ins built for another machine (a script's installer fetched a Raspberry Pi bundle): reported before sclang starts, never moved.
+# NORNS_PLUGIN_CHECK=0 or plugin_check=0 in audio.conf turns the check off
+NORNS_PLUGIN_CHECK="${NORNS_PLUGIN_CHECK:-$(conf_get plugin_check)}"
+export NORNS_PLUGIN_CHECK
 
 AUDIO_TOOL="$REPO/build/linux/audio_devices"
 export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
@@ -289,11 +294,17 @@ rm -f "$RESTART_MARK" "$AUDIO_MARK"
 
 start_norns() {
     export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
+    # before norns and sclang start: SuperCollider stops at the first plug-in it cannot load. report only (one line per file)
+    [ -x "$REPO/build/linux/plugin_arch_check" ] && "$REPO/build/linux/plugin_arch_check" "$NORNS_HOME" | sed 's/^/norns.sh: /'
+    # norns and the commands its scripts run (os.execute, norns.system_cmd) get linux/shims first on the PATH: "sudo systemctl restart norns-*" (a script's
+    # installer) becomes a restart request, and sudo never waits for a password (linux/shims/norns-shim-lib.sh). NORNS_NO_SHIMS=1: not
+    local shimpath="$PATH"
+    [ "${NORNS_NO_SHIMS:-0}" = 1 ] || shimpath="$REPO/linux/shims:$PATH"
     if [ $TERMINAL -eq 1 ]; then
         # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin
-        "$NORNS_BIN" <&0 &
+        PATH="$shimpath" "$NORNS_BIN" <&0 &
     else
-        "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
+        PATH="$shimpath" "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
     fi
     NORNS_PID=$!
     PIDS="$PIDS $NORNS_PID"

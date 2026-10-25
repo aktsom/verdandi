@@ -1,0 +1,4 @@
+#!/bin/bash
+# systemctl shim, see norns-shim-lib.sh
+. "$(dirname "$0")/norns-shim-lib.sh"
+shim_systemctl "$@"

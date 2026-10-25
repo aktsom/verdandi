@@ -134,3 +134,13 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 - [ ] Plug the grid into a different USB port (another ttyACM number) or use the by-id name: the check still finds the right process.
 - [ ] `NORNS_SERIALOSC_CHECK=0` or `serialosc_check=0` in `audio.conf`: nothing is reported.
 - [ ] An arc (same serial path): the same check.
+
+## SuperCollider plug-in check and restart commands from scripts
+- [ ] Put a Raspberry Pi plug-in in the extension folder (for example run the script's installer again, or copy one of the three ARM `.so` files into `~/verdandi-home/.local/share/SuperCollider/Extensions/supercollider-plugins/`) and start norns:
+      before SuperCollider starts, the terminal shows one line per wrong file with the path, "32-bit ARM, this machine is x86_64", why it fails, and the `mkdir -p ... && mv ... ~/verdandi-home/disabled-plugins/` command; the device window shows
+      `PLUGINS: wrong-architecture plug-in, see log`. Nothing was moved. (SuperCollider itself still fails until you move the files: that is expected, the check only reports.)
+- [ ] Run the printed command, restart norns: no line, no note, SuperCollider starts, engines are listed.
+- [ ] `NORNS_PLUGIN_CHECK=0` or `plugin_check=0` in `audio.conf`: nothing reported.
+- [ ] A script whose installer ends with "K3: Restart" (the one that runs `sudo systemctl restart norns-jack.service norns-crone.service norns-matron.service`): K3 returns at once, the terminal shows the `norns: there is no systemd ...` line,
+      norns restarts by itself within a few seconds (state saved), and the window does not freeze waiting for a password.
+- [ ] `sudo ls` run by a script (`os.execute("sudo ls")`) returns at once with a sudo message instead of waiting for a password (and, with a passwordless sudo, works).

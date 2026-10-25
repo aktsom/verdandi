@@ -75,6 +75,12 @@ a scratch copy, not applied); (2) `CLOCK_MONOTONIC` for the internal clock, docu
 78eedb02 is that a **saved choice is restored at boot**: `~/verdandi-home/.norns-input` (SYS, APP or the sink monitor) or `.mic-off` (OFF). Before 78eedb02 SYS/APP did not exist
 on Linux, so a SYS choice could not be made or restored. If your laptop's norns home has a `.norns-input` file from pressing the MIC button once (MIC > SYS), it starts in SYS.
 
+## SuperCollider plug-in check and restart commands from scripts
+Done, tests first: (1) before SuperCollider starts, `linux/norns.sh` runs `linux/plugin_arch_check` (ELF class and machine of the plug-ins in the extension folders and `dust/code`, against `uname -m`): one plain log
+line per wrong file with the move command into `<norns home>/disabled-plugins`, a standing note on the device window until none is left, report only (nothing is moved), off with `NORNS_PLUGIN_CHECK=0` / `plugin_check=0`;
+(2) `linux/shims/sudo` and `systemctl` (first on norns' own `PATH`): `sudo systemctl restart norns-*` from a script returns at once and norns restarts itself (`_norns.restart()`), other sudo commands get `-n`; one line logged.
+Decision to confirm: PATH shims for these command strings rather than a global `os.execute` interception (options in `KNOWN-ISSUES.md` 8.6). Not built: quarantine, installer or x86_64 bundles.
+
 ## serialosc conflict on the grid's serial port (Level 1)
 Norns now detects another process (serialosc's `serialosc-device`) on the serial port of a grid or arc it opened, logs one plain line per plug-in with the stop/start commands and the
 replug hint, and shows a standing note on the device window while it lasts; off with `NORNS_SERIALOSC_CHECK=0` / `serialosc_check=0`. Detect and warn only: nothing is stopped, no OSC. Details:

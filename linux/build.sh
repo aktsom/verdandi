@@ -19,4 +19,6 @@ git submodule update --init --recursive --depth 1
 # SYSTEM > AUDIO: the card list for norns' own jackd
 mkdir -p "$REPO/build/linux"
 cc -O2 -Wall "$REPO/linux/audio_devices.c" -o "$REPO/build/linux/audio_devices" $(pkg-config --cflags --libs alsa)
+# the check for SuperCollider plug-ins of the wrong architecture (norns.sh runs it before sclang starts)
+g++ -O2 -Wall -std=c++14 -I "$REPO/matron/src" "$REPO/linux/plugin_arch_check.cc" -o "$REPO/build/linux/plugin_arch_check"
 echo "linux/build.sh: $REPO/build/norns/norns"

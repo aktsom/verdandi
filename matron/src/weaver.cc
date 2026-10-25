@@ -60,6 +60,7 @@
 #ifdef NORNS_LINUX_DESKTOP
 #include "crone_main.h"
 #include "platform/linux/input_route.h"
+#include "platform/linux/plugin_arch_note.h"
 #include "platform/linux/serialosc_check.h"
 #include "platform/macos/app_audio.h"
 #endif
@@ -367,6 +368,7 @@ static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
 static int _serialosc_check(lua_State *l);
 static int _grid_conflict_text(lua_State *l);
+static int _plugin_note_text(lua_State *l);
 static int _midi_in_status(lua_State *l);
 static int _set_warning(lua_State *l);
 #endif
@@ -714,6 +716,7 @@ void w_init(void) {
     lua_register_norns("midi_in_from", &_midi_in_from);
     lua_register_norns("serialosc_check", &_serialosc_check);
     lua_register_norns("grid_conflict_text", &_grid_conflict_text);
+    lua_register_norns("plugin_note_text", &_plugin_note_text);
     lua_register_norns("midi_in_status", &_midi_in_status);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
@@ -3765,6 +3768,22 @@ int _midi_in_from(lua_State *l) {
  */
 int _grid_conflict_text(lua_State *l) {
     const char *t = serialosc_conflict_text();
+    if (t != NULL) {
+        lua_pushstring(l, t);
+    } else {
+        lua_pushnil(l);
+    }
+    return 1;
+}
+
+/***
+ * Linux desktop: the note for the device window if a SuperCollider plug-in found by linux/plugin_arch_check is still built for another
+ * machine, else nil
+ * @function plugin_note_text
+ * @treturn string note
+ */
+int _plugin_note_text(lua_State *l) {
+    const char *t = plugin_arch_note_text();
     if (t != NULL) {
         lua_pushstring(l, t);
     } else {
