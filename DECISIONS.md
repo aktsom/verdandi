@@ -58,3 +58,11 @@ SYS = **all application clients except norns' own clients** (no feedback: norns'
 The sink monitor exists only as an **optional extra** (`NORNS_SYS_MONITOR=1` or `sys_monitor=1` in `audio.conf`), as its
 own input mode "sink monitor (hears norns too)" with a standing warning on the device screen while it is on and the input
 monitor switched off. Decision 9 (crone follows the default sink, `audio.conf` overrides) is unchanged.
+
+## Plug-in: instances, first platform, framework (DECIDED by the owner, after `docs/port/multi-instance.md`; framework still open)
+- **One plug-in instance at a time with a clear message (option D)**, built into the plug-in design from the start, together with a settable bridge port and an instance id and version field in the protocol. Option A (one norns per instance, supervisor) is **not wanted now**; documented as a future option with the namespace measurement and its limits (`multi-instance.md`). Options B and C are not pursued.
+- **The first plug-in is a Linux VST3**, tested in Reaper on the owner's Linux Mint laptop (PipeWire); Windows follows later and reuses what it teaches. `PLAN.md`: Phase 7 = Linux VST3, Phase 8 = Windows VST3.
+- The AUv3 (macOS) is not touched; its two-instance problem is in `KNOWN-ISSUES.md` item 12.
+
+## GATE E (OPEN): the plug-in framework, and the open decisions of `docs/port/linux-vst3.md`
+Options: the **VST3 SDK directly** (MIT since 3.8; includes the validator; recommended), **JUCE 9** (AGPL-3.0 or a commercial licence; large dependency for a thin client), **DPF** (ISC; one code base for several formats). Recommendation, reasons and what could not be verified: `docs/port/linux-vst3.md` sections 3 and 13. Also open there: auto-start of norns from the plug-in, how much project recall in the first version, whether the bridge switches norns' clock source itself, a plug-in editor window or none, how to refer to "VST" in documents (Steinberg's usage guidelines), the offline-render limit.

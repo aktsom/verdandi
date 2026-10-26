@@ -55,9 +55,19 @@ Goal: real grids and arcs through **serialosc**, and a **virtual grid/arc that w
 - SYS input via WASAPI loopback (per-process where available).
 - Cross-compile or build in a Windows VM; anything not testable goes to the hardware checklist.
 
-## Phase 7: Windows VST3
-- **Plugin transport (Option C of `docs/port/clock-notes.md`)**: design a transport message (tempo, PPQ position, playing) into the UDP bridge protocol (`bridge_protocol.h`) from the start; the bridge turns it into MIDI clock, start/stop/continue and SPP for an internal norns MIDI device (same pipe approach as the keys device), so `clock_midi` follows the DAW with no virtual MIDI driver. The same message is added to the macOS AUv3 (host musical context; cannot be tested here, hardware checklist). Written down in the Phase 7 approach note before code.
-- A **Linux VST3** is wanted in principle: decide at Gate E (it would give Option C on Linux; today PLAN.md has no Linux plugin).
-- Mirror the AUv3 design: thin plugin client talking UDP on 127.0.0.1 to a bridge next to norns. Read `macos/auv3/` and `auv3_bridge` for the protocol first.
-- **GATE E**: Linux VST3 yes/no and framework choice (JUCE under AGPL-3.0 compatible with this GPL-3.0 project, or the VST3 SDK directly; confirm current licenses before choosing).
-- Validate with a VST3 validator tool; final test in a DAW (Reaper) is the owner's.
+## Phase 7: Linux VST3 (the first plug-in; tested in Reaper on the owner's Linux Mint laptop, PipeWire)
+Decided by the owner (after `docs/port/multi-instance.md`): the first plug-in is a **Linux VST3**; Windows follows later and reuses what it teaches. **One plug-in instance at a time, with a clear message** (option D); option A (one norns per instance with a supervisor) stays a documented future option and is not planned.
+Approach note: `docs/port/linux-vst3.md` (written before any plug-in code). Work in this order; each step has headless tests unless marked "owner":
+- **7.1 Protocol and bridge core (no plug-in yet).** A new, versioned bridge protocol in a shared header (not `macos/auv3/bridge_protocol.h`, which stays as it is): hello with an **instance id**, a version field, a settable bridge port (default 10200, announced in a runtime file), audio, MIDI, a **transport message** (tempo, PPQ position, play state), heartbeat, status, bye, and the **one-instance guard** (busy reply with a readable message). A Linux bridge (a JACK client next to norns, like `auv3_bridge`) and a fake plug-in client for tests.
+- **7.2 Transport to norns' clock.** The bridge turns the transport message into MIDI clock, start, stop, continue and song position and plays it into the existing internal device route (`Verdandi:midi_in`, which already follows them: Phase 3). Audio takeover of crone's inputs and outputs while a plug-in is connected, coordinated with the input router (MIC/SYS/APP/OFF). Tests: fake plug-in + headless norns, tempo and position follow, guard behaviour, latency measurement.
+- **7.3 The plug-in.** VST3 (framework per Gate E), thin client over loopback UDP, no allocation or locks in the audio thread, passes audio through (with a matching delay) when norns is not running, reports a constant latency, status as read-only parameters, state = instance id and version (more later). Tests: the SDK's validator tool, a headless fake host that loads the plug-in and drives audio, MIDI and `ProcessContext`.
+- **7.4 Start and find norns.** Bridge discovery through a runtime file; optional auto-start of norns from the plug-in (decision in the note); `linux/build.sh` builds and installs the plug-in (opt-out), `DEPS.md` for the SDK.
+- **7.5 Acceptance (owner).** Reaper on the owner's laptop: the plug-in scans and loads, audio both ways through norns, latency compensation, MIDI, tempo and transport following, the guard message with a second instance, behaviour when norns is not running or crashes, project save and load. Goes into `HARDWARE-CHECKLIST.md`.
+- **7.6 Project recall (optional, after 7.5).** Script name and parameter set stored in the plug-in state (what and what not: the note, section 10).
+- **GATE E (open)**: framework choice and the open decisions of `docs/port/linux-vst3.md` section 13 (recommendation there: the VST3 SDK directly, MIT). Question in `DECISIONS.md`.
+- Keep macOS and the AUv3 unchanged. The two-instance problem of the AUv3 is written down in `KNOWN-ISSUES.md` item 12.
+
+## Phase 8: Windows VST3 (after Phase 6 and Phase 7)
+- Reuse the protocol, the bridge logic and the plug-in code of Phase 7; what changes is the norns-side delivery (JACK MIDI becomes the internal pipe device of the keys type), the audio path (JACK for Windows or the Windows standalone's audio path from Gate D), process start and the bundle layout.
+- Windows-specific checks as in Phase 6 (ASIO, the owner uses an RME Fireface); tests that cannot run here go to the hardware checklist.
+- The same one-instance guard and message.

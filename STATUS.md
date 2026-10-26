@@ -136,6 +136,10 @@ Tests first (both failed before): `linux/tests/virtual_chunkname_test.lua`, `lin
 `docs/port/multi-instance.md`: today's AUv3 cannot serve two instances (one bridge, one stream; read, not run); the inventory of ports, JACK names and files; measurements of 1/2/4 headless instances (own namespaces: no clashes, ~0.46 GB and ~6.5 % of a core idle each, 4.5 to 7 s to start; with port flags and homes alone only one survives); options A to D assessed.
 Recommendation: build the one-instance guard with a message (D) into the plug-in plan, do not build per-instance norns (A) now, B never, C only as a separate feature. Harness and raw outputs in `docs/port/multi-instance/`. Decision for the owner: D now? and whether A is wanted at all.
 
+## Plug-in plan: Linux VST3 first, one instance at a time (approach note written, no plug-in code)
+
+Decisions (owner): option D (one instance with a clear message, a settable bridge port and an instance id in the protocol from the start); option A documented, not wanted now; AUv3 untouched (`KNOWN-ISSUES.md` item 12); first plug-in = Linux VST3 in Reaper on the owner's Mint laptop, Windows later. `PLAN.md`: Phase 7 = Linux VST3 (steps 7.1 to 7.6), Phase 8 = Windows VST3. Approach note: `docs/port/linux-vst3.md` (framework choice with licenses, protocol, guard, transport to clock, audio and latency, tests, recall, risks, open decisions = GATE E in `DECISIONS.md`). `CLAUDE.md` still says the VST3 belongs to the Windows step: the owner may want to update it.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.

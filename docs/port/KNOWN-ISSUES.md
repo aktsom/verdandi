@@ -544,3 +544,12 @@ Evidence and the test: `docs/port/maiden-exposure-evidence.md`.
 
 **Output format, changed later (plug-in check):** one line **per folder** instead of one per file (a script's installer drops a dozen plug-ins in one folder): the folder, each bad file with what it is, the machine, why SuperCollider fails, one move command for the folder (the folder itself if every plug-in in it is wrong, else the bad files together), how to turn the check off. Same information; the device-window note and the 3-second re-check
 are unchanged (the list file still has one path per file). Tests: `plugin_arch_test.cpp` (grouping and the line) and `plugin_check_test.sh` (seven bad files in four folders: four lines, two bad files and a good one in one folder, one in another).
+
+## 12. Two AUv3 instances in one project corrupt each other's audio silently (macOS port; read in the code, **not run**; NOT changed)
+
+Details and line references: `docs/port/multi-instance.md` section 1. Found while investigating several plug-in instances; `macos/` and the AUv3 were **not touched**.
+- There is **one** `auv3_bridge` (one JACK client `auv3`, one UDP socket on `127.0.0.1:10200`) and **one** audio adapter. Every plug-in instance connects to the same port: the port is compiled into the plug-in (`NB_PORT`; the bridge reads `NORNS_AUV3_PORT`, the plug-in does not).
+- The bridge answers each audio packet to its sender, so both plug-ins look connected, but it pushes both streams into the same adapter: norns' input is the two tracks' blocks interleaved, and each plug-in receives every other block of norns' one output (**expected** from the code: chopped, mixed audio; not heard, there is no Mac here).
+- A stop (`NB_BYE`) from either plug-in deactivates the bridge for both until the next audio packet; MIDI from both goes into one CoreMIDI source ("Verdandi AUv3"); a different sample rate flips the adapter back and forth.
+- The protocol has no instance id and no way to refuse a second client, so the plug-in cannot tell the user. **Nothing is shown**: this is silent.
+- Owner's decision (multi-instance note): the Linux VST3 gets a one-instance guard with a message from the start (`linux-vst3.md`); the AUv3 keeps its behaviour until the owner decides to change it (the fix would be the same guard: first sender wins, others get a "busy" reply and the plug-in shows it; a settable port on the plug-in side).

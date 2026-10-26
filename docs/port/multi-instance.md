@@ -2,6 +2,13 @@
 
 Status: **investigation only. No product code was changed.** The measurements were made with scripts in a scratch folder outside the repository (copies in `docs/port/multi-instance/`, with the raw outputs). Everything below says whether it was **read** in the code, **measured** here, or only **expected**.
 
+## Decisions taken by the owner (after this note)
+
+1. **Option D now**: one plug-in instance at a time, with a clear message instead of silent corruption, built into the plug-in plan before any VST3 code exists, together with a **settable bridge port** and an **instance id in the protocol from the start**, so that option A can be added later without redoing the plug-in. Design: `docs/port/linux-vst3.md`.
+2. **Option A is not wanted now.** It stays documented here as a future option, with the namespace measurement (section 3.3) and its limits: **Linux only; run as root in a container; not checked for ordinary users** (Ubuntu 24.04 may restrict unprivileged user namespaces); no real audio load or real-time behaviour measured; idle numbers only.
+3. **`macos/` and the AUv3 are not touched**; the AUv3's silent-corruption problem is in `KNOWN-ISSUES.md` item 12.
+4. **The first plug-in is a Linux VST3**, tested in Reaper on the owner's Linux Mint laptop (PipeWire); Windows follows later. `PLAN.md`: Phase 7 = Linux VST3, Phase 8 = Windows VST3.
+
 ## 0. The short answer
 
 - **Today, two instances of the Mac AUv3 in one project do not work, and they fail silently.** There is one bridge on one fixed UDP port (10200); both plug-ins talk to it, it has one audio stream, so it mixes their audio into one stream and splits the answer between them (read from the code; not run, there is no macOS here).
