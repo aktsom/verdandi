@@ -483,6 +483,11 @@ _norns.window_button = function(n)
     _menu.maiden_note = "maiden is not running, see log"
     _menu.maiden_note_until = util.time() + 6
     _menu.show_note()
+  elseif n == 8 then
+    -- Linux: maiden opened, but matron has no console socket: norns.sh --terminal keeps matron's prompt in the terminal
+    _menu.maiden_note = "maiden: no norns console with --terminal"
+    _menu.maiden_note_until = util.time() + 8
+    _menu.show_note()
   end
 end
 

@@ -1901,7 +1901,7 @@ static void post_enc(int n, int delta) {
     event_post(ev);
 }
 
-// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual, 6 mic, 7 (Linux) maiden is not running
+// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual, 6 mic, 7 (Linux) maiden is not running, 8 (Linux) maiden has no norns console
 static void post_window_button(int n) {
     union event_data *ev = event_data_new(EVENT_WINDOW_BUTTON);
     ev->key.n = n;
@@ -1947,6 +1947,10 @@ static void open_maiden() {
         char url[64];
         snprintf(url, sizeof url, "http://127.0.0.1:%d/maiden", port);
         shell_open_url(url);
+        // started with --terminal: matron's prompt is the terminal, nothing listens for maiden's norns console (5555)
+        if (!maiden_listening(5555)) {
+            post_window_button(8);
+        }
     } else {
         post_window_button(7);
     }

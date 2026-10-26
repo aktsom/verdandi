@@ -1,6 +1,6 @@
 #!/bin/bash
 # linux/tests/maiden_button_test.sh [MAIDEN_DIR]: the MAIDEN button of the window. with maiden listening it opens http://127.0.0.1:<port>/maiden
-# (xdg-open is a stub that records its argument); with nothing listening it opens nothing and the window shows a note for a few seconds.
+# (xdg-open is a stub that records its argument; in --terminal mode, as here, it adds a note that there is no norns console); with nothing listening it opens nothing and the window shows a note for a few seconds.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
@@ -30,7 +30,8 @@ run() { # name, maiden dir
 echo "== maiden is running"
 run up "$MD"
 check "xdg-open got maiden's page" "$(cat "$T/up.xdg" 2> /dev/null)" "http://127.0.0.1:$PORT/maiden"
-has "no note" "$(grep 'PROBE note after' "$T/up.log")" "nil"
+# the probe starts norns with --terminal: no norns console on 5555, so maiden opens and the window says why
+has "the window says maiden has no norns console in --terminal mode" "$(grep 'PROBE note after' "$T/up.log")" "maiden: no norns console with --terminal"
 echo "== maiden is not built / not running"
 run down "$T/none"
 check "nothing was opened" "$(cat "$T/down.xdg" 2> /dev/null)" ""

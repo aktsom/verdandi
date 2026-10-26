@@ -113,6 +113,13 @@ KNOWN-ISSUES item 10: the Mac port has the same exposure, untouched. Tests added
 Open: MANUAL button has no manual on Linux (decision 9, not done); `licenses` of maiden's Go/npm packages not collected (DEPS.md); apt `golang-go` 1.22 not tried (1.24.7 used); a fresh Ubuntu 24.04 image not used (this container, uid 65534, no `python`).
 Needs your laptop: `HARDWARE-CHECKLIST.md`, section "maiden".
 
+## maiden and `--terminal` (found on the laptop)
+
+Confirmed from the code: matron's Lua prompt is one stdin/stdout stream (`matron/src/input.cc` reads stdin). `--terminal` leaves it on the terminal; without it `ws-wrapper` binds it to the websocket on 5555 (what maiden's page and `maiden-repl` use).
+They are exclusive by construction. Not changed: `--terminal` keeps its meaning (the headless tests drive matron through it). Added: a launcher line in `--terminal` mode, a note in the window when MAIDEN opens the page without a console,
+RUN-ON-LAPTOP wording, the way to have both (start without `--terminal`, run `maiden-repl` in a second terminal), and a launcher test section for `--terminal`. The non-terminal assertions (5555 on 127.0.0.1 only, a websocket reaches the Lua REPL, a foreign Origin is refused)
+were already in `maiden_launcher_test.sh`.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.

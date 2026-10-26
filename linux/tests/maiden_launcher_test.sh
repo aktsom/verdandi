@@ -43,14 +43,14 @@ newhome() { mkdir -p "$T/$1" && ln -s "$REPO" "$T/$1/norns"; }
 start() { # name, env assignments...
     local name="$1"
     shift
-    env NORNS_HOME="$T/$name" "$@" "$REPO/linux/norns.sh" > "$T/$name.out" 2>&1 &
+    env NORNS_HOME="$T/$name" "$@" "$REPO/linux/norns.sh" ${LAUNCH_ARGS:-} < "${LAUNCH_STDIN:-/dev/null}" > "$T/$name.out" 2>&1 &
     RUN=$!
     for _ in $(seq 150); do
-        grep -q "matron log" "$T/$name.out" 2> /dev/null && break
+        grep -q "matron log\|--terminal:" "$T/$name.out" 2> /dev/null && break
         kill -0 "$RUN" 2> /dev/null || break
         sleep 0.2
     done
-    for _ in $(seq 100); do grep -q "running post-startup" "$T/$name/norns.log" 2> /dev/null && break; sleep 0.2; done
+    for _ in $(seq 100); do grep -q "running post-startup" "$T/$name/norns.log" "$T/$name.out" 2> /dev/null && break; sleep 0.2; done
 }
 procs() { pgrep -f "maiden server --host 127.0.0.1 --port $1" | wc -l; }
 
@@ -106,6 +106,18 @@ has "the launcher says so" "$(cat "$T/c.out")" "maiden is not built"
 check "norns booted" "$(grep -c 'running post-startup' "$T/c/norns.log")" 1
 stop_norns
 
+echo "== --terminal: matron's prompt is the terminal, there is no norns console for maiden"
+newhome d
+mkfifo "$T/d.fifo"
+exec 4<> "$T/d.fifo"
+LAUNCH_ARGS=--terminal LAUNCH_STDIN="$T/d.fifo" start d NORNS_MAIDEN="$MD" NORNS_MAIDEN_PORT="$PM"
+sleep 1
+has "the launcher says maiden's norns console is not available and how to get it" "$(cat "$T/d.out")" "maiden's norns console (port 5555) is not available; start without --terminal"
+check "nothing listens on 5555" "$(python3 -I "$HERE/listening.py" 5555)" ""
+check "maiden itself is up (editor, catalog)" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PM/maiden/")" 200
+stop_norns
+exec 4>&-
+
 [ $FAILS -eq 0 ] && echo "maiden_launcher_test: all passed" || echo "maiden_launcher_test: $FAILS failed"
-if [ $FAILS -ne 0 ]; then for f in a b c; do echo "--- $f.out"; tail -6 "$T/$f.out" 2> /dev/null; done; fi
+if [ $FAILS -ne 0 ]; then for f in a b c d; do echo "--- $f.out"; tail -6 "$T/$f.out" 2> /dev/null; done; fi
 [ $FAILS -eq 0 ]

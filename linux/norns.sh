@@ -361,6 +361,7 @@ else
     echo "norns.sh: maiden is not built (linux/maiden-build.sh): no web editor"
 fi
 [ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_HOME/norns.log"
+[ $TERMINAL -eq 1 ] && echo "norns.sh: --terminal: matron's Lua prompt is this terminal, so maiden's norns console (port 5555) is not available; start without --terminal for it (and run build/maiden-repl/maiden-repl for a terminal prompt next to it)"
 
 while :; do
     wait "$NORNS_PID"

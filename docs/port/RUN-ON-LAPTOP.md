@@ -41,8 +41,8 @@ depends on PipeWire; it checks the window, keys, grid, menu and dialogs:
 cd ~/verdandi-home/norns
 NORNS_JACK_DRIVER=dummy linux/norns.sh --terminal
 ```
-`--terminal` keeps matron's Lua prompt and its log in this terminal (maiden, the web editor, starts in either mode:
-see "maiden" at the end). Close the window or press Ctrl+Q in it to quit.
+`--terminal` keeps matron's Lua prompt and its log in this terminal (maiden, the web editor, starts in either mode, but its
+norns console only works without `--terminal`: see "maiden" at the end). Close the window or press Ctrl+Q in it to quit.
 
 **Run with sound under PipeWire (your Linux Mint 22.2 laptop).** Nothing to prefix any more: `linux/norns.sh`
 looks for a JACK server; if none answers and PipeWire runs, it starts itself again under `pw-jack` (needs
@@ -276,6 +276,10 @@ SHA-256), a few minutes, and about 1.6 GB of temporary space in `~/verdandi-home
 
 `linux/norns.sh` starts it next to norns (also with `--terminal`) and prints `maiden at http://127.0.0.1:5000/maiden` (log: `~/verdandi-home/maiden.log`). The **MAIDEN button** in the window opens that page;
 if nothing answers on the port (not built, port taken, crashed) it opens nothing and the window shows "maiden is not running, see log" for a few seconds.
+- **The norns console in the maiden page needs a start without `--terminal`.** matron has one text stream for its Lua prompt: with `--terminal` that is this terminal (stdin and stdout), without it `ws-wrapper` takes the stream and offers it on
+  `ws://127.0.0.1:5555` (the maiden page, `maiden-repl`). A stream cannot be both, so with `--terminal` nothing listens on 5555 and the page says "not connected to norns" (the SuperCollider console on 5556 is separate and unaffected).
+  The launcher prints a line about this in `--terminal` mode, and the MAIDEN button shows "maiden: no norns console with --terminal" when it opens the page. To have a terminal prompt **and** the page: start `linux/norns.sh` without `--terminal`
+  and, in a second terminal, run `build/maiden-repl/maiden-repl` (it connects to 5555 and 5556 as the page does; the matron log is then in `~/verdandi-home/norns.log`).
 - **Port:** 5000, or `NORNS_MAIDEN_PORT=5001 linux/norns.sh` if something else has 5000 (the launcher says so and does not start maiden then). The consoles (matron 5555, sclang 5556) are fixed ports.
 - **Where things go:** scripts you install go to `~/verdandi-home/dust/code/<name>/`, catalogs to `dust/data/catalogs`, sources to `dust/data/sources` (filled on the first start). The editor can read and write everything under `~/verdandi-home/dust`, and nothing outside it.
 - **Safety:** maiden and the consoles answer on `127.0.0.1` only. In addition a web page from **another site** open in your browser cannot use them: the consoles only keep a browser connection whose page came from maiden's own address
