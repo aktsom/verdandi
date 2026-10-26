@@ -90,7 +90,7 @@ exec 4<>/dev/tcp/127.0.0.1/5000 && printf 'GET /maiden HTTP/1.0\r\n\r\n' >&4 && 
 touch /opt/verdandi/should-not-work 2> /home/tester/write.err && echo written > /home/tester/write.out
 kill $PID; wait $PID 2>/dev/null
 sleep 3
-pgrep -u tester -l | grep -v 'run.sh\|pgrep' > /home/tester/left.out
+pgrep -u tester -l | grep -v 'run.sh\|pgrep\|grep' > /home/tester/left.out
 exit 0
 RUN
 chmod 755 /home/tester/run.sh
@@ -109,7 +109,7 @@ INNER
 chmod 755 "$R/root/inner.sh"
 
 unshare -m sh -c "
- mount -t proc proc '$R/proc' && mount --rbind /dev '$R/dev' && mount -t tmpfs tmpfs '$R/tmp'
+ mount -t proc proc '$R/proc' && mount --rbind /dev '$R/dev' && mount -t tmpfs tmpfs '$R/dev/shm' && mount -t tmpfs tmpfs '$R/tmp'
  cp /etc/resolv.conf '$R/etc/resolv.conf' 2>/dev/null
  chroot '$R' /usr/bin/env MIRROR='$MIRROR' http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' /bin/bash /root/inner.sh" > "$T/inner.out" 2>&1
 cat "$T/inner.out" | grep -E '^(PASS|FAIL|   |SKIP)' 
