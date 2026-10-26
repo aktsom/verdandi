@@ -1,5 +1,28 @@
 # Phase 4 (maiden): the web editor and script catalog on Linux
 
+## Result: decisions taken and what was built
+
+The owner decided (the plan below is unchanged; this is the outcome):
+1. maiden is built by default in `linux/setup-deps.sh` and `linux/build.sh`; `NORNS_NO_MAIDEN=1` skips it. Done: `linux/maiden-build.sh` (also run on its own).
+2. Browser-origin protection: an Origin check in `ws-wrapper` and Host/Origin checks in the maiden patch, loopback-aware; `macos/` and the Mac port untouched; the same exposure on the Mac written to `KNOWN-ISSUES.md` item 10.
+   The exposure was reproduced first (`maiden-exposure-evidence.md`, the failing run is `known-issues-logs/maiden-before.txt`), then fixed. `ws-wrapper/src/main.c` is shared code: the check is **off unless `WS_WRAPPER_ALLOWED_ORIGINS` is set**,
+   and `macos/norns.sh` does not set it, so the Mac behaves as before (the code path is not reached; the Mac build was not run here).
+3. maiden's systemd unit API and restart commands are off on Linux (`linux/patches/maiden-linux-guard-and-units.patch`): they answer 404 "not available in Verdandi", maiden does not open a D-Bus connection.
+4. The MAIDEN button opens the page when something answers on maiden's port, else the window shows "maiden is not running, see log" for a few seconds. The edit is in the shared `matron/src/platform/macos/sdl_bridge.cc`,
+   inside `#ifdef NORNS_LINUX_DESKTOP`; the Mac code path is the line it had.
+5. to 9., by the recommendations in the plan: port 5000 with `NORNS_MAIDEN_PORT` and a message (done); pinned commit, versions, lockfiles and a checked node archive, no vendored caches (done);
+   the catalog as on the Mac, from maiden's own sources at run time (done, checked once by hand against the real source: base.json and community.json were downloaded); item 8 needs nothing; **item 9 (the MANUAL button has no manual on Linux) was not done**: it is independent and
+   would copy a file from `macos/manual`, which the owner said to leave alone. Open, listed in STATUS.md.
+
+Not as planned: go-git does not support a `file://` git URL (maiden treats a `file:` URL as a zip path), so the automatic install test uses zip archives; the **git route was tried once by hand** over the network
+(`POST .../project/install?url=https://github.com/tehn/awake`: installed `dust/code/awake`), and is not in the suite (needs the network).
+Versions seen in this container: Go 1.24.7 (Ubuntu 24.04's apt `golang-go` is 1.22: **not tried**), node 16.20.2, yarn 1.22.22. The clean-user build was run as uid 65534 with `/usr/bin/python` masked, in this container, not in a fresh Ubuntu 24.04 image.
+
+Tests (all in `run_all.sh`): `maiden_test.sh` (24 checks: binds, editor API, install, REPL origin, Host/Origin, unit API), `maiden_launcher_test.sh` (real norns: loopback only, LAN refused, REPL answers maiden's page and refuses another site, port taken, maiden not built, stops with norns),
+`maiden_install_test.sh` (install a zip, norns runs it; a script with an ARM plug-in installs, is reported, nothing moved), `maiden_button_test.sh` (stub xdg-open; the note and its disappearance).
+
+# The plan as written before the decisions
+
 Status: **investigation and plan only. Nothing is built or changed by this note.** It covers the maiden item of
 `PLAN.md` Phase 4. What was read: the Mac port (`macos/setup-deps.sh`, `macos/norns.sh`, `macos/app-launcher.sh`,
 `macos/make-app.sh`, `macos/patches/maiden-host-flag.patch`, `readme-macos.md`, `sdl_bridge.cc`, `menu.lua`), this

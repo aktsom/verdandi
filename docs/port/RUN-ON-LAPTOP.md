@@ -41,8 +41,8 @@ depends on PipeWire; it checks the window, keys, grid, menu and dialogs:
 cd ~/verdandi-home/norns
 NORNS_JACK_DRIVER=dummy linux/norns.sh --terminal
 ```
-`--terminal` keeps matron's Lua prompt and its log in this terminal (there is no maiden yet in the Linux
-version; that comes with packaging). Close the window or press Ctrl+Q in it to quit.
+`--terminal` keeps matron's Lua prompt and its log in this terminal (maiden, the web editor, starts in either mode:
+see "maiden" at the end). Close the window or press Ctrl+Q in it to quit.
 
 **Run with sound under PipeWire (your Linux Mint 22.2 laptop).** Nothing to prefix any more: `linux/norns.sh`
 looks for a JACK server; if none answers and PipeWire runs, it starts itself again under `pw-jack` (needs
@@ -111,7 +111,8 @@ linux/norns.sh --terminal
 `linux/norns.sh` finds it. If nothing runs and PipeWire holds the sound card, `NORNS_JACK_DRIVER=alsa` (the
 default) fails because the card is busy: use the `dummy` driver or `pw-jack`.
 
-**Put a script on it.** Without maiden: copy a script folder into `~/verdandi-home/dust/code/<name>/<name>.lua`
+**Put a script on it.** With maiden: click MAIDEN in the window (see "maiden" at the end), or open
+`http://127.0.0.1:5000/maiden`, and use the library icon to install from the catalog. Without maiden: copy a script folder into `~/verdandi-home/dust/code/<name>/<name>.lua`
 (or use the menu's "Import files..." / "Import folder..."), then in the norns window use HOME > SELECT. A tiny
 test script that reports every key, encoder, grid, arc and MIDI event on the terminal:
 ```bash
@@ -132,7 +133,7 @@ It runs `sudo` for these (apt, libmonome in `/usr/local`), and nothing else; waf
    - **to build:** build-essential, ca-certificates, curl, git, pkg-config, python3, libasound2-dev,
      libavahi-client-dev, libavahi-compat-libdnssd-dev, libboost-dev, libcairo2-dev, libevdev-dev,
      libfftw3-dev, libglib2.0-dev, libgpiod-dev, libjack-jackd2-dev, liblo-dev, liblua5.3-dev, libncurses-dev,
-     libnng-dev, libreadline-dev, libsamplerate0-dev, libsdl2-dev, libsndfile1-dev, libudev-dev
+     libnng-dev, libreadline-dev, libsamplerate0-dev, libsdl2-dev, libsndfile1-dev, libudev-dev, golang-go
    - **to run:** jackd2, lua5.3, supercollider-server, supercollider-language, sc3-plugins-server,
      sc3-plugins-language (SuperCollider brings Qt WebEngine: several hundred MB with its dependencies)
    - **for the tests only:** xvfb, xauth, x11-apps, xdotool, imagemagick, dbus, python3-gi,
@@ -159,6 +160,8 @@ folder: `build/`, `.waf3-*` and the submodules under `third-party/` and `crone/s
 If you do not want the test tools, delete `xvfb xauth x11-apps xdotool imagemagick dbus python3-gi
 gir1.2-glib-2.0` from the install line (then `linux/tests/run_all.sh` skips what needs them). A
 `--no-test-deps` switch would be better; say if you want it.
+4. Builds **maiden** (`linux/maiden-build.sh`, as you, no `sudo`): the pinned commit of monome/maiden with two patches, node 16.20.2 in a temporary folder, into `~/verdandi-home/maiden` (see "maiden" at the end of this file).
+   `NORNS_NO_MAIDEN=1 linux/setup-deps.sh` skips it. A failure only prints a warning.
 
 ## 3. In a container instead (nothing installed on the laptop)
 
@@ -265,3 +268,19 @@ programs reading one serial stream steal each other's bytes: grid events lag, ar
 - **"sudo systemctl restart norns-..." from a script** (a script's installer asks for a restart this way, for the Raspberry Pi's services): on this build norns now answers it itself. The command returns at
   once with exit 0, prints one line (`norns: there is no systemd for norns on this build ... norns restarts itself instead`), and norns restarts within a few seconds (through its own restart, `linux/norns.sh` starts it again). Other
   `sudo` commands from scripts run with `sudo -n`: if a password would be needed they fail at once instead of waiting and freezing norns. `NORNS_NO_SHIMS=1` switches this off. A script that calls `/usr/bin/sudo` by its full path is not covered.
+
+## maiden: the web editor, the consoles and the script catalog
+`linux/setup-deps.sh` and `linux/build.sh` build maiden (`linux/maiden-build.sh`, as you, not as root) into `~/verdandi-home/maiden`: it needs the network (Go modules, npm packages, node 16.20.2 from nodejs.org with a checked
+SHA-256), a few minutes, and about 1.6 GB of temporary space in `~/verdandi-home/.maiden-build`, which is deleted afterwards (`MAIDEN_KEEP_BUILD=1` keeps it). `NORNS_NO_MAIDEN=1` skips it (norns works without; the launcher says
+"maiden is not built"). If the build fails (no network) the scripts print a warning and go on; run `linux/maiden-build.sh` again later. The node used for the web app is only in the temporary folder; nothing is installed system-wide besides `golang-go`.
+
+`linux/norns.sh` starts it next to norns (also with `--terminal`) and prints `maiden at http://127.0.0.1:5000/maiden` (log: `~/verdandi-home/maiden.log`). The **MAIDEN button** in the window opens that page;
+if nothing answers on the port (not built, port taken, crashed) it opens nothing and the window shows "maiden is not running, see log" for a few seconds.
+- **Port:** 5000, or `NORNS_MAIDEN_PORT=5001 linux/norns.sh` if something else has 5000 (the launcher says so and does not start maiden then). The consoles (matron 5555, sclang 5556) are fixed ports.
+- **Where things go:** scripts you install go to `~/verdandi-home/dust/code/<name>/`, catalogs to `dust/data/catalogs`, sources to `dust/data/sources` (filled on the first start). The editor can read and write everything under `~/verdandi-home/dust`, and nothing outside it.
+- **Safety:** maiden and the consoles answer on `127.0.0.1` only. In addition a web page from **another site** open in your browser cannot use them: the consoles only keep a browser connection whose page came from maiden's own address
+  (127.0.0.1 or localhost with maiden's port), and maiden refuses requests with another `Host` or `Origin`. `maiden-repl` and scripts on your machine are not affected. This is explained in `docs/port/maiden-exposure-evidence.md`.
+  The same exposure exists on the Mac app; nothing was changed there (`KNOWN-ISSUES.md`, item 10).
+- **What installing a script does:** maiden only downloads it (git clone, or unzip) into `dust/code`. It runs nothing. What a script does after (its own K3 "Install" dependency step) is as described above under "Scripts that install SuperCollider libraries":
+  Raspberry Pi plug-ins are reported and do not load on this machine; `sudo systemctl restart norns-*` becomes a norns restart. maiden's own console commands `;restart` and the like (they talk to systemd) answer
+  "not available in Verdandi" here: restart norns from its window.

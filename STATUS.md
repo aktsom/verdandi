@@ -105,9 +105,13 @@ the sound card (the owner's hand test: an unlinked stream stays unlinked, but a 
 Recorded in `HARDWARE-CHECKLIST.md` ("Done on a real machine"): silent run, sound under PipeWire, Reaper clock/notes through the
 Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped several times (design for auto-connect only).
 
-## maiden on Linux: plan written, nothing built
+## maiden on Linux: built (phase-4-maiden.md, "Result")
 
-`docs/port/phase-4-maiden.md`: how the Mac port builds and starts maiden, what Linux needs, how script installs interact with the ARM plugin and sudo findings, the security picture (including that a web page can reach the REPL websockets), a step plan with headless tests and nine decisions for the owner. Waiting for those decisions.
+Built by `linux/maiden-build.sh` (setup-deps.sh and build.sh run it; `NORNS_NO_MAIDEN=1` skips), started by `linux/norns.sh` on 127.0.0.1:5000 (`NORNS_MAIDEN_PORT`), MAIDEN button opens it or shows a note.
+The browser-origin exposure was reproduced first (`maiden-exposure-evidence.md`), then fixed: `ws-wrapper` Origin check (opt-in env var, the Mac does not set it) and a Host/Origin guard in the Linux maiden patch; the unit API is off.
+KNOWN-ISSUES item 10: the Mac port has the same exposure, untouched. Tests added to `run_all.sh`: maiden:server/origin, maiden:launcher, maiden:install, maiden:button.
+Open: MANUAL button has no manual on Linux (decision 9, not done); `licenses` of maiden's Go/npm packages not collected (DEPS.md); apt `golang-go` 1.22 not tried (1.24.7 used); a fresh Ubuntu 24.04 image not used (this container, uid 65534, no `python`).
+Needs your laptop: `HARDWARE-CHECKLIST.md`, section "maiden".
 
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS

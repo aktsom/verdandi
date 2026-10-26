@@ -144,3 +144,16 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 - [ ] A script whose installer ends with "K3: Restart" (the one that runs `sudo systemctl restart norns-jack.service norns-crone.service norns-matron.service`): K3 returns at once, the terminal shows the `norns: there is no systemd ...` line,
       norns restarts by itself within a few seconds (state saved), and the window does not freeze waiting for a password.
 - [ ] `sudo ls` run by a script (`os.execute("sudo ls")`) returns at once with a sudo message instead of waiting for a password (and, with a passwordless sudo, works).
+
+## maiden (web editor and script catalog; `docs/port/phase-4-maiden.md`)
+Everything below needs your laptop (a real browser, the real catalog, real audio). Headless tests already cover: the loopback-only binds, the file API, installing from a zip, loading the installed script in norns, the Origin/Host refusals, the window button.
+- [ ] `linux/setup-deps.sh` (or `linux/maiden-build.sh`) as your user on your laptop: maiden is built; time, size, and no warnings that matter. Then `linux/norns.sh` prints `maiden at http://127.0.0.1:5000/maiden`.
+- [ ] Click MAIDEN in the window: your default browser opens the page. The tree shows `dust`, the matron and supercollider consoles say "connected" (SuperCollider needs a working audio setup), `print(1+1)` in the matron console prints `2`.
+- [ ] Open the page as `http://localhost:5000/maiden` too: the consoles connect as well.
+- [ ] Install a script from the community catalog (the library icon; first it must have downloaded the catalog: a few seconds after the first start). It appears under `dust/code`, in HOME > SELECT, and runs. Update it from maiden once.
+- [ ] Install a script that has the Raspberry Pi plug-ins (one of the 71 in `macos/docs/02-katalog-scan.md` with "ugen-plugins"): maiden installs it, its K3 install fetches ARM files, norns reports them at the next start (`PLUGINS: ...`), SuperCollider fails as described. Expected, not a maiden problem.
+- [ ] Edit a script in maiden, save, and run it from norns (the "run" in maiden's editor sends it to the matron console).
+- [ ] Another computer on your network cannot open `http://<your laptop's address>:5000/maiden` (connection refused), nor the consoles.
+- [ ] Open a page of another site (any website, with maiden running): nothing happens to norns. (The page cannot be checked by hand without writing one: `docs/port/repro/maiden_exposure.js` does it with a browser; Firefox was not tried at all, only Chromium in the container.)
+- [ ] With something on port 5000 (for example `python3 -m http.server 5000`): the launcher says the port is in use; the button shows the note; `NORNS_MAIDEN_PORT=5001` works.
+- [ ] Reaper running with norns as a plug-in neighbor: maiden unaffected (no change expected).
