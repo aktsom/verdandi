@@ -108,17 +108,41 @@ void screen_init(void) {
 //-----------------
 //-- screen commands
 
+#ifdef NORNS_DESKTOP
+// desktop builds (Linux, macOS): cairo 1.17.8 and newer draws a glyph at the fractional position it is given (sub-pixel glyph positioning);
+// the device's cairo 1.16 rounds every glyph origin to a whole pixel. the pixel font of the screen is made for whole pixels: a text that
+// starts at a half pixel (centered text with an odd ink width, or a script's fractional x or y) looks squished and blurred. so the
+// start of every text is rounded (half up) to a whole pixel here, which is what the device draws. the device build below is as it was.
+// docs/port/KNOWN-ISSUES.md item 9, linux/tests/screen_text_test.cc
+static void snap_text_start(double dx) {
+    if (!cairo_has_current_point(cr)) {
+        return;
+    }
+    double x, y;
+    cairo_get_current_point(cr, &x, &y);
+    cairo_move_to(cr, floor(x + dx + 0.5), floor(y + 0.5));
+}
+#endif
+
 void screen_text_right(const char *s) {
     cairo_text_extents_t extents;
     cairo_text_extents(cr, s, &extents);
+#ifdef NORNS_DESKTOP
+    snap_text_start(-extents.width);
+#else
     cairo_rel_move_to(cr, -extents.width, 0);
+#endif
     cairo_show_text(cr, s);
 }
 
 void screen_text_center(const char *s) {
     cairo_text_extents_t extents;
     cairo_text_extents(cr, s, &extents);
+#ifdef NORNS_DESKTOP
+    snap_text_start(-extents.width * 0.5);
+#else
     cairo_rel_move_to(cr, -extents.width * 0.5, 0);
+#endif
     cairo_show_text(cr, s);
 }
 
@@ -132,6 +156,9 @@ void screen_text_trim(char *s, double w) {
             return;
         }
     } while (extents.width > w);
+#ifdef NORNS_DESKTOP
+    snap_text_start(0);
+#endif
     cairo_show_text(cr, s);
 }
 
@@ -451,6 +478,9 @@ void screen_fill(void) {
 }
 
 void screen_text(const char *s) {
+#ifdef NORNS_DESKTOP
+    snap_text_start(0);
+#endif
     cairo_show_text(cr, s);
 }
 

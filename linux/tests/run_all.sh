@@ -374,6 +374,21 @@ if command -v jackd > /dev/null; then
     run "shims:a script's sudo systemctl restart norns-* returns at once and norns restarts itself" shim_restart_ok
 fi
 
+# the screen's text placement (docs/port/KNOWN-ISSUES.md item 9): the real matron/src/hardware/screen.cc compiled into a test. the desktop build snaps the
+# start of every text to a whole pixel as the device's cairo does (odd-width centered text no longer squished or blurred); the device build is untouched
+screen_text_ok() { # variant: desktop | device
+    local h inc libs d
+    h="$(mktemp -d)"
+    ln -s "$REPO" "$h/norns"
+    inc="-I matron/src -I matron/src/hardware -I third-party/doctest $(pkg-config --cflags cairo freetype2 lua5.3)"
+    libs="$(pkg-config --libs cairo freetype2 lua5.3) -lm"
+    [ "$1" = desktop ] && d="-DNORNS_DESKTOP" || d="-DSCREEN_TEXT_DEVICE"
+    g++ -std=c++14 $inc $d matron/src/hardware/screen.cc linux/tests/screen_text_test.cc -o "$T/screen_text_$1" $libs || return 1
+    HOME="$h" "$T/screen_text_$1"
+}
+run "screen:text placement, desktop build (whole-pixel start, odd widths crisp)" screen_text_ok desktop
+run "screen:text placement, device build (unchanged)" screen_text_ok device
+
 # the optional MIDI auto-connect (midi_in_from= in audio.conf, or NORNS_MIDI_IN_FROM): a port matching a prefix is linked to
 # Verdandi:midi_in, a link cut behind norns' back is made again, a client that appears later is linked, a port that does
 # not match is not

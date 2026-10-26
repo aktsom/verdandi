@@ -75,6 +75,11 @@ a scratch copy, not applied); (2) `CLOCK_MONOTONIC` for the internal clock, docu
 78eedb02 is that a **saved choice is restored at boot**: `~/verdandi-home/.norns-input` (SYS, APP or the sink monitor) or `.mic-off` (OFF). Before 78eedb02 SYS/APP did not exist
 on Linux, so a SYS choice could not be made or restored. If your laptop's norns home has a `.norns-input` file from pressing the MIC button once (MIC > SYS), it starts in SYS.
 
+## Text placement fix (KNOWN-ISSUES item 9)
+Done, test first: on the desktop builds `screen.cc` rounds the start of every text (`screen.text`, `text_right`, `text_center`, `text_trim`) to a whole pixel, as the device's cairo 1.16 does, so centered text with an odd ink width
+("modulation", "track 6 options", "link" ...) is crisp again; the device build is byte for byte unchanged (preprocessed source compared). `linux/tests/screen_text_test.cc` (real `screen.cc` in the test) runs in `run_all.sh`.
+Not verified: macOS, a real device. Scripts checked for fractional text positions: none found in 12 community scripts; the core tab bar had one (fixed by the snap).
+
 ## SuperCollider plug-in check and restart commands from scripts
 Done, tests first: (1) before SuperCollider starts, `linux/norns.sh` runs `linux/plugin_arch_check` (ELF class and machine of the plug-ins in the extension folders and `dust/code`, against `uname -m`): one plain log
 line per wrong file with the move command into `<norns home>/disabled-plugins`, a standing note on the device window until none is left, report only (nothing is moved), off with `NORNS_PLUGIN_CHECK=0` / `plugin_check=0`;

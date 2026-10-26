@@ -427,7 +427,7 @@ shows one error while the list can be longer; a file this check cannot read (per
   shims cannot (an absolute `/usr/bin/sudo`, `sh -c "sudo ..."` with a changed `PATH`), but it changes every script's shell calls, hides what runs, and does not cover the sidecar; the `PATH` shims touch only these two names.
   Not covered: a script that calls `/bin/systemctl` or `/usr/bin/sudo` by absolute path, or one that clears or replaces `PATH`. Also not built: `apt`/`apt-get` shims, a `wget` shim, x86_64 plug-in bundles (8.5 B1, B2).
 
-## 9. Centered text with an odd ink width looks squished or blurred (cairo 1.18 draws glyphs at fractional positions; found on the laptop; investigated, NOT changed; fix proposed)
+## 9. Centered text with an odd ink width looks squished or blurred (cairo 1.18 draws glyphs at fractional positions; found on the laptop; FIXED for the desktop builds)
 
 **Symptom:** centered headers on PARAMS pages ("modulation", "track 6 options", "track 1 filter", "link") look squished and bolder, letters running together; "midi clock out" is clean; left- and right-aligned
 lines are clean; the OLED screenshot shows it too (so it is in the drawing, not in the window scaling).
@@ -497,3 +497,19 @@ This reproduces the device's output exactly for whole-pixel x (round half up: st
 snaps the current point (x and y, round half up) in `screen_text`, `screen_text_right` and `screen_text_center` before `cairo_show_text`, which also covers scripts that pass fractional x or y to `screen.move` (cairo 1.16 snapped those too); it
 would be guarded for the desktop builds (Linux and macOS, where cairo is new) so the device code stays byte for byte as it is. Test (to write first): a C test that draws odd and even widths centered at x = 64 and asserts no pixel is partial with
 `aa none` and `gray`, and that the leftmost column of "modulation" is 43. Not covered: text drawn with `screen.text_extents` based manual centering in a script (it passes `x - w/2` itself and has the same half pixel: the general snap would fix it as well).
+
+### 9.5 The general fix, applied (desktop builds only)
+`matron/src/hardware/screen.cc`: `snap_text_start()` rounds the start of the text, x and y, **half up to a whole pixel** (what cairo 1.16 does on the device) in `screen_text`, `screen_text_right`, `screen_text_center` and `screen_text_trim`
+(which also draws text). The centered and right-aligned offsets are applied before the rounding (`x - width/2`, `x - width`). It is guarded by `NORNS_DESKTOP` (Linux and macOS builds, where cairo is new): **the device code is untouched**: the
+preprocessed `screen.cc` without `NORNS_DESKTOP` is identical to the one before the change (compared, 9840 lines, no difference). A text with no current point is left alone (as before).
+**Test first** (`linux/tests/screen_text_test.cc`: the real `screen.cc` compiled into the test with stubs; reference images are plain cairo at the position the device would use; pixel-exact comparison of the whole 128 x 64 surface, `aa` none and gray):
+on the code before the change the desktop variant failed 3 of 6 cases, 30 of 169 assertions (odd-width centered strings "modulation", "track 6 options", "track 1 filter", "link": start 42.5 instead of 43 and so on; fractional starts from a script; the leftmost
+column of "modulation" was 42, expected 43), while the even-width, left-aligned and right-aligned cases passed; after the change all 6 cases (169 assertions) pass, and the device variant (no `NORNS_DESKTOP`: text starts exactly where it is asked to,
+also at fractional positions) passes both before and after (2 cases, 49 assertions). Both run in `run_all.sh`.
+**Do bundled or common scripts draw text at fractional positions?** Looked at: the core Lua (`lua/core`, `lua/lib`) and 12 community scripts' source (awake, twins, oooooo, barcode, amen, blndr, clcks, glitchlets, kolor, mx.samples, rachim, zxcvbn; 59 text calls, 9 centered, 9 right-aligned):
+- Of the `screen.move` calls directly before a text, 32 use whole-number literals, **none** has a decimal literal or a division, 27 use variables or expressions (loop counters, layout variables: not evaluated, not seen to be fractional).
+- The core: `lua/lib/ui.lua` (the tab bar, `Tabs`) moves to `MARGIN + col_width * 0.5 + ...` and centers there: with two titles `col_width` is 49 and the centre is `24.5`, a half pixel **before** the centering; its text now lands on the whole pixel the device drew. `lua/lib/graph.lua` has `+ 0.5` moves, but for **lines** (strokes aligned to pixel centres), not text: unchanged.
+  Every PARAMS/menu page that centers a header (`screen.text_center`) is affected, for the better: odd widths are now crisp.
+- **Effect on how things look:** integer positions are byte for byte as before (tested). Where a text started at a half pixel (centered text of odd ink width, a script's fractional x or y, the two-title tab bar) it is moved by at most half a pixel (round half up) and drawn crisp, as on the device with cairo 1.16;
+  nothing else changes. A script that **relies on** the newer cairo's smooth half-pixel placement (animated text moving by fractions of a pixel) would now move in whole-pixel steps, as it does on the device. The sample of scripts shows none that do.
+**Not verified:** macOS (the guard includes it; it was not built or run here), and a real device (the 1.16 behavior was checked against Ubuntu's cairo 1.16.0 library, item 9.2).
