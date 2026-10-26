@@ -363,7 +363,7 @@ if command -v jackd > /dev/null; then
     "$REPO/linux/tests/plugin_note_test.sh" "$PLOG" > /dev/null 2>&1
     plugin_note_ok() {
         local bad=0
-        [ "$(grep -ac "^norns.sh: SuperCollider plug-in .*Fake_scsynth.so is built for 32-bit ARM" "$PLOG")" = 1 ] || { echo "the log line must appear exactly once"; bad=1; }
+        [ "$(grep -ac "^norns.sh: SuperCollider plug-in in .*/fake/ignore: Fake_scsynth.so (32-bit ARM); this machine is" "$PLOG")" = 1 ] || { echo "the log line must appear exactly once"; bad=1; }
         grep -aq "PROBE plugin note 1.PLUGINS: wrong-architecture plug-in, see log" "$PLOG" || { echo "no note on the device window"; bad=1; }
         grep -aq "PROBE plugin note 2.nil" "$PLOG" || { echo "the note stayed after the file was moved away"; bad=1; }
         return $bad
