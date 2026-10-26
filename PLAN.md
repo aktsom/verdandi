@@ -32,10 +32,12 @@ Work top to bottom. Tick items off in `STATUS.md`. GATE = write to `DECISIONS.md
   4. Ableton Link stays as the secondary path (already built and working on Linux; Windows build define in Phase 6). Reaper side: ReaBlink (see clock-notes.md); MIDI clock is the primary path.
 
 ## Phase 4: Launcher and packaging
-- Linux equivalent of `macos/norns.sh` and `app-launcher.sh` (first run creates `~/norns`).
-- Bundle SuperCollider, sc3-plugins, maiden, GNU tools assumptions documented.
-- **GATE B**: Flatpak vs AppImage (or both). Recommendation to be written after Phase 3 based on audio and USB-access needs.
-- Build the packaged artifact; verify install in a clean container.
+- Linux equivalent of `macos/norns.sh` (done: `linux/norns.sh`; **installed mode** done: the home is `NORNS_HOME`, else `~/.config/verdandi/home`, else `~/Verdandi`; the `norns` link is created or moved, shared with a developer checkout).
+- maiden: done (Phase 4 note `docs/port/phase-4-maiden.md`).
+- **GATE B decided**: `.deb` first (Ubuntu 24.04 and Mint 22), one file per release, no apt repository; Flatpak not now; AppImage later and optional; a narrow udev rule for monome devices; font licences open before any public release (`DECISIONS.md`, `docs/port/packaging.md`).
+- First step done: `linux/package.sh` (SuperCollider 3.14.1 without Qt, sc3-plugins, libmonome for the final prefix, maiden, norns; `.deb` with a neutral identity and a privacy scan), the clean-root test (`linux/tests/package_test.sh`, in `run_all.sh`), the udev rule and its test, `docs/port/supercollider-3.14.md` (all six engines run on 3.14.1).
+- Next: build the `.deb` on the laptop (`package.sh clean-root` or `all`) and install it there (`HARDWARE-CHECKLIST.md`, "The package"); the answer on the four fonts before any release; a generated notices file for maiden's modules (packaging.md section 5.5); "bring the running window forward when started twice".
+- AppImage (optional, later): same tree and SuperCollider, plus a way around the compiled-in SuperCollider path, the FUSE question, a first-run desktop entry.
 
 ## Phase 5: Linux acceptance
 - Finish `docs/port/HARDWARE-CHECKLIST.md` (real grid/arc, crow, MIDI, audio interface, SYS capture, long-run stability).

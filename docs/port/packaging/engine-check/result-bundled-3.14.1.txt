@@ -1,0 +1,23 @@
+== bundled
+compiling class library...
+	Compiling directory '/opt/verdandi/supercollider/share/SuperCollider/Extensions'
+*** Welcome to SuperCollider 3.14.1. *** For help type ctrl-c ctrl-h (Emacs) or :SChelp (vim).
+ENG_LOADED PolyPerc
+ENG_NAME PolyPerc
+ENG_LOADED PolySub
+ENG_NAME PolySub
+ENG_LOADED TestSine
+ENG_NAME TestSine
+ENG_LOADED SimplePassThru
+ENG_NAME SimplePassThru
+ENG_LOADED Orgn
+ENG_NAME Orgn
+ENG_LOADED Eterna
+ENG_NAME Eterna
+METER PolyPerc PEAK 0.090970
+METER PolySub PEAK 0.544810
+METER TestSine PEAK 0.632513
+METER SimplePassThru PEAK 0.000015
+METER Orgn PEAK 0.074290
+METER Eterna PEAK 0.005098
+-- errors in sclang.log:

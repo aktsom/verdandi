@@ -137,4 +137,55 @@ printf 'period=256\nin_ports=X\n' > "$T/home/audio.conf"
 expect "pipewire: period from audio.conf becomes PIPEWIRE_QUANTUM" "DECIDE-QUANTUM 256/48000" \
     "$(decide_more DECIDE-QUANTUM STUB_PW=1 STUB_JACK=1 NORNS_REEXEC=1)"
 rm -f "$T/home/audio.conf"
+
+# installed mode (the .deb, docs/port/packaging.md): the program tree is a folder with an INSTALLED marker,
+# the norns home is chosen by NORNS_HOME, then ~/.config/verdandi/home, then ~/Verdandi. a developer checkout keeps
+# its old home (the folder above it) and shares any home through NORNS_HOME
+INST="$T/inst"
+mkdir -p "$INST/linux" "$T/h1"
+cp "$REPO/linux/norns.sh" "$INST/linux/norns.sh"
+touch "$INST/INSTALLED"
+homeline() { # script, HOME, env assignments... -> the DECIDE-HOME line
+    local script="$1" h="$2"
+    shift 2
+    env -i PATH="$BIN:/usr/bin:/bin" HOME="$h" NORNS_DECIDE_ONLY=1 "$@" "$script" 2>&1 | grep '^DECIDE-HOME ' || echo "DECIDE-HOME (none)"
+}
+expect "dev checkout, NORNS_HOME given: dev mode, that home, norns link found" \
+    "DECIDE-HOME mode=dev home=$T/home source=env link=ok" "$(homeline "$REPO/linux/norns.sh" "$T" NORNS_HOME="$T/home")"
+expect "dev checkout, no NORNS_HOME: the folder above it" \
+    "DECIDE-HOME mode=dev home=$(dirname "$REPO") source=repo" "$(homeline "$REPO/linux/norns.sh" "$T" | sed 's/ link=.*//')"
+expect "installed, nothing set: ~/Verdandi, link to create" \
+    "DECIDE-HOME mode=installed home=$T/h1/Verdandi source=default link=create" "$(homeline "$INST/linux/norns.sh" "$T/h1")"
+mkdir -p "$T/h1/.config/verdandi"
+echo '~/Shared' > "$T/h1/.config/verdandi/home"
+expect "installed, ~/.config/verdandi/home with ~/" \
+    "DECIDE-HOME mode=installed home=$T/h1/Shared source=config link=create" "$(homeline "$INST/linux/norns.sh" "$T/h1")"
+echo "$T/abs home" > "$T/h1/.config/verdandi/home"
+expect "installed, config file with an absolute path with a space" \
+    "DECIDE-HOME mode=installed home=$T/abs home source=config link=create" "$(homeline "$INST/linux/norns.sh" "$T/h1")"
+mkdir -p "$T/xdg/verdandi"
+echo "$T/xdgtarget" > "$T/xdg/verdandi/home"
+expect "installed, XDG_CONFIG_HOME is used" \
+    "DECIDE-HOME mode=installed home=$T/xdgtarget source=config link=create" "$(homeline "$INST/linux/norns.sh" "$T/h1" XDG_CONFIG_HOME="$T/xdg")"
+expect "installed, NORNS_HOME beats the config file" \
+    "DECIDE-HOME mode=installed home=$T/envhome source=env link=create" "$(homeline "$INST/linux/norns.sh" "$T/h1" NORNS_HOME="$T/envhome")"
+rm -f "$T/h1/.config/verdandi/home"
+expect "NORNS_INSTALLED=0 makes the tree a checkout" \
+    "DECIDE-HOME mode=dev home=$T/h1 source=env link=create" "$(homeline "$INST/linux/norns.sh" "$T/h1" NORNS_INSTALLED=0 NORNS_HOME="$T/h1")"
+expect "NORNS_INSTALLED=1 makes a checkout installed" \
+    "DECIDE-HOME mode=installed home=$T/h1/Verdandi source=default link=create" "$(homeline "$REPO/linux/norns.sh" "$T/h1" NORNS_INSTALLED=1)"
+# the norns link of the home: shared between a checkout and the package, the last launcher run decides
+mkdir -p "$T/shared"
+ln -s "$INST" "$T/shared/norns"
+expect "home links the installed tree: ok" \
+    "DECIDE-HOME mode=installed home=$T/shared source=env link=ok" "$(homeline "$INST/linux/norns.sh" "$T/h1" NORNS_HOME="$T/shared")"
+expect "home links the other tree (checkout vs package): the link is moved on start" \
+    "DECIDE-HOME mode=dev home=$T/shared source=env link=repoint" "$(homeline "$REPO/linux/norns.sh" "$T/h1" NORNS_HOME="$T/shared")"
+mkdir -p "$T/real/norns/lua"
+expect "home has a real norns folder that is not this tree: refuse, never replace" \
+    "DECIDE-HOME mode=installed home=$T/real source=env link=conflict" "$(homeline "$INST/linux/norns.sh" "$T/h1" NORNS_HOME="$T/real")"
+mkdir -p "$T/real2"
+ln -s "$REPO" "$T/real2/norns"
+expect "home's norns link already points at this checkout: ok" \
+    "DECIDE-HOME mode=dev home=$T/real2 source=env link=ok" "$(homeline "$REPO/linux/norns.sh" "$T/h1" NORNS_HOME="$T/real2")"
 exit $FAIL

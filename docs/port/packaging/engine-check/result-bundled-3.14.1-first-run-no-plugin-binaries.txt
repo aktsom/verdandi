@@ -1,0 +1,33 @@
+== bundled
+compiling class library...
+	Compiling directory '/opt/verdandi/supercollider/share/SuperCollider/Extensions'
+*** Welcome to SuperCollider 3.14.1. *** For help type ctrl-c ctrl-h (Emacs) or :SChelp (vim).
+ENG_LOADED PolyPerc
+ENG_NAME PolyPerc
+ENG_LOADED PolySub
+ENG_NAME PolySub
+ENG_LOADED TestSine
+ENG_NAME TestSine
+ENG_LOADED SimplePassThru
+ENG_NAME SimplePassThru
+ENG_LOADED Orgn
+ENG_NAME Orgn
+ENG_LOADED Eterna
+ENG_NAME Eterna
+METER PolyPerc PEAK 0.090537
+METER PolySub PEAK 0.538119
+METER TestSine PEAK 0.621516
+METER SimplePassThru PEAK 0.000015
+METER Orgn PEAK 0.000000
+METER Eterna PEAK 0.000000
+-- errors in sclang.log:
+      2 *** ERROR: SynthDef ESVF not found
+      1 *** ERROR: SynthDef SampleVoice not found
+      1 *** ERROR: SynthDef ulaw not found
+      1 FAILURE IN SERVER /n_free Node 1019 not found
+      1 FAILURE IN SERVER /s_new Node 1022 not found
+      1 FAILURE IN SERVER /s_new Node 1023 not found
+      1 FAILURE IN SERVER /s_new Node 1024 not found
+      4 FAILURE IN SERVER /s_new SynthDef not found
+      1 exception in GraphDef_Recv: UGen 'EnvFollow' not installed.
+      2 exception in GraphDef_Recv: UGen 'SVF' not installed.

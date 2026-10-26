@@ -236,3 +236,27 @@ The Go standard library is linked in too: BSD-3-Clause (the Go toolchain, Ubuntu
 - **Patent and trademark terms**, export rules, and the exact copyright holder lines: not read module by module; the license **type** is what is listed.
 - **Whether every license text matched was the complete one** (a module may carry a second license in a subfolder): only the top-level license files were read, apart from the two noted.
 - **Licenses of the other (non-maiden) rows above** are Ubuntu's package licenses as stated in this file, not re-checked here.
+
+## The Linux package (`linux/package.sh`, Gate B decided: `.deb`)
+
+Bundled in `/opt/verdandi` (their licence texts are copied unaltered into `/opt/verdandi/licenses`, with `SOURCES.txt` naming the exact tags and commits):
+
+| Part | Version | Licence | Where from |
+|---|---|---|---|
+| SuperCollider (sclang, scsynth; no Qt, no IDE, no Supernova, no Link) | 3.14.1 (tag `Version-3.14.1`) | GPL-3.0+ (`COPYING`) | github.com/supercollider/supercollider; built at the final prefix by `package.sh sc` |
+| sc3-plugins | commit `b80a41b731922feac7755df5ba359d14dfb8f4d9` (as the Mac port) | GPL-2.0+ (`license.txt`; some parts carry other terms, see each plug-in's folder) | github.com/supercollider/sc3-plugins |
+| libmonome (with the pty patch) | 1.4.9 (tag `v1.4.9`) | ISC | github.com/monome/libmonome; built for `/opt/verdandi/lib` (it loads `lib/monome/protocol_*.so` from a compiled-in path) |
+| maiden | commit `2e64f7d5…` (patched) | GPL-3.0; Go modules and npm packages: the lists above | `package.sh maiden` |
+| norns, matron, crone, softcut, Ableton Link, lua-cjson, concurrentqueue, readerwriterqueue | this source tree | GPL-3.0 (softcut GPL-3.0; Link GPL-2.0+; the others MIT / BSD / BSL) | their `LICENSE` files are copied |
+| The icon (`macos/norns-icon.png`) | this source tree | GPL-3.0 (drawn by `macos/make-icon.py`) | |
+
+Shared libraries (cairo, liblo, libsndfile, SDL2, nng, Lua, ALSA, libjack, ...) are **not** bundled; `Depends` names the Debian packages, which carry their own copyright files.
+`libjack` is never bundled (it has to be the host's, for `pw-jack`).
+
+Tools used to **build** the package (not shipped): `cmake`, `ninja-build`, `dpkg-dev` (`dpkg-deb`, `dpkg-shlibdeps`), `debootstrap` (only `package.sh clean-root` and the clean-root test), `xz-utils`, `gzip`, `binutils` (`strip`). Licences: BSD-3-Clause (cmake), Apache-2.0 (ninja), GPL-2.0+ (dpkg, debootstrap, binutils), 0BSD / public domain (xz / gzip: GPL-2.0+ for the tools, public domain for liblzma).
+`udev` (`udevadm verify`) is used by `linux/tests/udev_test.sh` when present: GPL-2.0+ / LGPL-2.1+.
+
+### OPEN: licence of four fonts (decision of the owner: leave unresolved for now)
+
+`resources/norns.ttf`, `resources/liquid.ttf`, `resources/Particle.ttf` and `resources/basis33.ttf` have **no licence file** in the source tree and no licence text inside the font files that I found; they come from upstream norns. The other fonts of the norns screen have licence files (Roboto, Vera, the bitmap fonts).
+**Before any public release** (a package or a download given to anyone but the owner) this has to be settled: find the licence of each font from its author, or replace the font, or drop it. Until then the package is for the owner's own use only, and `/usr/share/doc/verdandi/copyright` says so. The macOS port has the same open question.

@@ -1,0 +1,23 @@
+== apt
+compiling class library...
+	Compiling directory '/usr/share/SuperCollider/Extensions'
+*** Welcome to SuperCollider 3.13.0. *** For help type ctrl-c ctrl-h (Emacs) or :SChelp (vim) or ctrl-U (sced/gedit).
+ENG_LOADED PolyPerc
+ENG_NAME PolyPerc
+ENG_LOADED PolySub
+ENG_NAME PolySub
+ENG_LOADED TestSine
+ENG_NAME TestSine
+ENG_LOADED SimplePassThru
+ENG_NAME SimplePassThru
+ENG_LOADED Orgn
+ENG_NAME Orgn
+ENG_LOADED Eterna
+ENG_NAME Eterna
+METER PolyPerc PEAK 0.095353
+METER PolySub PEAK 0.538118
+METER TestSine PEAK 0.631643
+METER SimplePassThru PEAK 0.000015
+METER Orgn PEAK 0.070870
+METER Eterna PEAK 0.006364
+-- errors in sclang.log:

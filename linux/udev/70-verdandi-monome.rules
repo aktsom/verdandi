@@ -1,0 +1,12 @@
+# Verdandi: lets the logged-in user (the seat's active session) open the serial port of a monome grid or arc without
+# joining the dialout / uucp group. only monome devices; this file never sets a mode, a group, an owner or a program.
+# installed as /usr/lib/udev/rules.d/70-verdandi-monome.rules by the package (docs/port/packaging.md).
+
+# grids and arcs before 2022 and older monome kits: an FTDI FT232 chip (0403:6001) whose USB serial string is the monome
+# device name (m64-..., m128-..., m256-..., mk..., m40h..., m followed by digits: the names libmonome recognises, src/private/devices.h).
+# not verified against hardware: the numeric IDs (taken from the FTDI chip that monome's documentation names) and the manufacturer string
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="m[0-9k]*", TAG+="uaccess"
+
+# newer devices (a USB serial device of their own, e.g. the cafe:1110 grid): the USB manufacturer string is "monome"
+# (serialosc's detector asks for ID_VENDOR=monome). not verified against hardware: that this string is on every model
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{manufacturer}=="monome", TAG+="uaccess"

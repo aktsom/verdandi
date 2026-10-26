@@ -7,6 +7,11 @@
 #   <norns home>/dust           scripts, audio, data
 #   <norns home>/matronrc.lua   written on first start (desktop screen)
 #
+# installed (the .deb: a program tree with an INSTALLED marker file, /opt/verdandi): the norns home is NORNS_HOME, else the
+# first line of ~/.config/verdandi/home, else ~/Verdandi. in every mode <norns home>/norns is a link to the program tree; it is
+# created, and moved when it points at another tree (a developer checkout and the package can share one home: the tree
+# started last owns the link). a real folder called norns in the home is never replaced.
+#
 # usage: linux/norns.sh [--terminal]
 #   default: matron and sclang REPLs are websockets (127.0.0.1:5555/5556), the log is in
 #            <norns home>/norns.log; maiden (the web editor and script catalog) at http://127.0.0.1:5000/maiden,
@@ -14,7 +19,8 @@
 #   --terminal: matron's lua REPL and log are this terminal
 #
 # environment (all optional):
-#   NORNS_HOME          the norns home (default: the folder above this repository)
+#   NORNS_HOME          the norns home (default: checkout: the folder above this repository; installed: see above)
+#   NORNS_INSTALLED     1 / 0: treat this program tree as installed / as a checkout (default: the INSTALLED marker file)
 #   NORNS_JACK_DRIVER   jackd driver, default "alsa"; "dummy" for headless runs
 #   NORNS_JACK_RATE / NORNS_JACK_PERIOD   default 48000 / 1024
 #   NORNS_NO_SCLANG=1   do not start sclang
@@ -41,8 +47,66 @@ TERMINAL=0
 # this script's own absolute path: a re-run (pw-jack) may start in another working directory, so $0 is not enough
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-NORNS_HOME="${NORNS_HOME:-$(dirname "$REPO")}"
 JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
+
+# installed tree (the .deb) or checkout
+if [ -n "${NORNS_INSTALLED:-}" ]; then
+    INSTALLED="$NORNS_INSTALLED"
+elif [ -f "$REPO/INSTALLED" ]; then
+    INSTALLED=1
+else
+    INSTALLED=0
+fi
+if [ "$INSTALLED" = 1 ]; then MODE=installed; else MODE=dev; fi
+
+# the norns home and where it came from
+if [ -n "${NORNS_HOME:-}" ]; then
+    HOME_SOURCE=env
+elif [ "$INSTALLED" = 1 ]; then
+    HOME_CONF="${XDG_CONFIG_HOME:-${HOME:-}/.config}/verdandi/home"
+    NORNS_HOME="$(head -n 1 "$HOME_CONF" 2>/dev/null | tr -d '\r')"
+    case "$NORNS_HOME" in
+    "~/"*) NORNS_HOME="${HOME:-}/${NORNS_HOME#\~/}" ;;
+    esac
+    if [ -n "$NORNS_HOME" ]; then
+        HOME_SOURCE=config
+    else
+        NORNS_HOME="${HOME:-}/Verdandi"
+        HOME_SOURCE=default
+    fi
+else
+    NORNS_HOME="$(dirname "$REPO")"
+    HOME_SOURCE=repo
+fi
+case "$NORNS_HOME" in /*) ;; *) echo "norns.sh: the norns home '$NORNS_HOME' is not an absolute path"; exit 1 ;; esac
+
+# <norns home>/norns must lead to this tree (matron reads $HOME/norns/lua and $HOME/norns/resources). ok, create, repoint
+# (a link that points at another tree) or conflict (a real folder that is not this tree)
+LINK="$NORNS_HOME/norns"
+if [ -L "$LINK" ] || [ -e "$LINK" ]; then
+    if [ "$(cd "$LINK" 2>/dev/null && pwd -P)" = "$(cd "$REPO" && pwd -P)" ]; then
+        LINK_STATE=ok
+    elif [ -L "$LINK" ]; then
+        LINK_STATE=repoint
+    else
+        LINK_STATE=conflict
+    fi
+else
+    LINK_STATE=create
+fi
+
+# started from the desktop there is no terminal: the problems are shown in a dialog and the output is kept in a file
+[ -z "${NORNS_HAVE_TTY:-}" ] && { [ -t 1 ] || [ -t 2 ]; } && export NORNS_HAVE_TTY=1
+fail() {
+    echo "norns.sh: $*"
+    if [ -z "${NORNS_HAVE_TTY:-}" ]; then
+        if command -v zenity >/dev/null; then zenity --error --title=Verdandi --no-markup --text="$*" 2>/dev/null
+        elif command -v kdialog >/dev/null; then kdialog --error "$*" 2>/dev/null
+        elif command -v notify-send >/dev/null; then notify-send Verdandi "$*" 2>/dev/null
+        fi
+    fi
+    exit 1
+}
 
 jack_up() { jack_lsp >/dev/null 2>&1; }
 pw_up() { pw-cli info 0 >/dev/null 2>&1; }
@@ -147,6 +211,7 @@ decide_rate
 # NORNS_DECIDE_ONLY=reexec: as 1, but a decision to re-run under pw-jack is carried out (tests the re-run)
 if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ] || { [ "${NORNS_DECIDE_ONLY:-0}" = reexec ] && [ "$ACTION" != reexec-pw-jack ]; }; then
     echo "DECIDE action=$ACTION server=$SERVER in=$IN_PORTS out=$OUT_PORTS"
+    echo "DECIDE-HOME mode=$MODE home=$NORNS_HOME source=$HOME_SOURCE link=$LINK_STATE"
     if [ "$ACTION" = start-jackd ]; then
         jackd_args
         echo "DECIDE-JACKD ${JACKD_ARGS[*]}"
@@ -165,7 +230,21 @@ export NORNS_PLATFORM=linux
 # SDL would catch SIGTERM and turn it into a quit event nothing reads yet (no window event pump
 # on linux until phase 2): let the signal end norns
 export SDL_NO_SIGNAL_HANDLERS=1
+mkdir -p "$NORNS_HOME" || fail "cannot create the norns home $NORNS_HOME"
 cd "$NORNS_HOME" || exit 1
+# from the desktop: what this script says goes to a file
+if [ -z "${NORNS_HAVE_TTY:-}" ] && [ "$INSTALLED" = 1 ] && [ "${NORNS_LAUNCHER_LOG:-1}" != 0 ]; then
+    exec >> "$NORNS_HOME/launcher.log" 2>&1
+fi
+case "$LINK_STATE" in
+conflict) fail "$LINK is a folder that is not this program ($REPO). Move it away, or choose another norns home (NORNS_HOME, or ~/.config/verdandi/home)." ;;
+repoint) echo "norns.sh: $LINK pointed at $(readlink "$LINK"), now at $REPO" ; ln -sfn "$REPO" "$LINK" ;;
+create) ln -s "$REPO" "$LINK" || fail "cannot create $LINK" ;;
+esac
+
+# the parts of an installed tree that are not in a system folder
+if [ -d "$REPO/supercollider/bin" ]; then export PATH="$REPO/supercollider/bin:$PATH"; fi
+if [ -d "$REPO/lib" ]; then export LD_LIBRARY_PATH="$REPO/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"; fi
 
 mkdir -p dust/code dust/audio dust/data
 if [ -f "$REPO/update/version.txt" ] && ! cmp -s "$REPO/update/version.txt" version.txt; then
@@ -181,6 +260,11 @@ fi
 # sclang: the include paths norns-config.sc sets up on the device
 SC_CONF="$NORNS_HOME/.config/SuperCollider"
 mkdir -p "$SC_CONF"
+# written again when the program moved (checkout vs package): the old file is kept as .old
+if [ -f "$SC_CONF/sclang_conf.yaml" ] && ! grep -qF "\"$REPO/sc/core\"" "$SC_CONF/sclang_conf.yaml"; then
+    echo "norns.sh: sclang_conf.yaml named another program folder: written again (the old one is sclang_conf.yaml.old)"
+    mv -f "$SC_CONF/sclang_conf.yaml" "$SC_CONF/sclang_conf.yaml.old"
+fi
 if [ ! -f "$SC_CONF/sclang_conf.yaml" ]; then
     cat > "$SC_CONF/sclang_conf.yaml" <<SC
 includePaths:
@@ -194,13 +278,13 @@ SC
 fi
 
 if pgrep -x norns >/dev/null; then
-    echo "norns.sh: norns is already running"
-    exit 1
+    fail "norns is already running"
 fi
 
 # the MANUAL button of the window opens this (the window says so if the file is not there)
 export NORNS_MANUAL="${NORNS_MANUAL:-$REPO/linux/manual/manual.html}"
-MAIDEN="${NORNS_MAIDEN:-$NORNS_HOME/maiden}"
+if [ -x "$REPO/maiden/maiden" ]; then MAIDEN_DEFAULT="$REPO/maiden"; else MAIDEN_DEFAULT="$NORNS_HOME/maiden"; fi
+MAIDEN="${NORNS_MAIDEN:-$MAIDEN_DEFAULT}"
 MAIDEN_PORT="${NORNS_MAIDEN_PORT:-5000}"
 case "$MAIDEN_PORT" in '' | *[!0-9]*) echo "norns.sh: NORNS_MAIDEN_PORT='$MAIDEN_PORT' is not a port number"; exit 1 ;; esac
 export NORNS_MAIDEN_PORT="$MAIDEN_PORT" # the MAIDEN button of the window opens this port
@@ -238,8 +322,7 @@ need-pw-jack)
     exit 1
     ;;
 pipewire-no-jack)
-    echo "norns.sh: no JACK server answers even under pw-jack. Is pipewire-jack installed and PipeWire running?"
-    exit 1
+    fail "no JACK server answers even under pw-jack. Is pipewire-jack installed and PipeWire running?"
     ;;
 esac
 echo "norns.sh: audio server: $SERVER${IN_PORTS:+, input '$IN_PORTS'}${OUT_PORTS:+, output '$OUT_PORTS'}"
@@ -292,6 +375,7 @@ start_jackd() {
         run_jackd && return 0
     fi
     echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"
+    [ -z "${NORNS_HAVE_TTY:-}" ] && fail "jackd did not start (no sound server). See $NORNS_HOME/jackd.log"
     return 1
 }
 if [ "$ACTION" = start-jackd ]; then
@@ -301,7 +385,7 @@ fi
 
 WS="$REPO/build/ws-wrapper/ws-wrapper"
 NORNS_BIN="$REPO/build/norns/norns"
-[ -x "$NORNS_BIN" ] || { echo "norns.sh: $NORNS_BIN not built, run linux/build.sh"; exit 1; }
+[ -x "$NORNS_BIN" ] || fail "$NORNS_BIN not built, run linux/build.sh"
 RESTART_MARK="$NORNS_HOME/.norns-restart"
 AUDIO_MARK="$NORNS_HOME/.norns-restart-audio"
 rm -f "$RESTART_MARK" "$AUDIO_MARK"

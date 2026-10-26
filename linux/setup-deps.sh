@@ -22,7 +22,7 @@ SUDO=""
 export DEBIAN_FRONTEND=noninteractive
 $SUDO apt-get update
 $SUDO apt-get install -y --no-install-recommends \
-    build-essential ca-certificates curl git pkg-config python3 \
+    build-essential ca-certificates cmake curl dpkg-dev git ninja-build pkg-config python3 \
     libasound2-dev libavahi-client-dev libavahi-compat-libdnssd-dev libboost-dev libcairo2-dev \
     libevdev-dev libfftw3-dev libglib2.0-dev libgpiod-dev libjack-jackd2-dev liblo-dev \
     liblua5.3-dev libncurses-dev libnng-dev libreadline-dev libsamplerate0-dev libsdl2-dev \

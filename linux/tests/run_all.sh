@@ -91,6 +91,7 @@ if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
 else
     echo "SKIP  maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
 fi
+run "udev:rule syntax and narrowness (monome devices only, uaccess only)" linux/tests/udev_test.sh
 run "manual:file, table of contents, sources comments, names exist in the code" linux/tests/manual_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
 run "boot:script and library folders from chunk names (norns loads the script)" env NB_DIR="$NB_DIR" linux/tests/chunkname_test.sh "$T/chunk"
@@ -554,6 +555,19 @@ else
     echo "SKIP  window (xdotool and imagemagick not installed)"
 fi
 
+# the package in a clean Ubuntu 24.04 root (heavy: debootstrap, apt, a headless boot as a normal user). needs root, debootstrap,
+# network and a built .deb (linux/package.sh all). NORNS_PACKAGE_TEST=0 skips, =1 makes a missing .deb a failure
+pkg_name="package:clean root install, boot as a normal user, metadata, privacy scan"
+if [ "${NORNS_PACKAGE_TEST:-auto}" = 0 ]; then
+    echo "SKIP  $pkg_name (NORNS_PACKAGE_TEST=0)"
+else
+    "$REPO/linux/tests/package_test.sh" > "$T/package.log" 2>&1
+    rc=$?
+    if [ $rc -eq 0 ]; then echo "PASS  $pkg_name"; grep '^PASS' "$T/package.log" | sed 's/^/        /'
+    elif [ $rc -eq 77 ] && [ "${NORNS_PACKAGE_TEST:-auto}" != 1 ]; then echo "$(grep '^SKIP' "$T/package.log" | sed 's/^SKIP package_test:/SKIP  package:clean root test -/')"
+    else echo "FAIL  $pkg_name"; grep -E '^(FAIL|SKIP|   )' "$T/package.log" | head -20 | sed 's/^/        /'; FAILED+=("package")
+    fi
+fi
 echo
 echo "known failures: ${#KNOWN[@]}  unexpected failures: ${#FAILED[@]}"
 [ ${#FAILED[@]} -eq 0 ]
