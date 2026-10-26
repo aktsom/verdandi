@@ -1,18 +1,18 @@
-# Verdandi port: Linux first, then Windows (VST3)
+# Verdandi port: Linux first (standalone, then a Linux VST3), then Windows (standalone, then VST3)
 
 This is the owner's own version of the port (a fork of ha1dcre/verdandi). It is not meant to be offered upstream; layout and changes are decided for this project only.
 
 ## Goal
 Port Verdandi (norns running natively on a desktop, as a standalone app plus a DAW plugin) to:
-1. **Linux**: standalone app, plug-and-play (Flatpak or AppImage; decision gate B).
-2. **Windows**: standalone app plus a **VST3** plugin (no CLAP). Starts only after Linux is accepted (gate C).
+1. **Linux**: standalone app, plug-and-play (Flatpak or AppImage; decision gate B), and then the **first plugin: a Linux VST3** (PLAN.md Phase 7), tested in Reaper on the owner's Linux Mint laptop (PipeWire). One plugin instance at a time, with a clear message (`docs/port/multi-instance.md`, `docs/port/linux-vst3.md`).
+2. **Windows**: standalone app (Phase 6), then a **Windows VST3** (Phase 8) that reuses what the Linux VST3 teaches (no CLAP). Starts only after Linux is accepted (gate C).
 
 Order of work: **Linux baseline first, matching the macOS behavior** (what `readme-macos.md` lists: norns window with device skin, maiden, virtual grid/arc/keyboard, real grid/arc/crow/MIDI over USB, MIC/SYS/OFF input, sample drop and file picker, MIX page, screenshots/GIFs, and later the plugin equivalent of the AUv3). **Then the owner's own visual and workflow changes**, collected in `docs/port/WISHLIST.md`. Nothing from the wishlist is implemented unless the owner says so.
 
 ## Known architecture (from readme-macos.md; verify against code)
 - Mac-specific code lives in `matron/src/platform/macos/` and `macos/`. Everything else is the norns code base this fork started from.
 - Audio runs through JACK (jackd) on the Mac too, with SuperCollider (crone) and softcut.
-- The AUv3 is a thin client: it sends DAW audio and MIDI over UDP on 127.0.0.1 to `auv3_bridge`, a JACK client next to norns. Do the VST3 the same way.
+- The AUv3 is a thin client: it sends DAW audio and MIDI over UDP on 127.0.0.1 to `auv3_bridge`, a JACK client next to norns. The Linux VST3 (Phase 7) does it the same way, with a new versioned protocol, a one-instance guard and an instance id from the start; the Windows VST3 (Phase 8) reuses it.
 - The virtual grid and arc are a pty that libmonome opens like a USB device (`vgrid_proto.c`, `vgrid_device.c`).
 - Skins and key mapping are plain C with Cairo and have tests; reuse them as the shared desktop layer.
 
