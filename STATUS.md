@@ -110,7 +110,7 @@ Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped sev
 Built by `linux/maiden-build.sh` (setup-deps.sh and build.sh run it; `NORNS_NO_MAIDEN=1` skips), started by `linux/norns.sh` on 127.0.0.1:5000 (`NORNS_MAIDEN_PORT`), MAIDEN button opens it or shows a note.
 The browser-origin exposure was reproduced first (`maiden-exposure-evidence.md`), then fixed: `ws-wrapper` Origin check (opt-in env var, the Mac does not set it) and a Host/Origin guard in the Linux maiden patch; the unit API is off.
 KNOWN-ISSUES item 10: the Mac port has the same exposure, untouched. Tests added to `run_all.sh`: maiden:server/origin, maiden:launcher, maiden:install, maiden:button.
-Open: MANUAL button has no manual on Linux (decision 9, not done); `licenses` of maiden's Go/npm packages not collected (DEPS.md); apt `golang-go` 1.22 not tried (1.24.7 used); a fresh Ubuntu 24.04 image not used (this container, uid 65534, no `python`).
+Open: MANUAL button text (outline in docs/port/linux-manual-outline.md, waiting for your answer); maiden license notices file not generated (the licenses are collected in DEPS.md); apt `golang-go` 1.22 not tried (1.24.7 used); a fresh Ubuntu 24.04 image not used (this container, uid 65534, no `python`).
 Needs your laptop: `HARDWARE-CHECKLIST.md`, section "maiden".
 
 ## maiden and `--terminal` (found on the laptop)
@@ -124,6 +124,12 @@ were already in `maiden_launcher_test.sh`.
 
 Cheat Codes 2 (nb) failed with `mydir` nil: `loadfile`/`dofile`/`require` passed the real path to Lua, so `debug.getinfo(1).source` was the real path. Now the chunk is named with the virtual path (`lua/core/virtual_home.lua`, shared with the Mac app, `macos/` untouched).
 Tests first (both failed before): `linux/tests/virtual_chunkname_test.lua`, `linux/tests/chunkname_test.sh`, with the real nb library when the network allows. Errors and tracebacks now show virtual paths, as on the device. Not run: Cheat Codes 2 itself, macOS.
+
+## Plug-in check output, MANUAL button, maiden licenses
+
+- Plug-in check: one line per **folder** (files, what they are, one move command, how to turn it off); note and 3-second re-check unchanged. Unit and integration tests updated, with two bad files in one folder and one in another.
+- MANUAL button: the launcher sets `NORNS_MANUAL` to `linux/manual/manual.html`; the window shows "manual not found: ..." when it is not there (test `manual_button_test.sh`). The manual text is **not written**: outline in `docs/port/linux-manual-outline.md`, waiting for your answer (the text is large).
+- Licenses of maiden's Go modules (40), bundled npm packages (118) and build tools are in `docs/port/DEPS.md`, with what needs attention (one MPL-2.0 module, notices not carried by the build, five npm packages without a license file) and what could not be determined. No code changed for it.
 
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
