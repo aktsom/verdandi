@@ -53,6 +53,15 @@ done
 run "lua:keyboard_hardware" env NORNS_HARDWARE_KEYS=1 lua5.3 "$M/keyboard_hardware_test.lua"
 VH="$(mktemp -d)"
 run "lua:virtual_home" env HOME="$VH" lua5.3 "$M/virtual_home_test.lua" lua/core/virtual_home.lua
+# the real nb library (github.com/sixolet/nb: scripts such as cheat codes 2 include it): fetched if the network allows, else those checks are skipped, said out loud
+NB_DIR=""
+if timeout 60 git clone -q --depth 1 https://github.com/sixolet/nb.git "$T/nb" 2> /dev/null; then
+    NB_DIR="$T/nb"
+else
+    echo "SKIP  the real nb library could not be fetched (no network?): its checks are not run"
+fi
+VH2="$(mktemp -d)"
+run "lua:virtual_home chunk names (script and library folders from debug.getinfo)" env HOME="$VH2" NB_DIR="$NB_DIR" lua5.3 linux/tests/virtual_chunkname_test.lua lua/core/virtual_home.lua
 
 # gnu11, not c11: M_PI and ptsname need the GNU feature macros, as in the waf build
 CFLAGS="-std=gnu11 -D_GNU_SOURCE -I $P -I /usr/local/include"
@@ -82,6 +91,7 @@ if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
 else
     echo "SKIP  maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
 fi
+run "boot:script and library folders from chunk names (norns loads the script)" env NB_DIR="$NB_DIR" linux/tests/chunkname_test.sh "$T/chunk"
 
 PROBE_LOG="$T/probe.log"
 NORNS_HOME="$(mktemp -d)"

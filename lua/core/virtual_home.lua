@@ -71,9 +71,43 @@ local remove, rename = os.remove, os.rename
 os.remove = function(path) return remove(to_real(path)) end
 os.rename = function(a, b) return rename(to_real(a), to_real(b)) end
 
+-- loadfile, dofile and require read the real file but name the chunk with the virtual path ("@/home/we/dust/code/x.lua"),
+-- as on the device: libraries find their own folder with debug.getinfo(1).source (nb does:
+-- debug.getinfo(1).source:match("@?" .. _path.code .. "(.*/)")), and error messages and tracebacks show the path the script knows.
+-- (the real path is in the "virtual /home/we -> ..." line the log starts with)
 local _loadfile, _dofile = loadfile, dofile
-loadfile = function(path, ...) return _loadfile(to_real(path), ...) end
-dofile = function(path) return _dofile(to_real(path)) end
+local function load_named(file, mode, env, has_env)
+  -- file is the path as the caller gave it; real_file is where it is
+  local real_file = to_real(file)
+  local f, err = open(real_file, 'rb')
+  if f == nil then
+    return nil, 'cannot open ' .. to_virtual(file)
+  end
+  local text = f:read('a')
+  f:close()
+  if text == nil then
+    return nil, 'cannot read ' .. to_virtual(file)
+  end
+  -- what loadfile does: skip a UTF-8 byte order mark, and a first line that starts with # (the newline stays: line numbers)
+  if text:sub(1, 3) == '\239\187\191' then text = text:sub(4) end
+  if text:sub(1, 1) == '#' then text = text:gsub('^[^\n]*', '', 1) end
+  local name = '@' .. to_virtual(real_file)
+  if has_env then
+    return load(text, name, mode or 'bt', env)
+  end
+  return load(text, name, mode or 'bt')
+end
+
+loadfile = function(path, ...)
+  if path == nil then return _loadfile(nil, ...) end -- standard input
+  return load_named(path, (...), select(2, ...), select('#', ...) >= 2)
+end
+dofile = function(path)
+  if path == nil then return _dofile() end
+  local chunk, err = load_named(path)
+  if chunk == nil then error(err, 0) end
+  return chunk()
+end
 
 --- shell
 local execute, popen = os.execute, io.popen
@@ -106,10 +140,10 @@ local function search(path_list, loader)
     if file == nil then return '\n\t' .. err end
     local f, lerr = loader(file, name)
     if f == nil then error(lerr, 0) end
-    return f, file
+    return f, to_virtual(file) -- the loader data (the chunk's second argument, require's second result)
   end
 end
-package.searchers[2] = search(function() return package.path end, function(file) return _loadfile(file) end)
+package.searchers[2] = search(function() return package.path end, function(file) return load_named(file) end)
 package.searchers[3] = search(function() return package.cpath end, function(file, name)
   return package.loadlib(file, 'luaopen_' .. name:gsub('%.', '_'))
 end)

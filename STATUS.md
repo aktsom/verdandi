@@ -120,6 +120,11 @@ They are exclusive by construction. Not changed: `--terminal` keeps its meaning 
 RUN-ON-LAPTOP wording, the way to have both (start without `--terminal`, run `maiden-repl` in a second terminal), and a launcher test section for `--terminal`. The non-terminal assertions (5555 on 127.0.0.1 only, a websocket reaches the Lua REPL, a foreign Origin is refused)
 were already in `maiden_launcher_test.sh`.
 
+## Chunk names under the virtual /home/we (KNOWN-ISSUES item 11): FIXED
+
+Cheat Codes 2 (nb) failed with `mydir` nil: `loadfile`/`dofile`/`require` passed the real path to Lua, so `debug.getinfo(1).source` was the real path. Now the chunk is named with the virtual path (`lua/core/virtual_home.lua`, shared with the Mac app, `macos/` untouched).
+Tests first (both failed before): `linux/tests/virtual_chunkname_test.lua`, `linux/tests/chunkname_test.sh`, with the real nb library when the network allows. Errors and tracebacks now show virtual paths, as on the device. Not run: Cheat Codes 2 itself, macOS.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
