@@ -1,0 +1,29 @@
+MODE sandbox N 4
+ready (s since start): {1: 6.9, 2: 6.9, 3: 6.9, 4: 7.4} not ready: []
+instance 1: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 6.5% of one core, PSS 459 MB
+instance 2: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 6.4% of one core, PSS 460 MB
+instance 3: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 6.5% of one core, PSS 458 MB
+instance 4: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 6.5% of one core, PSS 459 MB
+total: idle CPU 25.9% of one core, PSS 1837 MB
+bound ports per instance (udp, and tcp in listen state), by process:
+  instance 1 norns        udp/8888 udp/9999 udp/10111
+  instance 1 sclang       udp/57120
+  instance 1 scsynth      udp/57110 udp/57120
+  instance 2 norns        udp/8888 udp/9999 udp/10111
+  instance 2 sclang       udp/57120
+  instance 2 scsynth      udp/57110 udp/57120
+  instance 3 norns        udp/8888 udp/9999 udp/10111
+  instance 3 sclang       udp/57120
+  instance 3 scsynth      udp/57110 udp/57120
+  instance 4 norns        udp/8888 udp/9999 udp/10111
+  instance 4 sclang       udp/57120
+  instance 4 scsynth      udp/57110 udp/57120
+JACK ports seen (first clients), per JACK server:
+log lines that look like clashes:
+      4 failed to open alsa virtual device.
+      4 error loading keyboard layout, using old value: us
+      4 dev_list_add: error allocating device data
+      4 ALSA lib seq_hw.c:528:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+      4 ### SCRIPT ERROR: NO SCRIPT
+
+finished

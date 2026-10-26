@@ -1,0 +1,21 @@
+MODE sandbox N 2
+ready (s since start): {1: 5.0, 2: 5.0} not ready: []
+instance 1: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 7.0% of one core, PSS 492 MB
+instance 2: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 7.0% of one core, PSS 495 MB
+total: idle CPU 14.0% of one core, PSS 987 MB
+bound ports per instance (udp, and tcp in listen state), by process:
+  instance 1 norns        udp/8888 udp/9999 udp/10111
+  instance 1 sclang       udp/57120
+  instance 1 scsynth      udp/57110 udp/57120
+  instance 2 norns        udp/8888 udp/9999 udp/10111
+  instance 2 sclang       udp/57120
+  instance 2 scsynth      udp/57110 udp/57120
+JACK ports seen (first clients), per JACK server:
+log lines that look like clashes:
+      2 failed to open alsa virtual device.
+      2 error loading keyboard layout, using old value: us
+      2 dev_list_add: error allocating device data
+      2 ALSA lib seq_hw.c:528:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+      2 ### SCRIPT ERROR: NO SCRIPT
+
+finished

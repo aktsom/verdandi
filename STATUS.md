@@ -131,6 +131,11 @@ Tests first (both failed before): `linux/tests/virtual_chunkname_test.lua`, `lin
 - MANUAL button: the launcher sets `NORNS_MANUAL` to `linux/manual/manual.html`; the window shows "manual not found: ..." when it is not there (test `manual_button_test.sh`). **The manual is written** (outline approved): `linux/manual/manual.html`, 14 sections with a table of contents and a sources comment per section, including known limitations (ARM plug-ins, Pi system commands, `--terminal` vs maiden's console, serialosc). Tests: `manual_test.sh` (file, links, sources comments, no external resources, names and paths exist in the code) and `manual_button_test.sh` (the button opens it). Whether each sentence is true is for the owner's reading (HARDWARE-CHECKLIST).
 - Licenses of maiden's Go modules (40), bundled npm packages (118) and build tools are in `docs/port/DEPS.md`, with what needs attention (one MPL-2.0 module, notices not carried by the build, five npm packages without a license file) and what could not be determined. No code changed for it.
 
+## Several plug-in instances in one project: investigation (no code changed)
+
+`docs/port/multi-instance.md`: today's AUv3 cannot serve two instances (one bridge, one stream; read, not run); the inventory of ports, JACK names and files; measurements of 1/2/4 headless instances (own namespaces: no clashes, ~0.46 GB and ~6.5 % of a core idle each, 4.5 to 7 s to start; with port flags and homes alone only one survives); options A to D assessed.
+Recommendation: build the one-instance guard with a message (D) into the plug-in plan, do not build per-instance norns (A) now, B never, C only as a separate feature. Harness and raw outputs in `docs/port/multi-instance/`. Decision for the owner: D now? and whether A is wanted at all.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.

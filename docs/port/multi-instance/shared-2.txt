@@ -1,0 +1,30 @@
+MODE shared N 2
+ready (s since start): {1: 6.5} not ready: [2]
+instance 1: 11 processes (QtWebEngineProc,inst.sh,norns,sclang,scsynth,sidecar,tail) idle CPU 7.9% of one core, PSS 514 MB
+instance 2: 7 processes (QtWebEngineProc,inst.sh,sclang,sidecar,tail) idle CPU 0.2% of one core, PSS 167 MB
+total: idle CPU 8.1% of one core, PSS 682 MB
+bound ports per instance (udp, and tcp in listen state), by process:
+  instance 1 norns        udp/8888 udp/9999 udp/10111
+  instance 1 sclang       udp/57120
+  instance 1 scsynth      udp/57110 udp/57120
+  instance 2 sclang       udp/20203
+JACK ports seen (first clients), per JACK server:
+      4 SuperCollider
+      1 Verdandi
+     12 crone
+      4 softcut
+      4 system
+
+log lines that look like clashes:
+      1 unique name `softcut-01' assigned
+      1 unique name `crone-01' assigned
+      1 liblo error: 9904; cannot find free port; 
+      1 failed to open alsa virtual device.
+      1 error loading keyboard layout, using old value: us
+      1 dev_list_add: error allocating device data
+      1 JackDriver: client name is 'SuperCollider-01'
+      1 ALSA lib seq_hw.c:528:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+      1 *** ERROR: failed to open UDP socket: address in use.
+      1 ### SCRIPT ERROR: NO SCRIPT
+
+finished

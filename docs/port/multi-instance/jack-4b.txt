@@ -1,0 +1,29 @@
+MODE jack N 4
+ready (s since start): {1: 100.6} not ready: [2, 3, 4]
+instance 1: 11 processes (QtWebEngineProc,inst.sh,norns,sclang,scsynth,sidecar,tail) idle CPU 7.6% of one core, PSS 486 MB
+instance 2: 7 processes (QtWebEngineProc,inst.sh,sclang,sidecar,tail) idle CPU 0.2% of one core, PSS 145 MB
+instance 3: 7 processes (QtWebEngineProc,inst.sh,sclang,sidecar,tail) idle CPU 0.2% of one core, PSS 146 MB
+instance 4: 7 processes (QtWebEngineProc,inst.sh,sclang,sidecar,tail) idle CPU 0.2% of one core, PSS 145 MB
+total: idle CPU 8.2% of one core, PSS 922 MB
+bound ports per instance (udp, and tcp in listen state), by process:
+  instance 1 norns        udp/8888 udp/9999 udp/10111
+  instance 1 sclang       udp/57120
+  instance 1 scsynth      udp/57110 udp/57120
+  instance 2 sclang       udp/20203
+  instance 3 sclang       udp/20303
+  instance 4 sclang       udp/20403
+JACK ports seen (first clients), per JACK server:
+ j1:       4 SuperCollider       1 Verdandi      12 crone       4 softcut       4 system 
+ j2:       4 system 
+ j3:       4 system 
+ j4:       4 system 
+log lines that look like clashes:
+      3 liblo error: 9904; cannot find free port; 
+      3 *** ERROR: failed to open UDP socket: address in use.
+      1 failed to open alsa virtual device.
+      1 error loading keyboard layout, using old value: us
+      1 dev_list_add: error allocating device data
+      1 ALSA lib seq_hw.c:528:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+      1 ### SCRIPT ERROR: NO SCRIPT
+
+finished

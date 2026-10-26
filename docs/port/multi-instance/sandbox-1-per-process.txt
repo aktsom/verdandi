@@ -1,0 +1,28 @@
+MODE sandbox N 1
+ready (s since start): {1: 4.5} not ready: []
+   bash             pid 1867    PSS      1 MB  CPU 0.0%
+   bash             pid 1892    PSS      0 MB  CPU 0.0%
+   tail             pid 1894    PSS      0 MB  CPU 0.0%
+   norns            pid 1895    PSS    304 MB  CPU 6.2%
+   sidecar          pid 1900    PSS      2 MB  CPU 0.0%
+   bash             pid 1982    PSS      0 MB  CPU 0.0%
+   tail             pid 1983    PSS      0 MB  CPU 0.0%
+   sclang           pid 1984    PSS    156 MB  CPU 0.1%
+   QtWebEngineProc  pid 1997    PSS     18 MB  CPU 0.0%
+   QtWebEngineProc  pid 1998    PSS     18 MB  CPU 0.0%
+   scsynth          pid 2017    PSS     58 MB  CPU 1.2%
+instance 1: 11 processes (QtWebEngineProc,bash,norns,sclang,scsynth,sidecar,tail) idle CPU 7.5% of one core, PSS 558 MB
+total: idle CPU 7.5% of one core, PSS 558 MB
+bound ports per instance (udp, and tcp in listen state), by process:
+  instance 1 norns        udp/8888 udp/9999 udp/10111
+  instance 1 sclang       udp/57120
+  instance 1 scsynth      udp/57110 udp/57120
+JACK ports seen (first clients), per JACK server:
+log lines that look like clashes:
+      1 failed to open alsa virtual device.
+      1 error loading keyboard layout, using old value: us
+      1 dev_list_add: error allocating device data
+      1 ALSA lib seq_hw.c:528:(snd_seq_hw_open) open /dev/snd/seq failed: No such file or directory
+      1 ### SCRIPT ERROR: NO SCRIPT
+
+finished
