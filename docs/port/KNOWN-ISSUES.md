@@ -513,3 +513,15 @@ also at fractional positions) passes both before and after (2 cases, 49 assertio
 - **Effect on how things look:** integer positions are byte for byte as before (tested). Where a text started at a half pixel (centered text of odd ink width, a script's fractional x or y, the two-title tab bar) it is moved by at most half a pixel (round half up) and drawn crisp, as on the device with cairo 1.16;
   nothing else changes. A script that **relies on** the newer cairo's smooth half-pixel placement (animated text moving by fractions of a pixel) would now move in whole-pixel steps, as it does on the device. The sample of scripts shows none that do.
 **Not verified:** macOS (the guard includes it; it was not built or run here), and a real device (the 1.16 behavior was checked against Ubuntu's cairo 1.16.0 library, item 9.2).
+
+## 10. A web page in the browser can reach the REPL websockets (and maiden's API) on 127.0.0.1: the same exposure exists on the Mac port (found while planning maiden on Linux; FIXED for the Linux build only)
+
+Evidence and the test: `docs/port/maiden-exposure-evidence.md`.
+
+- The REPL ports 5555 (matron) and 5556 (sclang) are `ws-wrapper` websockets on `127.0.0.1`. Binding to the loopback keeps other computers out, but **any web page open in the owner's browser** can open
+  `ws://127.0.0.1:5555`, because browsers do not apply the same-origin rule to WebSockets and `ws-wrapper` did not look at the `Origin` header. What the page sends is run by matron as Lua (`os.execute` and
+  everything else a script can do), as the user, while norns runs. maiden has the same property for its HTTP API (no check of `Host` or `Origin`): a cross-site request can install a script into dust, and DNS rebinding can read and write dust.
+- **The Mac port is the same**, because `macos/norns.sh` starts `ws-wrapper` and `maiden server --host 127.0.0.1` in the same way. Nothing was changed there (the owner said not to touch `macos/`). What the Mac would need, if the owner decides to:
+  set `WS_WRAPPER_ALLOWED_ORIGINS="http://127.0.0.1:5000,http://localhost:5000"` in `macos/norns.sh` for the two `ws-wrapper` lines (the code is in the shared `ws-wrapper/src/main.c` and ignores the variable when unset), and apply
+  `linux/patches/maiden-linux-guard-and-units.patch` (its guard half; the unit API half is Linux specific) in `macos/setup-deps.sh`. Not built or tested on the Mac.
+- Linux: `linux/norns.sh` sets the origin list for both `ws-wrapper` lines and builds maiden with the guard (see `phase-4-maiden.md`).

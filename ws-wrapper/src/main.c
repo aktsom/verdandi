@@ -33,6 +33,44 @@ pthread_t tid_rx, tid_tx;
 nng_listener listener_ws;
 nng_socket sock_ws;
 
+// WS_WRAPPER_ALLOWED_ORIGINS (optional, comma separated, e.g. "http://127.0.0.1:5000,http://localhost:5000"):
+// a client that sends an Origin header (every browser does, for every websocket, whatever page it is on)
+// is only kept if that origin is in the list. clients without an Origin header (maiden-repl, scripts) are
+// kept. unset: no check at all, as before (the macOS launcher does not set it).
+static const char *allowed_origins = NULL;
+
+static bool origin_allowed(const char *origin) {
+    size_t n = strlen(origin);
+    const char *p = allowed_origins;
+    while (*p != '\0') {
+        const char *end = strchr(p, ',');
+        size_t len = end != NULL ? (size_t)(end - p) : strlen(p);
+        if (len == n && strncmp(p, origin, n) == 0) {
+            return true;
+        }
+        if (end == NULL) {
+            break;
+        }
+        p = end + 1;
+    }
+    return false;
+}
+
+// called before the connection joins the socket: nothing it sends is read, nothing is sent to it
+static void check_origin(nng_pipe pipe, nng_pipe_ev ev, void *arg) {
+    (void)ev;
+    (void)arg;
+    char *origin = NULL;
+    if (nng_pipe_get_string(pipe, NNG_OPT_WS_REQUEST_HEADER "Origin", &origin) != 0) {
+        return; // no Origin header: not a browser
+    }
+    if (!origin_allowed(origin)) {
+        fprintf(stderr, "ws-wrapper: connection from origin '%s' refused\n", origin);
+        nng_pipe_close(pipe);
+    }
+    nng_strfree(origin);
+}
+
 void fatal(const char *func, int rv) {
     fprintf(stderr, "%s: %s\n", func, nng_strerror(rv));
     exit(1);
@@ -60,6 +98,16 @@ void bind_sock(nng_listener *listener, nng_socket *sock, char *url) {
         fatal("listener set option: WS_RECV_TEXT", rv);
     }
     // TODO: set TLS options
+
+    allowed_origins = getenv("WS_WRAPPER_ALLOWED_ORIGINS");
+    if (allowed_origins != NULL && allowed_origins[0] != '\0') {
+        if ((rv = nng_pipe_notify(*sock, NNG_PIPE_EV_ADD_PRE, check_origin, NULL)) != 0) {
+            fatal("nng_pipe_notify", rv);
+        }
+        printf("accepting browser connections from: %s\n", allowed_origins);
+    } else {
+        allowed_origins = NULL;
+    }
 
     // retry binding to handle port still held by a previous instance
     // (e.g., during systemd Restart=always after a slow shutdown).

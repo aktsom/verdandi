@@ -1,0 +1,41 @@
+== listening addresses (loopback only)
+  ok    maiden and ws-wrapper listen on 127.0.0.1 only
+== the editor
+  ok    web app is served
+  ok    api answers
+  ok    write a file into dust
+  ok    read it back
+  ok    it is in the dust folder
+== install a script from a zip (no Origin: curl, like maiden-repl or a script)
+  ok    install
+  ok    files are under dust/code
+== REPL websocket: who may connect
+  ok    no Origin (maiden-repl)
+  ok    maiden's own page (127.0.0.1)
+  ok    maiden's own page (localhost)
+  FAIL  another website is refused: got 'echo=ping-from-test ', want 'closed '
+  FAIL  another port on 127.0.0.1 is refused: got 'echo=ping-from-test ', want 'closed '
+  FAIL  origin 'null' (a file:// page, a sandboxed iframe) is refused: got 'echo=ping-from-test ', want 'closed '
+== maiden: cross-site requests and DNS rebinding
+  FAIL  page on another site: POST install is refused: got '201', want '403'
+  FAIL  nothing was installed by it: got 'note.lua victim ', want 'note.lua '
+  FAIL  page on another site: GET of dust is refused: got '200', want '403'
+  FAIL  rebinding: Host evil.example is refused: got '200', want '403'
+  FAIL  rebinding: a wrong port in Host is refused: got '200', want '403'
+  ok    Host localhost works
+  ok    own Origin works (the web app's requests)
+  ok    own Origin works for a write
+== the systemd unit API is off on Linux
+  FAIL  unit status is not served: got '503', want '404'
+  FAIL  unit restart is not served: got '503', want '404'
+maiden_test: 10 failed
+--- maiden.log
+[GIN] 2026/10/26 - 16:44:18 | 200 |      74.254µs |       127.0.0.1 | GET      "/api/v1/dust"
+[GIN] 2026/10/26 - 16:44:18 | 200 |      72.453µs |       127.0.0.1 | GET      "/api/v1/dust"
+[GIN] 2026/10/26 - 16:44:18 | 200 |      180.31µs |       127.0.0.1 | PUT      "/api/v1/dust/code/note2.lua"
+[GIN] 2026/10/26 - 16:44:18 | 503 |       31.63µs |       127.0.0.1 | GET      "/api/v1/unit/norns-main.service"
+[GIN] 2026/10/26 - 16:44:18 | 503 |      30.101µs |       127.0.0.1 | GET      "/api/v1/unit/norns-main.service?do=restart"
+--- ws.log
+ping-from-test
+ping-from-test
+ping-from-test

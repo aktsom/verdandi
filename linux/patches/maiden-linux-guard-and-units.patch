@@ -1,0 +1,77 @@
+diff --git a/cmd/server.go b/cmd/server.go
+index e3fec8c..f5102e5 100644
+--- a/cmd/server.go
++++ b/cmd/server.go
+@@ -89,6 +89,14 @@ func serverRun() {
+ 	r.Use(gin.Logger())
+ 	r.Use(gin.Recovery())
+ 
++	// Verdandi: when listening on the loopback only, also refuse requests that a web page in the browser
++	// makes on another site's behalf (Origin that is not this server) and DNS rebinding (Host that is not
++	// this server). nothing in maiden authenticates, so this is the only thing between a web page and the
++	// editor's file and install API.
++	if httpFD == 0 && isLoopbackHost(httpHost) {
++		r.Use(loopbackGuard(httpPort))
++	}
++
+ 	r.GET("", func(ctx *gin.Context) {
+ 		ctx.Redirect(http.StatusFound, "/maiden")
+ 	})
+@@ -110,11 +118,9 @@ func serverRun() {
+ 	// dust api
+ 	apiPrefix := filepath.Join(apiRoot, "dust")
+ 
+-	// dbus connection for process management
+-	dbusConn, err := dbus.NewSystemConnection()
+-	if err != nil {
+-		logger.Warnf("dbus connection error: %v", err)
+-	}
++	// Verdandi: no systemd to manage (the unit API is answered with an error), so no dbus connection
++	var dbusConn *dbus.Conn
++	var err error
+ 
+ 	s := server{
+ 		apiPrefix:    apiPrefix,
+@@ -179,11 +185,42 @@ type server struct {
+ 	catalogsMutex sync.Mutex
+ }
+ 
++func isLoopbackHost(h string) bool {
++	return h == "127.0.0.1" || h == "localhost" || h == "::1"
++}
++
++// loopbackGuard allows a request when its Host is one of the loopback names of this server's port and,
++// if it carries an Origin (browsers send one for cross-site requests, and for every non-GET), that is
++// one of the same names. requests without an Origin (curl, maiden-repl, same-site GET) are fine.
++func loopbackGuard(port int) gin.HandlerFunc {
++	names := []string{"127.0.0.1", "localhost", "[::1]"}
++	ok := map[string]bool{}
++	for _, n := range names {
++		ok[fmt.Sprintf("%s:%d", n, port)] = true
++	}
++	return func(ctx *gin.Context) {
++		if !ok[ctx.Request.Host] {
++			ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden: unexpected Host " + ctx.Request.Host})
++			return
++		}
++		if origin := ctx.Request.Header.Get("Origin"); origin != "" && !ok[strings.TrimPrefix(origin, "http://")] {
++			ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden: Origin " + origin})
++			return
++		}
++		ctx.Next()
++	}
++}
++
+ func (s *server) dustRoot() string {
+ 	return s.devicePath("")
+ }
+ 
+ func (s *server) unitHandler(ctx *gin.Context) {
++	// Verdandi: norns and sclang are not systemd units on a desktop. restart norns from its window
++	// (SYSTEM > RESTART) or by closing and starting it again
++	ctx.JSON(http.StatusNotFound, gin.H{"error": "not available in Verdandi: restart norns from its window or start it again"})
++	return
++
+ 	if s.dbusConn == nil {
+ 		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "no dbus connection"})
+ 		return
