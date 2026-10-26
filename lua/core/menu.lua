@@ -197,11 +197,11 @@ local INPUT_LABEL = {off = "off", mic = "mic / interface", system = "all apps (s
 local function monitor_ok() return _norns.mic_input ~= nil and os.getenv("NORNS_SYS_MONITOR") == "1" end
 local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 
--- the standing note on the device window (Linux): one at a time, the most urgent first: the sink monitor may feed back, a SuperCollider
+-- the standing note on the device window (Linux): one at a time, the most urgent first: the sink monitor may feed back, the MAIDEN button has no maiden to open (a few seconds), a SuperCollider
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.input == "monitor" and MONITOR_WARNING or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -424,6 +424,11 @@ if _norns.grid_conflict_text and _norns.set_warning then
     poll.event = function()
       grid_note_update()
       plugin_note_update()
+      -- the note of the MAIDEN button goes after a few seconds
+      if _menu.maiden_note and util.time() >= (_menu.maiden_note_until or 0) then
+        _menu.maiden_note = nil
+        _menu.show_note()
+      end
       -- a script ran "sudo systemctl restart norns-*" (a script's installer): linux/shims/systemctl left a request instead of the Raspberry Pi's
       -- services: restart norns the clean way
       local req = io.open("/home/we/.norns-request-restart")
@@ -473,6 +478,11 @@ _norns.window_button = function(n)
     if manual then _norns.open_url(manual) end
   elseif n == 6 then
     _menu.next_input()
+  elseif n == 7 then
+    -- Linux: the MAIDEN button found nothing listening on maiden's port (linux/norns.sh starts maiden when it is built)
+    _menu.maiden_note = "maiden is not running, see log"
+    _menu.maiden_note_until = util.time() + 6
+    _menu.show_note()
   end
 end
 

@@ -37,6 +37,15 @@
  */
 
 #include <cairo.h>
+#ifdef NORNS_LINUX_DESKTOP
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <string.h>
+#include <sys/socket.h>
+#endif
 #include <math.h>
 #include <pthread.h>
 #include <pwd.h>
@@ -1892,13 +1901,57 @@ static void post_enc(int n, int delta) {
     event_post(ev);
 }
 
-// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual, 6 mic
+// a button on the device for lua (_norns.window_button): 1-4 menu page, 5 manual, 6 mic, 7 (Linux) maiden is not running
 static void post_window_button(int n) {
     union event_data *ev = event_data_new(EVENT_WINDOW_BUTTON);
     ev->key.n = n;
     ev->key.val = 1;
     event_post(ev);
 }
+
+#ifdef NORNS_LINUX_DESKTOP
+// Linux: maiden is a separate process that linux/norns.sh starts when it is built (and the port is free); the button only opens a
+// browser page that answers. nothing listening: say so in the window (lua/core/menu.lua, _norns.window_button 7) instead of
+// opening a browser tab with "connection refused"
+static bool maiden_listening(int port) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return false;
+    }
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof addr);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bool up = false;
+    if (connect(fd, (struct sockaddr *)&addr, sizeof addr) == 0) {
+        up = true;
+    } else if (errno == EINPROGRESS) {
+        struct pollfd pfd = {fd, POLLOUT, 0};
+        int err = 0;
+        socklen_t len = sizeof err;
+        up = poll(&pfd, 1, 300) == 1 && getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) == 0 && err == 0;
+    }
+    close(fd);
+    return up;
+}
+
+static void open_maiden() {
+    const char *env = getenv("NORNS_MAIDEN_PORT");
+    int port = env != NULL ? atoi(env) : 5000;
+    if (port <= 0 || port > 65535) {
+        port = 5000;
+    }
+    if (maiden_listening(port)) {
+        char url[64];
+        snprintf(url, sizeof url, "http://127.0.0.1:%d/maiden", port);
+        shell_open_url(url);
+    } else {
+        post_window_button(7);
+    }
+}
+#endif
 
 static void button_action(int control) {
     if (control >= SKIN_PAGE1 && control <= SKIN_PAGE4) {
@@ -1908,7 +1961,11 @@ static void button_action(int control) {
     } else if (control == SKIN_MIC) {
         post_window_button(6);
     } else if (control == SKIN_MAIDEN) {
+#ifdef NORNS_LINUX_DESKTOP
+        open_maiden();
+#else
         shell_open_url("http://127.0.0.1:5000/maiden");
+#endif
     } else if (control == SKIN_GRID) {
         toggle_grid();
     } else if (control == SKIN_ARC) {
