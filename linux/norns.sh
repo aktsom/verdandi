@@ -233,7 +233,7 @@ export SDL_NO_SIGNAL_HANDLERS=1
 mkdir -p "$NORNS_HOME" || fail "cannot create the norns home $NORNS_HOME"
 cd "$NORNS_HOME" || exit 1
 # from the desktop: what this script says goes to a file
-if [ -z "${NORNS_HAVE_TTY:-}" ] && [ "$INSTALLED" = 1 ] && [ "${NORNS_LAUNCHER_LOG:-1}" != 0 ]; then
+if [ -z "${NORNS_HAVE_TTY:-}" ] && [ "$INSTALLED" = 1 ] && [ $TERMINAL -eq 0 ] && [ "${NORNS_LAUNCHER_LOG:-1}" != 0 ]; then
     exec >> "$NORNS_HOME/launcher.log" 2>&1
 fi
 case "$LINK_STATE" in
