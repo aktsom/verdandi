@@ -105,6 +105,10 @@ the sound card (the owner's hand test: an unlinked stream stays unlinked, but a 
 Recorded in `HARDWARE-CHECKLIST.md` ("Done on a real machine"): silent run, sound under PipeWire, Reaper clock/notes through the
 Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped several times (design for auto-connect only).
 
+## maiden on Linux: plan written, nothing built
+
+`docs/port/phase-4-maiden.md`: how the Mac port builds and starts maiden, what Linux needs, how script installs interact with the ARM plugin and sudo findings, the security picture (including that a web page can reach the REPL websockets), a step plan with headless tests and nine decisions for the owner. Waiting for those decisions.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
