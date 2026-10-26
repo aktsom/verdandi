@@ -25,7 +25,7 @@ print("handshake=" + (head.split(b" ")[1].decode() if b" " in head else "none"))
 if not head.startswith(b"HTTP/1.1 101"):
     sys.exit(0)
 
-payload = b"ping-from-test\n"
+payload = os.environ.get("WS_PAYLOAD", "ping-from-test\n").encode()
 mask = os.urandom(4)
 frame = bytes([0x81, 0x80 | len(payload)]) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
 try:
@@ -34,26 +34,43 @@ except OSError:
     print("closed")
     sys.exit(0)
 s.settimeout(0.3)
-end = time.time() + 1.5
+end = time.time() + float(os.environ.get("WS_WAIT", "1.5"))
 data = rest
-while time.time() < end:
-    if len(data) >= 2 and data[0] & 0x0F == 1:
+texts = []
+closed = False
+while time.time() < end and not closed:
+    # whole frames (server frames are not masked; lengths here are small)
+    while len(data) >= 2:
         n = data[1] & 0x7F
-        if len(data) >= 2 + n:
-            print("echo=" + data[2:2 + n].decode(errors="replace").strip())
-            sys.exit(0)
-    if len(data) >= 1 and data[0] & 0x0F == 8:
-        print("closed")
-        sys.exit(0)
+        hdr = 2
+        if n == 126:
+            if len(data) < 4:
+                break
+            n, hdr = struct.unpack(">H", data[2:4])[0], 4
+        if len(data) < hdr + n:
+            break
+        op = data[0] & 0x0F
+        if op == 8:
+            closed = True
+        elif op == 1:
+            texts.append(data[hdr:hdr + n].decode(errors="replace").strip())
+        data = data[hdr + n:]
+    if closed:
+        break
     try:
         d = s.recv(4096)
     except socket.timeout:
         continue
     except OSError:
-        print("closed")
-        sys.exit(0)
+        closed = True
+        break
     if not d:
-        print("closed")
-        sys.exit(0)
+        closed = True
+        break
     data += d
-print("silent")
+if texts:
+    print("echo=" + " | ".join(texts))
+elif closed:
+    print("closed")
+else:
+    print("silent")

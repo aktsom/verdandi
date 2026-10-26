@@ -47,31 +47,8 @@ for _ in $(seq 50); do curl -sf -o /dev/null "http://127.0.0.1:$PM/api/v1" && br
 for _ in $(seq 25); do ss -ltn 2> /dev/null | grep -q "127.0.0.1:$PW " && break; sleep 0.2; done
 
 echo "== listening addresses (loopback only)"
-# listening TCP sockets of these two ports, from /proc (ss may not be installed)
-LISTEN=$(python3 -I - "$PM" "$PW" << 'PY'
-import socket, struct, sys
-ports = {int(a) for a in sys.argv[1:]}
-out = []
-for f, v6 in (("/proc/net/tcp", False), ("/proc/net/tcp6", True)):
-    try:
-        lines = open(f).read().splitlines()[1:]
-    except OSError:
-        continue
-    for l in lines:
-        c = l.split()
-        if c[3] != "0A":
-            continue
-        addr, port = c[1].split(":")
-        if int(port, 16) not in ports:
-            continue
-        b = bytes.fromhex(addr)
-        a = socket.inet_ntop(socket.AF_INET6, b"".join(b[i:i+4][::-1] for i in range(0, 16, 4))) if v6 else socket.inet_ntoa(b[::-1])
-        out.append("%s:%d" % (a, int(port, 16)))
-print(" ".join(sorted(out)) + " ")
-PY
-)
-LISTEN=$(echo "$LISTEN" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')
-WANT=$(printf '%s\n' "127.0.0.1:$PM" "127.0.0.1:$PW" | sort | tr '\n' ' ')
+LISTEN=$(python3 -I "$HERE/listening.py" "$PM" "$PW")
+WANT=$(printf '%s\n' "127.0.0.1:$PM" "127.0.0.1:$PW" | sort | tr '\n' ' ' | sed 's/ $//')
 check "maiden and ws-wrapper listen on 127.0.0.1 only" "$LISTEN" "$WANT"
 
 printf x=1 > "$T/x.txt"; printf y=2 > "$T/y.txt"

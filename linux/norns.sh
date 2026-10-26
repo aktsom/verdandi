@@ -9,7 +9,8 @@
 #
 # usage: linux/norns.sh [--terminal]
 #   default: matron and sclang REPLs are websockets (127.0.0.1:5555/5556), the log is in
-#            <norns home>/norns.log
+#            <norns home>/norns.log; maiden (the web editor and script catalog) at http://127.0.0.1:5000/maiden,
+#            its log in <norns home>/maiden.log
 #   --terminal: matron's lua REPL and log are this terminal
 #
 # environment (all optional):
@@ -26,6 +27,9 @@
 #                       PipeWire (wpctl), else the first card. audio.conf in the norns home may hold
 #                       in_ports=... and out_ports=... (the environment wins)
 #   NORNS_NO_SHIMS=1    do not put linux/shims (sudo, systemctl for norns-* units) first on the PATH of norns
+#   NORNS_MAIDEN        where maiden is (default <norns home>/maiden, built by linux/maiden-build.sh); started if there
+#   NORNS_MAIDEN_PORT   maiden's port (default 5000). maiden and the REPL websockets (5555, 5556) answer on 127.0.0.1 only,
+#                       and the REPL websockets only to a browser page that maiden served (ws-wrapper's Origin check)
 #   NORNS_DECIDE_ONLY=1 print the decision ("DECIDE action=... server=... in=... out=...") and exit
 
 set -u
@@ -193,6 +197,13 @@ if pgrep -x norns >/dev/null; then
     exit 1
 fi
 
+MAIDEN="${NORNS_MAIDEN:-$NORNS_HOME/maiden}"
+MAIDEN_PORT="${NORNS_MAIDEN_PORT:-5000}"
+case "$MAIDEN_PORT" in '' | *[!0-9]*) echo "norns.sh: NORNS_MAIDEN_PORT='$MAIDEN_PORT' is not a port number"; exit 1 ;; esac
+export NORNS_MAIDEN_PORT="$MAIDEN_PORT" # the MAIDEN button of the window opens this port
+# the pages maiden serves: the only origins a browser may open the REPL websockets from (ws-wrapper)
+WS_ORIGINS="http://127.0.0.1:$MAIDEN_PORT,http://localhost:$MAIDEN_PORT"
+
 PIDS=""
 JACK_PID=""
 # a process and everything below it, children first
@@ -304,7 +315,7 @@ start_norns() {
         # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin
         PATH="$shimpath" "$NORNS_BIN" <&0 &
     else
-        PATH="$shimpath" "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
+        WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" PATH="$shimpath" "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
     fi
     NORNS_PID=$!
     PIDS="$PIDS $NORNS_PID"
@@ -321,13 +332,34 @@ start_norns() {
     done
     # sclang's Qt WebEngine refuses to start as root (containers) without this
     [ "$(id -u)" -eq 0 ] && export QTWEBENGINE_DISABLE_SANDBOX=1 QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox
-    QT_QPA_PLATFORM=offscreen "$WS" "ws://127.0.0.1:5556" sclang -i maiden \
+    WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" QT_QPA_PLATFORM=offscreen "$WS" "ws://127.0.0.1:5556" sclang -i maiden \
         < /dev/null > "$NORNS_HOME/sclang.log" 2>&1 &
     SCLANG_PID=$!
     PIDS="$PIDS $SCLANG_PID"
 }
 
 start_norns
+
+# maiden: the web editor, the REPL consoles and the script catalog, as on the Mac: on 127.0.0.1 only (--host, a patch of
+# macos/patches), and its guard (linux/patches) also refuses requests that a web page on another site makes. the same
+# origins are the only ones the REPL websockets accept from a browser
+if [ -x "$MAIDEN/maiden" ]; then
+    # first start: the catalog sources maiden installs scripts from (tool/project-setup.sh of maiden)
+    if [ ! -d dust/data/sources ]; then
+        mkdir -p dust/data/sources dust/data/catalogs
+        cp "$MAIDEN"/dist/sources/*.json dust/data/sources/ 2>/dev/null
+    fi
+    if (exec 3<>"/dev/tcp/127.0.0.1/$MAIDEN_PORT") 2>/dev/null; then
+        echo "norns.sh: port $MAIDEN_PORT is in use: maiden is not started (another port: NORNS_MAIDEN_PORT=5001 linux/norns.sh)"
+    else
+        (cd "$MAIDEN" && exec ./maiden server --host 127.0.0.1 --port "$MAIDEN_PORT" --app ./app/build \
+            --data "$NORNS_HOME/dust" --doc "$NORNS_HOME/norns/doc" < /dev/null > "$NORNS_HOME/maiden.log" 2>&1) &
+        PIDS="$PIDS $!"
+        echo "norns.sh: maiden at http://127.0.0.1:$MAIDEN_PORT/maiden (log: $NORNS_HOME/maiden.log)"
+    fi
+else
+    echo "norns.sh: maiden is not built (linux/maiden-build.sh): no web editor"
+fi
 [ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_HOME/norns.log"
 
 while :; do
