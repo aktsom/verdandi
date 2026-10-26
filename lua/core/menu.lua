@@ -424,7 +424,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
     poll.event = function()
       grid_note_update()
       plugin_note_update()
-      -- the note of the MAIDEN button goes after a few seconds
+      -- the note of the MAIDEN and MANUAL buttons goes after a few seconds
       if _menu.maiden_note and util.time() >= (_menu.maiden_note_until or 0) then
         _menu.maiden_note = nil
         _menu.show_note()
@@ -475,7 +475,14 @@ _norns.window_button = function(n)
     end
   elseif n == 5 and _norns.open_url then
     local manual = os.getenv("NORNS_MANUAL")
-    if manual then _norns.open_url(manual) end
+    if _norns.set_warning and (manual == nil or not util.file_exists(manual)) then
+      -- Linux: linux/norns.sh points NORNS_MANUAL at linux/manual/manual.html; say so when it is not there
+      _menu.maiden_note = "manual not found: linux/manual/manual.html"
+      _menu.maiden_note_until = util.time() + 6
+      _menu.show_note()
+    elseif manual then
+      _norns.open_url(manual)
+    end
   elseif n == 6 then
     _menu.next_input()
   elseif n == 7 then

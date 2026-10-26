@@ -28,6 +28,7 @@
 #                       in_ports=... and out_ports=... (the environment wins)
 #   NORNS_NO_SHIMS=1    do not put linux/shims (sudo, systemctl for norns-* units) first on the PATH of norns
 #   NORNS_MAIDEN        where maiden is (default <norns home>/maiden, built by linux/maiden-build.sh); started if there
+#   NORNS_MANUAL        the page the MANUAL button opens (default linux/manual/manual.html in this repository)
 #   NORNS_MAIDEN_PORT   maiden's port (default 5000). maiden and the REPL websockets (5555, 5556) answer on 127.0.0.1 only,
 #                       and the REPL websockets only to a browser page that maiden served (ws-wrapper's Origin check)
 #   NORNS_DECIDE_ONLY=1 print the decision ("DECIDE action=... server=... in=... out=...") and exit
@@ -197,6 +198,8 @@ if pgrep -x norns >/dev/null; then
     exit 1
 fi
 
+# the MANUAL button of the window opens this (the window says so if the file is not there)
+export NORNS_MANUAL="${NORNS_MANUAL:-$REPO/linux/manual/manual.html}"
 MAIDEN="${NORNS_MAIDEN:-$NORNS_HOME/maiden}"
 MAIDEN_PORT="${NORNS_MAIDEN_PORT:-5000}"
 case "$MAIDEN_PORT" in '' | *[!0-9]*) echo "norns.sh: NORNS_MAIDEN_PORT='$MAIDEN_PORT' is not a port number"; exit 1 ;; esac

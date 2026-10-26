@@ -1,0 +1,40 @@
+# Linux manual (MANUAL button): what exists, what was built, and the outline for the text
+
+## What the Mac does, what Linux did, what is built now
+
+- **Mac:** `macos/norns.sh` exports `NORNS_MANUAL=<repo>/macos/manual/manual.html`; `macos/make-app.sh` copies the same file into the app (and a PDF next to the disk image). `lua/core/menu.lua` (`_norns.window_button(5)`) calls `_norns.open_url(NORNS_MANUAL)`; `open_url.c` accepts http(s) and absolute paths and
+  hands them to `open`. The manual is one HTML file of 476 KB (almost all of it embedded images), 15 sections, about 23 000 characters of text, written for the Mac app (installing the `.app`, the menu bar, the AUv3 plug-in, uninstalling, Mac audio).
+- **Linux before:** the same Lua code ran, but `NORNS_MANUAL` was never set on Linux, so the button did nothing.
+- **Built now (small, tested):** `linux/norns.sh` exports `NORNS_MANUAL=<repo>/linux/manual/manual.html` unless it is already set; the same button code opens it through `xdg-open`; when the file is missing (or `NORNS_MANUAL` names something that is not there) the window shows
+  "manual not found: linux/manual/manual.html" for a few seconds and opens nothing. The note code is guarded by `_norns.set_warning`, which only the Linux desktop build has, so the Mac path is unchanged. Test: `linux/tests/manual_button_test.sh` (stub `xdg-open`: file present, file missing, the launcher's own default).
+  **There is no `linux/manual/manual.html` yet, so today the button shows the note.** That is deliberate: I did not write a stub page.
+
+## Why I stopped before writing the text
+
+The text is large (the Mac one is about 23 000 characters in 15 sections) and it has to be **only** what is built and tested, so each statement needs a source. Writing it in one go without your review of the outline risks sections you do not want (for example how much to say about maiden, or whether to include a
+troubleshooting section). **Decision for you:** approve, cut or change the outline below, and say whether you want one HTML file with a table of contents (like the Mac one, without images except maybe the device screenshot `docs`-style, which would need a screenshot made from the window: the headless harness can produce one) or the plain
+text of `RUN-ON-LAPTOP.md` turned into HTML.
+
+## Outline (one HTML file, table of contents, no external resources)
+
+Every section names where its facts come from; all of those are in this repository and covered by `run_all.sh` unless marked "laptop".
+
+1. **What this is.** Norns running natively on a desktop (Linux), with the device window, the menu, a virtual grid/arc/keys, maiden, MIDI and audio through JACK or PipeWire. What it is not (no Raspberry Pi hardware: no WiFi, no power control). *Source: `RUN-ON-LAPTOP.md` header, `KNOWN-ISSUES.md`.*
+2. **Installing and building.** `linux/setup-deps.sh`, `linux/build.sh`, `linux/tests/run_all.sh`; the norns home (`~/verdandi-home`, the folder above the repository), what is installed with sudo and what is not. *Source: `RUN-ON-LAPTOP.md` sections 1-2, `DEPS.md`.*
+3. **First start.** `linux/norns.sh` and `--terminal` (what each gives: log in `norns.log`, maiden's norns console only without `--terminal`); the first-start files (`matronrc.lua`, `dust`, `audio.conf`). *Source: `linux/norns.sh` header, `RUN-ON-LAPTOP.md`; tests `maiden_launcher_test.sh`.*
+4. **The window.** Keyboard map, mouse (knobs, keys, fader, wheel), the button row (page buttons, MIC/SYS/APP/OFF, GRID, ARC, KEYS, MAIDEN, MANUAL), the right-click menu (screenshot, GIF, import files and folders, file dialogs). *Source: the Mac readme's table which is shared code (`readme-macos.md`), `window_keys.c`, `device_skin.c`; tests `window:*`.* Mac-only items (menu bar, retina, Dock) dropped.
+5. **Audio.** The three ways norns finds sound (own jackd, a running JACK, PipeWire through `pw-jack`) and how the launcher chooses; the sound card choice (`in_ports`, `out_ports`, `NORNS_IN_PORTS`, `NORNS_OUT_PORTS`), SYSTEM > AUDIO, buffer and rate (`period`, `rate`), MIC / SYS / APP / OFF (what each does, SYS = all applications except norns, the sink-monitor extra and its warning), the internal clock under PipeWire. *Source: `phase-3.md`, `KNOWN-ISSUES.md` items 6 and 7; tests `audio:*`, `input:*`, `clock:*`. Laptop: everything with a real sound card.*
+6. **MIDI, grid, arc, crow.** Real devices over USB, virtual grid/arc/keys windows, "Verdandi keys", MIDI clock in through JACK MIDI (`Verdandi:midi_in`), the optional auto-connect (`midi_in_from`), serialosc conflict note. *Source: `phase-2.md`, `phase-3.md`, `HARDWARE-CHECKLIST.md`; tests `midi:*`, `serialosc:*`. Laptop: real grid/arc/crow.*
+7. **maiden and the script catalog.** The page at `http://127.0.0.1:5000/maiden` (port, `NORNS_MAIDEN_PORT`), the MAIDEN button, what the consoles are, the loopback-only rule and the Origin/Host protection, where installed scripts go, `--terminal` and the norns console, `maiden-repl`. *Source: `phase-4-maiden.md`, `maiden-exposure-evidence.md`; tests `maiden:*`. Laptop: the real catalog and browser.*
+8. **Scripts.** Putting scripts in `dust/code`, the virtual `/home/we` (scripts see `/home/we`; errors and tracebacks show it), engines and SuperCollider; scripts with prebuilt Raspberry Pi plug-ins (cannot load, reported by the plug-in check, the move command, `NORNS_PLUGIN_CHECK=0`), scripts that run `sudo systemctl restart norns-*` (becomes a restart), other `sudo` (`sudo -n`), `wget` and `apt` not provided. *Source: `KNOWN-ISSUES.md` items 8 and 11; tests `plugins:*`, `shims:*`, `chunkname`.*
+9. **Files and logs.** Where everything is (`norns.log`, `sclang.log`, `maiden.log`, `audio.conf`, `.plugin-mismatch`, `disabled-plugins`, `dust`). *Source: `linux/norns.sh`.*
+10. **Settings.** A table of `audio.conf` keys (`input`, `output`, `in_ports`, `out_ports`, `rate`, `period`, `midi_in_from`, `plugin_check`, `serialosc_check`, `sys_monitor`) and environment variables (`NORNS_HOME`, `NORNS_JACK_DRIVER`, `NORNS_JACK_RATE`, `NORNS_JACK_PERIOD`, `NORNS_AUDIO_SERVER`, `NORNS_IN_PORTS`, `NORNS_OUT_PORTS`, `NORNS_NO_SCLANG`, `NORNS_NO_SHIMS`,
+    `NORNS_PLUGIN_CHECK`, `NORNS_SERIALOSC_CHECK`, `NORNS_SYS_MONITOR`, `NORNS_MIDI_IN_FROM`, `NORNS_MAIDEN`, `NORNS_MAIDEN_PORT`, `NORNS_MANUAL`, `NORNS_NO_MAIDEN` for the build). *Source: the header of `linux/norns.sh` and the code that reads them; I would check each against the code again while writing.*
+11. **Troubleshooting.** Only items that were met and fixed: no sound under PipeWire, jackd busy, SuperCollider fail (the plug-in check), grid not found (serialosc), maiden "not connected to norns" with `--terminal`, port 5000 taken, the first start taking long. *Source: `KNOWN-ISSUES.md`.*
+12. **Differences from the device (and from the Mac app).** No hardware (WiFi, power, the OLED is a window), the clock source and Link availability as tested, SLEEP quits norns, `update` does nothing, no AppImage/Flatpak yet (gate B), no VST3 yet (Windows phase).
+13. **Known limitations.** Everything open in `KNOWN-ISSUES.md` and `STATUS.md` (x86_64 PortedPlugins, apt/wget shims, forward clock jumps, SYS unlinking, MIDI control of window controls), stated as limits, with no promises.
+14. **Source and licenses.** GPL-3.0, the repository, `DEPS.md`.
+
+Not included: the AUv3 section, installing/uninstalling an app bundle, the Mac menu bar, anything about macOS audio, and anything not built.
+
+Size estimate: about 15 000-20 000 characters of text, no images except, if you want, one screenshot of the window made by the test harness.

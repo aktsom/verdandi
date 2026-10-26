@@ -91,6 +91,7 @@ if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
 else
     echo "SKIP  maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
 fi
+run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
 run "boot:script and library folders from chunk names (norns loads the script)" env NB_DIR="$NB_DIR" linux/tests/chunkname_test.sh "$T/chunk"
 
 PROBE_LOG="$T/probe.log"
