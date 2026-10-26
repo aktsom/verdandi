@@ -426,3 +426,60 @@ shows one error while the list can be longer; a file this check cannot read (per
 - **Decision taken (shall be confirmed): shims for these command strings, not a global `os.execute` interception.** A global interception in Lua (replacing `os.execute`/`io.popen` for every script) would also catch commands the
   shims cannot (an absolute `/usr/bin/sudo`, `sh -c "sudo ..."` with a changed `PATH`), but it changes every script's shell calls, hides what runs, and does not cover the sidecar; the `PATH` shims touch only these two names.
   Not covered: a script that calls `/bin/systemctl` or `/usr/bin/sudo` by absolute path, or one that clears or replaces `PATH`. Also not built: `apt`/`apt-get` shims, a `wget` shim, x86_64 plug-in bundles (8.5 B1, B2).
+
+## 9. Centered text with an odd ink width looks squished or blurred (cairo 1.18 draws glyphs at fractional positions; found on the laptop; investigated, NOT changed; fix proposed)
+
+**Symptom:** centered headers on PARAMS pages ("modulation", "track 6 options", "track 1 filter", "link") look squished and bolder, letters running together; "midi clock out" is clean; left- and right-aligned
+lines are clean; the OLED screenshot shows it too (so it is in the drawing, not in the window scaling).
+
+### 9.1 How the text is drawn here, and how it differs from the device
+- `matron/src/hardware/screen.cc` is **identical to upstream norns** (`diff` against `monome/norns` main: no difference). The drawing: an ARGB32 image surface of 128 x 64; `screen_init` sets `CAIRO_ANTIALIAS_SUBPIXEL`,
+  then `init_font_faces` replaces it with `GRAY`, and every script load calls `screen.aa(0)` (`lua/core/script.lua:133`), i.e. **`CAIRO_ANTIALIAS_NONE` for text** (the menu panel indicator uses `screen.aa(1)`, gray, `lua/core/menu.lua:541`). No other font
+  options are set: hint style and hint metrics stay at cairo's defaults, there is no scaling and no surface conversion on the way (the desktop window paints the same 128 x 64 surface; `screen_export_screenshot` copies it 4x).
+- The default font is `resources/norns.ttf` (a pixel font, 8 px) for body text **and** headers: no different face or size for headers, and one `cairo_show_text` per string (no doubled draw).
+- **`screen_text_center`** is `cairo_rel_move_to(cr, -extents.width * 0.5, 0); cairo_show_text(...)`: `extents.width` is the **ink width** of the string. **`screen_text_right`** is `-extents.width`. For this font the ink width is a whole number
+  of pixels, so right-aligned text starts on a whole pixel (x is a whole number in scripts); centered text starts at `x - width/2`, **which is `.5` whenever the ink width is odd**.
+- The device and this build run the **same code**; what differs is **cairo**. This build uses cairo **1.18.0**. cairo 1.16 (what a Raspberry Pi image of the norns era ships) places every glyph on a **whole pixel** (the origin is rounded); a newer
+  cairo draws the glyph at the **fractional position** it is given (sub-pixel glyph positioning). I could not fetch the device's cairo; I unpacked Ubuntu's `libcairo2` **1.16.0** package and ran the same program against it (below).
+
+### 9.2 Reproduction and evidence
+Harness `docs/port/repro/text_center.c` (the code's surface, font, options and `text_center`, nothing else), and `linux/tests/scripts/text_probe.lua` run in the real norns (`screen.export_screenshot`). Centre x = 64.
+Ink widths: "modulation" 43 (odd), "track 6 options" 65 (odd), "track 1 filter" 53 (odd), "link" 13 (odd), "midi clock out" 56 (even), "tempo" 24 (even).
+
+Pixels of "modulation" (start x = 64 - 21.5 = **42.5**), `.` empty, `#` full, `-`/`+`/`:` partial:
+```
+cairo 1.18, aa none (what scripts get)     cairo 1.18, aa gray               cairo 1.16, aa none (and gray)
+.................##.....##......##.##...   ..............--.....--......--.--.   ..................#......#.......#..#...
+...#####..###..######.####.########...###.####   ...-###-..-#-..-##---.----.-##--##-...-#-.-##-   ....####...##...###.#..#.#..###.###....##..###.
+...########.####.####.######.##.##.####.####.##   ...--------.----.----.------.--.--.----.----.--   ....#.#.#.#..#.#..#.#..#.#.#..#..#..#.#..#.#..#
+...######.###..####.######.####..####.###.##.##   ...------.-#-..-##-.-##---.-##-..----.-#-.--.--   ....#.#.#..##...###..###.#..###...#.#..##..#..#
+```
+(every stroke is **two columns wide** in the first column, grey smears in the second, one crisp column in the third). "midi clock out" (start **36.0**) is crisp in all of them. The screenshot taken by the real norns
+(`screen.export_screenshot`, 4x) of the same strings shows the same doubled columns for the odd widths and single columns for the even width, with only the values 0 and 255 (the `aa(0)` state of a script).
+Count of grey pixels (neither empty nor full) with `gray` anti-aliasing at centre 64: modulation 126, track 6 options 148, track 1 filter 124, link 48, clock 54 (all odd ink widths), **0 for "midi clock out" and "tempo" (even)**.
+
+Same strings, other options (cairo 1.18): hint style none / full, hint metrics on / off, anti-aliasing subpixel: **no change**: the artifact is not a hint option. With `aa none` the stroke is doubled instead of grey.
+Starting the string at a whole pixel (rounding the centre) removes it in every option: grey count 0 and the strokes one column wide for all strings.
+
+### 9.3 Cause
+**A fractional x from centering (`-ink_width * 0.5`, `.5` for every odd ink width) combined with cairo 1.18's sub-pixel glyph positioning.** On the device's cairo 1.16 the glyph origin is rounded to a whole pixel, so the same `.5` is harmless (the string
+lands on column 43 for start 42.5, round half up); here the glyph outline is rasterised at the half-pixel offset: grey in the anti-aliased case, a doubled stroke with `aa(0)`. That is why only centered lines with an odd ink width show it
+(right-aligned and left-aligned lines start on whole pixels; "midi clock out" has an even width). Not the cause (each checked above): antialias / hint options, scaling or surface conversion, a doubled draw, a different font face or size.
+The same would affect **macOS** (cairo from Homebrew is 1.18 too); the code is shared.
+
+### 9.4 Smallest fix (proposed, NOT applied)
+In `screen_text_center` snap the start to a whole pixel the way cairo 1.16 did, instead of passing a half pixel to cairo:
+```c
+void screen_text_center(const char *s) {
+    cairo_text_extents_t extents;
+    cairo_text_extents(cr, s, &extents);
+    double x, y;
+    cairo_get_current_point(cr, &x, &y);
+    cairo_move_to(cr, floor(x - extents.width * 0.5 + 0.5), y);   // was: cairo_rel_move_to(cr, -extents.width * 0.5, 0)
+    cairo_show_text(cr, s);
+}
+```
+This reproduces the device's output exactly for whole-pixel x (round half up: start 42.5 becomes 43, as cairo 1.16 drew it; verified against the 1.16 library, 0 grey pixels, same columns). A more general version
+snaps the current point (x and y, round half up) in `screen_text`, `screen_text_right` and `screen_text_center` before `cairo_show_text`, which also covers scripts that pass fractional x or y to `screen.move` (cairo 1.16 snapped those too); it
+would be guarded for the desktop builds (Linux and macOS, where cairo is new) so the device code stays byte for byte as it is. Test (to write first): a C test that draws odd and even widths centered at x = 64 and asserts no pixel is partial with
+`aa none` and `gray`, and that the leftmost column of "modulation" is 43. Not covered: text drawn with `screen.text_extents` based manual centering in a script (it passes `x - w/2` itself and has the same half pixel: the general snap would fix it as well).
