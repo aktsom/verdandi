@@ -137,7 +137,7 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
 
 ## SuperCollider plug-in check and restart commands from scripts
 - [ ] Put a Raspberry Pi plug-in in the extension folder (for example run the script's installer again, or copy one of the three ARM `.so` files into `~/verdandi-home/.local/share/SuperCollider/Extensions/supercollider-plugins/`) and start norns:
-      before SuperCollider starts, the terminal shows one line per wrong file with the path, "32-bit ARM, this machine is x86_64", why it fails, and the `mkdir -p ... && mv ... ~/verdandi-home/disabled-plugins/` command; the device window shows
+      before SuperCollider starts, the terminal shows one line per folder with the folder, its bad files ("(32-bit ARM)"), "this machine is x86_64", why it fails, and one `mkdir -p ... && mv ... ~/verdandi-home/disabled-plugins/` command for the folder (the folder itself if all its plug-ins are wrong, else the bad files); the device window shows
       `PLUGINS: wrong-architecture plug-in, see log`. Nothing was moved. (SuperCollider itself still fails until you move the files: that is expected, the check only reports.)
 - [ ] Run the printed command, restart norns: no line, no note, SuperCollider starts, engines are listed.
 - [ ] `NORNS_PLUGIN_CHECK=0` or `plugin_check=0` in `audio.conf`: nothing reported.

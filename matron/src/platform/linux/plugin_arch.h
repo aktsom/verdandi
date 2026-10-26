@@ -154,14 +154,68 @@ inline bool isPluginFile(const std::string &path, bool inDust) {
     return endsWith(path, ".so");
 }
 
-// the one log line. moveFolder: if every plug-in in the file's folder is wrong, the folder to move instead of the file ("" = the file)
-inline std::string message(const Finding &f, const std::string &uname, const std::string &home, const std::string &moveFolder) {
-    std::string src = moveFolder.empty() ? f.path : moveFolder;
+// the bad files of one folder: one log line, one move command
+struct Group {
+    std::string folder;
+    std::vector<Finding> items;
+    std::string moveFolder; // if every plug-in in the folder is wrong (and it is a folder inside an extension folder): the folder to move instead of the files, "" = the files
+};
+
+// found: the bad files (in order); files: every plug-in file that was looked at; roots: the extension folders. one group per folder, in the order of the first bad file
+inline std::vector<Group> groupFindings(const std::vector<Finding> &found, const std::vector<std::string> &files, const std::vector<std::string> &roots) {
+    std::vector<Group> groups;
+    for (const auto &f : found) {
+        std::string parent = f.path.substr(0, f.path.rfind('/'));
+        Group *g = nullptr;
+        for (auto &x : groups) {
+            if (x.folder == parent) {
+                g = &x;
+            }
+        }
+        if (g == nullptr) {
+            groups.push_back(Group{parent, {}, ""});
+            g = &groups.back();
+        }
+        g->items.push_back(f);
+    }
+    for (auto &g : groups) {
+        for (const auto &r : roots) {
+            if (g.folder.size() > r.size() && g.folder.compare(0, r.size() + 1, r + "/") == 0) {
+                bool all = true;
+                for (const auto &p : files) {
+                    if (p.compare(0, g.folder.size() + 1, g.folder + "/") == 0 && p.find('/', g.folder.size() + 1) == std::string::npos) {
+                        bool bad = false;
+                        for (const auto &f : g.items) {
+                            bad = bad || f.path == p;
+                        }
+                        all = all && bad;
+                    }
+                }
+                if (all) {
+                    g.moveFolder = g.folder;
+                }
+            }
+        }
+    }
+    return groups;
+}
+
+// the one log line of a folder: the folder, its bad files and what each is, why SuperCollider fails, the one command that moves them, how to turn the check off
+inline std::string message(const Group &g, const std::string &uname, const std::string &home) {
     std::string dir = home + "/disabled-plugins";
-    return "SuperCollider plug-in " + f.path + " is built for " + describe(f.info) + ", this machine is " + uname +
-           ": SuperCollider cannot load it and stops at the first bad file, so it will not start (no engines, SUPERCOLLIDER FAIL), and the list "
-           "of bad files may be longer than the one error in sclang.log. nothing was changed. to move it out of the way (never deleted): "
-           "mkdir -p '" + dir + "' && mv '" + src + "' '" + dir + "/' ; "
+    bool many = g.items.size() > 1;
+    std::string names;
+    std::string files;
+    for (const auto &f : g.items) {
+        names += (names.empty() ? "" : ", ") + f.path.substr(f.path.rfind('/') + 1) + " (" + describe(f.info) + ")";
+        files += "'" + f.path + "' ";
+    }
+    std::string src = g.moveFolder.empty() ? files : "'" + g.moveFolder + "' ";
+    return std::string("SuperCollider plug-in") + (many ? "s" : "") + " in " + g.folder + ": " + names + "; this machine is " + uname +
+           ": SuperCollider cannot load " + (many ? "them" : "it") +
+           " and stops at the first bad file, so it will not start (no engines, SUPERCOLLIDER FAIL), and the list "
+           "of bad files may be longer than the one error in sclang.log. nothing was changed. to move " + (many ? "them" : "it") +
+           " out of the way (never deleted): mkdir -p '" + dir + "' && mv " + src + "'" + dir + "/' ; "
            "to turn this check off: NORNS_PLUGIN_CHECK=0 or plugin_check=0 in audio.conf";
 }
 

@@ -101,31 +101,12 @@ int main(int argc, char **argv) {
     files.erase(std::unique(files.begin(), files.end()), files.end());
 
     std::vector<Finding> found = scan(files, read_head, machine);
-    std::set<std::string> bad;
-    for (const auto &f : found) {
-        bad.insert(f.path);
-    }
-
     FILE *lf = fopen(list.c_str(), "w");
+    // one line per folder (a script's installer drops a dozen plug-ins in one place); the list for the device note keeps one path per file
+    for (const auto &g : groupFindings(found, files, roots)) {
+        printf("%s\n", message(g, machine, home).c_str());
+    }
     for (const auto &f : found) {
-        // a folder inside an extension folder whose plug-ins are all wrong: the command moves the folder, not the file
-        std::string parent = f.path.substr(0, f.path.rfind('/'));
-        std::string moveFolder;
-        for (const auto &r : roots) {
-            if (parent.size() > r.size() && parent.compare(0, r.size() + 1, r + "/") == 0) {
-                bool all = true;
-                for (const auto &p : files) {
-                    if (p.compare(0, parent.size() + 1, parent + "/") == 0 && p.find('/', parent.size() + 1) == std::string::npos &&
-                        bad.count(p) == 0) {
-                        all = false;
-                    }
-                }
-                if (all) {
-                    moveFolder = parent;
-                }
-            }
-        }
-        printf("%s\n", message(f, machine, home, moveFolder).c_str());
         if (lf != NULL) {
             fprintf(lf, "%s\n", f.path.c_str());
         }

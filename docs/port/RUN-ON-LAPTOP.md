@@ -261,7 +261,7 @@ programs reading one serial stream steal each other's bytes: grid events lag, ar
 - **A script's own installer (K3 "Install") may download Raspberry Pi files** (for example `PortedPlugins-RaspberryPi.zip`). Those 32-bit ARM `.so` files cannot load on your
   machine, and SuperCollider then does not start at all ("SUPERCOLLIDER FAIL", no engines, `wrong ELF class: ELFCLASS32` in `sclang.log`). norns now **checks for this before SuperCollider starts**:
   it reads the header of every plug-in in `~/verdandi-home/.local/share/SuperCollider/Extensions`, `/usr/local/share/SuperCollider/Extensions`, `/usr/share/SuperCollider/Extensions`
-  (and `*_scsynth.so` in `dust/code`) and compares it with this machine. For each wrong file it prints **one line** in the terminal with the file, what it is ("32-bit ARM, this machine is x86_64"), why SuperCollider will fail,
+  (and `*_scsynth.so` in `dust/code`) and compares it with this machine. For each **folder** with wrong files it prints **one line** in the terminal with the folder, each bad file in it and what it is ("A_scsynth.so (32-bit ARM); this machine is x86_64"), why SuperCollider will fail,
   and the exact command to move it (or its folder) into `~/verdandi-home/disabled-plugins` (it **never** moves or deletes anything itself), and the device window shows
   `PLUGINS: wrong-architecture plug-in, see log` until no wrong file is left. SuperCollider stops at the first bad file, so `sclang.log` shows only one of them: the list from norns can be longer. After moving the files, restart norns.
   Turn the check off with `NORNS_PLUGIN_CHECK=0` or `plugin_check=0` in `~/verdandi-home/audio.conf`.

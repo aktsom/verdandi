@@ -126,20 +126,71 @@ TEST_CASE("which files count: .so and .scx in the extension folders, only *_scsy
     CHECK_FALSE(isPluginFile("/h/dust/code/s/lib/cjson.so", true));
 }
 
-TEST_CASE("the log line: one line, the path, what it is, why it fails, the command, never a delete") {
-    Finding f{"/home/n/.local/share/SuperCollider/Extensions/supercollider-plugins/AnalogChew_scsynth.so", parseElf(arm32())};
-    std::string m = message(f, "x86_64", "/home/n", "");
+static const char *EXT = "/home/n/.local/share/SuperCollider/Extensions";
+static std::vector<std::string> roots() { return {EXT, "/usr/share/SuperCollider/Extensions"}; }
+
+TEST_CASE("grouping: one group per folder, in order; files of one folder together") {
+    std::string e = EXT;
+    std::vector<Finding> found = {{e + "/pl/A_scsynth.so", parseElf(arm32())},
+                                  {e + "/pl/B_scsynth.so", parseElf(arm32())},
+                                  {e + "/other/C_scsynth.so", parseElf(arm32())}};
+    std::vector<std::string> files = {e + "/other/C_scsynth.so", e + "/pl/A_scsynth.so", e + "/pl/B_scsynth.so"};
+    auto groups = groupFindings(found, files, roots());
+    REQUIRE(groups.size() == 2);
+    CHECK(groups[0].folder == e + "/pl");
+    REQUIRE(groups[0].items.size() == 2);
+    CHECK(groups[0].items[0].path == e + "/pl/A_scsynth.so");
+    CHECK(groups[0].items[1].path == e + "/pl/B_scsynth.so");
+    CHECK(groups[1].folder == e + "/other");
+    CHECK(groups[1].items.size() == 1);
+}
+
+TEST_CASE("grouping: a folder in an extension folder whose plug-ins are all bad is moved as a folder, else the files") {
+    std::string e = EXT;
+    std::vector<Finding> found = {{e + "/allbad/A_scsynth.so", parseElf(arm32())},
+                                  {e + "/mixed/B_scsynth.so", parseElf(arm32())},
+                                  {e + "/mixed/C_scsynth.so", parseElf(arm32())},
+                                  {"/home/n/dust/code/s/ignore/D_scsynth.so", parseElf(arm32())}};
+    std::vector<std::string> files = {e + "/allbad/A_scsynth.so", e + "/mixed/B_scsynth.so", e + "/mixed/C_scsynth.so", e + "/mixed/Fine.so",
+                                      "/home/n/dust/code/s/ignore/D_scsynth.so"};
+    auto groups = groupFindings(found, files, roots());
+    REQUIRE(groups.size() == 3);
+    CHECK(groups[0].folder == e + "/allbad");
+    CHECK(groups[0].moveFolder == e + "/allbad");
+    CHECK(groups[1].folder == e + "/mixed");
+    CHECK(groups[1].moveFolder.empty()); // a good file is in there: only the two bad ones move
+    CHECK(groups[2].folder == "/home/n/dust/code/s/ignore");
+    CHECK(groups[2].moveFolder.empty()); // dust/code: the files, never the script's folder
+}
+
+TEST_CASE("the log line: one line per folder; the files, what they are, why it fails, the command, never a delete") {
+    std::string e = EXT;
+    Group g{e + "/pl", {{e + "/pl/A_scsynth.so", parseElf(arm32())}, {e + "/pl/B_scsynth.so", parseElf(arm32())}}, ""};
+    std::string m = message(g, "x86_64", "/home/n");
     CHECK(m.find('\n') == std::string::npos);
-    CHECK(m.find(f.path) != std::string::npos);
-    CHECK(m.find("32-bit ARM, this machine is x86_64") != std::string::npos);
-    CHECK(m.find("SuperCollider") != std::string::npos);
+    CHECK(m.find("SuperCollider plug-ins in " + e + "/pl: ") == 0);
+    CHECK(m.find("A_scsynth.so (32-bit ARM), B_scsynth.so (32-bit ARM)") != std::string::npos);
+    CHECK(m.find("this machine is x86_64") != std::string::npos);
     CHECK(m.find("stops at the first") != std::string::npos);
-    CHECK(m.find("mkdir -p '/home/n/disabled-plugins' && mv '" + f.path + "' '/home/n/disabled-plugins/'") != std::string::npos);
+    CHECK(m.find("mkdir -p '/home/n/disabled-plugins' && mv '" + e + "/pl/A_scsynth.so' '" + e + "/pl/B_scsynth.so' '/home/n/disabled-plugins/'") !=
+          std::string::npos);
     CHECK(m.find("rm ") == std::string::npos);
     CHECK(m.find("NORNS_PLUGIN_CHECK=0") != std::string::npos);
+    CHECK(m.find("plugin_check=0 in audio.conf") != std::string::npos);
+    // one file: the singular
+    Group one{e + "/pl", {{e + "/pl/A_scsynth.so", parseElf(arm32())}}, ""};
+    std::string m1 = message(one, "x86_64", "/home/n");
+    CHECK(m1.find("SuperCollider plug-in in " + e + "/pl: A_scsynth.so (32-bit ARM); this machine is x86_64") == 0);
+    CHECK(m1.find("cannot load it") != std::string::npos);
+    // different kinds in one folder are told apart
+    Group mix{e + "/pl", {{e + "/pl/A_scsynth.so", parseElf(arm32())}, {e + "/pl/B_scsynth.so", parseElf(aarch64())}}, ""};
+    std::string mm = message(mix, "x86_64", "/home/n");
+    CHECK(mm.find("A_scsynth.so (32-bit ARM), B_scsynth.so (64-bit ARM (aarch64))") != std::string::npos);
     // when the whole folder is bad, the command moves the folder
-    std::string m2 = message(f, "x86_64", "/home/n", "/home/n/.local/share/SuperCollider/Extensions/supercollider-plugins");
-    CHECK(m2.find("mv '/home/n/.local/share/SuperCollider/Extensions/supercollider-plugins' '/home/n/disabled-plugins/'") != std::string::npos);
+    Group whole{e + "/pl", g.items, e + "/pl"};
+    std::string m2 = message(whole, "x86_64", "/home/n");
+    CHECK(m2.find("mv '" + e + "/pl' '/home/n/disabled-plugins/'") != std::string::npos);
+    CHECK(m2.find("mv '" + e + "/pl/A_scsynth.so'") == std::string::npos);
 }
 
 TEST_CASE("the note on the device window is short") {
