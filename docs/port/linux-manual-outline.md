@@ -7,7 +7,7 @@
 - **Linux before:** the same Lua code ran, but `NORNS_MANUAL` was never set on Linux, so the button did nothing.
 - **Built now (small, tested):** `linux/norns.sh` exports `NORNS_MANUAL=<repo>/linux/manual/manual.html` unless it is already set; the same button code opens it through `xdg-open`; when the file is missing (or `NORNS_MANUAL` names something that is not there) the window shows
   "manual not found: linux/manual/manual.html" for a few seconds and opens nothing. The note code is guarded by `_norns.set_warning`, which only the Linux desktop build has, so the Mac path is unchanged. Test: `linux/tests/manual_button_test.sh` (stub `xdg-open`: file present, file missing, the launcher's own default).
-  **There is no `linux/manual/manual.html` yet, so today the button shows the note.** That is deliberate: I did not write a stub page.
+  **Update:** the owner approved the outline (one HTML file with a table of contents, no screenshots, a sources comment per section, a known-limitations section) and the manual is now written: `linux/manual/manual.html`, checked by `linux/tests/manual_test.sh` (file, table of contents, a sources comment per section, no external resources, the four limitation topics, every `NORNS_*` name and `audio.conf` key and repository path in the text exists in the code) and opened by the button (`manual_button_test.sh`). Deviations from the outline: the troubleshooting list only has items met and fixed; the SYSTEM menu description follows `lua/core/menu/system.lua` (no WIFI, UPDATE on a computer).
 
 ## Why I stopped before writing the text
 

@@ -110,7 +110,7 @@ Midi-Bridge all work; the link from Reaper to `Verdandi:midi_in` was dropped sev
 Built by `linux/maiden-build.sh` (setup-deps.sh and build.sh run it; `NORNS_NO_MAIDEN=1` skips), started by `linux/norns.sh` on 127.0.0.1:5000 (`NORNS_MAIDEN_PORT`), MAIDEN button opens it or shows a note.
 The browser-origin exposure was reproduced first (`maiden-exposure-evidence.md`), then fixed: `ws-wrapper` Origin check (opt-in env var, the Mac does not set it) and a Host/Origin guard in the Linux maiden patch; the unit API is off.
 KNOWN-ISSUES item 10: the Mac port has the same exposure, untouched. Tests added to `run_all.sh`: maiden:server/origin, maiden:launcher, maiden:install, maiden:button.
-Open: MANUAL button text (outline in docs/port/linux-manual-outline.md, waiting for your answer); maiden license notices file not generated (the licenses are collected in DEPS.md); apt `golang-go` 1.22 not tried (1.24.7 used); a fresh Ubuntu 24.04 image not used (this container, uid 65534, no `python`).
+Open: maiden license notices file not generated (the licenses are collected in DEPS.md); apt `golang-go` 1.22 not tried (1.24.7 used); a fresh Ubuntu 24.04 image not used (this container, uid 65534, no `python`).
 Needs your laptop: `HARDWARE-CHECKLIST.md`, section "maiden".
 
 ## maiden and `--terminal` (found on the laptop)
@@ -128,7 +128,7 @@ Tests first (both failed before): `linux/tests/virtual_chunkname_test.lua`, `lin
 ## Plug-in check output, MANUAL button, maiden licenses
 
 - Plug-in check: one line per **folder** (files, what they are, one move command, how to turn it off); note and 3-second re-check unchanged. Unit and integration tests updated, with two bad files in one folder and one in another.
-- MANUAL button: the launcher sets `NORNS_MANUAL` to `linux/manual/manual.html`; the window shows "manual not found: ..." when it is not there (test `manual_button_test.sh`). The manual text is **not written**: outline in `docs/port/linux-manual-outline.md`, waiting for your answer (the text is large).
+- MANUAL button: the launcher sets `NORNS_MANUAL` to `linux/manual/manual.html`; the window shows "manual not found: ..." when it is not there (test `manual_button_test.sh`). **The manual is written** (outline approved): `linux/manual/manual.html`, 14 sections with a table of contents and a sources comment per section, including known limitations (ARM plug-ins, Pi system commands, `--terminal` vs maiden's console, serialosc). Tests: `manual_test.sh` (file, links, sources comments, no external resources, names and paths exist in the code) and `manual_button_test.sh` (the button opens it). Whether each sentence is true is for the owner's reading (HARDWARE-CHECKLIST).
 - Licenses of maiden's Go modules (40), bundled npm packages (118) and build tools are in `docs/port/DEPS.md`, with what needs attention (one MPL-2.0 module, notices not carried by the build, five npm packages without a license file) and what could not be determined. No code changed for it.
 
 ## Next

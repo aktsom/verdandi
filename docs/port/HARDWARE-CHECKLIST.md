@@ -159,3 +159,7 @@ Everything below needs your laptop (a real browser, the real catalog, real audio
 - [ ] Reaper running with norns as a plug-in neighbor: maiden unaffected (no change expected).
 - [ ] `linux/norns.sh --terminal`: one line says maiden's norns console is not available in this mode; MAIDEN opens the page, the window shows "maiden: no norns console with --terminal", the page says "not connected to norns" (found on your laptop). Without `--terminal` the page connects.
 - [ ] `linux/norns.sh` in one terminal and `build/maiden-repl/maiden-repl` in another: a line typed at the maiden-repl prompt runs in matron, and the maiden page sees the same output.
+
+## The Linux manual (`linux/manual/manual.html`)
+- [ ] Click MANUAL in the window: your default browser opens the manual, the table of contents links work, it is readable in light and dark mode.
+- [ ] Read it once against what you see: any sentence that is wrong or missing is a bug of the manual (every statement has a "sources" comment above its section in the HTML; the tests check the file, the links, the names, not the truth of each sentence).
