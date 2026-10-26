@@ -72,6 +72,14 @@ echo "SKIP  c:gif (links ImageIO), objc: drop_test app_input_test"
 
 run "waf:unit tests" "$WAF" test
 
+# maiden (web editor): loopback binds, file API, script install, Origin/Host checks. needs linux/maiden-build.sh
+# (built by setup-deps.sh / build.sh); not built (NORNS_NO_MAIDEN=1) is a SKIP, said out loud
+if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
+    run "maiden:server, origin checks" linux/tests/maiden_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
+else
+    echo "SKIP  maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
+fi
+
 PROBE_LOG="$T/probe.log"
 NORNS_HOME="$(mktemp -d)"
 ln -s "$REPO" "$NORNS_HOME/norns"

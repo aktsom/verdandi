@@ -26,7 +26,7 @@ $SUDO apt-get install -y --no-install-recommends \
     libasound2-dev libavahi-client-dev libavahi-compat-libdnssd-dev libboost-dev libcairo2-dev \
     libevdev-dev libfftw3-dev libglib2.0-dev libgpiod-dev libjack-jackd2-dev liblo-dev \
     liblua5.3-dev libncurses-dev libnng-dev libreadline-dev libsamplerate0-dev libsdl2-dev \
-    libsndfile1-dev libudev-dev \
+    libsndfile1-dev libudev-dev golang-go \
     jackd2 lua5.3 supercollider-server supercollider-language sc3-plugins-server \
     sc3-plugins-language xvfb xauth x11-apps xdotool imagemagick dbus python3-gi gir1.2-glib-2.0 zenity
 
@@ -57,5 +57,17 @@ if [ ! -x "$WAF_DIR/waf" ] || ! [ -w "$WAF_DIR" ]; then
     if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then
         chown -R "$SUDO_USER:$(id -gn "$SUDO_USER")" "$WAF_DIR"
     fi
+fi
+# maiden (web editor and script catalog): built as the normal user, into <norns home>/maiden. NORNS_NO_MAIDEN=1 skips it.
+# a failure (no network, ...) is a warning: norns itself does not need it. run linux/maiden-build.sh to try again
+if [ "${NORNS_NO_MAIDEN:-0}" != 1 ]; then
+    echo "== maiden"
+    if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then
+        MB="sudo -u $SUDO_USER env NORNS_HOME=${NORNS_HOME:-} PATH=$PATH $HERE/maiden-build.sh"
+        [ -n "${NORNS_HOME:-}" ] || MB="sudo -u $SUDO_USER env PATH=$PATH $HERE/maiden-build.sh"
+    else
+        MB="$HERE/maiden-build.sh"
+    fi
+    $MB || echo "linux/setup-deps.sh: WARNING: maiden was not built (see above); norns works without it. retry: linux/maiden-build.sh"
 fi
 echo "linux/setup-deps.sh: done"

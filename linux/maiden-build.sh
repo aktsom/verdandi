@@ -7,7 +7,8 @@
 # needs: git, curl, tar, xz, sha256sum, go (apt: golang-go). node 16 is downloaded into the build folder
 # (react-scripts 1.x does not run on a current node) and not installed anywhere else.
 # environment (optional): NORNS_HOME (default: the folder above this repository), MAIDEN_BUILD_DIR
-# (sources and caches, default <norns home>/.maiden-build; safe to delete), MAIDEN_FORCE=1 (rebuild)
+# (sources and caches, default <norns home>/.maiden-build, removed after a good build unless MAIDEN_KEEP_BUILD=1),
+# MAIDEN_FORCE=1 (rebuild)
 
 set -eu
 
@@ -87,4 +88,8 @@ rm -rf "$M/app/build" && cp -R maiden/web/build "$M/app/"
 find "$M/app/build" -name '*.map' -delete
 cp maiden/sources/*.json "$M/dist/sources/"
 echo "$WANT" > "$STAMP"
+# the build folder is about 1.6 GB (node_modules, go and yarn caches); a rebuild downloads them again
+if [ "${MAIDEN_KEEP_BUILD:-0}" != 1 ]; then
+    cd "$NORNS_HOME" && chmod -R u+w "$B" && rm -rf "$B"
+fi
 echo "maiden-build: done, $M"

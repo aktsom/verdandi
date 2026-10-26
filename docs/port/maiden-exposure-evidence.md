@@ -6,7 +6,7 @@ Reproduced headless on this container (Linux, no norns running: `ws-wrapper` aro
 
 ## Before the fix (stock behavior; the Mac port is the same)
 
-`linux/tests/maiden_test.sh`, failures only (10 of 27 checks), full output `docs/port/known-issues-logs/maiden-before.txt`:
+`linux/tests/maiden_test.sh`, failures only (10 of 24 checks), full output `docs/port/known-issues-logs/maiden-before.txt`:
 
 ```
 FAIL  another website is refused: got 'echo=ping-from-test ', want 'closed '
@@ -36,7 +36,7 @@ FAIL  unit restart is not served: got '503', want '404'
   or sent to it. Connections without an `Origin` header (`maiden-repl`, scripts) are kept. Real browser: `"ws": "open, then closed by the server"`.
 - maiden (`linux/patches/maiden-linux-guard-and-units.patch`, applied after the Mac's host-flag patch which it does not change): when it listens on the loopback only, a request whose `Host` is not `127.0.0.1:<port>`,
   `localhost:<port>` or `[::1]:<port>`, or whose `Origin` is present and is not one of those, gets `403`.
-- `linux/tests/maiden_test.sh`: 27 of 27 pass (`known-issues-logs/maiden-after.txt`). maiden's own page in the browser still connects to its REPL port with the list set (checked with Chromium: the websocket to `:5555` stays open).
+- `linux/tests/maiden_test.sh`: 24 of 24 pass (`known-issues-logs/maiden-after.txt`). maiden's own page in the browser still connects to its REPL port with the list set (checked with Chromium: the websocket to `:5555` stays open).
 
 ## Limits
 
