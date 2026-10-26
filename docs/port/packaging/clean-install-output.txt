@@ -1,0 +1,20 @@
+# Output of the last clean-system run (a minimal Ubuntu 24.04 root made with debootstrap, the experimental .deb installed with apt, then a headless boot).
+# Earlier runs of the same test failed twice and are described in docs/port/packaging.md section 3.
+apt update exit 0
+== apt-get install ./verdandi-exp.deb (a clean system, nothing else installed)
+install exit 0
+1 upgraded, 0 newly installed, 0 to remove and 50 not upgraded.
+Setting up verdandi (0.0.3~experiment) ...
+packages installed: 550
+libjack chosen:
+jackd jackd2 jackd2-firewire libjack-jackd2-0:amd64 pipewire-jack:amd64 
+== which of the program's libraries are missing (ldd)
+0
+0
+== test-only tools (a display and a JACK server for the headless run)
+test tools exit 0
+jackd2 jackd2-firewire libjack-jackd2-0:amd64 pipewire-jack:amd64 
+boot: startup_status.ok x1; engines: engines: [PolySub, SimplePassThru, PolyPerc, TestSine, None]
+PROBE ro boot ok
+PROBE ro done
+finished

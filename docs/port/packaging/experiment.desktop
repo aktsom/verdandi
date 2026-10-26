@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Verdandi
+Comment=norns on the desktop
+Exec=verdandi
+Icon=/opt/verdandi/verdandi.png
+Terminal=false
+Categories=AudioVideo;Audio;Music;

@@ -140,6 +140,10 @@ Recommendation: build the one-instance guard with a message (D) into the plug-in
 
 Decisions (owner): option D (one instance with a clear message, a settable bridge port and an instance id in the protocol from the start); option A documented, not wanted now; AUv3 untouched (`KNOWN-ISSUES.md` item 12); first plug-in = Linux VST3 in Reaper on the owner's Mint laptop, Windows later. `PLAN.md`: Phase 7 = Linux VST3 (steps 7.1 to 7.6), Phase 8 = Windows VST3. Approach note: `docs/port/linux-vst3.md` (framework choice with licenses, protocol, guard, transport to clock, audio and latency, tests, recall, risks, open decisions = GATE E in `DECISIONS.md`). `CLAUDE.md` still says the VST3 belongs to the Windows step: the owner may want to update it.
 
+## Packaging investigation (Gate B): written, no code changed
+
+`docs/port/packaging.md` (+ `docs/port/packaging/` with the scripts and the last output): recommendation **`.deb` first** (Ubuntu 24.04 / Mint 22), bundled SuperCollider 3.14.1 **without Qt**, program read-only under `/opt/verdandi`, home in a user folder, AppImage possibly later, Flatpak not recommended. Run here: read-only program tree boots; Qt-less SuperCollider built from source boots norns (closure 18 MB vs 238 MB); an experimental `.deb` installs in a clean Ubuntu 24.04 and boots headless. Found: SuperCollider's data path is compiled in (not relocatable); the bundled SuperCollider must not be called `sc/` (norns' own folder). Not tested: AppImage, Flatpak, the laptop. `CLAUDE.md` now says Linux VST3 first, then Windows. GATE B is open in `DECISIONS.md`.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.

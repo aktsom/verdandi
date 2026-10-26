@@ -1,0 +1,10 @@
+Package: verdandi
+Version: 0.0.3~experiment
+Architecture: amd64
+Maintainer: scratch <scratch@example.invalid>
+Section: sound
+Priority: optional
+Installed-Size: 29728
+Depends: libasound2t64 (>= 1.1.1), libavahi-compat-libdnssd1 (>= 0.6.16), libc6 (>= 2.38), libcairo2 (>= 1.6.0), libevdev2 (>= 0.9.1), libfreetype6 (>= 2.2.1), libgcc-s1 (>= 3.0), libglib2.0-0t64 (>= 2.28.0), libjack-jackd2-0 (>= 1.9.10+20150825) | libjack-0.125, liblo7 (>= 0.27), liblua5.3-0, libncurses6 (>= 6), libncursesw6 (>= 6), libnng1 (>= 1.7.2), libreadline8t64 (>= 6.3), libsdl2-2.0-0 (>= 2.0.12), libsndfile1 (>= 1.0.20), libstdc++6 (>= 13.1), libtinfo6 (>= 6), libudev1 (>= 183), libyaml-cpp0.8, libfftw3-single3, pipewire-jack | jackd2, xdg-utils, zenity | xdg-desktop-portal
+Description: experiment package (scratch)
+ only to see what apt makes of the dependencies
