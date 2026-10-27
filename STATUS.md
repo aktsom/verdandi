@@ -50,6 +50,9 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   (script LEDs, clear on script change for both halves, prompt `g:led`/`g:all`: all correct, identical to upstream). Found in libmonome: a non-blocking write that the port takes only in part
   was dropped, cutting a protocol message in the middle (reproduced with a stalled pty: 22 bytes left half read). `linux/patches/libmonome-write-retry.patch` finishes such writes and adds
   `NORNS_MONOME_TRACE=1`. **Not confirmed on the laptop's grid**; how to send a trace is in the item and in HARDWARE-CHECKLIST.md.
+- **UI plan, step 1 (preview and plan only, no product code changed):** `docs/port/ui-plan.md` and `docs/port/ui-previews/` (17 PNGs made by the real norns and the real skin code with `make_previews.sh`):
+  screen +20/22/25 percent in the box, grey options (gamma 0.7 recommended, level 4: 68 -> 101) and brightness 100/70/40, plan for the SCREEN page, the colour mapping, screenshots/GIFs, tests and risks.
+  Finding: the screen is drawn at a whole number of device pixels (3 today); the next is 4 = +33 percent, so +20..25 percent needs a fractional pixel size. Waiting for the owner's choice.
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.
