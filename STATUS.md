@@ -53,6 +53,12 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
 - **UI plan, step 1 (preview and plan only, no product code changed):** `docs/port/ui-plan.md` and `docs/port/ui-previews/` (17 PNGs made by the real norns and the real skin code with `make_previews.sh`):
   screen +20/22/25 percent in the box, grey options (gamma 0.7 recommended, level 4: 68 -> 101) and brightness 100/70/40, plan for the SCREEN page, the colour mapping, screenshots/GIFs, tests and risks.
   Finding: the screen is drawn at a whole number of device pixels (3 today); the next is 4 = +33 percent, so +20..25 percent needs a fractional pixel size. Added later: a +33 percent preview (exactly 4 device pixels per screen pixel; fits with the box and window unchanged, or 26 units wider with the cluster's spacing kept) and the pixel counts of +25 (`ui-plan.md` 1.4, 1.5). Round 2 added: the owner's layout (no OUT slider, MUTE in the top row, keys and encoders +15 percent, screen at 4 px, box and window unchanged) as pictures with and without labels and an alternative arrangement, with numbers, hit-test check and risks (`ui-plan.md` 1.6). Waiting for the owner's choice.
+- **UI step 2 built** (`docs/port/ui-plan.md` 1.7): the Linux window is arrangement A without labels: the screen at exactly 4 device pixels per screen pixel, the box and window unchanged (960 x 630 units, 992 x 662 px),
+  no OUT slider, MUTE the 11th button of the top row (id 17, with its LED), keys and encoders 15 percent bigger, no K/E text. A second layout table in `device_skin.c` selected by `NORNS_LINUX_DESKTOP`;
+  the enum: `SKIN_MUTE = 17` on Linux, the Mac's `SKIN_FADER = 17` / `SKIN_MUTE = 18` untouched, and `macos/tests/device_skin_test.c` passes unchanged. The slider code in `sdl_bridge.cc` is compiled out on Linux.
+  Tests first (55 failures before): `linux/tests/device_skin_linux_test.c` (geometry, hits, rendered window, keyboard-mapping checksum). Updated: the window click coordinates, the maiden and manual button probes, the manual,
+  RUN-ON-LAPTOP, HARDWARE-CHECKLIST ("The new window layout"). Not built (later steps): the greys, the brightness, the SCREEN page, the detachable window. Needs the owner's eyes on the laptop.
+  A run of `run_all.sh` while another test was still running on the same Xvfb display produced two false failures (grid LED, maiden launcher); both pass alone and in a clean full run.
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.
