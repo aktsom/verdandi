@@ -128,13 +128,18 @@ build_maiden() {
 # libmonome with the pty patch (linux/patches), built for the final prefix: it opens its protocol modules from
 # <prefix>/lib/monome/protocol_*.so, a path compiled in, so the copy in /usr/local would not be found
 build_libmonome() {
-    say "libmonome $LIBMONOME_VERSION + pty serial patch for $PREFIX"
-    if [ ! -f "$STAGE$PREFIX/lib/monome/protocol_mext.so" ]; then
+    say "libmonome $LIBMONOME_VERSION + patches for $PREFIX"
+    local patches psum
+    patches="$(ls "$REPO"/linux/patches/libmonome-*.patch | sort)"
+    psum="$(cat $patches | sha256sum | cut -d' ' -f1)"
+    # a changed patch builds it again
+    if [ ! -f "$STAGE$PREFIX/lib/monome/protocol_mext.so" ] || [ "$(cat "$CACHE/libmonome.patches" 2> /dev/null)" != "$psum" ]; then
         rm -rf "$CACHE/libmonome"
         git clone -q --depth 1 --branch "v$LIBMONOME_VERSION" https://github.com/monome/libmonome.git "$CACHE/libmonome"
-        (cd "$CACHE/libmonome" && git apply "$REPO/linux/patches/libmonome-pty-serial.patch" &&
+        (cd "$CACHE/libmonome" && for p in $patches; do git apply "$p" || exit 1; done &&
             python3 ./waf configure --prefix="$PREFIX" --libdir="$PREFIX/lib" &&
             python3 ./waf build -j "$JOBS" && python3 ./waf install --destdir="$STAGE")
+        echo "$psum" > "$CACHE/libmonome.patches"
     fi
     # only the library and its protocol modules; no headers, tools or man pages
     rm -rf "$STAGE$PREFIX/include" "$STAGE$PREFIX/bin" "$STAGE$PREFIX/share" "$STAGE$PREFIX/lib/pkgconfig"
@@ -245,7 +250,7 @@ Verdandi is free software (GPL-3.0). The source of every part of this package is
   SuperCollider $SC_TAG (no Qt, no IDE):  https://github.com/supercollider/supercollider  (tag $SC_TAG)
   sc3-plugins:                            https://github.com/supercollider/sc3-plugins    (commit $SC3_PLUGINS_COMMIT)
   libmonome $LIBMONOME_VERSION + the pty patch:   https://github.com/monome/libmonome (tag v$LIBMONOME_VERSION),
-      the patch is linux/patches/libmonome-pty-serial.patch of the Verdandi source
+      the patches are linux/patches/libmonome-*.patch of the Verdandi source
   maiden (patched by linux/patches and macos/patches/maiden-host-flag.patch of the Verdandi source):
       https://github.com/monome/maiden  (commit 2e64f7d59284962ac68055dd556e3fd8515462f8)
 

@@ -1,0 +1,98 @@
+diff --git a/src/platform/posix.c b/src/platform/posix.c
+index 263b9bb..457293f 100644
+--- a/src/platform/posix.c
++++ b/src/platform/posix.c
+@@ -26,6 +26,8 @@
+ #include <sys/select.h>
+ #include <termios.h>
+ #include <errno.h>
++#include <poll.h>
++#include <time.h>
+ 
+ #include <monome.h>
+ #include "internal.h"
+@@ -153,16 +155,69 @@ int monome_platform_close(monome_t *monome) {
+ 	return close(monome->fd);
+ }
+ 
++/* NORNS_MONOME_TRACE=1 in the environment: every write to and read from the device is listed on stderr (hex), with the time. for finding out
++ * what a device is sent and sends */
++static int trace_on(void) {
++	static int on = -1;
++	if( on < 0 ) {
++		const char *e = getenv("NORNS_MONOME_TRACE");
++		on = e && *e && *e != '0';
++	}
++	return on;
++}
++
++static void trace_bytes(const char *what, const uint8_t *buf, size_t n, long want) {
++	struct timespec ts;
++	size_t i;
++
++	clock_gettime(CLOCK_MONOTONIC, &ts);
++	fprintf(stderr, "libmonome: %ld.%03ld %s %ld/%ld:", (long)ts.tv_sec % 100000, ts.tv_nsec / 1000000, what, (long)n, want);
++	for( i = 0; i < n && i < 40; i++ )
++		fprintf(stderr, " %02x", buf[i]);
++	if( n > 40 )
++		fprintf(stderr, " ...");
++	fputc('\n', stderr);
++}
++
++/* the device is opened O_NONBLOCK. a write to a serial port can take only part of the bytes (or none: EAGAIN) when the port's
++ * buffer is full, and a message of the monome protocol cut off in the middle leaves the device reading the next message as the rest of
++ * this one: the grid or arc then ignores or garbles everything until it is unplugged. so: wait for room and write the rest,
++ * for up to a second, and say if that did not work */
+ ssize_t monome_platform_write(monome_t *monome, const uint8_t *buf, size_t nbyte) {
+-	ssize_t ret = write(monome->fd, buf, nbyte);
++	size_t done = 0;
++	int waited = 0;
++	ssize_t r;
++
++	while( done < nbyte ) {
++		r = write(monome->fd, buf + done, nbyte - done);
++		if( r > 0 ) {
++			done += r;
++			continue;
++		}
++
++		if( r < 0 && errno == EINTR )
++			continue;
+ 
+-	if( ret < nbyte )
+-		perror("libmonome: write is missing bytes");
++		if( r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) && waited < 1000 ) {
++			struct pollfd pfd = { .fd = monome->fd, .events = POLLOUT };
++			int ms = 20;
++
++			poll(&pfd, 1, ms);
++			waited += ms;
++			continue;
++		}
+ 
+-	if( ret < 0 )
+ 		perror("libmonome: error in write");
++		break;
++	}
+ 
+-	return ret;
++	if( done < nbyte )
++		fprintf(stderr, "libmonome: write is missing bytes (%lu of %lu written)\n", (unsigned long)done, (unsigned long)nbyte);
++
++	if( trace_on() )
++		trace_bytes("write", buf, done, (long)nbyte);
++
++	return (done == 0 && nbyte > 0) ? -1 : (ssize_t)done;
+ }
+ 
+ ssize_t monome_platform_read(monome_t *monome, uint8_t *buf, size_t nbyte) {
+@@ -188,6 +243,9 @@ start:
+ 			return bytes;
+ 		}
+ 
++		if( bytes > 0 && trace_on() )
++			trace_bytes("read", buf, bytes, bytes);
++
+ 		ret += bytes;
+ 		buf += bytes;
+ 	}

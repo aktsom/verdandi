@@ -73,6 +73,10 @@ cc $CFLAGS -I matron/src/platform/linux $(pkg-config --cflags cairo) linux/tests
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
     -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
+# libmonome's write to a port that is slow to take data: no message cut in the middle (linux/patches/libmonome-write-retry.patch)
+cc $CFLAGS -I matron/src/platform/macos -I/usr/local/include linux/tests/monome_write_test.c "$P/vgrid_proto.c" -L/usr/local/lib -lmonome \
+    -lpthread -o "$T/mwt" && LD_LIBRARY_PATH=/usr/local/lib run "c:monome_write (a stalled serial port, no half message)" "$T/mwt"
+run "grid:LED data reaches the serial port (script, script change clears, prompt commands)" linux/tests/grid_led_test.sh
 cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" && run "c:dust_import" "$T/dit"
 # the same as an ordinary user: root can read every file, so the failed-copy case only runs here
 chmod 755 "$T" && setpriv --reuid=65534 --regid=65534 --clear-groups true 2> /dev/null &&

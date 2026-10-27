@@ -33,17 +33,20 @@ $SUDO apt-get install -y --no-install-recommends \
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
-# libmonome with linux/patches/libmonome-pty-serial.patch (the virtual grid and arc are ptys).
+# libmonome with the patches in linux/patches/libmonome-*.patch (the virtual grid and arc are ptys; a write to the serial port that
+# takes only part of a message is finished, and NORNS_MONOME_TRACE lists the bytes).
 # its bundled ./waf starts with "#!/usr/bin/env python" and a stock Ubuntu has no `python`, only python3:
 # so it is run as `python3 ./waf` (waf 2.0.26 there works with python 3.12; no python2-compat package needed)
-# the stamp says that this build has the patch
+# the stamp holds a checksum of the patches: a changed patch builds it again
 STAMP="$PREFIX/share/verdandi/libmonome-pty-serial"
-if [ ! -f "$STAMP" ] || ! ldconfig -p | grep -q libmonome.so; then
-    echo "== libmonome $LIBMONOME_VERSION + pty serial patch"
+PATCHES="$(ls "$HERE"/patches/libmonome-*.patch | sort)"
+PATCHSUM="$(cat $PATCHES | sha256sum | cut -d' ' -f1)"
+if [ "$(cat "$STAMP" 2> /dev/null)" != "$PATCHSUM" ] || ! ldconfig -p | grep -q libmonome.so; then
+    echo "== libmonome $LIBMONOME_VERSION + patches"
     git clone -q --depth 1 --branch "v$LIBMONOME_VERSION" https://github.com/monome/libmonome.git "$T/libmonome"
-    (cd "$T/libmonome" && git apply "$HERE/patches/libmonome-pty-serial.patch" &&
+    (cd "$T/libmonome" && for p in $PATCHES; do git apply "$p" || exit 1; done &&
         python3 ./waf configure --prefix="$PREFIX" --libdir="$PREFIX/lib" && python3 ./waf && $SUDO python3 ./waf install)
-    $SUDO mkdir -p "$(dirname "$STAMP")" && $SUDO touch "$STAMP"
+    $SUDO mkdir -p "$(dirname "$STAMP")" && echo "$PATCHSUM" | $SUDO tee "$STAMP" > /dev/null
     $SUDO ldconfig
 fi
 

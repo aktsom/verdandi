@@ -46,6 +46,10 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   the desktop screen backend never did, so a script's global `refresh()` was never called (counter 0 in the headless test). Now the Linux `screen:sdl` posts it at 60 Hz
   (a small thread, joined when the screen is destroyed; the call is on the Lua thread via the event queue); test `refresh_test.sh`: 180 calls in 3 s (was 0), none after the
   script is replaced or cleared, scripts without `refresh()` unaffected. 14 of the 351 catalog scripts define it. The Mac has the same gap and was not changed.
+- **Grid LEDs stuck / prompt commands ignored on a real grid** (`KNOWN-ISSUES.md` item 14): the whole path from Lua to the serial port was checked headless with a recording shim
+  (script LEDs, clear on script change for both halves, prompt `g:led`/`g:all`: all correct, identical to upstream). Found in libmonome: a non-blocking write that the port takes only in part
+  was dropped, cutting a protocol message in the middle (reproduced with a stalled pty: 22 bytes left half read). `linux/patches/libmonome-write-retry.patch` finishes such writes and adds
+  `NORNS_MONOME_TRACE=1`. **Not confirmed on the laptop's grid**; how to send a trace is in the item and in HARDWARE-CHECKLIST.md.
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.
