@@ -1,0 +1,2 @@
+smallest gap between two hit circles: 31.7 units (K1-E1)
+smallest gap hit circle - bezel (with its lip): 64.3 (E1); - button row (hit area): 64.3 (E1); - box edge: 30.0 (K2)

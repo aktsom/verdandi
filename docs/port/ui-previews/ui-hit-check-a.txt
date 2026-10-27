@@ -1,0 +1,1 @@
+hit_check: 30 points, 0 wrong

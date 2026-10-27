@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
     st.page = 4;              // PARAMS lit
     st.input = SKIN_INPUT_MIC; // the MIC button is lit by default
     st.out_level = 0.8;
+    st.out_muted = argc > 6 ? atoi(argv[6]) : 0; // 1: MUTE on
     skin_draw_static(cr, &g);
     skin_draw_controls(cr, &g, &st);
 #ifdef VARIANT

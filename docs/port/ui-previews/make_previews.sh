@@ -65,6 +65,24 @@ for m in keep wide; do
 done
 "$W/render_v22" "$HERE/layout-plus22-smooth.png" "$W/oled.png" "$W/current.lut" 100 2
 
+echo "== round 2: the owner's layout (no OUT fader, MUTE in the top row, keys and encoders 15 percent bigger, the screen at 4 px)"
+for arr in a b; do
+    for lab in 1 0; do
+        d="$W/ui$arr$lab"
+        mkdir -p "$d"
+        python3 "$HERE/gen_variant_ui.py" "$arr" "$lab" "$d" > "$d/out.txt"
+        cc -std=gnu11 -O1 -Wall -I"$d" -I"$SKIN" $(pkg-config --cflags cairo) -DVARIANT "$HERE/render_preview.c" "$d/device_skin_variant.c" -o "$d/render" $LIBS
+        name=$([ "$lab" = 1 ] && echo labels || echo nolabels)
+        "$d/render" "$HERE/layout-ui-$arr-$name.png" "$W/oled.png" "$W/current.lut" 100 1
+    done
+    cp "$W/ui${arr}1/numbers.txt" "$HERE/ui-numbers-$arr.txt"
+    cp "$W/ui${arr}1/checks.txt" "$HERE/ui-checks-$arr.txt"
+    cc -std=gnu11 -I"$W/ui${arr}1" -I"$SKIN" $(pkg-config --cflags cairo) "$HERE/hit_check.c" "$W/ui${arr}1/device_skin_variant.c" -o "$W/hit_$arr" $LIBS
+    "$W/hit_$arr" > "$HERE/ui-hit-check-$arr.txt" && echo "   arrangement $arr: $(cat "$HERE/ui-hit-check-$arr.txt")"
+done
+# MUTE on (the LED lights), arrangement a
+"$W/uia1/render" "$HERE/layout-ui-a-labels-muted.png" "$W/oled.png" "$W/current.lut" 100 1 1
+
 echo "== greys (current layout)"
 for t in current gamma07 gamma05; do
     "$W/render_current" "$HERE/grey-$t.png" "$W/oled.png" "$W/$t.lut" 100
@@ -114,4 +132,13 @@ convert "$HERE/layout-current-REAL-window.png" -resize 50% "$W/s-0.png"
 tile() { convert "$1" -background '#1a1a1c' -gravity northwest -extent 509x331 "$2"; }
 for k in 0 20 22 25 33 33w; do tile "$W/s-$k.png" "$W/t-$k.png"; done
 convert \( "$W/t-0.png" "$W/t-20.png" "$W/t-22.png" +append \) \( "$W/t-25.png" "$W/t-33.png" "$W/t-33w.png" +append \) -append "$HERE/layout-compare.png"
+# the compare sheet of round 2: today's real window against the new layouts, half size, captioned
+cap() { convert "$1" -resize 50% -background '#1a1a1c' -gravity north -splice 0x24 -fill white -pointsize 15 -annotate +0+3 "$2" -gravity northwest -extent 496x355 "$3"; }
+cap "$HERE/layout-current-REAL-window.png" "today (real window)" "$W/u-0.png"
+cap "$HERE/layout-ui-a-labels.png" "A with labels" "$W/u-1.png"
+cap "$HERE/layout-ui-a-nolabels.png" "A without labels" "$W/u-2.png"
+cap "$HERE/layout-ui-b-labels.png" "B (alternative) with labels" "$W/u-3.png"
+cap "$HERE/layout-ui-b-nolabels.png" "B without labels" "$W/u-4.png"
+cap "$HERE/layout-ui-a-labels-muted.png" "A, MUTE on" "$W/u-5.png"
+convert \( "$W/u-0.png" "$W/u-1.png" "$W/u-2.png" +append \) \( "$W/u-3.png" "$W/u-4.png" "$W/u-5.png" +append \) -append "$HERE/layout-compare-ui.png"
 echo "done: $(ls "$HERE"/*.png | wc -l) PNGs in $HERE"
