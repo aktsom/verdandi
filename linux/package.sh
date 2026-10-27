@@ -454,6 +454,10 @@ apt-get update -q
 stage "certificates and git"
 [ -f /usr/local/share/ca-certificates/host-proxy.crt ] && update-ca-certificates > /dev/null
 export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+# node and npm (maiden's web app) do not read the system store by themselves
+export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt npm_config_cafile=/etc/ssl/certs/ca-certificates.crt
+# maiden is built by "package.sh all" below, where a failure stops the build; in setup-deps.sh and build.sh it is only a warning
+export NORNS_NO_MAIDEN=1
 git config --global --add safe.directory '*'
 cd /build/verdandi
 stage "linux/setup-deps.sh (apt build dependencies, libmonome for /usr/local, waf)"
