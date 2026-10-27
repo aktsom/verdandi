@@ -457,13 +457,12 @@ export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt GIT_SSL_CAINFO=/etc/ssl/
 # node and npm (maiden's web app) do not read the system store by themselves
 export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt npm_config_cafile=/etc/ssl/certs/ca-certificates.crt
 # maiden is built by "package.sh all" below, where a failure stops the build; in setup-deps.sh and build.sh it is only a warning
-export NORNS_NO_MAIDEN=1
 git config --global --add safe.directory '*'
 cd /build/verdandi
 stage "linux/setup-deps.sh (apt build dependencies, libmonome for /usr/local, waf)"
-linux/setup-deps.sh
+NORNS_NO_MAIDEN=1 linux/setup-deps.sh
 stage "linux/build.sh (norns, maiden)"
-linux/build.sh
+NORNS_NO_MAIDEN=1 linux/build.sh
 stage "linux/package.sh all (SuperCollider, sc3-plugins, libmonome, maiden, tree, .deb)"
 linux/package.sh all
 stage "done"
