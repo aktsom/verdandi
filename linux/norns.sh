@@ -52,6 +52,13 @@ JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
 # the name a person sees (window title, dialogs): linux/brand.sh. internal names keep "Verdandi"
 . "$REPO/linux/brand.sh"
 export NORNS_DISPLAY_NAME="$VERDANDI_DISPLAY_NAME"
+# the window class (the panel and the window list match the menu entry with it) and the window icon: the installed icon, else the repository's
+export SDL_VIDEO_X11_WMCLASS="$VERDANDI_WM_CLASS"
+if [ -z "${NORNS_ICON:-}" ]; then
+    for i in /usr/share/icons/hicolor/256x256/apps/verdandi.png "$REPO/macos/norns-icon.png"; do
+        [ -f "$i" ] && { export NORNS_ICON="$i"; break; }
+    done
+fi
 
 # installed tree (the .deb) or checkout
 if [ -n "${NORNS_INSTALLED:-}" ]; then

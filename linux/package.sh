@@ -142,7 +142,7 @@ build_libmonome() {
 }
 
 # the menu entry: the display name from linux/brand.sh, a comment that says it is the Linux version. Exec, Icon and the file name
-# stay "verdandi" (the command)
+# stay "verdandi" (the command). StartupWMClass is the class the window sets (brand.sh), so the panel shows this entry's icon
 desktop_entry() {
     cat <<DESK
 [Desktop Entry]
@@ -152,6 +152,7 @@ GenericName=norns on the desktop
 Comment=The Linux version of Verdandi, norns on the desktop
 Exec=verdandi
 Icon=verdandi
+StartupWMClass=$VERDANDI_WM_CLASS
 Terminal=false
 Categories=AudioVideo;Audio;Music;
 Keywords=norns;monome;grid;arc;Verdandi;

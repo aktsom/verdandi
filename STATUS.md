@@ -35,6 +35,13 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   `SUDO_USER` that does not exist in the root: 8 minutes (plus about 3 once for the cached base root), `.deb` 13.5 MB, root 2.8 GB while it
   exists and removed afterwards (`PACKAGE_KEEP_ROOT=1` keeps it). Installed and booted by `linux/tests/package_test.sh`: pass.
   `run_all.sh`: 0 unexpected failures; `NORNS_CLEAN_ROOT_TEST=1` adds the end-to-end build. Not tested: the laptop itself (a run there without a proxy).
+- **Browser buttons, display name, panel icon** (`docs/port/packaging.md` section 8):
+  (1) MAIDEN/MANUAL opened Firefox because `linux/norns.sh` sets `HOME` to the norns home and `xdg-open` read the default browser from
+  there; matron now gives `xdg-open` (only) the user's own HOME/XDG folders back (`NORNS_USER_*`); test `open_browser_test.sh` fails on the old
+  behaviour. Not run: the laptop's real `xdg-open`/Vivaldi. (2) The display name is "Verdandi Linux", defined once in `linux/brand.sh`
+  (window title, menu entry + comment, .deb description, manual title/heading, new `readme-linux.md`); internal names unchanged; Mac window title
+  unchanged; attribution and licence files intact; test `display_name_test.sh`. (3) Menu entry has `StartupWMClass=norns` (= the window class, now set
+  explicitly by the launcher), window icon from the installed icon; tested under Xvfb with `xprop`.
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.
