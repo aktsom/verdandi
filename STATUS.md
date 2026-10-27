@@ -18,6 +18,16 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
      (B) ALSA sequencer port, written and runtime-optional, **not tested** (no `/dev/snd/seq` here).
 - Clock investigation (read-only): `docs/port/clock-notes.md`. Decisions planned in `PLAN.md` (Phase 3: SPP and
   MIDI continue, JACK MIDI input, later ALSA seq input; Phase 7: plugin transport) and `WISHLIST.md`.
+- **Gate B first step (decided by the owner, `DECISIONS.md`; `docs/port/packaging.md` section 7):** `.deb` first.
+  Done and pushed: engine check on the bundled SuperCollider 3.14.1 (all six engines run; differences from 3.13.0 in
+  `docs/port/supercollider-3.14.md`); installed mode in `linux/norns.sh` (home: `NORNS_HOME`, `~/.config/verdandi/home`, `~/Verdandi`;
+  shared with a checkout through the `norns` link); `linux/package.sh` (`sc`, `libmonome`, `maiden`, `tree`, `deb`, `all`, `clean-root`, `check`;
+  neutral identity, privacy scan); clean-root test `linux/tests/package_test.sh` (in `run_all.sh`; passes: install in a clean Ubuntu 24.04,
+  no missing library, boot as a normal user, maiden, engines); udev rule + test. `run_all.sh`: 0 unexpected failures
+  (the maiden server tests are SKIPped here because maiden is not built in the default home; the package's maiden was built and answers).
+  Found: libmonome's compiled-in protocol path (fixed in the package). Open: font licences (DEPS.md, before any public release);
+  `package.sh clean-root` itself (the full build in a fresh root) was **not run**; second-start "bring window forward" not built.
+  Not testable here (HARDWARE-CHECKLIST.md, "The package"): the laptop, desktop menu, real grid/arc, udev hotplug, USB IDs of older devices.
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.
