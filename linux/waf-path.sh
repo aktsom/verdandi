@@ -3,6 +3,12 @@
 # the default is ~/.local/share/waf (of the user who ran setup-deps.sh, also with sudo), not /opt.
 # WAF_DIR overrides where setup-deps.sh installs it; WAF (build/test) names the waf to use.
 
+# a SUDO_USER that is not an account on this machine (the environment came from another one, as in the clean root of
+# package.sh) or is root means nobody: the build user is the current one
+if [ -n "${SUDO_USER:-}" ] && { [ "$SUDO_USER" = root ] || ! id "$SUDO_USER" >/dev/null 2>&1; }; then
+    unset SUDO_USER
+fi
+
 waf_user_home() {
     if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then
         getent passwd "$SUDO_USER" | cut -d: -f6

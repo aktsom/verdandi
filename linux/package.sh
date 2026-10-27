@@ -6,9 +6,12 @@
 #        linux/package.sh tree          the program tree and the files around it
 #        linux/package.sh deb           control files, privacy scan, the .deb
 #        linux/package.sh all           sc, maiden, tree, deb (norns itself must be built: linux/build.sh)
-#        linux/package.sh clean-root    all of it in a fresh Ubuntu 24.04 root (debootstrap, needs root)
+#        linux/package.sh clean-root    all of it in a fresh Ubuntu 24.04 root (debootstrap, needs root); the root has its own
+#                                       root user and none of the account that starts it; the root is removed after a good build
+#                                       (PACKAGE_KEEP_ROOT=1 keeps it; a failed build always keeps it)
 #        linux/package.sh check FILE    metadata and privacy checks of a built .deb
-# output: build/package/verdandi_<version>_<arch>.deb
+# output: build/package/verdandi_<version>_<arch>.deb (clean-root: build/package/clean-root/). every command but check keeps its whole
+# output in build/package/package-<command>.log and says on failure which stage failed
 # environment (optional): PACKAGE_MAINTAINER (default: a neutral project identity), PACKAGE_PRIVACY_EXTRA
 # (extra words that must not appear in the package, space separated), SOURCE_DATE_EPOCH, JOBS.
 #
@@ -30,8 +33,29 @@ SC3_PLUGINS_COMMIT=b80a41b731922feac7755df5ba359d14dfb8f4d9
 LIBMONOME_VERSION=1.4.9
 MAINTAINER="${PACKAGE_MAINTAINER:-Verdandi packagers <verdandi-packaging@localhost.invalid>}"
 
-say() { echo "== $*"; }
+# the stage that is running, said again if the script stops (and where the whole log is)
+STAGE_NOW="start"
+say() { STAGE_NOW="$*"; echo "== $*"; }
 die() { echo "package.sh: $*" >&2; exit 1; }
+on_exit() {
+    local rc=$?
+    if [ $rc -ne 0 ] && [ "${1:-}" != check ]; then
+        echo "package.sh: FAILED (exit $rc) during: $STAGE_NOW" >&2
+        [ -n "${PACKAGE_LOG:-}" ] && echo "package.sh: the whole log is in $PACKAGE_LOG" >&2
+    fi
+}
+trap 'on_exit "${1:-}"' EXIT
+
+# every command but check keeps its whole output in <out>/package-<command>.log (a second run overwrites it)
+if [ -z "${PACKAGE_LOGGING:-}" ] && [ -n "${1:-}" ] && [ "${1:-}" != check ]; then
+    mkdir -p "$OUT"
+    export PACKAGE_LOGGING=1 PACKAGE_LOG="$OUT/package-$1.log"
+    echo "package.sh: the log is $PACKAGE_LOG"
+    trap - EXIT
+    set +e
+    bash "$0" "$@" 2>&1 | tee "$PACKAGE_LOG"
+    exit "${PIPESTATUS[0]}"
+fi
 
 # git clones are done at a commit, with the submodules the build needs
 clone_at() { # url dir commit
@@ -218,8 +242,7 @@ DEB="$OUT/verdandi_${VERSION}_${ARCH}.deb"
 # remote and the folder names of this checkout. never printed, only counted. words that every machine has are skipped
 identity_words() {
     {
-        id -un
-        getent passwd "$(id -un)" | cut -d: -f5 | tr ',' '\n' | tr ' ' '\n'
+XX
         git config user.name | tr ' ' '\n'
         git config user.email | tr '@.' '\n\n'
         git -C "$REPO" config user.name | tr ' ' '\n'
@@ -404,38 +427,64 @@ build_clean_root() {
     fi
     rm -rf "$OUT/clean-root"
     mkdir -p "$OUT/clean-root"
+    say "clean root: copy of the base root"
     cp -a "$base" "$R"
-    say "copying the repository to /build/verdandi"
+    say "clean root: copying the repository to /build/verdandi"
     mkdir -p "$R/build/verdandi"
-    (cd "$REPO" && tar --exclude=./build -cf - .) | tar -xf - -C "$R/build/verdandi"
+    # owner 0: the account that runs this has no meaning inside the root (and must not be in its file ownership)
+    (cd "$REPO" && tar --exclude=./build --owner=0 --group=0 --numeric-owner -cf - .) | tar -xf - -C "$R/build/verdandi" --no-same-owner
     for f in "${PACKAGE_CA_BUNDLE:-}" "${SSL_CERT_FILE:-}" /root/.ccr/ca-bundle.crt; do
         [ -n "$f" ] && [ -f "$f" ] && { ca="$f"; break; }
     done
     [ -n "$ca" ] && install -D -m 644 "$ca" "$R/usr/local/share/ca-certificates/host-proxy.crt"
     cat > "$R/root/clean-build.sh" <<'INNER'
 #!/bin/bash
-set -eu
+# runs INSIDE the clean root, as its own root user. nothing of the account that started the build is here: the environment is
+# empty but for the proxy and mirror settings (no SUDO_USER, no HOME of the host)
+set -eEu
+set -o pipefail
 export DEBIAN_FRONTEND=noninteractive
+STAGE_NAME=start
+stage() { STAGE_NAME="$1"; echo "$1" > /root/stage.txt; echo; echo "==== STAGE: $1 ($(date -u +%H:%M:%S))"; }
+trap 'echo "==== FAILED in stage: $STAGE_NAME"' ERR
+stage "apt sources and update"
 printf 'deb %s noble main universe\ndeb %s noble-updates main universe\n' "$MIRROR" "$MIRROR" > /etc/apt/sources.list
 rm -f /etc/apt/sources.list.d/*
 apt-get update -q
+stage "certificates and git"
 [ -f /usr/local/share/ca-certificates/host-proxy.crt ] && update-ca-certificates > /dev/null
 export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 git config --global --add safe.directory '*'
 cd /build/verdandi
+stage "linux/setup-deps.sh (apt build dependencies, libmonome for /usr/local, waf)"
 linux/setup-deps.sh
+stage "linux/build.sh (norns, maiden)"
 linux/build.sh
+stage "linux/package.sh all (SuperCollider, sc3-plugins, libmonome, maiden, tree, .deb)"
 linux/package.sh all
+stage "done"
 INNER
     chmod 755 "$R/root/clean-build.sh"
     say "build in the clean root (this takes a while: dependencies, SuperCollider, norns, maiden)"
-    unshare -m sh -c "
-        mount -t proc proc '$R/proc' && mount --rbind /dev '$R/dev' && mount -t tmpfs tmpfs '$R/tmp'
+    # the words that identify the person who builds are handed in so that the scan inside the root knows them
+    local words
+    words="$(identity_words | tr '\n' ' ')"
+    local t0=$SECONDS
+    if ! unshare -m sh -c "
+        mount -t proc proc '$R/proc' && mount --rbind /dev '$R/dev' && mount -t tmpfs tmpfs '$R/dev/shm' && mount -t tmpfs tmpfs '$R/tmp'
         cp /etc/resolv.conf '$R/etc/resolv.conf' 2>/dev/null
-        chroot '$R' /usr/bin/env MIRROR='$mirror' http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' HTTP_PROXY='${HTTP_PROXY:-}' HTTPS_PROXY='${HTTPS_PROXY:-}' NO_PROXY='${NO_PROXY:-}' /bin/bash /root/clean-build.sh" ||
-        die "the build in the clean root failed (the root is kept in $R)"
+        chroot '$R' /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8 MIRROR='$mirror' http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' HTTP_PROXY='${HTTP_PROXY:-}' HTTPS_PROXY='${HTTPS_PROXY:-}' NO_PROXY='${NO_PROXY:-}' PACKAGE_PRIVACY_EXTRA='$words' /bin/bash /root/clean-build.sh"; then
+        STAGE_NOW="in the clean root: $(cat "$R/root/stage.txt" 2>/dev/null || echo unknown)"
+        echo "package.sh: the build in the clean root failed in the stage '$(cat "$R/root/stage.txt" 2>/dev/null || echo unknown)'; the root is kept in $R"
+        exit 1
+    fi
+    mkdir -p "$OUT/clean-root"
     cp "$R"/build/verdandi/build/package/verdandi_*.deb "$OUT/clean-root/"
-    rm -rf "$R"
+    local rootsize
+    rootsize="$(du -sh "$R" | cut -f1)"
+    echo "package.sh: build time in the root $(( (SECONDS - t0) / 60 )) min; the root is $rootsize"
+    if [ "${PACKAGE_KEEP_ROOT:-0}" = 1 ]; then echo "package.sh: PACKAGE_KEEP_ROOT=1: the root is kept in $R"; else rm -rf "$R"; echo "package.sh: the root is removed (PACKAGE_KEEP_ROOT=1 keeps it)"; fi
+    check_deb "$(ls "$OUT"/clean-root/verdandi_*.deb | head -1)"
     ls -l "$OUT"/clean-root/*.deb
 }
 
