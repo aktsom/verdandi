@@ -12,6 +12,12 @@
 
 #include "platform/common/desktop_platform.h"
 #include "platform/common/display_name.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include <time.h>
+
+#include "event_types.h"
+#include "events.h"
+#endif
 #ifdef NORNS_SDL_BRIDGE
 #include "platform/macos/product.h"
 #include "platform/macos/sdl_bridge.h"
@@ -36,6 +42,34 @@ static cairo_surface_t *screen_sdl_surface_create(screen_sdl_priv_t *priv);
 // the screen: paint and destroy take turns, and nothing is painted once closed
 static pthread_mutex_t paint_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool closed = false;
+
+#ifdef NORNS_LINUX_DESKTOP
+// a script's global refresh() is called "at the completion of an actual screen redraw" (norns update 231114): on the device the SPI display
+// thread (hardware/screen/ssd1322.cc) posts EVENT_SCREEN_REFRESH every 1/60 s whatever the script does, and the event loop calls
+// refresh() on the Lua thread (events.cc, weaver.cc w_handle_screen_refresh). this screen has no such thread, so a script that draws in
+// refresh() (eterna) never drew. same rate and same event here. Linux only: the Mac app is left as it was
+static pthread_t refresh_thread;
+static bool refresh_running = false;
+static volatile bool refresh_stop = false;
+
+static void *refresh_thread_run(void *p) {
+    (void)p;
+    static const struct timespec ts = {.tv_sec = 0, .tv_nsec = 16666666}; // 60Hz
+    struct timespec next;
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    while (!refresh_stop) {
+        event_post(event_data_new(EVENT_SCREEN_REFRESH));
+        // absolute times: a late wake does not slow the rate
+        next.tv_nsec += ts.tv_nsec;
+        if (next.tv_nsec >= 1000000000L) {
+            next.tv_nsec -= 1000000000L;
+            next.tv_sec++;
+        }
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+    }
+    return NULL;
+}
+#endif
 
 static SDL_Rect windowSize = {
     .x = 0,
@@ -72,11 +106,25 @@ int screen_sdl_setup(matron_io_t *io) {
         return -1;
     }
     fb->cairo = cairo_create(fb->surface);
+#ifdef NORNS_LINUX_DESKTOP
+    if (!refresh_running) {
+        refresh_stop = false;
+        refresh_running = pthread_create(&refresh_thread, NULL, refresh_thread_run, NULL) == 0;
+    }
+#endif
     return 0;
 }
 
 static void screen_sdl_destroy(matron_io_t *io) {
     matron_fb_t *fb = (matron_fb_t *)io;
+#ifdef NORNS_LINUX_DESKTOP
+    // no more refresh events once the screen goes away
+    if (refresh_running) {
+        refresh_stop = true;
+        pthread_join(refresh_thread, NULL);
+        refresh_running = false;
+    }
+#endif
     pthread_mutex_lock(&paint_lock);
     closed = true;
     pthread_mutex_unlock(&paint_lock);

@@ -42,6 +42,10 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   (window title, menu entry + comment, .deb description, manual title/heading, new `readme-linux.md`); internal names unchanged; Mac window title
   unchanged; attribution and licence files intact; test `display_name_test.sh`. (3) Menu entry has `StartupWMClass=norns` (= the window class, now set
   explicitly by the launcher), window icon from the installed icon; tested under Xvfb with `xprop`.
+- **`refresh()` bug** (eterna did not update the screen; `KNOWN-ISSUES.md` item 13): upstream posts `EVENT_SCREEN_REFRESH` every 1/60 s from the SPI display thread;
+  the desktop screen backend never did, so a script's global `refresh()` was never called (counter 0 in the headless test). Now the Linux `screen:sdl` posts it at 60 Hz
+  (a small thread, joined when the screen is destroyed; the call is on the Lua thread via the event queue); test `refresh_test.sh`: 180 calls in 3 s (was 0), none after the
+  script is replaced or cleared, scripts without `refresh()` unaffected. 14 of the 351 catalog scripts define it. The Mac has the same gap and was not changed.
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.

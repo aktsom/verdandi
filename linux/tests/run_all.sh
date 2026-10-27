@@ -94,6 +94,7 @@ fi
 run "build:waf-path ignores an unknown or root SUDO_USER" linux/tests/waf_path_test.sh
 run "udev:rule syntax and narrowness (monome devices only, uaccess only)" linux/tests/udev_test.sh
 run "manual:file, table of contents, sources comments, names exist in the code" linux/tests/manual_test.sh
+run "screen:a script's global refresh() is called about 60 times a second, stops with the script, scripts without it are unaffected" linux/tests/refresh_test.sh
 run "window:buttons start the system xdg-open with the user's own HOME and XDG folders (not the norns home)" linux/tests/open_browser_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
