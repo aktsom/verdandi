@@ -10,10 +10,14 @@ The page on the screen is the parameter list of PARAMS > EDIT, with one highligh
 | `layout-current-rendered.png` | today's layout drawn by `device_skin.c` through the preview renderer. It differs from the real window by an RMSE of about 2 % (the LED glow and the screen's anti-aliasing), so the renderer is a fair stand-in |
 | `layout-plus20.png`, `layout-plus22.png`, `layout-plus25.png` | the screen 20, 22 and 25 percent bigger (3.6, 3.66 and 3.75 device pixels per screen pixel; today 3), nearest-neighbour; box and window unchanged, the other controls nudged (`../ui-plan.md` section 1.3) |
 | `layout-plus22-smooth.png`, `zoom-nearest-vs-smooth.png` | the +22 layout with a bilinear screen, and a 4x zoom of the text of both |
-| `layout-compare.png` | the real window and the three layouts side by side (half size) |
+| `layout-plus33.png` | the screen at exactly 4 device pixels per screen pixel (+33 percent, whole pixels): box and window the same size, the cluster of K2 K3 E2 E3 re-spaced, K1 and E1 moved up (`../ui-plan.md` section 1.4) |
+| `layout-plus33-wider-box.png` | the same screen with the box and window 26 units wider and the cluster's spacing kept (the alternative) |
+| `zoom-letters-today-25-33.png` | the word LEVELS at 8x: today (3 px), +25 percent (3.75: uneven) and +33 percent (4: even) |
+| `layout-compare.png` | the real window and the five layouts side by side (half size): today, +20, +22 / +25, +33, +33 wider box |
+| `oled-edit.png` | the screen image (128 x 64) captured from the real norns; `UIPREVIEW_REUSE_CAPTURE=1 make_previews.sh` redraws everything else from it without starting norns |
 | `grey-current.png`, `grey-gamma07.png`, `grey-gamma05.png`, `grey-compare.png` | the same page with today's greys and the two brighter options, current layout; `grey-levels.txt` is the exact table for all 16 levels |
 | `brightness-100.png`, `brightness-70.png`, `brightness-40.png`, `brightness-compare.png` | the +22 layout with grey option gamma 0.7 at three brightness settings |
 
 What is real code and what is not: the **screen content** comes from the real norns (menu code, fonts, the screen's own greys). Today's window is the real window. The **layouts** are drawn by the product's own `device_skin.c`
-(`gen_variant.py` makes a copy with other constants; the product file is only read). **Not** product code: drawing the screen at a fractional pixel size, the grey table and the brightness (they do not exist yet).
+(`gen_variant.py` and `gen_variant33.py` make a copy with other constants; the product file is only read). **Not** product code: drawing the screen at a fractional pixel size, the grey table and the brightness (they do not exist yet).
 The other files: `capture.lua` and `uipreview.lua` (what norns is told to show), `render_preview.c`, `grey_tables.py`.
