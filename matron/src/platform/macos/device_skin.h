@@ -8,6 +8,8 @@
  *
  * layout units: the box is SKIN_W x SKIN_H units, positions taken from the monome
  * "standard norns" legend. everything is drawn in device pixels through skin_geom_t.
+ * NORNS_LINUX_DESKTOP (the Linux build) selects another layout table (device_skin.c): no OUT fader, MUTE in the top row, bigger
+ * keys and encoders, a bigger screen, no K/E text. without it the layout is the one of the Mac app.
  */
 
 #pragma once
@@ -39,8 +41,13 @@ enum {
     SKIN_KEYS = 14,
     SKIN_MAIDEN = 15,
     SKIN_MANUAL = 16,
+#ifdef NORNS_LINUX_DESKTOP
+    // the Linux window has no OUT fader: MUTE is the 11th button of the top row, id SKIN_PAGE1 + 10. the Mac values below are not changed
+    SKIN_MUTE = 17, // the last button of the top row: output off and back
+#else
     SKIN_FADER = 17, // the OUT fader right of E3 (not on the device): norns' output level
     SKIN_MUTE = 18,  // under it: output off and back
+#endif
 };
 
 // the MIC button: what reaches norns' input. lit unless OFF
@@ -83,8 +90,10 @@ extern int skin_hit(const skin_geom_t *g, double x, double y);
 // centre of the encoder nearest to device pixel x/y: 1-3
 extern int skin_nearest_enc(const skin_geom_t *g, double x, double y);
 
+#ifndef NORNS_LINUX_DESKTOP
 // the OUT fader's value (0-1) for the pointer at device pixel height y
 extern double skin_fader_value(const skin_geom_t *g, double y);
+#endif
 
 // the oled pixel (0-127, 0-63) under device pixel x/y; false if it is not on the oled
 extern int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy);

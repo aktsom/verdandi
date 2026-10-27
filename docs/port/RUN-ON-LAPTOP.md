@@ -198,7 +198,7 @@ terminal output and `~/verdandi-home/jackd.log` and `sclang.log` if present.
 
 **Window**
 - [ ] The device window opens (aluminium box, black screen, buttons MIX TAPE HOME PARAMS MIC GRID ARC KEYS
-      MAIDEN MANUAL, a fader OUT, K1-K3, E1-E3); it resizes without breaking; closing it ends norns.
+      MAIDEN MANUAL MUTE across the top, the screen at its lower left, K1 E1 above it, E2 E3 K2 K3 to its right; no OUT slider and no K/E text); it resizes without breaking; closing it ends norns.
 - [ ] With the script above loaded, or from HOME > SELECT, the screen shows the script's picture.
 - [ ] It looks right on your screen scale (HiDPI) and in X11 *and* Wayland if you can try both.
 
@@ -232,7 +232,7 @@ terminal output and `~/verdandi-home/jackd.log` and `sclang.log` if present.
 **Audio** (`linux/norns.sh --terminal` finds PipeWire itself; see "Run with sound under PipeWire")
 - [ ] The terminal shows the re-run under pw-jack and "audio server: pipewire, input '...', output '...'" with your
       default source and sink; norns starts without "no ADC ports found".
-- [ ] A script with an engine makes sound on the default sink; the OUT fader changes the volume; changing the
+- [ ] A script with an engine makes sound on the default sink; the output level on the MIX page (E2, or drag the OUT column on the screen) changes the volume and MUTE (top right) silences it and gives it back; changing the
       default sink in the desktop's sound settings and restarting norns moves the sound.
 - [ ] `pw-jack jack_lsp -c`: crone's ports are connected to your card's `capture_*` / `playback_*` only (no MIDI port).
 - [ ] SYSTEM > AUDIO shows the cards and 48000, read-only; unplug the USB DAC while it is the chosen one (or give a wrong

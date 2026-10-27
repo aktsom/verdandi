@@ -1,15 +1,16 @@
 # the window under Xvfb 1280x800 (linux/tests/norns_probe.sh): mouse, keyboard, virtual grid and arc.
 # coordinates are of the first screen the norns window shows there.
+# Linux layout: K2 at (639.65, 522.15) and E2 at (729.35, 381.85) units; the window is at 144,69 on the screen and adds a margin of 16
 #sleep 5
 norns.script.load("code/probe/window_probe.lua")
 #sleep 3
 #shot @home/window-device.png
 # K2 with the mouse, E2 with the wheel
-#xdo mousemove 753 626
+#xdo mousemove 800 607
 #xdo mousedown 1
 #sleep 0.3
 #xdo mouseup 1
-#xdo mousemove 832 505 click 4 click 4 click 4 click 4
+#xdo mousemove 889 467 click 4 click 4 click 4 click 4
 #sleep 0.5
 # the computer keyboard: 3 = K3, w = E1
 #xdo search --name Verdandi windowfocus

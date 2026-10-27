@@ -68,6 +68,10 @@ CFLAGS="-std=gnu11 -D_GNU_SOURCE -I $P -I /usr/local/include"
 cc $CFLAGS "$M/window_keys_test.c" "$P/window_keys.c" -o "$T/wkt" && run "c:window_keys" "$T/wkt"
 cc $CFLAGS $(pkg-config --cflags cairo) "$M/device_skin_test.c" "$P/device_skin.c" "$P/vgrid_skin.c" \
     "$P/varc_skin.c" "$P/vkeys_skin.c" -o "$T/dst" $(pkg-config --libs cairo) -lm && run "c:device_skin" "$T/dst"
+# the Linux window layout (arrangement A: no OUT fader, MUTE in the top row, bigger keys and encoders, the screen at 4 px): the same device_skin.c built with
+# -DNORNS_LINUX_DESKTOP, as matron is on Linux. the line above is the Mac layout (the file without the define), unchanged
+cc $CFLAGS -DNORNS_LINUX_DESKTOP linux/tests/device_skin_linux_test.c "$P/device_skin.c" "$P/window_keys.c" -o "$T/dsl" \
+    $(pkg-config --cflags --libs cairo) -lm && run "c:device_skin_linux (geometry, hit testing, rendered window, keyboard mapping unchanged)" "$T/dsl"
 cc $CFLAGS -I matron/src/platform/linux $(pkg-config --cflags cairo) linux/tests/menu_skin_test.c \
     matron/src/platform/linux/menu_skin.c -o "$T/mst" $(pkg-config --libs cairo) -lm && run "c:menu_skin" "$T/mst"
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
@@ -485,7 +489,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     }
     run "window:mouse, keyboard, virtual grid and arc" window_ok
     # the oled shows the script's rectangle (about 8% of it is white), the grid shows the lit key
-    oled_mean() { convert "$WH/window-device.png" -crop 420x220+235+440 -colorspace Gray -format "%[fx:mean]" info:; }
+    oled_mean() { convert "$WH/window-device.png" -crop 440x200+230+420 -colorspace Gray -format "%[fx:mean]" info:; }
     window_pixels() { awk -v m="$(oled_mean)" 'BEGIN { exit !(m > 0.03 && m < 0.3) }'; }
     run "window:oled pixels" window_pixels
     cp "$WH/window-device.png" "$WH/window-devices.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null

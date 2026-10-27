@@ -12,6 +12,39 @@ typedef struct {
     double x, y;
 } pt_t;
 
+// the button row along the top: menu pages on the left, tools on the right
+typedef struct {
+    double x;
+    const char *label;
+} button_t;
+
+#ifdef NORNS_LINUX_DESKTOP
+// ---- the Linux window (docs/port/ui-plan.md section 1.6, arrangement A) ----
+// the box and the window are as on the Mac (960 x 630 units). margins of 36 units on all four sides: the button row from x 36 to x 924 at y 36, the
+// bezel's left edge at x 36 and its bottom edge 36 above the box's. the screen is 512 x 256 units: exactly 4 device pixels per screen pixel at scale 1.
+// keys and encoders are 15 percent bigger than on the Mac. no OUT fader (MUTE is the last button of the row), no K1..E3 text
+static const pt_t key_pos[3] = {{71.65, 193}, {639.65, 522.15}, {779.65, 522.15}};
+static const pt_t enc_pos[3] = {{194.7, 193}, {729.35, 381.85}, {869.35, 381.85}};
+static const double key_r = 35.65;
+static const double enc_r = 43.7; // washer; the knob itself is 35.65
+static const double bezel_x = 36, bezel_y = 310, bezel_w = 540, bezel_h = 284;
+static const double bezel_pad = 14;
+// pages MIX TAPE HOME PARAMS, then MIC GRID ARC KEYS, MAIDEN MANUAL, MUTE: three group gaps of 25.33 fill the row between x 36 and x 924
+static const button_t buttons[] = {
+    {36, "MIX"},       {112, "TAPE"},     {188, "HOME"},     {264, "PARAMS"}, // SKIN_PAGE1..4
+    {359.3333, "MIC"}, {435.3333, "GRID"}, {511.3333, "ARC"}, {587.3333, "KEYS"}, // SKIN_MIC..KEYS
+    {682.6667, "MAIDEN"}, {758.6667, "MANUAL"},                                  // SKIN_MAIDEN, MANUAL
+    {854, "MUTE"},                                                               // SKIN_MUTE
+};
+static const double button_y = 36, button_w = 70, button_h = 40;
+// sizes of the drawn parts (the Mac's 25, 23, 31, 25 and the well's inset 4, times 1.15)
+#define KEY_CAP 28.75
+#define KEY_CAP_DOWN 26.45
+#define KEY_WELL_INSET 4.6
+#define KNOB_R 35.65
+#define KNOB_TOP 28.75
+#else
+// ---- the Mac window ----
 // standard norns, in layout units
 static const pt_t key_pos[3] = {{109, 252}, {594, 542}, {749, 542}};
 static const pt_t enc_pos[3] = {{216, 252}, {672, 420}, {827, 420}};
@@ -23,12 +56,6 @@ static const double fader_x = 913, fader_top = 196, fader_bottom = 486;
 static const double fader_cap_w = 34, fader_cap_h = 18;
 static const double mute_x = 886, mute_y = 520, mute_w = 54, mute_h = 34;
 static const double bezel_pad = 14;
-
-// the button row along the top: menu pages on the left, tools on the right
-typedef struct {
-    double x;
-    const char *label;
-} button_t;
 static const button_t buttons[] = {
     {77, "MIX"}, {153, "TAPE"}, {229, "HOME"}, {305, "PARAMS"}, // SKIN_PAGE1..4
     {398, "MIC"},
@@ -38,8 +65,14 @@ static const button_t buttons[] = {
     {719, "MAIDEN"},
     {795, "MANUAL"}, // SKIN_MAIDEN, MANUAL
 };
-#define NBUTTONS ((int)(sizeof buttons / sizeof buttons[0]))
 static const double button_y = 70, button_w = 70, button_h = 40;
+#define KEY_CAP 25
+#define KEY_CAP_DOWN 23
+#define KEY_WELL_INSET 4
+#define KNOB_R 31
+#define KNOB_TOP 25
+#endif
+#define NBUTTONS ((int)(sizeof buttons / sizeof buttons[0]))
 
 // the knobs are endless encoders: no pointer, only the knurl moves. one detent turns it by
 // a third of the knurl spacing, so it always visibly moves the right way
@@ -87,20 +120,24 @@ int skin_hit(const skin_geom_t *g, double x, double y) {
             return SKIN_E1 + i;
         }
     }
+#ifndef NORNS_LINUX_DESKTOP
     if (fabs(p.x - fader_x) <= fader_cap_w / 2 + 6 && p.y >= fader_top - fader_cap_h && p.y <= fader_bottom + fader_cap_h) {
         return SKIN_FADER;
     }
     if (p.x >= mute_x - 3 && p.x <= mute_x + mute_w + 3 && p.y >= mute_y - 3 && p.y <= mute_y + mute_h + 3) {
         return SKIN_MUTE;
     }
+#endif
     return SKIN_NONE;
 }
 
+#ifndef NORNS_LINUX_DESKTOP
 double skin_fader_value(const skin_geom_t *g, double y) {
     double v = (fader_bottom - (y - g->oy) / g->s) / (fader_bottom - fader_top);
     return v < 0 ? 0 : v > 1 ? 1
                              : v;
 }
+#endif
 
 int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy) {
     int px = (int)floor((x - g->oled_x) / g->oled_px), py = (int)floor((y - g->oled_y) / g->oled_px);
@@ -227,6 +264,7 @@ static void draw_bezel(cairo_t *cr) {
     cairo_fill(cr);
 }
 
+#ifndef NORNS_LINUX_DESKTOP
 static void draw_label(cairo_t *cr, pt_t c, double r, const char *text) {
     cairo_save(cr);
     double d = r + 5;
@@ -243,6 +281,7 @@ static void draw_label(cairo_t *cr, pt_t c, double r, const char *text) {
     cairo_show_text(cr, text);
     cairo_restore(cr);
 }
+#endif
 
 static void draw_washer(cairo_t *cr, pt_t c) {
     circle(cr, c.x, c.y, enc_r);
@@ -267,7 +306,9 @@ void skin_draw_static(cairo_t *cr, const skin_geom_t *g) {
     cairo_scale(cr, g->s, g->s);
     draw_box(cr, g);
     draw_bezel(cr);
+#ifndef NORNS_LINUX_DESKTOP
     static const char *names[3][2] = {{"K1", "E1"}, {"K2", "E2"}, {"K3", "E3"}};
+#endif
     for (int i = 0; i < 3; i++) {
         draw_washer(cr, enc_pos[i]);
         // key well
@@ -278,19 +319,21 @@ void skin_draw_static(cairo_t *cr, const skin_geom_t *g) {
         cairo_set_source(cr, p);
         cairo_fill(cr);
         cairo_pattern_destroy(p);
-        circle(cr, key_pos[i].x, key_pos[i].y, key_r - 4);
+        circle(cr, key_pos[i].x, key_pos[i].y, key_r - KEY_WELL_INSET);
         hex(cr, "161618", 1);
         cairo_fill(cr);
 
+#ifndef NORNS_LINUX_DESKTOP
         draw_label(cr, key_pos[i], key_r, names[i][0]);
         draw_label(cr, enc_pos[i], enc_r, names[i][1]);
+#endif
     }
     cairo_restore(cr);
 }
 
 static void draw_key(cairo_t *cr, pt_t c, int down, int hover) {
     double dy = down ? 2 : 0;
-    double r = down ? 23 : 25;
+    double r = down ? KEY_CAP_DOWN : KEY_CAP;
     // cap; pressed it sinks into the well and loses its highlight
     circle(cr, c.x, c.y + dy, r);
     cairo_pattern_t *p = down ? cairo_pattern_create_radial(c.x, c.y + dy + 6, 2, c.x, c.y + dy, r)
@@ -322,7 +365,7 @@ static void draw_key(cairo_t *cr, pt_t c, int down, int hover) {
 }
 
 static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
-    const double r = 31, top = 25;
+    const double r = KNOB_R, top = KNOB_TOP;
     double a = ticks * KNURL_STEP;
 
     // shadow on the washer
@@ -403,7 +446,11 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     int down = st->button_down == id;
     int lit = (id <= SKIN_PAGE4 && st->page == i + 1) || (id == SKIN_GRID && st->grid_open) ||
               (id == SKIN_ARC && st->arc_open) || (id == SKIN_KEYS && st->keys_open) ||
-              (id == SKIN_MIC && st->input != SKIN_INPUT_OFF);
+              (id == SKIN_MIC && st->input != SKIN_INPUT_OFF)
+#ifdef NORNS_LINUX_DESKTOP
+              || (id == SKIN_MUTE && st->out_muted)
+#endif
+        ;
     double x = b->x, y = button_y, dy = down ? 1.2 : 0;
 
     // well
@@ -439,7 +486,11 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
 
     // led or arrow on the left, label in the rest
     double mid = y + dy + button_h / 2;
+#ifdef NORNS_LINUX_DESKTOP
+    if (id <= SKIN_KEYS || id == SKIN_MUTE) {
+#else
     if (id <= SKIN_KEYS) {
+#endif
         draw_led(cr, x + 12, mid, lit);
     } else {
         draw_out_arrow(cr, x + 12, mid);
@@ -500,6 +551,7 @@ static void draw_toast(cairo_t *cr, const char *text, int recording) {
     cairo_restore(cr);
 }
 
+#ifndef NORNS_LINUX_DESKTOP
 // the OUT fader: a slot, the level lit up to the cap, the cap; MUTE under it
 static void draw_fader(cairo_t *cr, const skin_state_t *st) {
     double v = st->out_level < 0 ? 0 : st->out_level > 1 ? 1
@@ -598,6 +650,7 @@ static void draw_fader(cairo_t *cr, const skin_state_t *st) {
     hex(cr, st->out_muted ? "ffffff" : "c3c6cb", 1);
     cairo_show_text(cr, "MUTE");
 }
+#endif
 
 void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st) {
     cairo_save(cr);
@@ -613,7 +666,9 @@ void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *s
         draw_key(cr, key_pos[i], st->key_down[i], st->hover == SKIN_K1 + i);
         draw_knob(cr, enc_pos[i], st->enc_ticks[i], st->hover == SKIN_E1 + i);
     }
+#ifndef NORNS_LINUX_DESKTOP
     draw_fader(cr, st);
+#endif
     cairo_restore(cr);
 }
 

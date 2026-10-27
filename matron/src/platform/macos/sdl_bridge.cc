@@ -2084,12 +2084,14 @@ static void set_hover(int control) {
 }
 
 // the OUT fader to the pointer: shown at once, the level set by lua (output_level)
+#ifndef NORNS_LINUX_DESKTOP // the Linux window has no OUT fader (MUTE is a button of the top row)
 static void fader_to(double py) {
     skin.out_level = skin_fader_value(&geom, py);
     skin.out_muted = 0;
     redraw(true);
     call_lua("output_fader", {std::to_string(skin.out_level)});
 }
+#endif
 
 // the mouse on the oled, as oled pixels, for the menu page (MIX only: its levels)
 static bool mouse_on_mix(void) {
@@ -2121,6 +2123,7 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
         }
         int c = skin_hit(&geom, px, py);
         int ox, oy;
+#ifndef NORNS_LINUX_DESKTOP
         if (c == SKIN_FADER) {
             if (b->clicks >= 2) {
                 // double click: back to 0 dB, and no drag after it (the pointer's slightest
@@ -2131,7 +2134,9 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
                 SDL_CaptureMouse(SDL_TRUE);
                 fader_to(py);
             }
-        } else if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
+        } else
+#endif
+        if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
             drag_oled = true;
             SDL_CaptureMouse(SDL_TRUE);
             oled_mouse(px, py, b->clicks >= 2 ? "double" : "down", 0);
@@ -2183,9 +2188,12 @@ static void handle_motion(const SDL_MouseMotionEvent *m) {
     if (drag_fader || drag_oled) {
         double px, py;
         to_pixels(m->windowID, m->x, m->y, &px, &py);
+#ifndef NORNS_LINUX_DESKTOP
         if (drag_fader) {
             fader_to(py);
-        } else {
+        } else
+#endif
+        {
             oled_mouse(px, py, "drag", 0);
         }
         return;
@@ -2226,10 +2234,12 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
     int delta = w->direction == SDL_MOUSEWHEEL_FLIPPED ? -w->y : w->y;
     int ox, oy;
     // over the fader: the output level a step; over the oled on the MIX page: the level there
+#ifndef NORNS_LINUX_DESKTOP
     if (c == SKIN_FADER || c == SKIN_MUTE) {
         call_lua("output_step", {std::to_string(delta)});
         return;
     }
+#endif
     if (c == SKIN_NONE && mouse_on_mix() && skin_oled_pixel(&geom, px, py, &ox, &oy)) {
         oled_mouse(px, py, "wheel", delta);
         return;
