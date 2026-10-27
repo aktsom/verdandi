@@ -28,6 +28,13 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   Found: libmonome's compiled-in protocol path (fixed in the package). Open: font licences (DEPS.md, before any public release);
   `package.sh clean-root` itself (the full build in a fresh root) was **not run**; second-start "bring window forward" not built.
   Not testable here (HARDWARE-CHECKLIST.md, "The package"): the laptop, desktop menu, real grid/arc, udev hotplug, USB IDs of older devices.
+- **`package.sh clean-root` fixed and run end to end** (owner's laptop report: `SUDO_USER` of the host leaked into the root; `docs/port/packaging.md` 7.2):
+  the root now has its own root user (`env -i`), no host account in the environment or the file ownership, stage markers and a log
+  (`build/package/package-<command>.log`), the failing stage is named, a good build removes the root. Two more failures only the end-to-end run
+  showed (npm did not trust the proxy certificate; maiden failing silently in setup-deps) are fixed. End to end here, as root with a
+  `SUDO_USER` that does not exist in the root: 8 minutes (plus about 3 once for the cached base root), `.deb` 13.5 MB, root 2.8 GB while it
+  exists and removed afterwards (`PACKAGE_KEEP_ROOT=1` keeps it). Installed and booted by `linux/tests/package_test.sh`: pass.
+  `run_all.sh`: 0 unexpected failures; `NORNS_CLEAN_ROOT_TEST=1` adds the end-to-end build. Not tested: the laptop itself (a run there without a proxy).
 
 ## Test state
 `linux/tests/run_all.sh` (about 2 minutes): no unexpected failures on an idle machine in the latest runs.

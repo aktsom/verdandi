@@ -569,14 +569,14 @@ else
     else echo "FAIL  $pkg_name"; grep -E '^(FAIL|SKIP|   )' "$T/package.log" | head -20 | sed 's/^/        /'; FAILED+=("package")
     fi
 fi
-# opt-in (about an hour): the whole build in a fresh root, started like "sudo linux/package.sh clean-root" by an account that does not
+# opt-in (about 10 minutes): the whole build in a fresh root, started like "sudo linux/package.sh clean-root" by an account that does not
 # exist in that root, then the install test on the result. NORNS_CLEAN_ROOT_TEST=1
 if [ "${NORNS_CLEAN_ROOT_TEST:-0}" = 1 ]; then
     run "package:clean-root build end to end (as another account), then install test" bash -c '
         id hostbuilder >/dev/null 2>&1 || useradd -m hostbuilder
         SUDO_USER=hostbuilder linux/package.sh clean-root && linux/tests/package_test.sh build/package/clean-root/verdandi_*.deb'
 else
-    echo "SKIP  package:clean-root build end to end (opt-in, about an hour: NORNS_CLEAN_ROOT_TEST=1)"
+    echo "SKIP  package:clean-root build end to end (opt-in, about 10 minutes: NORNS_CLEAN_ROOT_TEST=1)"
 fi
 echo
 echo "known failures: ${#KNOWN[@]}  unexpected failures: ${#FAILED[@]}"
