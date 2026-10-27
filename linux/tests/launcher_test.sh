@@ -143,7 +143,7 @@ rm -f "$T/home/audio.conf"
 # its old home (the folder above it) and shares any home through NORNS_HOME
 INST="$T/inst"
 mkdir -p "$INST/linux" "$T/h1"
-cp "$REPO/linux/norns.sh" "$INST/linux/norns.sh"
+cp "$REPO/linux/norns.sh" "$REPO/linux/brand.sh" "$INST/linux/"
 touch "$INST/INSTALLED"
 homeline() { # script, HOME, env assignments... -> the DECIDE-HOME line
     local script="$1" h="$2"

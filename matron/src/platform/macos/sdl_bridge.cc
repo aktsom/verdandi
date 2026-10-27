@@ -74,6 +74,7 @@
 #include "event_types.h"
 #include "events.h"
 
+#include "../common/display_name.h"
 #include "app_audio.h"
 #include "device.h"
 #include "device_list.h"
@@ -2264,7 +2265,14 @@ static void handle_key(const SDL_KeyboardEvent *k) {
     case WK_MODE: {
         SDL_Window *window = SDL_GetWindowFromID(k->windowID);
         if (window != NULL) {
-            SDL_SetWindowTitle(window, out.value ? MACOS_PRODUCT " · keys" : MACOS_PRODUCT);
+            const char *name = display_name(MACOS_PRODUCT);
+            if (out.value) {
+                char title[256];
+                snprintf(title, sizeof title, "%s · keys", name);
+                SDL_SetWindowTitle(window, title);
+            } else {
+                SDL_SetWindowTitle(window, name);
+            }
         }
         break;
     }

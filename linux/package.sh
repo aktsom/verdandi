@@ -22,6 +22,7 @@ set -eu
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PREFIX=/opt/verdandi
+. "$REPO/linux/brand.sh" # VERDANDI_DISPLAY_NAME, VERDANDI_TAGLINE: what a person sees
 OUT="${PACKAGE_OUT:-$REPO/build/package}"
 CACHE="$OUT/cache"
 STAGE="$OUT/stage"
@@ -47,6 +48,7 @@ on_exit() {
 trap 'on_exit "${1:-}"' EXIT
 
 # every command but check keeps its whole output in <out>/package-<command>.log (a second run overwrites it)
+case "${1:-}" in print-desktop | print-description) PACKAGE_LOGGING=1 ;; esac
 if [ -z "${PACKAGE_LOGGING:-}" ] && [ -n "${1:-}" ] && [ "${1:-}" != check ]; then
     mkdir -p "$OUT"
     export PACKAGE_LOGGING=1 PACKAGE_LOG="$OUT/package-$1.log"
@@ -139,6 +141,38 @@ build_libmonome() {
     [ -f "$STAGE$PREFIX/lib/monome/protocol_mext.so" ] || die "libmonome: no protocol modules in the stage"
 }
 
+# the menu entry: the display name from linux/brand.sh, a comment that says it is the Linux version. Exec, Icon and the file name
+# stay "verdandi" (the command)
+desktop_entry() {
+    cat <<DESK
+[Desktop Entry]
+Type=Application
+Name=$VERDANDI_DISPLAY_NAME
+GenericName=norns on the desktop
+Comment=The Linux version of Verdandi, norns on the desktop
+Exec=verdandi
+Icon=verdandi
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=norns;monome;grid;arc;Verdandi;
+DESK
+}
+
+# the description of the .deb (control file format: a first line, then lines that start with a space)
+deb_description() {
+    cat <<DESC
+Description: $VERDANDI_DISPLAY_NAME: norns on the desktop
+ $VERDANDI_DISPLAY_NAME is the Linux version of Verdandi, the macOS port of monome's norns
+ by ha1dcre. It runs the norns scripts, with the screen, keys and encoders in a
+ window. Includes SuperCollider and the norns audio engines, the maiden
+ web editor, and virtual or real monome grids and arcs.
+ .
+ Free software (GPL-3.0); it keeps the licences and copyright notices of norns,
+ Verdandi and the other parts. They and the source locations are in
+ /opt/verdandi/licenses.
+DESC
+}
+
 # the program tree: the same layout as a checkout, because linux/norns.sh and matron look for these paths
 build_tree() {
     say "program tree in $STAGE$PREFIX"
@@ -156,6 +190,7 @@ build_tree() {
     cp "$REPO/matronrc.lua" "$T/" 2>/dev/null || true
     install -m 755 "$REPO/linux/norns.sh" "$T/linux/norns.sh"
     cp -a "$REPO/linux/shims" "$REPO/linux/manual" "$T/linux/"
+    install -m 644 "$REPO/linux/brand.sh" "$T/linux/brand.sh"
     # the marker that makes linux/norns.sh use the installed layout (home in ~/Verdandi, program tree read-only)
     echo "installed by the verdandi package" > "$T/INSTALLED"
     # editors' and test leftovers
@@ -174,18 +209,7 @@ build_tree() {
 #!/bin/sh
 exec $PREFIX/linux/norns.sh "\$@"
 WRAP
-    install -D -m 644 /dev/stdin "$STAGE/usr/share/applications/verdandi.desktop" <<'DESK'
-[Desktop Entry]
-Type=Application
-Name=Verdandi
-GenericName=norns on the desktop
-Comment=The norns sound computer on your desktop
-Exec=verdandi
-Icon=verdandi
-Terminal=false
-Categories=AudioVideo;Audio;Music;
-Keywords=norns;monome;grid;arc;
-DESK
+    desktop_entry | install -D -m 644 /dev/stdin "$STAGE/usr/share/applications/verdandi.desktop"
     install -D -m 644 "$REPO/macos/norns-icon.png" "$STAGE/usr/share/icons/hicolor/256x256/apps/verdandi.png"
     install -D -m 644 "$REPO/linux/udev/70-verdandi-monome.rules" "$STAGE/usr/lib/udev/rules.d/70-verdandi-monome.rules"
     build_licenses
@@ -211,6 +235,7 @@ build_licenses() {
     done
     for f in "$CACHE"/maiden-home/maiden/LICENSE*; do [ -f "$f" ] && install -D -m 644 "$f" "$L/maiden/$(basename "$f")"; done
     install -m 644 "$REPO/docs/port/DEPS.md" "$L/DEPS.md"
+    install -m 644 "$REPO/readme-linux.md" "$L/README-linux.md"
     cat > "$L/SOURCES.txt" <<SRC
 Verdandi is free software (GPL-3.0). The source of every part of this package is available:
 
@@ -300,13 +325,7 @@ Installed-Size: $size
 Depends: $DEPENDS
 Section: sound
 Priority: optional
-Description: norns sound computer on the desktop
- Verdandi runs the norns scripts, with the screen, keys and encoders in a
- window, on Linux. Includes SuperCollider and the norns audio engines, the maiden
- web editor, and virtual or real monome grids and arcs.
- .
- Free software (GPL-3.0). The licences and the source locations of every part are
- in /opt/verdandi/licenses.
+$(deb_description)
 CTL
     cat > "$D/postinst" <<'POST'
 #!/bin/sh
@@ -332,7 +351,7 @@ POST
     # copyright file (machine readable) and changelog
     cat > "$doc/copyright" <<CPR
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: Verdandi (norns for the desktop)
+Upstream-Name: Verdandi (this package: $VERDANDI_DISPLAY_NAME)
 Source: see /opt/verdandi/licenses/SOURCES.txt
 
 Files: *
@@ -405,6 +424,10 @@ check_deb() {
     outside="$(dpkg-deb -c "$f" | grep -v '^d' | awk '{print $6}' | sed 's#^\./##' |
         grep -vE '^(opt/verdandi/|usr/bin/verdandi$|usr/share/applications/verdandi.desktop$|usr/share/icons/hicolor/256x256/apps/verdandi.png$|usr/share/doc/verdandi/|usr/lib/udev/rules.d/70-verdandi-monome.rules$)' || true)"
     [ -z "$outside" ] || { echo "$outside" | head; rm -rf "$t"; die "check: files outside the allowed places"; }
+    # nothing in the package may stand in for the system's browser opener
+    if dpkg-deb -c "$f" | awk '{print $6}' | grep -qE '(^|/)xdg-[a-z-]+$'; then rm -rf "$t"; die "check: an xdg-* program is in the package (the buttons must use the system's xdg-open)"; fi
+    grep -q "^Name=$VERDANDI_DISPLAY_NAME\$" "$t/x/usr/share/applications/verdandi.desktop" || { rm -rf "$t"; die "check: the menu entry is not named '$VERDANDI_DISPLAY_NAME'"; }
+    grep -q "^Description: $VERDANDI_DISPLAY_NAME: " "$t/c/control" || { rm -rf "$t"; die "check: the description does not start with '$VERDANDI_DISPLAY_NAME'"; }
     grep -q "^Maintainer: " "$t/c/control" || { rm -rf "$t"; die "check: no Maintainer"; }
     privacy_scan "$t"
     rm -rf "$t"
@@ -499,6 +522,8 @@ case "${1:-}" in
     deb) build_deb ;;
     all) build_sc; build_libmonome; build_maiden; build_tree; build_deb ;;
     clean-root) build_clean_root ;;
+    print-desktop) desktop_entry ;;
+    print-description) deb_description ;;
     check) check_deb "${2:?usage: package.sh check FILE.deb}" ;;
     *) die "usage: see the top of this file" ;;
 esac

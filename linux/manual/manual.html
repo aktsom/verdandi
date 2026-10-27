@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Verdandi on Linux: manual</title>
+<title>Verdandi Linux: manual</title>
 <!--
   The MANUAL button of the window opens this file (linux/norns.sh sets NORNS_MANUAL to it).
   Rule for this text: only behavior that is built in this repository and covered by a test or by the code named in the
@@ -38,7 +38,7 @@
 </head>
 <body>
 
-<h1>Verdandi on Linux</h1>
+<h1>Verdandi Linux</h1>
 <p class="lead">norns running natively on a Linux desktop. This manual describes what is built and tested in this repository, and says where something has only been tried on the computer of the project's owner or not at all.</p>
 
 <nav aria-label="Contents">
@@ -63,7 +63,7 @@
 <!-- sources: docs/port/RUN-ON-LAPTOP.md (header), docs/port/phase-1.md, linux/norns.sh header; tests: run_all.sh boot:headless -->
 <section id="what-this-is">
 <h2>1. What this is</h2>
-<p>Verdandi is the norns software (matron, crone with softcut, SuperCollider, maiden) running as an application on a desktop computer. This is the Linux version. It shows the device as a window, with its screen, three keys, three encoders and an output fader. It can open a virtual grid, a virtual arc and a virtual keyboard, talks to real grids, arcs, crow and MIDI devices over USB, and uses JACK or PipeWire for sound.</p>
+<p>Verdandi Linux is the Linux version of Verdandi: the norns software (matron, crone with softcut, SuperCollider, maiden) running as an application on a desktop computer. From here on this manual says just &ldquo;Verdandi&rdquo;. It shows the device as a window, with its screen, three keys, three encoders and an output fader. It can open a virtual grid, a virtual arc and a virtual keyboard, talks to real grids, arcs, crow and MIDI devices over USB, and uses JACK or PipeWire for sound.</p>
 <p>It is not a Raspberry Pi: the operating system owns WiFi, updates and power (see <a href="#differences">section 12</a>).</p>
 <p>Tested: the automated tests run on Ubuntu 24.04 in a container without a sound card (a dummy JACK driver, fake sound cards, a virtual X server). The owner also ran it on Linux Mint 22.2 with PipeWire and reported results that led to the fixes described here. Anything that needs a real sound card, a real grid or arc, or a real browser session is listed in <code>docs/port/HARDWARE-CHECKLIST.md</code>.</p>
 </section>
@@ -312,7 +312,7 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <!-- sources: LICENSE, docs/port/DEPS.md -->
 <section id="licenses">
 <h2>14. Source and licenses</h2>
-<p>Verdandi is free software under the GPL-3.0 (<code>LICENSE</code> in the repository). The other components and their licenses are listed in <code>docs/port/DEPS.md</code>, including maiden's Go modules and npm packages and what needs attention when redistributing them. The source is the repository this page came from; the Linux port is on the branch <code>linux-port</code>.</p>
+<p>Verdandi Linux is based on the macOS port Verdandi by its original author (ha1dcre), which is based on monome&rsquo;s norns, and it keeps their licence and copyright notices. Verdandi is free software under the GPL-3.0 (<code>LICENSE</code> in the repository). The other components and their licenses are listed in <code>docs/port/DEPS.md</code>, including maiden's Go modules and npm packages and what needs attention when redistributing them. The source is the repository this page came from; the Linux port is on the branch <code>linux-port</code>.</p>
 </section>
 
 </body>

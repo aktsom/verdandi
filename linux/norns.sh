@@ -49,6 +49,10 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 JACK_DRIVER="${NORNS_JACK_DRIVER:-alsa}"
 
+# the name a person sees (window title, dialogs): linux/brand.sh. internal names keep "Verdandi"
+. "$REPO/linux/brand.sh"
+export NORNS_DISPLAY_NAME="$VERDANDI_DISPLAY_NAME"
+
 # installed tree (the .deb) or checkout
 if [ -n "${NORNS_INSTALLED:-}" ]; then
     INSTALLED="$NORNS_INSTALLED"
@@ -100,9 +104,9 @@ fi
 fail() {
     echo "norns.sh: $*"
     if [ -z "${NORNS_HAVE_TTY:-}" ]; then
-        if command -v zenity >/dev/null; then zenity --error --title=Verdandi --no-markup --text="$*" 2>/dev/null
+        if command -v zenity >/dev/null; then zenity --error --title="$VERDANDI_DISPLAY_NAME" --no-markup --text="$*" 2>/dev/null
         elif command -v kdialog >/dev/null; then kdialog --error "$*" 2>/dev/null
-        elif command -v notify-send >/dev/null; then notify-send Verdandi "$*" 2>/dev/null
+        elif command -v notify-send >/dev/null; then notify-send "$VERDANDI_DISPLAY_NAME" "$*" 2>/dev/null
         fi
     fi
     exit 1
@@ -221,6 +225,12 @@ if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ] || { [ "${NORNS_DECIDE_ONLY:-0}" = reexec ]
     exit 0
 fi
 
+# the user's own HOME and XDG folders, for the programs the window starts for the user (xdg-open: the default browser is in the
+# user's ~/.config/mimeapps.list, not in the norns home). matron gives them back to xdg-open only (matron/src/platform/macos/open_url.c)
+export NORNS_USER_HOME="${NORNS_USER_HOME:-${HOME:-}}"
+for v in XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME; do
+    [ -n "${!v:-}" ] && export "NORNS_USER_$v=${!v}"
+done
 export HOME="$NORNS_HOME"
 export JACK_NO_START_SERVER=1
 # no norns hardware: the keyboard drives K1-3 / E1-3 when nothing else wants the keys

@@ -11,6 +11,7 @@
 #include "hardware/screen/screens.h"
 
 #include "platform/common/desktop_platform.h"
+#include "platform/common/display_name.h"
 #ifdef NORNS_SDL_BRIDGE
 #include "platform/macos/product.h"
 #include "platform/macos/sdl_bridge.h"
@@ -128,7 +129,7 @@ static cairo_surface_t *screen_sdl_surface_create(screen_sdl_priv_t *priv) {
 
 #ifdef NORNS_SDL_BRIDGE
     // SDL is initialized on the main thread by sdl_bridge_init()
-    priv->window = sdl_bridge_create_window(MACOS_PRODUCT, windowSize.w, windowSize.h);
+    priv->window = sdl_bridge_create_window(display_name(MACOS_PRODUCT), windowSize.w, windowSize.h);
     priv->window_surface = NULL;
 #else
     SDL_Init(SDL_INIT_VIDEO);

@@ -7,6 +7,8 @@ shows the device. as a standalone app, and as an AUv3 plugin that puts norns int
 an unofficial community port, not affiliated with monome. the norns scripts from the
 community catalog run unchanged.
 
+**Linux:** the Linux version, Verdandi Linux, is described in [readme-linux.md](readme-linux.md).
+
 **support:** please ask here, in the [GitHub issues](../../issues), not on lines or at
 monome: they have nothing to do with this port.
 
