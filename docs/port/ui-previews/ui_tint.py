@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """the mapping of docs/port/ui-settings-plan.md section 2, as a reference implementation (the product code would do the same in C):
-for a tint colour and a brightness, the colour of every grey 0..255 of the screen image.
-  1. the tint is normalised: its brightest channel becomes 255 (hue and saturation kept). black (000000) is not a tint.
-  2. out(channel) = round_half_up(grey * tint(channel) / 255 * brightness); brightness is 0.1 .. 1 in steps of 0.1.
+for a grey correction (gamma), a tint colour and a brightness, the colour of every grey 0..255 of the screen image.
+  1. grey correction: g' = 255 * (g / 255) ** gamma (gamma 1.0 = linear, as the desktop was; default 0.7; 0 and 255 stay).
+  2. the tint is normalised: its brightest channel becomes 255 (hue and saturation kept). black (000000) is not a tint.
+  3. out(channel) = round_half_up(g' * tint(channel) / 255 * brightness); brightness is 0.1 .. 1 in steps of 0.1. one rounding, at the end.
 usage: ui_tint.py table      the table of the plan (markdown)
+       ui_tint.py greys      the 16 levels after the grey correction (gamma 1.0, 0.7, 0.5) and the device's own table (see the plan, section 2.1)
        ui_tint.py edge       the edge cases of custom colours
        ui_tint.py hex TEXT   parse a hex code the way the plan says (prints the colour or the error)"""
 import re
@@ -36,8 +38,33 @@ def level_grey(level):
     return level * 17
 
 
-def mapped(grey, tint, brightness):
-    return tuple(int(grey * c / 255 * brightness + 0.5) for c in normalise(tint))
+DEFAULT_GAMMA = 0.7
+
+
+def corrected(grey, gamma=DEFAULT_GAMMA):
+    return 255.0 * (grey / 255.0) ** gamma
+
+
+def mapped(grey, tint, brightness, gamma=DEFAULT_GAMMA):
+    g = corrected(grey, gamma)
+    return tuple(int(g * c / 255 * brightness + 0.5) for c in normalise(tint))
+
+
+def device_like(level):
+    """what the real panel shows at pixel value 1..15 if its light output follows the grey scale table that ssd1322.cc writes for gamma 1.0
+    (GS value = 8 * (level - 1), linear in light) and a monitor with gamma 2.2 shows it: the code value that gives the same light. level 0 and 1 are dark."""
+    if level <= 1:
+        return 0
+    return int(255 * ((level - 1) / 14.0) ** (1 / 2.2) + 0.5)
+
+
+def greys():
+    out = ["| level | today (gamma 1.0) | gamma 0.7 (default) | gamma 0.5 | device-like (estimate) |", "|---|---|---|---|---|"]
+    for lv in range(16):
+        g = lv * 17
+        out.append("| %d | %d (%d%%) | %d (%d%%) | %d (%d%%) | %d (%d%%) |" % ((lv, g, round(g / 2.55)) + tuple(
+            v for gm in (0.7, 0.5) for v in (int(corrected(g, gm) + 0.5), round(corrected(g, gm) / 2.55))) + (device_like(lv), round(device_like(lv) / 2.55))))
+    return "\n".join(out)
 
 
 def hexs(rgb):
@@ -65,7 +92,7 @@ def edge():
         try:
             rgb = parse_hex(c)
             n = normalise(rgb)
-            print("%-8s -> tint %s; level 15 at 1: %s, level 4 at 0.4: %s" % (c, hexs(n), hexs(mapped(255, rgb, 1.0)), hexs(mapped(68, rgb, 0.4))))
+            print("%-8s -> tint %s; level 15 at 1: %s, level 4 at 0.4 (gamma 0.7): %s" % (c, hexs(n), hexs(mapped(255, rgb, 1.0)), hexs(mapped(68, rgb, 0.4))))
         except ValueError as e:
             print("%-8s -> rejected: %s" % (c, e))
 
@@ -74,6 +101,8 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "table"
     if cmd == "table":
         print(table())
+    elif cmd == "greys":
+        print(greys())
     elif cmd == "edge":
         edge()
     elif cmd == "hex":
