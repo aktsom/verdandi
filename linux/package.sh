@@ -9,6 +9,7 @@
 #        linux/package.sh clean-root    all of it in a fresh Ubuntu 24.04 root (debootstrap, needs root); the root has its own
 #                                       root user and none of the account that starts it; the root is removed after a good build
 #                                       (PACKAGE_KEEP_ROOT=1 keeps it; a failed build always keeps it)
+#        linux/package.sh print-version the version the .deb gets (0.1~git<date>.<commits>.<hash>), nothing is built
 #        linux/package.sh check FILE    metadata and privacy checks of a built .deb
 # output: build/package/verdandi_<version>_<arch>.deb (clean-root: build/package/clean-root/). every command but check keeps its whole
 # output in build/package/package-<command>.log and says on failure which stage failed
@@ -48,7 +49,7 @@ on_exit() {
 trap 'on_exit "${1:-}"' EXIT
 
 # every command but check keeps its whole output in <out>/package-<command>.log (a second run overwrites it)
-case "${1:-}" in print-desktop | print-description) PACKAGE_LOGGING=1 ;; esac
+case "${1:-}" in print-desktop | print-description | print-version) PACKAGE_LOGGING=1 ;; esac
 if [ -z "${PACKAGE_LOGGING:-}" ] && [ -n "${1:-}" ] && [ "${1:-}" != check ]; then
     mkdir -p "$OUT"
     export PACKAGE_LOGGING=1 PACKAGE_LOG="$OUT/package-$1.log"
@@ -263,9 +264,12 @@ SRC
 }
 
 # ---- the package ----
-EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$REPO" log -1 --format=%ct)}"
+# the version has to grow with every commit, or an update does not replace the installed one: dpkg compares the digit runs as numbers, so
+# date, then the number of commits up to this one (two commits on one day), then the hash (only the label, never decides). PACKAGE_GIT_REPO is for tests
+GIT_REPO="${PACKAGE_GIT_REPO:-$REPO}"
+EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$GIT_REPO" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH="$EPOCH"
-VERSION="0.1~git$(date -u -d "@$EPOCH" +%Y%m%d).$(git -C "$REPO" rev-parse --short HEAD)"
+VERSION="0.1~git$(date -u -d "@$EPOCH" +%Y%m%d).$(git -C "$GIT_REPO" rev-list --count HEAD).$(git -C "$GIT_REPO" rev-parse --short HEAD)"
 ARCH="$(dpkg --print-architecture)"
 DEB="$OUT/verdandi_${VERSION}_${ARCH}.deb"
 
@@ -530,6 +534,7 @@ case "${1:-}" in
     clean-root) build_clean_root ;;
     print-desktop) desktop_entry ;;
     print-description) deb_description ;;
+    print-version) echo "$VERSION" ;;
     check) check_deb "${2:?usage: package.sh check FILE.deb}" ;;
     *) die "usage: see the top of this file" ;;
 esac

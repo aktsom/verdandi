@@ -23,11 +23,11 @@ typedef struct {
 // the box and the window are as on the Mac (960 x 630 units). margins of 36 units on all four sides: the button row from x 36 to x 924 at y 36, the
 // bezel's left edge at x 36 and its bottom edge 36 above the box's. the screen is 512 x 256 units: exactly 4 device pixels per screen pixel at scale 1.
 // keys and encoders are 15 percent bigger than on the Mac. no OUT fader (MUTE is the last button of the row), no K1..E3 text
-static const pt_t key_pos[3] = {{71.65, 193}, {639.65, 522.15}, {779.65, 522.15}};
-static const pt_t enc_pos[3] = {{194.7, 193}, {729.35, 381.85}, {869.35, 381.85}};
+static const pt_t key_pos[3] = {{71.65, 188.33}, {655.65, 517.48}, {785.65, 517.48}};
+static const pt_t enc_pos[3] = {{194.7, 188.33}, {745.35, 377.18}, {875.35, 377.18}};
 static const double key_r = 35.65;
 static const double enc_r = 43.7; // washer; the knob itself is 35.65
-static const double bezel_x = 36, bezel_y = 310, bezel_w = 540, bezel_h = 284;
+static const double bezel_x = 36, bezel_y = 300.667, bezel_w = 556, bezel_h = 293.333; // the screen 512 x 256 in it: margins of 22 and 18.67 (the Mac's proportions)
 static const double bezel_pad = 14;
 // pages MIX TAPE HOME PARAMS, then MIC GRID ARC KEYS, MAIDEN MANUAL, MUTE: three group gaps of 25.33 fill the row between x 36 and x 924
 static const button_t buttons[] = {
@@ -87,6 +87,21 @@ void skin_geom(int w, int h, skin_geom_t *g) {
     g->s = sx < sy ? sx : sy;
     g->ox = (w - SKIN_W * g->s) / 2;
     g->oy = (h - SKIN_H * g->s) / 2;
+#ifdef NORNS_LINUX_DESKTOP
+    // the screen scales with the window: 512 x 256 units. a whole multiple of 128 x 64 when the scale is within 0.02 of one (crisp), else
+    // an even width in between (the drawing then enlarges and filters, skin_draw_oled)
+    double k = 4 * g->s;
+    long r = lround(k);
+    g->oled_w = (r >= 1 && fabs(k - r) <= 0.02) ? (int)(128 * r) : 2 * (int)lround(256 * g->s);
+    if (g->oled_w < 128) {
+        g->oled_w = 128;
+    }
+    g->oled_h = g->oled_w / 2;
+    g->oled_px = r < 1 ? 1 : (int)r;
+    g->oled_x = (int)lround(g->ox + (bezel_x + bezel_w / 2) * g->s - g->oled_w / 2.0);
+    g->oled_y = (int)lround(g->oy + (bezel_y + bezel_h / 2) * g->s - g->oled_h / 2.0);
+    return;
+#endif
     double fit_w = (bezel_w - 2 * bezel_pad) * g->s / 128;
     double fit_h = (bezel_h - 2 * bezel_pad) * g->s / 64;
     int px = (int)floor(fit_w < fit_h ? fit_w : fit_h);
@@ -140,7 +155,14 @@ double skin_fader_value(const skin_geom_t *g, double y) {
 #endif
 
 int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy) {
+#ifdef NORNS_LINUX_DESKTOP
+    if (x < g->oled_x || y < g->oled_y || x >= g->oled_x + g->oled_w || y >= g->oled_y + g->oled_h) {
+        return 0;
+    }
+    int px = (int)floor((x - g->oled_x) * 128 / g->oled_w), py = (int)floor((y - g->oled_y) * 64 / g->oled_h);
+#else
     int px = (int)floor((x - g->oled_x) / g->oled_px), py = (int)floor((y - g->oled_y) / g->oled_px);
+#endif
     if (px < 0 || px > 127 || py < 0 || py > 63) {
         return 0;
     }
@@ -684,6 +706,38 @@ void skin_draw_oled(cairo_t *cr, const skin_geom_t *g, cairo_surface_t *oled) {
     hex(cr, "000000", 1);
     cairo_paint(cr);
 
+#ifdef NORNS_LINUX_DESKTOP
+    if (g->oled_w == 128 * g->oled_px) {
+        cairo_save(cr);
+        cairo_translate(cr, g->oled_x, g->oled_y);
+        cairo_scale(cr, g->oled_px, g->oled_px);
+        cairo_set_source_surface(cr, oled, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+        cairo_rectangle(cr, 0, 0, 128, 64);
+        cairo_fill(cr);
+        cairo_restore(cr);
+    } else {
+        // between whole multiples: enlarge to a whole multiple with nearest (no blur inside a pixel), then scale down with the best filter
+        int m = (int)ceil(g->oled_w / 128.0);
+        cairo_surface_t *big = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 128 * m, 64 * m);
+        cairo_t *bc = cairo_create(big);
+        cairo_scale(bc, m, m);
+        cairo_set_source_surface(bc, oled, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(bc), CAIRO_FILTER_NEAREST);
+        cairo_paint(bc);
+        cairo_destroy(bc);
+        cairo_save(cr);
+        cairo_translate(cr, g->oled_x, g->oled_y);
+        cairo_scale(cr, (double)g->oled_w / (128 * m), (double)g->oled_h / (64 * m));
+        cairo_set_source_surface(cr, big, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
+        cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_PAD);
+        cairo_rectangle(cr, 0, 0, 128 * m, 64 * m);
+        cairo_fill(cr);
+        cairo_restore(cr);
+        cairo_surface_destroy(big);
+    }
+#else
     cairo_save(cr);
     cairo_translate(cr, g->oled_x, g->oled_y);
     cairo_scale(cr, g->oled_px, g->oled_px);
@@ -692,5 +746,6 @@ void skin_draw_oled(cairo_t *cr, const skin_geom_t *g, cairo_surface_t *oled) {
     cairo_rectangle(cr, 0, 0, 128, 64);
     cairo_fill(cr);
     cairo_restore(cr);
+#endif
     cairo_restore(cr);
 }

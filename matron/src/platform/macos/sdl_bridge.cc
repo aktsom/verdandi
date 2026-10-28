@@ -258,7 +258,11 @@ static void redraw(bool full) {
         draw_oled(cr);
         // the bezel interior, generously
         int pad = (int)(20 * geom.s);
+#ifdef NORNS_LINUX_DESKTOP
+        r = {geom.oled_x - pad, geom.oled_y - pad, geom.oled_w + 2 * pad, geom.oled_h + 2 * pad};
+#else
         r = {geom.oled_x - pad, geom.oled_y - pad, 128 * geom.oled_px + 2 * pad, 64 * geom.oled_px + 2 * pad};
+#endif
     }
     cairo_destroy(cr);
     cairo_surface_flush(canvas);
@@ -321,7 +325,12 @@ static void bridge_do(bridge_req_t *req) {
         if (req->window == NULL) {
             fprintf(stderr, "sdl_bridge: SDL_CreateWindow failed: %s\n", SDL_GetError());
         } else {
+#ifdef NORNS_LINUX_DESKTOP
+            // half the design size: the screen is then 256 x 128, two device pixels per screen pixel
+            SDL_SetWindowMinimumSize(req->window, (SKIN_W + 2 * SKIN_MARGIN) / 2, (SKIN_H + 2 * SKIN_MARGIN) / 2);
+#else
             SDL_SetWindowMinimumSize(req->window, (SKIN_W + 2 * SKIN_MARGIN) / 3, (SKIN_H + 2 * SKIN_MARGIN) / 3);
+#endif
             fit_main_window(req->window);
             set_icon(req->window);
             the_window = req->window;
@@ -2102,7 +2111,11 @@ static void oled_mouse(double px, double py, const char *kind, int value) {
     int ox, oy;
     if (!skin_oled_pixel(&geom, px, py, &ox, &oy)) {
         // dragged off the oled: the nearest pixel on it
+#ifdef NORNS_LINUX_DESKTOP
+        double fx = (px - geom.oled_x) * 128 / geom.oled_w, fy = (py - geom.oled_y) * 64 / geom.oled_h;
+#else
         double fx = (px - geom.oled_x) / geom.oled_px, fy = (py - geom.oled_y) / geom.oled_px;
+#endif
         ox = fx < 0 ? 0 : fx > 127 ? 127
                                    : (int)fx;
         oy = fy < 0 ? 0 : fy > 63 ? 63

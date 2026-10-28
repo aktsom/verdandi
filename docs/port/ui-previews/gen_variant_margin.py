@@ -12,8 +12,8 @@ device_skin.c (built with NORNS_LINUX_DESKTOP) with the bezel changed; the produ
 import sys, os
 mode, out = sys.argv[1], sys.argv[2]
 here = os.path.dirname(os.path.abspath(__file__))
-skin = os.path.join(here, "../../../matron/src/platform/macos")
-c = open(os.path.join(skin, "device_skin.c")).read()
+skin = os.path.join(here, "base")
+c = open(os.path.join(skin, "device_skin_step2.c")).read()
 MX, MY = 16.5 / 384, 14.0 / 192            # the Mac's margins as a fraction of the screen's width and height
 bx, bw, bh, unit = 36.0, 540.0, 284.0, 4.0
 by_bottom = 594.0

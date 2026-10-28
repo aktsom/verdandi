@@ -79,6 +79,11 @@ typedef struct {
     double s;                    // device pixels per layout unit
     double ox, oy;               // box origin in device pixels
     int oled_x, oled_y, oled_px; // oled position and pixel size (integer: crisp pixels)
+#ifdef NORNS_LINUX_DESKTOP
+    // the Linux screen scales with the window (ui-plan.md 1.9, option A): its rectangle in device pixels, always 2:1, on whole pixels.
+    // oled_px is then only the nearest whole multiple (at least 1)
+    int oled_w, oled_h;
+#endif
 } skin_geom_t;
 
 // fit the box (plus margin) into a w x h canvas
