@@ -1,7 +1,19 @@
 # SYSTEM > UI: screen brightness and screen colour (UI step 3: plan only, nothing is built)
 
-Linux desktop build only. Written from the code of this repository; the pictures are a stand-in (the real window with the screen tinted by the mapping of section 2, at the old linear greys: `ui-previews/ui-colours.png`, `ui-previews/ui-brightness.png`, **not redrawn with the grey correction**; the ramp of the 16 levels with and without it is `ui-previews/ui-grey-ramp.png`; made by `ui-previews/make_ui_settings_previews.py`, the mapping itself is `ui-previews/ui_tint.py`).
-**This plan replaces the "SCREEN" page of `ui-plan.md` section 2** (brightness and greys `device / bright / brighter`): the page is now called UI, with three settings, **BRIGHTNESS, COLOUR and GREYS** (and the HEX row of the colour). **Addition (evidence from the owner's laptop): the grey correction is back and on by default** (gamma 0.7, setting GREYS): on the desktop the dim levels of some scripts (the waveform and labels of Cheat Codes 2) are almost invisible, while the same page is readable on the owner's norns. The earlier "the grey table stays as it is" is withdrawn; what stays is that the raw 16 levels (grey 17 n) come from the screen backend unchanged and the correction is a display mapping in the bridge, like the tint. The rest of section 2 of `ui-plan.md` (the chip's brightness/contrast/gamma do nothing on the desktop; where the mapping lives) still holds.
+Linux desktop build only. Written from the code of this repository. **Status: BUILT (UI step 3), with the owner's decisions below; the pictures are captures of the real window with the real code** (`ui-previews/ui-greys.png`, `ui-colours.png`, `ui-brightness.png`, made by `ui-previews/make_ui_pictures.sh`; the mapping's reference implementation is `ui-previews/ui_tint.py`; the C code is `matron/src/platform/macos/ui_look.c`).
+**This plan replaces the "SCREEN" page of `ui-plan.md` section 2** (brightness and greys `device / bright / brighter`): the page is now called UI, with three settings, **BRIGHTNESS, COLOUR and GREYS** (and the HEX row of the colour). **Addition (evidence from the owner's laptop): the grey correction is back and on by default** (setting GREYS; **default 0.5 by the owner's decision**, 0.7 was the first proposal): on the desktop the dim levels of some scripts (the waveform and labels of Cheat Codes 2) are almost invisible, while the same page is readable on the owner's norns. The earlier "the grey table stays as it is" is withdrawn; what stays is that the raw 16 levels (grey 17 n) come from the screen backend unchanged and the correction is a display mapping in the bridge, like the tint. The rest of section 2 of `ui-plan.md` (the chip's brightness/contrast/gamma do nothing on the desktop; where the mapping lives) still holds.
+
+## Decisions of the owner and what was built
+
+1. Yellow `FFD000`, pink `FF80B8`. 2. A very dark custom colour is raised to full value (normalised; `000000` is rejected). 3. **Brightness** 0.1 to 1 in steps of 0.1, default 1, with a gentler curve at the low end: **the factor applied is b^0.6** (0.1 -> 0.251, 0.2 -> 0.381, 0.3 -> 0.486, 0.4 -> 0.577, 0.5 -> 0.660, 0.7 -> 0.807, 1 -> 1); the displayed values stay the plain 0.1 steps. 4. A script's own `screen.export_png` stays raw. 5. `RESET` leaves `ui.conf`. 6. **GREYS** default **0.5**, range 0.4 to 1.0 in steps of 0.1, 1.0 = the old linear mapping. **Where level 3 (grey 51) comes out** (white, brightness 1): **1.0: 51 (20 percent); 0.7: 83 (33 percent); 0.5: 114 (45 percent)**; level 1 (the Cheat Codes 2 overview waveform): 17, 38, 66; level 4: 68, 101, 132.
+
+Differences between this plan and what was built:
+- **The text entry's warning** shows "3 or 6 digits (0-9, a-f)" for every non-empty text that is not yet a valid code (so after one or two digits too), not only for impossible ones: it goes away at the third and the sixth digit. Empty text and a lone `#` give no warning.
+- **The grey of a screen pixel** is read from the green channel and snapped to the nearest level (17 n) when within 2: the desktop's screen backend draws in RGB565 (`hardware/screen/sdl.cc`), so the red and blue of a grey are 5 bits and a flat level is a little off (level 4 is (66, 69, 66) in the old window); anti-aliased greys between the levels pass as they are. At white, brightness 1, greys 1.0 nothing is mapped and the old pixels are used as they were.
+- **Until the first setting arrives** (the first frame of the boot) and when `_norns.ui_look` is missing, the screen is shown raw; the page and the file apply the defaults (greys 0.5) at start.
+- The page's four rows are BRIGHTNESS, COLOUR, GREYS, HEX (HEX last: it belongs to COLOUR); the file keys are `brightness`, `colour`, `custom`, `greys`.
+- `ui-previews/ui-grey-ramp.png` and `make_grey_ramp.py` were replaced by real-window captures (`ui-greys.png`).
+
 
 ## 1. How it works upstream, and what the desktop build has to do
 
@@ -26,15 +38,15 @@ Linux desktop build only. Written from the code of this repository; the pictures
 
 ### The page (what you see)
 ```
-BRIGHTNESS            0.7      row 1 (y 10)
+BRIGHTNESS            1.0      row 1 (y 10)
 COLOUR              YELLOW     row 2 (y 20): WHITE, YELLOW, PINK, CUSTOM
-GREYS                 0.7      row 3 (y 30): 1.0 = linear (as before), 0.7 default, 0.5 brighter
+GREYS                 0.5      row 3 (y 30): 1.0 = linear (as before), 0.5 default
 HEX                 #FF8800    row 4 (y 40): the custom colour; K3 opens the text entry
 [ 16 grey bars, in the chosen colour ]   y 45..50, as in display.lua: shows the effect at once
 bad hex: 3 or 6 digits         y 62: a message (level 15 for an error, else the hint "E2 row  E3 change; GREYS lower = brighter")
 ```
 - **Brightness** is a plain number like the other values (AUDIO's `INPUT/RATE`, params): E3 right/left = +0.1 / -0.1, clamped to **0.1 .. 1.0**, shown as `0.7` (one decimal), default 1.0; no drawn slider. E3 is a detent encoder on the device, one step per click, on the desktop one per wheel step; shift (5 steps) is harmless since it clamps.
-- **Greys** is a plain number, like BRIGHTNESS: E3 steps of 0.1, clamped to **0.4 .. 1.0**, shown with one decimal; **1.0 is linear (the desktop as it was), 0.7 is the default, 0.5 and 0.4 brighten the mid greys more**. (The name is GREYS, not CONTRAST: upstream's CONTRAST is the chip's segment current, a different thing.) The 16 bars on the page show the effect while it is changed. It is the gamma of the mapping, so a *lower* number is a *brighter* mid grey; the hint line says so.
+- **Greys** is a plain number, like BRIGHTNESS: E3 steps of 0.1, clamped to **0.4 .. 1.0**, shown with one decimal; **1.0 is linear (the desktop as it was), 0.5 is the default, 0.4 brightens the mid greys most**. (The name is GREYS, not CONTRAST: upstream's CONTRAST is the chip's segment current, a different thing.) The 16 bars on the page show the effect while it is changed. It is the gamma of the mapping, so a *lower* number is a *brighter* mid grey; the hint line says so.
 - **Colour** E3 cycles WHITE, YELLOW, PINK, CUSTOM (clamped at the ends like AUDIO's lists). CUSTOM is only selectable once a valid hex has been entered (before that, it shows `#------` and E3 stops at PINK).
 - **Hex** row (the last, the sub-row of COLOUR): K3 on it opens the text entry (below); a valid code becomes the custom colour and **switches COLOUR to CUSTOM at once**; a bad one keeps everything as it was and shows the message on this page (no change of colour, the page stays where it is).
 - K2 = back to SYSTEM. E2 = row.
@@ -51,20 +63,20 @@ The UI page calls `textentry.enter(m.hex_done, current_hex, "HEX COLOUR (3 or 6 
 brightness=0.7
 colour=yellow
 custom=FF8800
-greys=0.7
+greys=0.5
 ```
-`colour` is `white`, `yellow`, `pink` or `custom`; `custom` is the last custom hex (6 digits, upper case, written without `#`; read with or without it, 3 or 6 digits); `greys` is the gamma, 0.4 to 1.0, default 0.7; `color` is accepted as a spelling of `colour`. Hand editing is supported: a bad value is handled per key (below).
+`colour` is `white`, `yellow`, `pink` or `custom`; `custom` is the last custom hex (6 digits, upper case, written without `#`; read with or without it, 3 or 6 digits); `greys` is the gamma, 0.4 to 1.0, default 0.5; `color` is accepted as a spelling of `colour`. Hand editing is supported: a bad value is handled per key (below).
 
 ## 2. The exact mapping
 
-For a grey g (0..255 of the raw screen image; level n has g = 17 n), a grey correction gamma G (default 0.7), a tint T = (Tr, Tg, Tb) and a brightness b, **in this order**:
+For a grey g (0..255 of the raw screen image; level n has g = 17 n), a grey correction gamma G (default 0.5), a tint T = (Tr, Tg, Tb) and a brightness b, **in this order**:
 1. **Grey correction (GREYS):** g' = 255 x (g / 255)^G. G = 1.0 is the identity (the desktop as it was). It is evaluated for every grey 0..255, so the anti-aliased edges of text follow the same curve; **0 stays 0 and 255 stays 255** at every G.
 2. **Normalise the tint:** divide by its largest channel and scale to 255 (hue and saturation kept, the brightest channel becomes 255). `000000` is not a colour (rejected). White, yellow and pink below are already normalised.
-3. **out_c = round_half_up(g' x T_c / 255 x b)** for each channel c: **one rounding, at the end** (so the table below is exact, and a test can compare it with the reference).
+3. **out_c = round_half_up(g' x T_c / 255 x f(b))**, with the brightness curve **f(b) = b^0.6** (decision 3) for each channel c: **one rounding, at the end** (so the table below is exact, and a test can compare it with the reference).
 - **Black stays black** at every setting: g = 0 gives 0 for every channel whatever G, T and b, so the contrast (screen against its frame) is the whole range of the colour.
 - **Presets:** white `FFFFFF` (as today), **yellow `FFD000`** (255, 208, 0: the amber-yellow of the yellow OLED panels; a 590 nm panel is not far from it), **pink `FF80B8`** (255, 128, 184). These are proposals; the pictures show them (at the old linear greys).
 - **Custom colours are normalised, so a very dark one is not a dark screen.** The colour sets the hue; brightness is the only thing that makes the screen dimmer. A very dark code (`202020`, `010000`) becomes the full-value version of the same hue (white, red) instead of an unreadable screen, on the page that is used to set it. A very bright one (`ffffff`, `fff`) is white. A saturated dark hue such as pure blue `0000FF` stays as dim to the eye as blue is (the tint keeps the largest channel at 255, it does not equalise luminance): it is legible, but it is the owner's choice. The other design (use the code literally, so `202020` is a very dark grey screen) is simpler to explain but lets one lock the screen into a colour one cannot read; **my recommendation is the normalised one**; tell me if you prefer literal.
-- **Brightness is linear in the pixel values, after the grey correction**: 0.1 is one tenth of the value, about 1 percent of the light (the display's gamma). With the default greys 0.7 the dim menu text (level 4 = 101) is 40 at brightness 0.4 and 10 at 0.1 (without the correction it was 27 and 7): readable at 0.4, still very dark at 0.1, where the page is readable only through its level-15 rows. An alternative is a curve for brightness (out = g' x b^0.6, so 0.4 acts as 0.58 and 0.1 as 0.25).
+- **Brightness has a gentler curve at the low end** (decision 3): the factor is f(b) = b^0.6 after the grey correction, so 0.1 to 0.4 give 0.25, 0.38, 0.49, 0.58 of the value instead of 0.1 to 0.4. With the default greys 0.5 the dim menu text (level 4 = 132) is 76 at brightness 0.4 and 33 at 0.1 (linear brightness would have given 53 and 13); full white at 0.1 is 64. 0.1 is therefore dim but not black, and the page that sets it stays readable.
 
 ### 2.1 The grey correction: the evidence and the numbers
 
@@ -79,7 +91,7 @@ For a grey g (0..255 of the raw screen image; level n has g = 17 n), a grey corr
 
 **The mapped levels against the device** (grey code values and percent of full white; `ui_tint.py greys` makes the table; "device-like" is *my estimate*: the code value whose light on a monitor with gamma 2.2 equals the panel's light at gs[k] = 8 (k-1), i.e. 255 x ((k-1)/14)^(1/2.2); the values for gamma 0.7 and 0.5 are the exact table of `docs/port/ui-previews/grey-levels.txt`, which is still there, up to a one-point rounding of the percent column):
 
-| level | today (gamma 1.0) | gamma 0.7 (default) | gamma 0.5 | device-like (estimate) |
+| level | today (gamma 1.0) | gamma 0.7 | gamma 0.5 (default) | device-like (estimate) |
 |---|---|---|---|---|
 | 0 | 0 (0%) | 0 (0%) | 0 (0%) | 0 (0%) |
 | 1 | 17 (7%) | 38 (15%) | 66 (26%) | 0 (0%) |
@@ -98,43 +110,43 @@ For a grey g (0..255 of the raw screen image; level n has g = 17 n), a grey corr
 | 14 | 238 (93%) | 243 (95%) | 246 (97%) | 247 (97%) |
 | 15 | 255 (100%) | 255 (100%) | 255 (100%) | 255 (100%) |
 
-What this says: **gamma 0.5 is within 5 code values of the device-like curve from level 2 up; gamma 0.7 (the default asked for) is milder** (level 4: 101 against 127, level 2: 62 against 77) but already brings level 4 from 27 to 40 percent and level 1 from 7 to 15 percent. Differences: the device shows level 1 as black (the same as 0) where every mapping here keeps level 1 visible. **I could not verify any of this on a real panel**: it rests on (a) the code's grey-scale table and its comment, (b) the assumption that the panel's light is linear in the GS value, (c) a 2.2 monitor, (d) the default gamma 1.0 (the owner's `system.display` could differ; contrast and brightness do not change the relative levels). **It does not explain by itself why the overview waveform at level 1 is clearly readable on the owner's norns**: by the table level 1 is dark on the panel too; either the owner looked at the editing frame (level 4), or the panel shows level 1 faintly (pre-charge), or the settings differ. Worth a look at the real page before the default is final.
+What this says: **gamma 0.5 (the owner's default) is within 5 code values of the device-like curve from level 2 up; gamma 0.7 would have been milder** (level 4: 101 against 127, level 2: 62 against 77) but already brings level 4 from 27 to 40 percent and level 1 from 7 to 15 percent. Differences: the device shows level 1 as black (the same as 0) where every mapping here keeps level 1 visible. **I could not verify any of this on a real panel**: it rests on (a) the code's grey-scale table and its comment, (b) the assumption that the panel's light is linear in the GS value, (c) a 2.2 monitor, (d) the default gamma 1.0 (the owner's `system.display` could differ; contrast and brightness do not change the relative levels). **It does not explain by itself why the overview waveform at level 1 is clearly readable on the owner's norns**: by the table level 1 is dark on the panel too; either the owner looked at the editing frame (level 4), or the panel shows level 1 faintly (pre-charge), or the settings differ. The owner chose 0.5 as the default; the Cheat Codes 2 overview waveform (level 1) comes out at 66 and its labels and markers (level 3) at 114 (0.7 would give 38 and 83, linear 17 and 51).
 
 **What GREYS does to every script.** It is a display mapping of the whole screen, for every script and every menu: the mid greys get brighter everywhere (levels 1 to 14), only black (0) and full white (level 15) are unchanged. Scripts that draw faint hints in level 1 to 3 will show them more strongly, a screen full of level 5 to 10 looks lighter and flatter, and **a desktop screenshot or GIF (which follow the window) will not match what a device shows pixel for pixel**; at 1.0 they are as before. `screen.export_png` (a script's own PNG) stays the raw levels, so it differs from the window by this mapping.
 
-**The 16 mapped colours** (hex RGB; gamma 0.7, the default; the custom example is `20C0A0`, normalised to `2BFFD5` at level 15; generated by `ui_tint.py table`):
+**The 16 mapped colours** (hex RGB; gamma 0.5, the default, and the brightness curve b^0.6; the custom example is `20C0A0`, normalised to `2BFFD5` at level 15; generated by `ui_tint.py table`):
 
 | level | grey | white @ 1 | white @ 0.4 | yellow @ 1 | yellow @ 0.4 | pink @ 1 | pink @ 0.4 | custom 20C0A0 @ 1 | custom 20C0A0 @ 0.4 |
 |---|---|---|---|---|---|---|---|---|---|
 | 0 | 0 | 000000 | 000000 | 000000 | 000000 | 000000 | 000000 | 000000 | 000000 |
-| 1 | 17 | 262626 | 0F0F0F | 261F00 | 0F0C00 | 26131C | 0F080B | 062620 | 030F0D |
-| 2 | 34 | 3E3E3E | 191919 | 3E3300 | 191400 | 3E1F2D | 190C12 | 0A3E34 | 041915 |
-| 3 | 51 | 535353 | 212121 | 534300 | 211B00 | 53293C | 211118 | 0E5345 | 06211C |
-| 4 | 68 | 656565 | 282828 | 655200 | 282100 | 653349 | 28141D | 116554 | 072822 |
-| 5 | 85 | 767676 | 2F2F2F | 766000 | 2F2700 | 763B55 | 2F1822 | 147663 | 082F27 |
-| 6 | 102 | 868686 | 363636 | 866E00 | 362C00 | 864361 | 361B27 | 178670 | 09362D |
-| 7 | 119 | 969696 | 3C3C3C | 967A00 | 3C3100 | 964B6C | 3C1E2B | 19967D | 0A3C32 |
-| 8 | 136 | A4A4A4 | 424242 | A48600 | 423600 | A45276 | 42212F | 1CA489 | 0B4237 |
-| 9 | 153 | B2B2B2 | 474747 | B29100 | 473A00 | B25A81 | 472433 | 1EB295 | 0C473C |
-| 10 | 170 | C0C0C0 | 4D4D4D | C09D00 | 4D3F00 | C0608B | 4D2737 | 20C0A0 | 0D4D40 |
-| 11 | 187 | CDCDCD | 525252 | CDA700 | 524300 | CD6794 | 52293B | 23CDAB | 0E5245 |
-| 12 | 204 | DADADA | 575757 | DAB200 | 574700 | DA6D9D | 572C3F | 25DAB6 | 0F5749 |
-| 13 | 221 | E7E7E7 | 5C5C5C | E7BC00 | 5C4B00 | E774A6 | 5C2E43 | 27E7C1 | 105C4D |
-| 14 | 238 | F3F3F3 | 616161 | F3C600 | 614F00 | F37AAF | 613146 | 29F3CB | 106151 |
-| 15 | 255 | FFFFFF | 666666 | FFD000 | 665300 | FF80B8 | 66334A | 2BFFD5 | 116655 |
+| 1 | 17 | 424242 | 262626 | 423600 | 261F00 | 422130 | 26131B | 0B4237 | 062620 |
+| 2 | 34 | 5D5D5D | 363636 | 5D4C00 | 362C00 | 5D2F43 | 361B27 | 105D4E | 09362D |
+| 3 | 51 | 727272 | 424242 | 725D00 | 423600 | 723952 | 42212F | 13725F | 0B4237 |
+| 4 | 68 | 848484 | 4C4C4C | 846B00 | 4C3E00 | 84425F | 4C2637 | 16846E | 0D4C3F |
+| 5 | 85 | 939393 | 555555 | 937800 | 554500 | 934A6A | 552B3D | 19937B | 0E5547 |
+| 6 | 102 | A1A1A1 | 5D5D5D | A18400 | 5D4C00 | A15174 | 5D2F43 | 1BA187 | 105D4E |
+| 7 | 119 | AEAEAE | 656565 | AE8E00 | 655200 | AE577E | 653249 | 1DAE92 | 116554 |
+| 8 | 136 | BABABA | 6B6B6B | BA9800 | 6B5800 | BA5D86 | 6B364E | 1FBA9C | 126B5A |
+| 9 | 153 | C6C6C6 | 727272 | C6A100 | 725D00 | C6638F | 723952 | 21C6A5 | 13725F |
+| 10 | 170 | D0D0D0 | 787878 | D0AA00 | 786200 | D06996 | 783C57 | 23D0AE | 147864 |
+| 11 | 187 | DADADA | 7E7E7E | DAB200 | 7E6700 | DA6E9E | 7E3F5B | 25DAB6 | 157E69 |
+| 12 | 204 | E4E4E4 | 848484 | E4BA00 | 846B00 | E472A5 | 84425F | 26E4BF | 16846E |
+| 13 | 221 | EDEDED | 898989 | EDC200 | 897000 | ED77AB | 894563 | 28EDC6 | 178972 |
+| 14 | 238 | F6F6F6 | 8E8E8E | F6C900 | 8E7400 | F67CB2 | 8E4767 | 2AF6CE | 188E77 |
+| 15 | 255 | FFFFFF | 939393 | FFD000 | 937800 | FF80B8 | 934A6A | 2BFFD5 | 19937B |
 
-**Edge cases** (`ui_tint.py edge`; level 15 at brightness 1, and level 4 at 0.4, gamma 0.7):
+**Edge cases** (`ui_tint.py edge`; level 15 at brightness 1, and level 4 at 0.4, gamma 0.5):
 ```
 000000   -> rejected: black would hide the screen
-010000   -> tint FF0000; level 15 at 1: FF0000, level 4 at 0.4 (gamma 0.7): 280000
-202020   -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 282828
-808080   -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 282828
-ffffff   -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 282828
-ff0000   -> tint FF0000; level 15 at 1: FF0000, level 4 at 0.4 (gamma 0.7): 280000
-0000ff   -> tint 0000FF; level 15 at 1: 0000FF, level 4 at 0.4 (gamma 0.7): 000028
-00000f   -> tint 0000FF; level 15 at 1: 0000FF, level 4 at 0.4 (gamma 0.7): 000028
-fff      -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 282828
-#FFD000  -> tint FFD000; level 15 at 1: FFD000, level 4 at 0.4 (gamma 0.7): 282100
+010000   -> tint FF0000; level 15 at 1: FF0000, level 4 at 0.4 (gamma 0.5): 4C0000
+202020   -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.5): 4C4C4C
+808080   -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.5): 4C4C4C
+ffffff   -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.5): 4C4C4C
+ff0000   -> tint FF0000; level 15 at 1: FF0000, level 4 at 0.4 (gamma 0.5): 4C0000
+0000ff   -> tint 0000FF; level 15 at 1: 0000FF, level 4 at 0.4 (gamma 0.5): 00004C
+00000f   -> tint 0000FF; level 15 at 1: 0000FF, level 4 at 0.4 (gamma 0.5): 00004C
+fff      -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.5): 4C4C4C
+#FFD000  -> tint FFD000; level 15 at 1: FFD000, level 4 at 0.4 (gamma 0.5): 4C3E00
 12       -> rejected: a hex colour has 3 or 6 digits (0-9, a-f)
 ```
 **Hex parsing** (the same in Lua and in the Python reference): optional leading `#`, then exactly 3 or 6 hex digits in either case (`fa0` = `FFAA00`), surrounding blanks ignored; anything else is rejected with "3 or 6 digits (0-9, a-f)"; `000`/`000000` is rejected with "black would hide the screen".
@@ -143,8 +155,8 @@ fff      -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 2828
 
 - **Instantly while the page is open:** every E3 step and every accepted hex calls `_norns.ui_look` and writes `ui.conf`; the window's screen (and the bars on the page) change within a frame, and a script running behind the menu changes too (the setting is the display's, not the page's). Closing the menu changes nothing.
 - **At start:** `ui_settings.load_and_apply()` reads `ui.conf` before the first script is loaded. Until then the window shows the first frame at white, brightness 1 and linear greys (a pink user may see one white frame of the boot, a few hundred milliseconds; avoiding that would need the launcher to read the file; not planned).
-- **Missing file:** defaults (white, brightness 1, greys 0.7), no file written until a setting changes, log line `ui.conf: not found, using defaults`.
-- **Damaged:** handled per key, each bad key falls back to its own default and logs one line (`ui.conf: brightness='abc' is not 0.1..1, using 1`, `ui.conf: colour='purple' unknown, using white`, `ui.conf: custom='12' is not a hex colour, ignored`, `ui.conf: greys='x' is not 0.4..1.0, using 0.7`); **greys** falls back to its own default 0.7 (a number outside 0.4..1.0 is clamped, anything else uses 0.7), brightness to 1, the colour to white; a brightness outside 0.1..1 is clamped if it is a number (`5` -> 1, `0` -> 0.1) and falls back to 1 if it is not; if `colour=custom` has no valid `custom`, the colour is white. A file that cannot be read at all is the same as missing. The page then shows what was applied, and the next change writes a clean file.
+- **Missing file:** defaults (white, brightness 1, greys 0.5), no file written until a setting changes, log line `ui.conf: not found, using defaults`.
+- **Damaged:** handled per key, each bad key falls back to its own default and logs one line (`ui.conf: brightness='abc' is not 0.1..1, using 1`, `ui.conf: colour='purple' unknown, using white`, `ui.conf: custom='12' is not a hex colour, ignored`, `ui.conf: greys='x' is not 0.4..1.0, using 0.5`); **greys** falls back to its own default 0.5 (a number outside 0.4..1.0 is clamped, anything else uses 0.5), brightness to 1, the colour to white; a brightness outside 0.1..1 is clamped if it is a number (`5` -> 1, `0` -> 0.1) and falls back to 1 if it is not; if `colour=custom` has no valid `custom`, the colour is white. A file that cannot be read at all is the same as missing. The page then shows what was applied, and the next change writes a clean file.
 
 ## 4. Guarding
 
@@ -154,22 +166,22 @@ fff      -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 2828
 
 ## 5. Tests first (each fails before the code exists)
 
-1. **Mapping table** (C, now with the grey correction first, `linux/tests/ui_look_test.c`, the mapping function that the bridge uses, separated into a small file like `window_keys.c` so it can be tested): the 16 levels for white, yellow, pink and the custom example, at brightness 1 and 0.4 (gamma 0.7), equal to the table of section 2 (generated from `ui_tint.py`, which is the second implementation: the test compares the two); every grey 0..255 monotonic per channel; level 15 at brightness 1 is the tint at every gamma; **the 16-level gamma table equals `grey-levels.txt` for gamma 1.0, 0.7 and 0.5 (the device-like column of 2.1 is only documentation, not tested)**; the identity at white, brightness 1, greys 1.0 (and only then `oled` is used directly).
+1. **Mapping table** (C, now with the grey correction first, `linux/tests/ui_look_test.c`, the mapping function that the bridge uses, separated into a small file like `window_keys.c` so it can be tested): the 16 levels for white, yellow, pink and the custom example, at brightness 1 and 0.4 (gamma 0.5), equal to the table of section 2 (and for every gamma 0.4..1.0, brightness 0.1..1 and five tints in a dump of 89600 values) (generated from `ui_tint.py`, which is the second implementation: the test compares the two); every grey 0..255 monotonic per channel; level 15 at brightness 1 is the tint at every gamma; **the 16-level gamma table equals `grey-levels.txt` for gamma 1.0, 0.7 and 0.5 (the device-like column of 2.1 is only documentation, not tested)**; the identity at white, brightness 1, greys 1.0 (and only then `oled` is used directly).
 2. **Black stays black and white stays white:** g = 0 gives (0,0,0) and g = 255 gives the tint times the brightness for every tint, every gamma 0.4..1.0 and brightness 0.1..1 (also in the window render: the pixels of the screen frame and of black screen pixels, and in a screenshot and a GIF frame).
 3. **Hex parsing** (Lua, `lua/test/core/ui_settings_test.lua`, runs with the repo's Lua test runner and with `lua5.3`): `fff`, `FFF`, `#fa0`, `ff8800`, `#FF8800`, blanks around; rejected: empty, `#`, 1, 2, 4, 5, 7 digits, `ggg`, `#12345g`, `0x123456`, `000`, `000000`; the message text; and `parse_hex` of Lua equals `ui_tint.py hex` for a list of 50 random codes (same normalised colour).
 4. **The text entry for the hex code** (Lua, with the real `textentry` and `keyboard` modules and the stubs of `tape_test.lua`): from the UI page K3 on HEX opens `textentry` with the current hex as its default and the heading; typing `#`, digits and letters through `keyboard.process` (not the stub) builds the text; Enter returns it, Esc returns nil; the check shows the warning while the code is bad; a valid code applies and selects CUSTOM; a bad one leaves colour and file as they were and the page shows the message; 1, 2, 3 and Enter typed in the entry do not press K1..K3.
-5. **Setting saved and loaded:** change brightness, colour and **greys** through the page's `enc`/`key`, the file has exactly the four keys with the expected text (`greys=0.7` by default, `1.0` after the steps up, no float noise like `0.7000000000000001`); a second start (new Lua state) loads them and calls `_norns.ui_look` with the same five numbers (a stub records the calls); the file is written through a temporary file (no `ui.conf.tmp` left behind); `ui.conf` is written under the norns home that the launcher uses (the headless norns test: set, restart norns, read the window).
+5. **Setting saved and loaded:** change brightness, colour and **greys** through the page's `enc`/`key`, the file has exactly the four keys with the expected text (`greys=0.5` by default, `1.0` after the steps up, no float noise like `0.7000000000000001`); a second start (new Lua state) loads them and calls `_norns.ui_look` with the same five numbers (a stub records the calls); the file is written through a temporary file (no `ui.conf.tmp` left behind); `ui.conf` is written under the norns home that the launcher uses (the headless norns test: set, restart norns, read the window).
 6. **A damaged file:** each case of section 3 (empty file, binary junk, `brightness=abc`, `brightness=5`, `brightness=0`, `colour=purple`, `colour=custom` without `custom`, `custom=12`, `greys=abc`, `greys=0`, `greys=3`, a missing `greys`, an unknown key, a line without `=`, a missing file): the result, the log lines (the stub `print` collects them) and that nothing throws; unknown keys survive a rewrite.
-7. **Brightness and greys steps:** greys from the default 0.7: three steps up reach 1.0 and stop, three down reach 0.4 and stop, shown `0.4`..`1.0`; brightness from 1.0 the 9th step down is 0.1 and the 10th does not go lower; up from 0.1 stops at 1; the shown text is `0.1`..`1.0` (no `0.30000000000000004`).
+7. **Brightness and greys steps:** greys from the default 0.5: five steps up reach 1.0 and stop, one down reaches 0.4 and stops, shown `0.4`..`1.0`; brightness from 1.0 the 9th step down is 0.1 and the 10th does not go lower; up from 0.1 stops at 1; the shown text is `0.1`..`1.0` (no `0.30000000000000004`).
 8. **Screenshot and GIF match the window** (C, extending `device_skin_linux_test.c` and the bridge's capture functions, which will have to be callable by the test, or a headless norns test): render the window's screen rectangle and a screenshot of the same frame for yellow/0.4, equal pixel for pixel; a GIF of the same frame decodes to the same colour at the 16 levels (the new palette); `gif_begin` (old) still writes the grey palette; white/1 screenshots equal today's bytes.
 9. **The menu page is present on the desktop only:** `system.lua`'s lists are `DEVICES, AUDIO, UI, MODS, RESET, RESTART` with `NORNS_PLATFORM` set and unchanged without it; `m["UI"]` loads on the desktop; without `_norns.ui_look` `load_and_apply` does nothing and writes nothing; the Mac's and the device's tests (`macos/tests/device_skin_test.c`, the Lua tests) are unchanged.
-10. **Headless norns test** (`norns_probe`): start with a `ui.conf` of yellow/0.4, read the window screenshot: the screen's brightest pixel is `665300` (level 15 is unchanged by the grey correction) and a level-4 pixel is `282100` (gamma 0.7: 101 x 0.4 on the yellow); open SYSTEM > UI, change values with `_norns.enc`, the window changes, `ui.conf` changes; the whole of `run_all.sh` stays green.
+10. **Headless norns test** (`norns_probe`): start with a `ui.conf` of yellow/0.4, read the window screenshot: the screen's brightest pixel is `937800` (level 15 is unchanged by the grey correction; 255 x 0.577 on the yellow) and a level-4 pixel is `4C3E00` (gamma 0.5: 132 x 0.577), a level-1 pixel `261F00`; open SYSTEM > UI, change values with `_norns.enc`, the window changes, `ui.conf` changes; the whole of `run_all.sh` stays green.
 
 ### Risks
-- **Dim text at low brightness:** with the default greys the menus' dim rows (level 4) are 40 at brightness 0.4 and 10 at 0.1 (27 and 7 at linear greys); levels 1-2 are nearly invisible below 0.4. The page at 0.1 is readable only in its selected rows (level 15 = 26) and the grey bar. A floor or a curve would fix it; decision for the owner.
+- **Dim text at low brightness:** with the default greys and the curve the menus' dim rows (level 4) are 76 at brightness 0.4 and 33 at 0.1; level 1 is 38 and 17. Dim but readable; to be judged on the laptop.
 - **The grey correction changes how every script looks** (mid greys brighter, flatter): faint hints in levels 1 to 3 show more, screens that use levels 5 to 10 for shading look lighter; and **desktop screenshots and GIFs no longer match a device exactly** (at GREYS 1.0 they do again). A script author who tunes levels on the desktop sees a different picture than on the device unless GREYS is at the device-like value.
-- **Which gamma matches the device is an estimate** (2.1): 0.5 is nearer to the computed panel curve than 0.7; the level-1 puzzle (panel dark by the table, readable for the owner) is open; the default may need to move after a look at the real page on both.
-- **The earlier pictures** (`ui-colours.png`, `ui-brightness.png`) are at linear greys and show dimmer text than the default will; only the ramp picture shows the correction. Re-make them (with `ui_tint.py`'s gamma) when the plan is accepted.
+- **Which gamma matches the device is an estimate** (2.1): 0.5 (the default) is nearest to the computed panel curve; the level-1 puzzle (panel dark by the table, readable for the owner) is open.
+- **The pictures** are real-window captures with the real code at the final mapping; they show what a screenshot of this machine's window looks like, not the laptop's screen.
 - **Tint accuracy:** the tint is a multiplication in the display's sRGB values; the 16 levels of a yellow or pink screen are not what a yellow panel's physical grey scale looks like; compare with a real yellow OLED if you have one.
 - **Colour names are mine** (`FFD000`, `FF80B8`); the page shows the hex as well as the name.
 - **GIF:** a setting changed while recording; GIF palette of 16 entries (the in-between edge greys are level-quantised as today). **Scripts' `screen.export_png`** stays raw: a script's PNG will not be tinted.
@@ -179,9 +191,4 @@ fff      -> tint FFFFFF; level 15 at 1: FFFFFF, level 4 at 0.4 (gamma 0.7): 2828
 - **Not testable here:** the colours on the laptop's real screen, the yellow panel comparison, the keyboard text entry with a real keyboard layout (a typed `#` on a non-US layout).
 
 ## Questions for the owner
-1. Presets: yellow `FFD000` and pink `FF80B8` as proposed, or other values (the pictures show them)?
-2. Custom colours normalised (recommended) or literal?
-   (new) **Default greys 0.7 as asked, or 0.5**, which is closer to my estimate of the panel? And the range 0.4 to 1.0 in 0.1 steps?
-3. Brightness linear (as asked) or with the curve at the low end (`b^0.6`)?
-4. `screen.export_png` (a script's own PNG) raw (recommended) or tinted?
-5. `RESET` leaves `ui.conf` (recommended) or deletes it?
+All five questions of the plan and the one about the default greys are answered (see "Decisions of the owner and what was built"). Open: whether 0.5 still looks right on the laptop next to the real norns, and whether the first white frame of the boot (before the file is read) is acceptable for a pink or yellow screen.

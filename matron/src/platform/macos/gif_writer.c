@@ -15,6 +15,10 @@ static void put16(FILE *f, int v) {
 }
 
 int gif_begin(gif_writer_t *g, FILE *f, int w, int h, int scale) {
+    return gif_begin_palette(g, f, w, h, scale, NULL);
+}
+
+int gif_begin_palette(gif_writer_t *g, FILE *f, int w, int h, int scale, const uint8_t *palette) {
     g->f = f;
     g->w = w;
     g->h = h;
@@ -26,9 +30,9 @@ int gif_begin(gif_writer_t *g, FILE *f, int w, int h, int scale) {
     fputc(0, f);    // background
     fputc(0, f);    // aspect
     for (int i = 0; i < 16; i++) {
-        fputc(i * 17, f);
-        fputc(i * 17, f);
-        fputc(i * 17, f);
+        for (int c = 0; c < 3; c++) {
+            fputc(palette != NULL ? palette[i * 3 + c] : i * 17, f);
+        }
     }
     // loop forever
     static const uint8_t loop[] = {0x21, 0xff, 0x0b, 'N', 'E', 'T', 'S', 'C', 'A', 'P', 'E',

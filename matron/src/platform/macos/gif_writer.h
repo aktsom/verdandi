@@ -22,6 +22,8 @@ typedef struct {
 
 // w x h source pixels, written scale times larger. false if the file could not be written
 extern int gif_begin(gif_writer_t *g, FILE *f, int w, int h, int scale);
+// the same with a colour table of the 16 levels (16 * 3 bytes, red green blue; NULL: the grey table i * 17): the screen's tint and brightness
+extern int gif_begin_palette(gif_writer_t *g, FILE *f, int w, int h, int scale, const uint8_t *palette);
 // one frame: w * h levels 0-15, row by row, shown for delay_cs hundredths of a second
 extern int gif_frame(gif_writer_t *g, const uint8_t *levels, int delay_cs);
 extern int gif_end(gif_writer_t *g);

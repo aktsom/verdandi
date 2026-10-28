@@ -693,6 +693,11 @@ m["SETTINGS"] = require 'core/menu/settings'
 m["RESTART"] = require 'core/menu/restart'
 m["RESET"] = require 'core/menu/reset'
 m["AUDIO"] = require 'core/menu/audio'
+-- the look of the screen (brightness, colour, greys): computers only (docs/port/ui-settings-plan.md)
+if os.getenv("NORNS_PLATFORM") ~= nil then
+  m["UI"] = require 'core/menu/ui'
+  require('core/ui_settings').load_and_apply() -- ui.conf, once at start (does nothing without _norns.ui_look)
+end
 m["UPDATE"] = require 'core/menu/update'
 m["SLEEP"] = require 'core/menu/sleep'
 m["MIX"] = require 'core/menu/mix'

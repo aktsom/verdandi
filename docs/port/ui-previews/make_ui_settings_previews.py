@@ -1,34 +1,17 @@
 #!/usr/bin/env python3
-"""the two pictures of docs/port/ui-settings-plan.md. input: a capture of the REAL window (992 x 662, PARAMS page, white, brightness 1), taken by capture.lua under
-Xvfb with the built norns (make_previews.sh does that). the screen is then tinted with the mapping of ui_tint.py: this is a stand-in (the setting is not built yet),
-everything but the colour of the 512 x 256 screen rectangle is the real window.
-usage: make_ui_settings_previews.py WINDOW.png OUT_DIR"""
+"""the pictures of docs/port/ui-settings-plan.md, made from CAPTURES OF THE REAL WINDOW with the real UI code (make_ui_pictures.sh takes them).
+usage: make_ui_settings_previews.py CAPTURE_DIR OUT_DIR   (CAPTURE_DIR holds loops-1.0.png, loops-0.5.png, params-<colour>.png, params-b<brightness>.png)"""
 import os
 import sys
 import textwrap
 
 from PIL import Image, ImageDraw, ImageFont
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import ui_tint as ut
-
-SX, SY, SW, SH = 74, 335, 512, 256  # the screen in the window at the design size (device_skin.c, Linux layout)
-CROP = (40, 296, 622, 628)          # the bezel with a little of the box around it
-
-
-def tinted(win, tint, brightness):
-    out = win.copy().convert("RGB")
-    px = out.load()
-    lut = [ut.mapped(g, tint, brightness) for g in range(256)]
-    for y in range(SY, SY + SH):
-        for x in range(SX, SX + SW):
-            px[x, y] = lut[px[x, y][0]]
-    return out.crop(CROP)
+F = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
 def sheet(panels, path, title):
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
-    small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13)
+    font, small = ImageFont.truetype(F, 15), ImageFont.truetype(F, 13)
     w, h = panels[0][0].size
     gap, head = 14, 46
     img = Image.new("RGB", (w, head + len(panels) * (h + 40 + gap)), (32, 32, 34))
@@ -42,15 +25,16 @@ def sheet(panels, path, title):
     img.save(path)
 
 
-win = Image.open(sys.argv[1]).convert("RGB")
-out = sys.argv[2]
-sheet([(tinted(win, ut.PRESETS[n], 1.0), l) for n, l in [
-    ("white", "WHITE (as today), brightness 1: the reference - the menu text and the grey bar should be as you know them."),
-    ("yellow", "YELLOW (FFD000), brightness 1: does the dim text (level 4) stay readable, and does it look like a yellow OLED?"),
-    ("pink", "PINK (FF80B8), brightness 1: is the pink the one you want, and are the dim levels still apart from each other?")]],
-    os.path.join(out, "ui-colours.png"), "Real window, PARAMS page, three colours (the tint is simulated, see ui-settings-plan.md)")
-sheet([(tinted(win, ut.PRESETS["white"], b), l) for b, l in [
-    (1.0, "brightness 1 (default): full."),
-    (0.7, "brightness 0.7: look at the dim text (level 4) - is it still easy to read?"),
-    (0.4, "brightness 0.4: the darkest you would run it? 0.1 would be a quarter of this.")]],
-    os.path.join(out, "ui-brightness.png"), "Real window, PARAMS page, white at brightness 1, 0.7 and 0.4 (simulated)")
+cap, out = sys.argv[1], sys.argv[2]
+load = lambda n: Image.open(os.path.join(cap, n + ".png")).convert("RGB")
+sheet([(load("loops-1.0"), "GREYS 1.0 (linear, as before): the waveform (level 1), the labels and the markers (level 3) are nearly black."),
+       (load("loops-0.5"), "GREYS 0.5 (the default): the same page; look at the waveform and the dim labels, they should be readable now.")],
+      os.path.join(out, "ui-greys.png"), "A loops page in the style of Cheat Codes 2 (levels 3, 1, 3, 15), real window, brightness 1")
+sheet([(load("params-white"), "WHITE, brightness 1, greys 0.5: the reference."),
+       (load("params-yellow"), "YELLOW (FFD000): does it look like a yellow OLED, and is the dim text readable?"),
+       (load("params-pink"), "PINK (FF80B8): is this the pink you want?")],
+      os.path.join(out, "ui-colours.png"), "SYSTEM > UI colours, PARAMS page, real window, brightness 1, greys 0.5")
+sheet([(load("params-b1.0"), "brightness 1 (the default)."),
+       (load("params-b0.7"), "brightness 0.7: the dim text should still read easily."),
+       (load("params-b0.4"), "brightness 0.4: the darkest you would run it? (0.1 is dim, a quarter of full brightness in the code values, not black)")],
+      os.path.join(out, "ui-brightness.png"), "SYSTEM > UI brightness, PARAMS page, real window, white, greys 0.5")

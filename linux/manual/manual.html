@@ -106,7 +106,8 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 </section>
 
 <!-- sources: matron/src/platform/macos/window_keys.c, lua/core/keyboard.lua, lua/core/menu.lua (window_button), matron/src/platform/linux/desktop_shell_linux.cc (menu), sdl_bridge.cc (buttons, capture_path),
-     readme-macos.md (shared window code); tests: window:* in run_all.sh, keyboard_hardware_test.lua, menu_skin_test.c, manual_button_test.sh, maiden_button_test.sh -->
+     readme-macos.md (shared window code); lua/core/ui_settings.lua, lua/core/menu/ui.lua, matron/src/platform/macos/ui_look.c (SYSTEM > UI), docs/port/ui-settings-plan.md;
+     tests: window:* in run_all.sh, keyboard_hardware_test.lua, menu_skin_test.c, manual_button_test.sh, maiden_button_test.sh, ui_settings_test.lua, ui_look_test.c -->
 <section id="window">
 <h2>4. The window</h2>
 <p>The window is the norns screen on a drawing of the device. It can be resized. Closing it ends norns.</p>
@@ -130,6 +131,17 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 
 <h3>The buttons above the device</h3>
 <p>These are not on the hardware. MIX, TAPE, HOME and PARAMS open the menu pages (clicking the page that is up goes back to the script). MIC goes through the audio inputs (see <a href="#audio">section 5</a>). GRID, ARC and KEYS open the virtual windows. MAIDEN opens the maiden page in your browser; if nothing answers on maiden's port the window shows a note ("maiden is not running, see log") instead, and if the page opens but there is no norns console (the <code>--terminal</code> case) the note says so. MANUAL opens this page; if the file is missing the window says "manual not found: linux/manual/manual.html". MUTE (right end of the row) switches the sound output off and on again; it keeps the level you had and gives it back, and its light shows that the output is muted.</p>
+
+<h3>SYSTEM &gt; UI: brightness, colour, greys</h3>
+<p>HOME &gt; SYSTEM &gt; UI (below AUDIO) sets how the screen looks in the window. <kbd>E2</kbd> chooses the row, <kbd>E3</kbd> (or the mouse wheel over it) changes the value, <kbd>K2</kbd> goes back. A change shows at once and is kept for the next start.</p>
+<table>
+<tr><th>row</th><th>values</th><th>does</th></tr>
+<tr><td>BRIGHTNESS</td><td>0.1 to 1 in steps of 0.1, default 1</td><td>dims the whole screen; the low steps are lifted a little so that 0.1 is dim but still readable</td></tr>
+<tr><td>COLOUR</td><td>WHITE, YELLOW, PINK, CUSTOM</td><td>the colour of the lit pixels (black stays black); CUSTOM shows once a colour has been entered</td></tr>
+<tr><td>GREYS</td><td>0.4 to 1.0 in steps of 0.1, default 0.5</td><td>a correction of the 16 grey levels: the dim levels many scripts use for waveforms and labels are nearly black on a computer screen, GREYS lifts the greys in between (lower number = brighter; 1.0 is the plain, linear mapping). It changes how every script looks and how screenshots and GIFs look: they match the window, not exactly a norns</td></tr>
+<tr><td>HEX</td><td>3 or 6 hex digits</td><td><kbd>K3</kbd> opens the same text entry that names a preset: type the code on the computer keyboard (<code>ff8800</code>, <code>#f80</code>), <kbd>Enter</kbd> accepts, <kbd>Esc</kbd> cancels. A bad code is refused with a message and the colour stays. A very dark colour is raised to full value so that it cannot hide the screen</td></tr>
+</table>
+<p>The settings are in <code>ui.conf</code> in the norns home (<code>brightness=</code>, <code>colour=</code>, <code>custom=</code>, <code>greys=</code>); it can be edited by hand. A missing file means white, brightness 1, greys 0.5; a bad value falls back to its own default with a line in <code>norns.log</code>; unknown keys are ignored. The recording of a script's own PNG (<code>screen.export_png</code>) is not changed by these settings.</p>
 
 <h3>The right-click menu</h3>
 <table>
@@ -225,6 +237,7 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <tr><td><code>sclang.log</code></td><td>SuperCollider's output; look here for &ldquo;SUPERCOLLIDER FAIL&rdquo;</td></tr>
 <tr><td><code>maiden.log</code></td><td>maiden's log</td></tr>
 <tr><td><code>audio.conf</code></td><td>settings, see <a href="#settings">section 10</a></td></tr>
+<tr><td><code>ui.conf</code></td><td>the look of the screen (SYSTEM &gt; UI, <a href="#window">section 4</a>)</td></tr>
 <tr><td><code>matronrc.lua</code></td><td>makes the window the screen; written on the first start</td></tr>
 <tr><td><code>maiden/</code></td><td>the built maiden</td></tr>
 <tr><td><code>disabled-plugins/</code></td><td>where the printed command moves bad plug-ins (made by that command)</td></tr>

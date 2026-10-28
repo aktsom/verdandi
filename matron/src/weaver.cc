@@ -363,6 +363,7 @@ static int _app_input(lua_State *l);
 static int _monitor_out(lua_State *l);
 #ifdef NORNS_LINUX_DESKTOP
 static int _audio_status(lua_State *l);
+static int _ui_look(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -721,6 +722,7 @@ void w_init(void) {
 #endif
 #ifdef NORNS_LINUX_DESKTOP
     lua_register_norns("audio_status", &_audio_status);
+    lua_register_norns("ui_look", &_ui_look);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3707,6 +3709,21 @@ int _audio_status(lua_State *l) {
         lua_pushstring(l, buf);
     }
     return 3;
+}
+
+/***
+ * Linux desktop: the look of the screen (SYSTEM > UI)
+ * @function ui_look
+ * @tparam number brightness 0.1 to 1
+ * @tparam number r tint, 0-255
+ * @tparam number g
+ * @tparam number b
+ * @tparam number gamma 0.4 to 1.0 (1.0: linear)
+ */
+int _ui_look(lua_State *l) {
+    sdl_bridge_set_screen_look(luaL_checknumber(l, 1), (int)luaL_checkinteger(l, 2), (int)luaL_checkinteger(l, 3), (int)luaL_checkinteger(l, 4),
+                               luaL_checknumber(l, 5));
+    return 0;
 }
 
 /***

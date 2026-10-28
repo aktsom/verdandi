@@ -6,10 +6,10 @@ local m = {
 
 -- on a computer (NORNS_PLATFORM set by the launcher) the OS owns wifi, updates and the
 -- password, there is no battery and the display settings drive the oled chip: of
--- SETTINGS only RESET is left, so it moves up here. AUDIO picks the audio device
+-- SETTINGS only RESET is left, so it moves up here. AUDIO picks the audio device, UI the look of the screen (brightness, colour, greys)
 if os.getenv("NORNS_PLATFORM") ~= nil then
-  m.list = {"DEVICES > ", "AUDIO >", "MODS >", "RESET", "RESTART"}
-  m.pages = {"DEVICES", "AUDIO", "MODS", "RESET", "RESTART"}
+  m.list = {"DEVICES > ", "AUDIO >", "UI >", "MODS >", "RESET", "RESTART"}
+  m.pages = {"DEVICES", "AUDIO", "UI", "MODS", "RESET", "RESTART"}
 end
 
 m.key = function(n,z)

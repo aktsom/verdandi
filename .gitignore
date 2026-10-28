@@ -47,3 +47,4 @@ maiden-repl/maiden-repl
 ._*
 .DS_Store
 dist/
+__pycache__/

@@ -217,6 +217,7 @@ def build(bld):
             '../matron/src/platform/macos/hardware_null.cc',
             '../matron/src/platform/macos/open_url.c',
             '../matron/src/platform/macos/sdl_bridge.cc',
+            '../matron/src/platform/macos/ui_look.c',
             '../matron/src/platform/macos/varc_skin.c',
             '../matron/src/platform/macos/vgrid_device.c',
             '../matron/src/platform/macos/vgrid_proto.c',

@@ -55,6 +55,11 @@ extern void sdl_bridge_choose_file_close(void);
 // audio problems). other messages show over it for a few seconds
 extern void sdl_bridge_set_warning(const char *text);
 
+#ifdef NORNS_LINUX_DESKTOP
+// any thread, does not block: the look of the screen (SYSTEM > UI): brightness 0.1-1, the tint colour and the gamma of the grey correction (ui_look.h)
+extern void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

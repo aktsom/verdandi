@@ -38,6 +38,9 @@
 
 #include <cairo.h>
 #ifdef NORNS_LINUX_DESKTOP
+#include "ui_look.h"
+#endif
+#ifdef NORNS_LINUX_DESKTOP
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -175,6 +178,16 @@ static skin_state_t skin = {};
 static skin_geom_t geom = {};
 // the last oled frame, kept so the window can be redrawn without matron
 static cairo_surface_t *oled = NULL;
+#ifdef NORNS_LINUX_DESKTOP
+// the look of the screen (SYSTEM > UI, ui_look.h): oled is the raw grey image, oled_view the colours that the window, the screenshot and the gif show.
+// at white, brightness 1 and greys 1.0 oled_view stays NULL and oled is used as it is
+static cairo_surface_t *oled_view = NULL;
+static uint8_t look_lut[3][256];
+static double look_brightness = 1.0, look_gamma = 0.5;
+static int look_rgb[3] = {255, 255, 255};
+static bool look_identity = false; // before the first setting arrives the default look (greys 0.5) is not applied: the first frame of the boot is as it was
+static bool look_set = false;
+#endif
 static int have_frame = 0;
 // the device without the oled, at the current size
 static cairo_surface_t *static_layer = NULL;
@@ -226,9 +239,62 @@ static bool ensure_layers(int w, int h) {
     return true;
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+// the screen as the window shows it: the mapped copy, or the raw image at the identity
+static cairo_surface_t *oled_shown(void) {
+    return look_set && !look_identity && oled_view != NULL ? oled_view : oled;
+}
+
+// remake oled_view from oled through the tables
+static void make_view(void) {
+    if (!look_set || look_identity || oled == NULL) {
+        return;
+    }
+    int w = cairo_image_surface_get_width(oled), h = cairo_image_surface_get_height(oled);
+    if (oled_view == NULL || cairo_image_surface_get_width(oled_view) != w || cairo_image_surface_get_height(oled_view) != h) {
+        if (oled_view != NULL) {
+            cairo_surface_destroy(oled_view);
+        }
+        oled_view = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
+    }
+    cairo_surface_flush(oled);
+    cairo_surface_flush(oled_view);
+    const uint8_t *src = cairo_image_surface_get_data(oled);
+    uint8_t *dst = cairo_image_surface_get_data(oled_view);
+    int ss = cairo_image_surface_get_stride(oled), ds = cairo_image_surface_get_stride(oled_view);
+    // the screen backend draws in RGB565 (hardware/screen/sdl.cc): the red and blue of a grey are 5 bits, the green 6 bits, so the green is the best
+    // grey; and a flat level (grey 17 n) is off by up to 1, so it is snapped back to 17 n (the anti-aliased greys in between pass as they are)
+    uint8_t snap[256];
+    for (int g = 0; g < 256; g++) {
+        int n = (g + 8) / 17, near = n * 17;
+        snap[g] = (uint8_t)(abs(g - near) <= 2 && n <= 15 ? near : g);
+    }
+    for (int y = 0; y < h; y++) {
+        const uint32_t *sp = (const uint32_t *)(src + y * ss);
+        uint32_t *dp = (uint32_t *)(dst + y * ds);
+        for (int x = 0; x < w; x++) {
+            unsigned grey = snap[(sp[x] >> 8) & 0xff];
+            dp[x] = ((uint32_t)look_lut[0][grey] << 16) | ((uint32_t)look_lut[1][grey] << 8) | look_lut[2][grey];
+        }
+    }
+    cairo_surface_mark_dirty(oled_view);
+}
+
+static void gif_palette(uint8_t pal[16][3]) {
+    if (!look_set) { // no look was set: the window shows the raw levels
+        ui_look_palette(pal, 1.0, 255, 255, 255, 1.0);
+        return;
+    }
+    ui_look_palette(pal, look_brightness, look_rgb[0], look_rgb[1], look_rgb[2], look_gamma);
+}
+#define OLED_SHOWN() oled_shown()
+#else
+#define OLED_SHOWN() oled
+#endif
+
 static void draw_oled(cairo_t *cr) {
     if (have_frame) {
-        skin_draw_oled(cr, &geom, oled);
+        skin_draw_oled(cr, &geom, OLED_SHOWN());
     }
 }
 
@@ -285,6 +351,9 @@ static void present(SDL_Window *window, SDL_Surface *src) {
     SDL_ConvertPixels(src->w, src->h, src->format->format, src->pixels, src->pitch, SDL_PIXELFORMAT_RGB888,
                       cairo_image_surface_get_data(oled), cairo_image_surface_get_stride(oled));
     cairo_surface_mark_dirty(oled);
+#ifdef NORNS_LINUX_DESKTOP
+    make_view();
+#endif
     bool first = !have_frame;
     have_frame = 1;
     redraw(first || canvas == NULL);
@@ -444,6 +513,29 @@ void sdl_bridge_set_warning(const char *text) {
         free(ev.user.data1);
     }
 }
+
+#ifdef NORNS_LINUX_DESKTOP
+// any thread: the look of the screen (SYSTEM > UI): brightness 0.1-1, the tint (r, g, b) and the gamma of the grey correction
+void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma) {
+    double *v = (double *)malloc(5 * sizeof(double));
+    if (v == NULL) {
+        return;
+    }
+    v[0] = brightness;
+    v[1] = r;
+    v[2] = g;
+    v[3] = b;
+    v[4] = gamma;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 3;
+    ev.user.data1 = v;
+    if (SDL_PushEvent(&ev) < 1) {
+        free(v);
+    }
+}
+#endif
 
 // mac_menu.m's messages (any thread)
 static void note_toast(const char *text) {
@@ -1707,7 +1799,7 @@ static void save_screenshot(void) {
     cairo_surface_t *big = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w * CAPTURE_SCALE, h * CAPTURE_SCALE);
     cairo_t *cr = cairo_create(big);
     cairo_scale(cr, CAPTURE_SCALE, CAPTURE_SCALE);
-    cairo_set_source_surface(cr, oled, 0, 0);
+    cairo_set_source_surface(cr, OLED_SHOWN(), 0, 0); // the colours of the window (SYSTEM > UI)
     // crisp pixels, as on the oled
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
@@ -1786,7 +1878,14 @@ static void *gif_encode(void *arg) {
     bool ok = f != NULL;
     if (ok) {
         gif_writer_t g;
+#ifdef NORNS_LINUX_DESKTOP
+        // the colour table is the window's look: the frames keep the raw levels, the palette maps them (the setting at the time of encoding)
+        uint8_t pal[16][3];
+        gif_palette(pal);
+        ok = gif_begin_palette(&g, f, GIF_W, GIF_H, CAPTURE_SCALE, &pal[0][0]);
+#else
         ok = gif_begin(&g, f, GIF_W, GIF_H, CAPTURE_SCALE);
+#endif
         // delays in hundredths, rounded so the total stays true
         Uint32 shown = 0;
         for (size_t i = 0; ok && i < take->frames.size(); i++) {
@@ -2516,6 +2615,27 @@ void sdl_bridge_run(void) {
         if (ev.type == toast_event_type) {
             if (ev.user.code == 1) {
                 toast_expired((unsigned)(uintptr_t)ev.user.data1);
+#ifdef NORNS_LINUX_DESKTOP
+            } else if (ev.user.code == 3) {
+                // SYSTEM > UI: a new look for the screen (sdl_bridge_set_screen_look)
+                double *v = (double *)ev.user.data1;
+                look_brightness = v[0];
+                look_rgb[0] = (int)v[1];
+                look_rgb[1] = (int)v[2];
+                look_rgb[2] = (int)v[3];
+                look_gamma = v[4];
+                free(v);
+                if (!ui_look_normalise(&look_rgb[0], &look_rgb[1], &look_rgb[2])) {
+                    look_rgb[0] = look_rgb[1] = look_rgb[2] = 255;
+                }
+                look_identity = ui_look_is_identity(look_brightness, look_rgb[0], look_rgb[1], look_rgb[2], look_gamma);
+                look_set = true;
+                ui_look_table(look_lut, look_brightness, look_rgb[0], look_rgb[1], look_rgb[2], look_gamma);
+                make_view();
+                if (have_frame) {
+                    redraw(false);
+                }
+#endif
             } else if (ev.user.code == 2) {
                 char *text = (char *)ev.user.data1;
                 sticky_text = text;

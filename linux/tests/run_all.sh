@@ -108,6 +108,10 @@ g++ -std=gnu++14 -D_GNU_SOURCE -DNORNS_LINUX_DESKTOP -I matron/src -I matron/src
     $(pkg-config --cflags lua5.3 libevdev 2>/dev/null) -I/usr/include/libevdev-1.0 linux/tests/device_monitor_null_test.cc -o "$T/dmn" \
     && run "c:device_monitor (devices without node, product, vendor or model: no strdup(NULL), no crash)" "$T/dmn"
 run "linux:crash report (signal, thread name, backtrace in the log and crash-report.txt; the default action and the core dump kept)" linux/tests/crash_report_test.sh
+cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -o "$T/ulk" -lm 2> "$T/ulk.err" || cat "$T/ulk.err"
+python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
+run "c:ui_look (grey correction, tint, brightness: equal to the Python reference at 89600 values; black stays black, white stays white; the gif palette)" "$T/ulk" "$T/ui-dump.txt"
+run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "package:the .deb version grows with every commit (dpkg --compare-versions)" linux/tests/package_version_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
@@ -568,6 +572,45 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     else
         echo "SKIP  portal mock (python3 gi and dbus-run-session not installed)"
     fi
+    # the screen's look: yellow, brightness 0.4, greys 0.5 from ui.conf; window, screenshot and gif show the same colours (docs/port/ui-settings-plan.md)
+    ui_look_scenario() {
+        UH="$(mktemp -d)"
+        ln -s "$REPO" "$UH/norns"
+        mkdir -p "$UH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/ui_look_probe.lua" "$UH/dust/code/probe/"
+        printf 'brightness=0.4\ncolour=yellow\ngreys=0.5\n' > "$UH/ui.conf"
+        NORNS_HOME="$UH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_ui_look.lua" "$T/ui-look.log" > /dev/null 2>&1
+        # the window is at 144,69 on the screen; the screen (512 x 256) at 74,335 in it (4 px per screen pixel)
+        px() { convert "$UH/ui-window.png" -format "%[hex:u.p{$(($1 + 144 + 74)),$(($2 + 69 + 335))}]" info: 2> /dev/null; }
+        want() { python3 -I -c "import sys; sys.path.insert(0, '$REPO/docs/port/ui-previews'); import ui_tint as u; print('%02X%02X%02X' % u.mapped($1 * 17, u.parse_hex('FFD000'), 0.4, 0.5))"; }
+        ui_look_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE ui_look done" "$T/ui-look.log"'
+            chk "window: level 15 is yellow at 0.4 ($(want 15))" '[ "$(px 42 42)" = "$(want 15)" ]'
+            chk "window: level 4 ($(want 4))" '[ "$(px 242 42)" = "$(want 4)" ]'
+            chk "window: level 1 ($(want 1))" '[ "$(px 402 42)" = "$(want 1)" ]'
+            chk "window: black stays black" '[ "$(px 500 42)" = "000000" ]'
+            shot="$(ls "$UH"/dust/Verdandi*.png 2> /dev/null | head -1)"
+            chk "a screenshot was saved" '[ -n "$shot" ]'
+            # the screenshot is the window's screen, pixel for pixel
+            convert "$UH/ui-window.png" -crop 512x256+$((144 + 74))+$((69 + 335)) +repage "$UH/win-screen.png"
+            chk "the screenshot equals the window's screen pixel for pixel" '[ "$(compare -metric AE "$shot" "$UH/win-screen.png" null: 2>&1)" = 0 ]'
+            gif="$(ls "$UH"/dust/Verdandi*.gif 2> /dev/null | head -1)"
+            chk "a gif was saved" '[ -n "$gif" ]'
+            gs="$(identify -format "%w" "$gif[0]" 2> /dev/null)"
+            gscale=$((gs / 128))
+            gpx() { convert "$gif[0]" -format "%[hex:u.p{$(($1 * gscale + gscale / 2)),$(($2 * gscale + gscale / 2))}]" info: 2> /dev/null; }
+            chk "gif: level 15 as in the window" '[ "$(gpx 10 10)" = "$(want 15)" ]'
+            chk "gif: level 4 as in the window" '[ "$(gpx 60 10)" = "$(want 4)" ]'
+            chk "gif: level 1 as in the window" '[ "$(gpx 100 10)" = "$(want 1)" ]'
+            chk "gif: black stays black" '[ "$(gpx 120 60)" = "000000" ]'
+            return $bad
+        }
+        run "window:the look from ui.conf (yellow, 0.4, greys 0.5): window, screenshot and gif agree" ui_look_ok
+        cp "$UH/ui-window.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
+    }
+    ui_look_scenario
 else
     echo "SKIP  window (xdotool and imagemagick not installed)"
 fi

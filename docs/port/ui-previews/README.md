@@ -16,8 +16,7 @@ Everything is drawn by the product's own skin code (`matron/src/platform/macos/d
 | `ui-numbers-a.txt`, `ui-checks-a.txt`, `ui-hit-check-a.txt` | the exact positions of the chosen layout, its spacing checks and the result of `hit_check.c` (the skin code's real `skin_hit` on 30 points) |
 | `ui-margins.txt` | the margin measurements: the Mac layout and each option, calculated and measured on renders with a white screen |
 | `ui-resize-numbers.txt` | what `skin_geom` does at 33 to 200 percent of the window size, for the Linux layout and the Mac layout |
-| `ui-colours.png`, `ui-brightness.png` | step 3 (`../ui-settings-plan.md`): the real window (PARAMS page) with the screen tinted by the plan's mapping: white / yellow / pink at brightness 1, and white at 1, 0.7, 0.4 (a stand-in, the setting is not built; made by `make_ui_settings_previews.py` from a real capture, the mapping is `ui_tint.py`) |
-| `ui-grey-ramp.png` | step 3 addition: the 16 screen levels on black as today and with the default grey correction (gamma 0.7); `make_grey_ramp.py`; the numbers are `ui_tint.py greys` |
+| `ui-greys.png`, `ui-colours.png`, `ui-brightness.png` | UI step 3 (`../ui-settings-plan.md`): captures of the **real window with the built UI settings**: a loops page in the style of Cheat Codes 2 at GREYS 1.0 and 0.5; the PARAMS page in white, yellow and pink; white at brightness 1, 0.7 and 0.4. Made by `make_ui_pictures.sh` (`pic_loops.lua`, `pic_params.lua`, `loops_like.lua`, `make_ui_settings_previews.py`); the mapping's reference is `ui_tint.py` |
 | `oled-edit.png` | the 128 x 64 screen image (PARAMS > EDIT) captured from the real norns, the input of every render |
 
 ## Sources the script and the plan use
