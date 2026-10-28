@@ -62,6 +62,7 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   A run of `run_all.sh` while another test was still running on the same Xvfb display produced two false failures (grid LED, maiden launcher); both pass alone and in a clean full run.
 - **UI step 2b built** (`docs/port/ui-plan.md` 1.10, 1.11; decided by the owner: "grow" margin and resize option A): bezel 556 x 293.3 units, the screen 512 x 256 (4 px) with the Mac's margins (4.3 % / 7.3 %), keys and encoders re-placed; the screen scales with the window (crisp at whole multiples of the screen scale, nearest-enlarge + best-filter in between, always 2:1, mouse mapping from the rectangle); smallest window on Linux is half the design size. All behind `NORNS_LINUX_DESKTOP`, Mac table and `macos/tests/device_skin_test.c` unchanged. Tests first (compile error, then 0 failures): `device_skin_linux_test.c`; `package_version_test.sh`.
   **My readings, not given to me:** (1) "the dpkg version fix" = the .deb version did not grow between commits of one day (the hash is not ordered); it is now `0.1~git<date>.<commit count>.<hash>` and checked with `dpkg --compare-versions`. If you meant another problem with the version, tell me. (2) the 50 % minimum window size (1.9.3).
+  `run_all.sh` after the last change: 67 PASS, 0 unexpected failures (clean-root build opt-in, not run).
   Not verified: the laptop (look and taste), HiDPI / fractional scaling, the Mac build.
 
 ## Test state
