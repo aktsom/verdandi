@@ -17,7 +17,7 @@ shot() { # name probe "ui.conf text"
     # the window is at 144,69 on the screen (992 x 662); the bezel with a little of the box around it
     convert "$h/window.png" -crop 582x332+$((144 + 40))+$((69 + 296)) +repage "$W/$1.png"
 }
-for g in 1.0 0.5; do shot "loops-$g" pic_loops.lua "brightness=1.0\ncolour=white\ngreys=$g\n"; done
-for c in white yellow pink; do shot "params-$c" pic_params.lua "brightness=1.0\ncolour=$c\ngreys=0.5\n"; done
-for b in 1.0 0.7 0.4; do shot "params-b$b" pic_params.lua "brightness=$b\ncolour=white\ngreys=0.5\n"; done
+for c in 0 0.5; do shot "loops-$c" pic_loops.lua "brightness=1.0\ncolour=white\ncontrast=$c\n"; done
+for c in white yellow pink; do shot "params-$c" pic_params.lua "brightness=1.0\ncolour=$c\ncontrast=0.5\n"; done
+for b in 1.0 0.7 0.4; do shot "params-b$b" pic_params.lua "brightness=$b\ncolour=white\ncontrast=0.5\n"; done
 python3 "$HERE/make_ui_settings_previews.py" "$W" "$HERE"

@@ -575,13 +575,13 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     else
         echo "SKIP  portal mock (python3 gi and dbus-run-session not installed)"
     fi
-    # the screen's look: yellow, brightness 0.4, greys 0.5 from ui.conf; window, screenshot and gif show the same colours (docs/port/ui-settings-plan.md)
+    # the screen's look: yellow, brightness 0.4, contrast 0.5 from ui.conf; window, screenshot and gif show the same colours (docs/port/ui-settings-plan.md)
     ui_look_scenario() {
         UH="$(mktemp -d)"
         ln -s "$REPO" "$UH/norns"
         mkdir -p "$UH/dust/code/probe"
         cp "$REPO/linux/tests/scripts/ui_look_probe.lua" "$UH/dust/code/probe/"
-        printf 'brightness=0.4\ncolour=yellow\ngreys=0.5\n' > "$UH/ui.conf"
+        printf 'brightness=0.4\ncolour=yellow\ncontrast=0.5\n' > "$UH/ui.conf"
         NORNS_HOME="$UH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_ui_look.lua" "$T/ui-look.log" > /dev/null 2>&1
         # the window is at 144,69 on the screen; the screen (512 x 256) at 74,335 in it (4 px per screen pixel)
         px() { convert "$UH/ui-window.png" -format "%[hex:u.p{$(($1 + 144 + 74)),$(($2 + 69 + 335))}]" info: 2> /dev/null; }
@@ -610,7 +610,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "gif: black stays black" '[ "$(gpx 120 60)" = "000000" ]'
             return $bad
         }
-        run "window:the look from ui.conf (yellow, 0.4, greys 0.5): window, screenshot and gif agree" ui_look_ok
+        run "window:the look from ui.conf (yellow, 0.4, contrast 0.5): window, screenshot and gif agree" ui_look_ok
         cp "$UH/ui-window.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
     }
     ui_look_scenario

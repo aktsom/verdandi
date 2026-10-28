@@ -3,7 +3,8 @@
 --   brightness=0.7    0.1 to 1 in steps of 0.1 (a gentler curve than linear is applied by the screen code), default 1
 --   colour=yellow     white, yellow, pink or custom, default white
 --   custom=FF8800     the last custom colour (3 or 6 hex digits), none until one was entered
---   greys=0.5         the gamma of the grey correction, 0.4 to 1.0 in steps of 0.1, 1.0 = linear (as before), default 0.5
+--   contrast=0.5      how much the dim greys are lifted, 0 to 1 in steps of 0.1 (eleven values), 0 = the old linear mapping, default 0.5 (gamma_of below)
+--   greys=0.7         the old key of that setting (a gamma, 0.4 to 1.0): still read, converted to the nearest contrast, never written
 -- unknown keys are ignored with a log line (and kept when the file is written again), missing keys take their defaults, a damaged value
 -- falls back to its own default with a log line. one call, _norns.ui_look(brightness, r, g, b, gamma), tells the window; it exists on the
 -- Linux desktop only, elsewhere nothing here applies or writes anything.
@@ -45,7 +46,25 @@ function M.hex_hint(text)
 end
 
 function M.format_brightness(b) return string.format("%.1f", tenths(b)) end
-M.format_greys = M.format_brightness
+M.format_contrast = M.format_brightness
+
+--- the displayed contrast (0 to 1) as the gamma exponent of the grey correction g' = 255 (g / 255) ^ gamma, in one place:
+--   0 .. 0.5:  gamma = 1 - contrast         (1.0 linear ... 0.5, one tenth of gamma per step)
+--   0.5 .. 1:  gamma = 0.5 - 0.2 (contrast - 0.5)   (0.5 ... 0.4, two hundredths per step)
+-- 0 is exactly the old linear mapping, 0.5 the first default (gamma 0.5), 1 the strongest lift (gamma 0.4)
+function M.gamma_of(contrast)
+  local c = clamp(contrast, 0, 1)
+  if c <= 0.5 then return 1.0 - c end
+  return 0.5 - 0.2 * (c - 0.5)
+end
+
+--- the inverse for the old greys key: a gamma (0.4 to 1.0) as the nearest contrast value (a step of 0.1)
+function M.contrast_from_gamma(gamma)
+  local g = clamp(gamma, 0.4, 1.0)
+  local c
+  if g >= 0.5 then c = 1.0 - g else c = 0.5 + (0.5 - g) / 0.2 end
+  return tenths(c)
+end
 
 -- ---- the settings: key, default, parse(text) -> value or nil, format(value) -> text ----
 local function number_setting(key, default, lo, hi)
@@ -83,11 +102,23 @@ local SETTINGS = {
     format = function(v) return v end,
     range = "a hex colour",
   },
-  number_setting("greys", 0.5, 0.4, 1.0),
+  {
+    key = "contrast", default = 0.5,
+    -- out of range is not clamped: it falls back to the default with a log line, like a damaged value
+    parse = function(text)
+      local n = tonumber(text)
+      if n == nil or n ~= n or n < -1e-9 or n > 1 + 1e-9 then return nil end
+      return clamp(tenths(n), 0, 1)
+    end,
+    format = function(v) return M.format_contrast(v) end,
+    range = "0..1",
+  },
 }
 local BY_KEY = {}
 for _, s in ipairs(SETTINGS) do BY_KEY[s.key] = s end
 BY_KEY.color = BY_KEY.colour -- a spelling that is accepted
+-- the old greys key (a gamma) is not a setting any more: it is converted at load unless contrast is there too
+local LEGACY_GREYS = "greys"
 
 local function defaults()
   local st = {extra = {}}
@@ -100,6 +131,7 @@ M.state = defaults()
 function M.load()
   local st = defaults()
   M.state = st
+  local legacy, legacy_text, has_contrast
   local f = io.open(M.PATH)
   if f == nil then
     M.log("not found, using defaults")
@@ -109,7 +141,15 @@ function M.load()
     local k, v = line:match("^([%w_]+)=(.*)$")
     if k then
       local s = BY_KEY[k]
-      if s == nil then
+      if k == LEGACY_GREYS then
+        local n = tonumber(v)
+        if n == nil or n ~= n then
+          M.log(string.format("greys='%s' is not a gamma (0.4..1.0), ignored", v))
+        else
+          legacy = M.contrast_from_gamma(n)
+          legacy_text = v
+        end
+      elseif s == nil then
         M.log("unknown key '" .. k .. "' ignored")
         table.insert(st.extra, line)
       else
@@ -118,6 +158,7 @@ function M.load()
           M.log(string.format("%s='%s' is not %s, using %s", s.key, v, s.range, tostring(s.default)))
         else
           st[s.key] = val
+          if s.key == "contrast" then has_contrast = true end
         end
       end
     elseif line:match("%S") then
@@ -125,6 +166,10 @@ function M.load()
     end
   end
   f:close()
+  if legacy ~= nil and not has_contrast then
+    st.contrast = legacy
+    M.log(string.format("greys=%s (the old gamma key) is contrast=%s now", legacy_text, M.format_contrast(legacy)))
+  end
   if st.colour == "custom" and st.custom == nil then
     M.log("colour=custom without a valid custom, using white")
     st.colour = "white"
@@ -164,7 +209,7 @@ end
 function M.apply()
   if _norns == nil or _norns.ui_look == nil then return end
   local r, g, b = M.tint()
-  _norns.ui_look(M.state.brightness, r, g, b, M.state.greys)
+  _norns.ui_look(M.state.brightness, r, g, b, M.gamma_of(M.state.contrast))
 end
 
 --- at start: read the file and apply it
@@ -188,10 +233,10 @@ function M.step_brightness(d)
   changed()
 end
 
-function M.step_greys(d)
+function M.step_contrast(d)
   d = math.floor((d or 0) + 0.5)
   if d == 0 then return end
-  M.state.greys = clamp(tenths(M.state.greys + d * 0.1), 0.4, 1.0)
+  M.state.contrast = clamp(tenths(M.state.contrast + d * 0.1), 0, 1)
   changed()
 end
 

@@ -54,18 +54,18 @@ function _menu.keychar(c) if _menu.keyboardchar then _menu.keyboardchar(c) end e
 
 local function code(name) for k, v in pairs(keyboard.codes) do if v == name then return k end end error("no code " .. name) end
 local function send(name, value) keyboard.process(1, code(name), value) end
-local ROWS = {"BRIGHTNESS", "COLOUR", "GREYS", "HEX"}
-local function snapshot() local s = ui.state; return string.format("row %s  brightness %s  colour %s  greys %s", ROWS[page.pos], ui.format_brightness(s.brightness), s.colour, ui.format_greys(s.greys)) end
+local ROWS = {"BRIGHTNESS", "COLOUR", "CONTRAST", "HEX"}
+local function snapshot() local s = ui.state; return string.format("row %s  brightness %s  colour %s  contrast %s", ROWS[page.pos], ui.format_brightness(s.brightness), s.colour, ui.format_contrast(s.contrast)) end
 local function reset(row)
   if te_kbd.code then send("ESC", 1); send("ESC", 0) end -- an entry left open by the previous case
   os.remove("/home/we/ui.conf")
   page.init()
-  ui.state.brightness, ui.state.colour, ui.state.greys, ui.state.custom = 0.5, "yellow", 0.7, "FF8800"
+  ui.state.brightness, ui.state.colour, ui.state.contrast, ui.state.custom = 0.5, "yellow", 0.7, "FF8800"
   page.pos = row
   keyboard.clear()
   pressed, pushed, looks = {}, {}, {}
 end
-local function vals() local s = ui.state; return {s.brightness, s.colour, s.greys} end
+local function vals() local s = ui.state; return {s.brightness, s.colour, s.contrast} end
 local function same(a, b) return a[1] == b[1] and a[2] == b[2] and a[3] == b[3] end
 
 local function step_of(row, name)
@@ -106,7 +106,7 @@ for _, row in ipairs({1, 2, 3, 4}) do
       elseif row == 2 then
         check(after_down[2] == (want > 0 and "pink" or "white"), tag .. ": colour yellow goes one step, is " .. tostring(after_down[2]))
       else
-        check(after_down[3] == (want > 0 and 0.8 or 0.6), tag .. ": greys 0.7 goes one step to " .. tostring(want > 0 and 0.8 or 0.6) .. ", is " .. tostring(after_down[3]))
+        check(after_down[3] == (want > 0 and 0.8 or 0.6), tag .. ": contrast 0.7 goes one step to " .. tostring(want > 0 and 0.8 or 0.6) .. ", is " .. tostring(after_down[3]))
       end
     end
     if name == "UP" or name == "DOWN" then

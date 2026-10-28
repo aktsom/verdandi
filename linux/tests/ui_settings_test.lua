@@ -71,7 +71,7 @@ check(ui.hex_hint("ggg") ~= "" and ui.hex_hint("1234567") ~= "", "an impossible 
 -- ---- defaults, save, load ----
 os.remove("/home/we/ui.conf")
 local s = ui.load()
-check(s.brightness == 1.0 and s.colour == "white" and s.greys == 0.5 and s.custom == nil, "defaults: brightness 1, white, greys 0.5")
+check(s.brightness == 1.0 and s.colour == "white" and s.contrast == 0.5 and s.custom == nil, "defaults: brightness 1, white, contrast 0.5")
 check(logs("not found"), "a missing file is logged")
 check(slurp("/home/we/ui.conf") == nil, "a missing file is not created by loading")
 
@@ -81,12 +81,30 @@ for _ = 1, 20 do ui.step_brightness(-1) end
 check(s.brightness == 0.1, "brightness stops at 0.1")
 for _ = 1, 20 do ui.step_brightness(1) end
 check(s.brightness == 1.0, "brightness stops at 1")
-for _ = 1, 3 do ui.step_greys(1) end
-check(s.greys == 0.8, "greys 0.5 up three steps is 0.8: " .. tostring(s.greys))
-for _ = 1, 10 do ui.step_greys(1) end
-check(s.greys == 1.0, "greys stops at 1.0")
-for _ = 1, 10 do ui.step_greys(-1) end
-check(s.greys == 0.4, "greys stops at 0.4")
+for _ = 1, 3 do ui.step_contrast(1) end
+check(s.contrast == 0.8, "contrast 0.5 up three steps is 0.8: " .. tostring(s.contrast))
+for _ = 1, 10 do ui.step_contrast(1) end
+check(s.contrast == 1.0, "contrast stops at 1.0")
+for _ = 1, 20 do ui.step_contrast(-1) end
+check(s.contrast == 0.0, "contrast stops at 0 (the old linear mapping)")
+local seen_c = {}
+for _ = 1, 10 do ui.step_contrast(1); seen_c[#seen_c + 1] = ui.format_contrast(s.contrast) end
+check(table.concat(seen_c, " ") == "0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0", "the ten steps up from 0: " .. table.concat(seen_c, " "))
+s.contrast = 0.5
+
+-- the displayed value to the gamma exponent: eleven values, 0 = linear, 0.5 = the old default 0.5, 1 = 0.4 (docs/port/ui-settings-plan.md 2.2)
+local GAMMA = {[0.0] = 1.00, [0.1] = 0.90, [0.2] = 0.80, [0.3] = 0.70, [0.4] = 0.60, [0.5] = 0.50, [0.6] = 0.48, [0.7] = 0.46, [0.8] = 0.44, [0.9] = 0.42, [1.0] = 0.40}
+for i = 0, 10 do
+  local c = i / 10
+  check(math.abs(ui.gamma_of(c) - GAMMA[c]) < 1e-9, string.format("contrast %.1f gives gamma %.2f, is %s", c, GAMMA[c], tostring(ui.gamma_of(c))))
+end
+-- the old greys key (a gamma) converts to the nearest contrast value
+local OLD = {[1.0] = 0.0, [0.9] = 0.1, [0.8] = 0.2, [0.7] = 0.3, [0.6] = 0.4, [0.5] = 0.5, [0.4] = 1.0}
+for g, c in pairs(OLD) do
+  check(math.abs(ui.contrast_from_gamma(g) - c) < 1e-9, string.format("old greys=%.1f is contrast %.1f, is %s", g, c, tostring(ui.contrast_from_gamma(g))))
+end
+check(math.abs(ui.contrast_from_gamma(0.45) - 0.8) < 1e-9, "old greys=0.45 (by hand) is contrast 0.8")
+check(ui.format_contrast(0.30000000000000004) == "0.3" and ui.format_contrast(0) == "0.0" and ui.format_contrast(1) == "1.0", "no float noise in the shown contrast")
 check(ui.format_brightness(0.30000000000000004) == "0.3" and ui.format_brightness(1) == "1.0", "no float noise in the shown value")
 
 -- steps are whole tenths all the way: 0.1 .. 1.0
@@ -114,10 +132,10 @@ local ok2, msg = ui.set_custom("12")
 check(not ok2 and type(msg) == "string" and s.colour == before and s.custom == "FF8800", "a bad hex changes nothing and says why")
 
 -- save: exactly the four keys, in order, read back by a second load
-ui.state.brightness, ui.state.colour, ui.state.greys = 0.7, "custom", 0.6
+ui.state.brightness, ui.state.colour, ui.state.contrast = 0.7, "custom", 0.6
 ui.save()
 local text = slurp("/home/we/ui.conf")
-check(text == "brightness=0.7\ncolour=custom\ncustom=FF8800\ngreys=0.6\n", "the file: " .. tostring(text))
+check(text == "brightness=0.7\ncolour=custom\ncustom=FF8800\ncontrast=0.6\n", "the file: " .. tostring(text))
 check(slurp("/home/we/ui.conf.tmp") == nil, "no temporary file is left")
 calls = {}
 package.loaded["core/ui_settings"] = nil
@@ -125,14 +143,14 @@ local ui2 = dofile("lua/core/ui_settings.lua")
 package.loaded["core/ui_settings"] = ui2 -- the page requires this instance
 ui2.log = function(s) logged[#logged + 1] = s end
 ui2.load_and_apply()
-check(#calls == 1 and calls[1][1] == 0.7 and calls[1][2] == 255 and calls[1][3] == 136 and calls[1][4] == 0 and calls[1][5] == 0.6, "a second start applies the saved look: " .. (calls[1] and table.concat(calls[1], " ") or "nothing"))
+check(#calls == 1 and calls[1][1] == 0.7 and calls[1][2] == 255 and calls[1][3] == 136 and calls[1][4] == 0 and math.abs(calls[1][5] - 0.48) < 1e-9, "a second start applies the saved look: " .. (calls[1] and table.concat(calls[1], " ") or "nothing"))
 ui = ui2
 
--- the defaults at the first start are applied too (greys 0.5)
+-- the defaults at the first start are applied too (contrast 0.5 = gamma 0.5)
 os.remove("/home/we/ui.conf")
 calls = {}
 ui.load_and_apply()
-check(#calls == 1 and calls[1][1] == 1.0 and calls[1][2] == 255 and calls[1][5] == 0.5, "no file: white, 1, greys 0.5 applied")
+check(#calls == 1 and calls[1][1] == 1.0 and calls[1][2] == 255 and calls[1][5] == 0.5, "no file: white, 1, contrast 0.5 (gamma 0.5) applied")
 
 -- ---- a damaged file: per key, nothing throws, one log line each, unknown keys survive a rewrite ----
 local function load_text(t)
@@ -142,13 +160,34 @@ local function load_text(t)
   check(ok, "load threw: " .. tostring(st))
   return ok and st or {}
 end
-local st = load_text("brightness=abc\ncolour=purple\ncustom=12\ngreys=x\n")
-check(st.brightness == 1.0 and st.colour == "white" and st.greys == 0.5 and st.custom == nil, "every bad key falls back to its own default")
-check(logs("brightness") and logs("colour") and logs("custom") and logs("greys"), "one log line for each bad key")
-st = load_text("brightness=5\ngreys=0\n")
-check(st.brightness == 1.0 and st.greys == 0.4, "numbers out of range are clamped (5 -> 1, greys 0 -> 0.4)")
-st = load_text("brightness=0\ngreys=3\n")
-check(st.brightness == 0.1 and st.greys == 1.0, "0 -> 0.1, greys 3 -> 1.0")
+local st = load_text("brightness=abc\ncolour=purple\ncustom=12\ncontrast=x\n")
+check(st.brightness == 1.0 and st.colour == "white" and st.contrast == 0.5 and st.custom == nil, "every bad key falls back to its own default")
+check(logs("brightness") and logs("colour") and logs("custom") and logs("contrast"), "one log line for each bad key")
+st = load_text("brightness=5\ncontrast=3\n")
+check(st.brightness == 1.0 and st.contrast == 0.5 and logs("contrast"), "brightness 5 is clamped to 1; contrast 3 is out of range: the default 0.5 with a log line")
+st = load_text("brightness=0\ncontrast=-0.1\n")
+check(st.brightness == 0.1 and st.contrast == 0.5 and logs("contrast"), "brightness 0 -> 0.1; contrast -0.1 is out of range: 0.5")
+st = load_text("contrast=0\n")
+check(st.contrast == 0.0 and not logs("contrast"), "contrast=0 is valid (linear)")
+st = load_text("contrast=0.73\n")
+check(st.contrast == 0.7, "contrast 0.73 snaps to a tenth: " .. tostring(st.contrast))
+-- an old ui.conf with greys= (a gamma) converts; contrast wins when both are there
+st = load_text("brightness=0.6\ncolour=yellow\ngreys=0.7\n")
+check(st.contrast == 0.3 and st.brightness == 0.6 and st.colour == "yellow" and logs("greys"), "old greys=0.7 becomes contrast 0.3, the rest is kept, a log line says so")
+st = load_text("greys=1.0\n")
+check(st.contrast == 0.0, "old greys=1.0 (linear) is contrast 0")
+st = load_text("greys=0.4\n")
+check(st.contrast == 1.0, "old greys=0.4 is contrast 1")
+st = load_text("greys=0.5\n")
+check(st.contrast == 0.5, "old greys=0.5 is contrast 0.5")
+st = load_text("greys=0.7\ncontrast=0.9\n")
+check(st.contrast == 0.9, "contrast wins over the old greys key")
+st = load_text("greys=abc\n")
+check(st.contrast == 0.5 and logs("greys"), "a damaged old greys value is the default")
+load_text("greys=0.7\n")
+ui.save()
+local rewritten = slurp("/home/we/ui.conf") or ""
+check(rewritten:find("contrast=0.3", 1, true) and not rewritten:find("greys", 1, true), "saving writes contrast and drops the old key: " .. rewritten:gsub("\n", " "))
 st = load_text("brightness=0.75\n")
 check(st.brightness == 0.8 or st.brightness == 0.7, "0.75 snaps to a tenth")
 st = load_text("colour=custom\n")
@@ -156,7 +195,7 @@ check(st.colour == "white" and logs("custom"), "colour=custom without a custom h
 st = load_text("color=yellow\ncolour=pink\n")
 check(st.colour == "pink", "color is an accepted spelling, the last one wins")
 st = load_text("")
-check(st.brightness == 1.0 and st.colour == "white" and st.greys == 0.5, "an empty file is the defaults")
+check(st.brightness == 1.0 and st.colour == "white" and st.contrast == 0.5, "an empty file is the defaults")
 st = load_text("\0\1\2 junk \255\n===\nbrightness\n")
 check(st.brightness == 1.0 and st.colour == "white", "binary junk and lines without = are ignored")
 st = load_text("foo=bar\nbrightness=0.5\nnot a line\n")
@@ -171,7 +210,7 @@ ui.load()
 local page = dofile("lua/core/menu/ui.lua")
 page.init()
 page.redraw()
-check(shown("BRIGHTNESS") and shown("COLOUR") and shown("GREYS") and shown("HEX"), "the four rows are shown")
+check(shown("BRIGHTNESS") and shown("COLOUR") and shown("CONTRAST") and shown("HEX") and not shown("GREYS"), "the four rows are shown, the third is CONTRAST")
 check(shown("1.0") and shown("WHITE") and shown("0.5"), "the values: 1.0, WHITE, 0.5")
 calls = {}
 page.enc(3, -1)
@@ -180,7 +219,7 @@ check(slurp("/home/we/ui.conf") and slurp("/home/we/ui.conf"):find("brightness=0
 page.enc(2, 1); page.enc(3, 1)
 check(ui.state.colour == "yellow" and #calls == 2 and calls[2][2] == 255 and calls[2][3] == 208 and calls[2][4] == 0, "E2 then E3 on COLOUR: yellow applied")
 page.enc(2, 1); page.enc(3, 1)
-check(ui.state.greys == 0.6 and calls[3][5] == 0.6, "E3 on GREYS: 0.6 applied")
+check(ui.state.contrast == 0.6 and math.abs(calls[3][5] - 0.48) < 1e-9, "E3 on CONTRAST: 0.6 applied (gamma 0.48)")
 page.redraw(); check(shown("0.6") and shown("YELLOW"), "the page shows the new values")
 page.key(2, 1); check(pushed[#pushed] == "SYSTEM", "K2 goes back to SYSTEM")
 

@@ -1,10 +1,10 @@
--- SYSTEM > UI (computers only, see core/menu/system.lua): the look of the screen. BRIGHTNESS, COLOUR, GREYS and the custom colour HEX.
+-- SYSTEM > UI (computers only, see core/menu/system.lua): the look of the screen. BRIGHTNESS, COLOUR, CONTRAST and the custom colour HEX.
 -- the values live in core/ui_settings.lua (file: ui.conf in the norns home); every change is applied and saved at once.
 -- docs/port/ui-settings-plan.md. E2 row, E3 value, K3 on HEX opens the text entry that also names a pset (lib/textentry), K2 back.
 
 local ui = require 'core/ui_settings'
 
-local ROWS = {"BRIGHTNESS", "COLOUR", "GREYS", "HEX"}
+local ROWS = {"BRIGHTNESS", "COLOUR", "CONTRAST", "HEX"}
 
 local m = {pos = 1, msg = nil}
 
@@ -12,7 +12,7 @@ local function value_text(row)
   local st = ui.state
   if row == 1 then return ui.format_brightness(st.brightness)
   elseif row == 2 then return st.colour:upper()
-  elseif row == 3 then return ui.format_greys(st.greys)
+  elseif row == 3 then return ui.format_contrast(st.contrast)
   elseif st.custom then return "#" .. st.custom
   else return "#------" end
 end
@@ -53,7 +53,7 @@ m.enc = function(n, delta)
     local row = ROWS[m.pos]
     if row == "BRIGHTNESS" then ui.step_brightness(delta)
     elseif row == "COLOUR" then ui.step_colour(delta)
-    elseif row == "GREYS" then ui.step_greys(delta) end
+    elseif row == "CONTRAST" then ui.step_contrast(delta) end
   end
   _menu.redraw()
 end
@@ -75,7 +75,7 @@ m.redraw = function()
   end
   screen.level(m.msg and 15 or 2)
   screen.move(0, 62)
-  screen.text(m.msg or "E2 row  E3 change  GREYS: lower = brighter")
+  screen.text(m.msg or "E2 row  E3 change  CONTRAST: more = lighter")
   screen.update()
 end
 

@@ -201,7 +201,7 @@ terminal output and `~/verdandi-home/jackd.log` and `sclang.log` if present.
       MAIDEN MANUAL MUTE across the top, the screen at its lower left, K1 E1 above it, E2 E3 K2 K3 to its right; no OUT slider and no K/E text); the black frame around the screen has the Mac's proportions; it resizes without breaking (the screen scales with the window: crisp at 75/100/125/150 percent, very slightly soft in between; smallest size is half); closing it ends norns.
 - [ ] With the script above loaded, or from HOME > SELECT, the screen shows the script's picture.
 - [ ] It looks right on your screen scale (HiDPI) and in X11 *and* Wayland if you can try both.
-- [ ] **SYSTEM > UI** (HOME > SYSTEM > UI): BRIGHTNESS, COLOUR (white, yellow, pink, custom hex typed on the keyboard), GREYS. The detailed list is in `HARDWARE-CHECKLIST.md`, "SYSTEM > UI". In short: the Cheat Codes 2 loops page at GREYS 1.0, 0.7 and 0.5 (which is closest to your norns?), one colour change, one custom hex colour, a low brightness.
+- [ ] **SYSTEM > UI** (HOME > SYSTEM > UI): BRIGHTNESS, COLOUR (white, yellow, pink, custom hex typed on the keyboard), CONTRAST (0 = the old linear look, higher = lighter dim greys). The detailed list is in `HARDWARE-CHECKLIST.md`, "SYSTEM > UI". In short: the Cheat Codes 2 loops page at CONTRAST 0, 0.3 and 0.5 (which is closest to your norns?), one colour change, one custom hex colour, a low brightness.
 
 **Keys and knobs**
 - [ ] Click K1-K3 (they light and norns reacts); drag a knob; scroll over E1-E3.

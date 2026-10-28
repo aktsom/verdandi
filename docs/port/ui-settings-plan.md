@@ -3,6 +3,35 @@
 Linux desktop build only. Written from the code of this repository. **Status: BUILT (UI step 3), with the owner's decisions below; the pictures are captures of the real window with the real code** (`ui-previews/ui-greys.png`, `ui-colours.png`, `ui-brightness.png`, made by `ui-previews/make_ui_pictures.sh`; the mapping's reference implementation is `ui-previews/ui_tint.py`; the C code is `matron/src/platform/macos/ui_look.c`).
 **This plan replaces the "SCREEN" page of `ui-plan.md` section 2** (brightness and greys `device / bright / brighter`): the page is now called UI, with three settings, **BRIGHTNESS, COLOUR and GREYS** (and the HEX row of the colour). **Addition (evidence from the owner's laptop): the grey correction is back and on by default** (setting GREYS; **default 0.5 by the owner's decision**, 0.7 was the first proposal): on the desktop the dim levels of some scripts (the waveform and labels of Cheat Codes 2) are almost invisible, while the same page is readable on the owner's norns. The earlier "the grey table stays as it is" is withdrawn; what stays is that the raw 16 levels (grey 17 n) come from the screen backend unchanged and the correction is a display mapping in the bridge, like the tint. The rest of section 2 of `ui-plan.md` (the chip's brightness/contrast/gamma do nothing on the desktop; where the mapping lives) still holds.
 
+## Change (after the first build): GREYS became CONTRAST, "higher = more"
+
+The row felt backwards (a *lower* gamma exponent gave brighter greys; on BRIGHTNESS and every other value a higher number means more). It is now **CONTRAST**, a plain value **0 to 1 in steps of 0.1 (eleven values), default 0.5**, changed with the encoder like the others: **0 is exactly the old linear mapping (gamma 1.0), 1 is the strongest lift (gamma 0.4), 0.5 is the previous default (gamma 0.5)**. The 16-level mapping for a given gamma is unchanged (section 2); only the displayed number and its translation to gamma are new. Everything below that says GREYS means this setting (the sections are kept as they were written, with their gamma numbers).
+
+**The one place that maps the displayed value to the gamma exponent** (`gamma_of` in `lua/core/ui_settings.lua`), piecewise linear so that every step is explainable and the upper half does not go flat:
+- contrast 0 to 0.5: **gamma = 1 - contrast** (one tenth of gamma per step: 1.0, 0.9, ... 0.5);
+- contrast 0.5 to 1: **gamma = 0.5 - 0.2 x (contrast - 0.5)** (two hundredths per step: 0.48, ... 0.40).
+(A smooth single formula through the three required points, 0 -> 1.0, 0.5 -> 0.5, 1 -> 0.4, saturates above 0.7: the levels at 0.8, 0.9 and 1 differ by 1 to 2 grey values; this one gives 4 per step.)
+
+| CONTRAST (displayed) | gamma | level 3 (grey 51) | level 1 (grey 17) | the old `greys` key that converts to it |
+|---|---|---|---|---|
+| 0.0 | 1.00 | 51 | 17 | `greys=1.0` |
+| 0.1 | 0.90 | 60 | 22 | `greys=0.9` |
+| 0.2 | 0.80 | 70 | 29 | `greys=0.8` |
+| 0.3 | 0.70 | 83 | 38 | `greys=0.7` |
+| 0.4 | 0.60 | 97 | 50 | `greys=0.6` |
+| 0.5 | 0.50 | 114 | 66 | `greys=0.5` |
+| 0.6 | 0.48 | 118 | 70 | - |
+| 0.7 | 0.46 | 122 | 73 | - |
+| 0.8 | 0.44 | 126 | 77 | - |
+| 0.9 | 0.42 | 130 | 82 | - |
+| 1.0 | 0.40 | 134 | 86 | `greys=0.4` |
+
+Level 3 and level 1 are the greys the Cheat Codes 2 overview uses (labels and markers, waveform); the old linear mapping (contrast 0) has 51 and 17. Every step lifts both; the lower half in big steps (0.1 -> 0.5 takes level 3 from 51 to 114), the upper half in small ones (114 -> 134).
+
+**ui.conf:** the key is `contrast` (written as `contrast=0.5`). An **old file with `greys=`** (a gamma) is still read and converted to the nearest contrast value by the last column above (a gamma between the listed ones, entered by hand, rounds to the nearest tenth: `greys=0.45` is contrast 0.8), with a log line (`ui.conf: greys=0.7 (the old gamma key) is contrast=0.3 now`); `contrast` wins if both are there; the next change writes `contrast` and no `greys`. **A bad or out-of-range contrast** (`abc`, `-0.1`, `3`) falls back to the default 0.5 with a log line (it is not clamped); `contrast=0` is valid; a value between two steps (`0.73`) snaps to the nearest tenth.
+
+**Tests (written first):** the eleven steps of `gamma_of` against the table; the old-key conversion for 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4 and a by-hand 0.45; a damaged old key; contrast winning; the page row label CONTRAST (and no GREYS); saved and loaded (`contrast=0.6` in the file, `ui_look` gets gamma 0.48); a damaged and an out-of-range value; the ten steps up from 0; the keyboard test with the new row (`ui_keys_test.lua`).
+
 ## Decisions of the owner and what was built
 
 1. Yellow `FFD000`, pink `FF80B8`. 2. A very dark custom colour is raised to full value (normalised; `000000` is rejected). 3. **Brightness** 0.1 to 1 in steps of 0.1, default 1, with a gentler curve at the low end: **the factor applied is b^0.6** (0.1 -> 0.251, 0.2 -> 0.381, 0.3 -> 0.486, 0.4 -> 0.577, 0.5 -> 0.660, 0.7 -> 0.807, 1 -> 1); the displayed values stay the plain 0.1 steps. 4. A script's own `screen.export_png` stays raw. 5. `RESET` leaves `ui.conf`. 6. **GREYS** default **0.5**, range 0.4 to 1.0 in steps of 0.1, 1.0 = the old linear mapping. **Where level 3 (grey 51) comes out** (white, brightness 1): **1.0: 51 (20 percent); 0.7: 83 (33 percent); 0.5: 114 (45 percent)**; level 1 (the Cheat Codes 2 overview waveform): 17, 38, 66; level 4: 68, 101, 132.

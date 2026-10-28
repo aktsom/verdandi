@@ -27,14 +27,14 @@ def sheet(panels, path, title):
 
 cap, out = sys.argv[1], sys.argv[2]
 load = lambda n: Image.open(os.path.join(cap, n + ".png")).convert("RGB")
-sheet([(load("loops-1.0"), "GREYS 1.0 (linear, as before): the waveform (level 1), the labels and the markers (level 3) are nearly black."),
-       (load("loops-0.5"), "GREYS 0.5 (the default): the same page; look at the waveform and the dim labels, they should be readable now.")],
+sheet([(load("loops-0"), "CONTRAST 0 (the old linear mapping): the waveform (level 1), the labels and the markers (level 3) are nearly black."),
+       (load("loops-0.5"), "CONTRAST 0.5 (the default): the same page; look at the waveform and the dim labels, they should be readable now.")],
       os.path.join(out, "ui-greys.png"), "A loops page in the style of Cheat Codes 2 (levels 3, 1, 3, 15), real window, brightness 1")
-sheet([(load("params-white"), "WHITE, brightness 1, greys 0.5: the reference."),
+sheet([(load("params-white"), "WHITE, brightness 1, contrast 0.5: the reference."),
        (load("params-yellow"), "YELLOW (FFD000): does it look like a yellow OLED, and is the dim text readable?"),
        (load("params-pink"), "PINK (FF80B8): is this the pink you want?")],
-      os.path.join(out, "ui-colours.png"), "SYSTEM > UI colours, PARAMS page, real window, brightness 1, greys 0.5")
+      os.path.join(out, "ui-colours.png"), "SYSTEM > UI colours, PARAMS page, real window, brightness 1, contrast 0.5")
 sheet([(load("params-b1.0"), "brightness 1 (the default)."),
        (load("params-b0.7"), "brightness 0.7: the dim text should still read easily."),
        (load("params-b0.4"), "brightness 0.4: the darkest you would run it? (0.1 is dim, a quarter of full brightness in the code values, not black)")],
-      os.path.join(out, "ui-brightness.png"), "SYSTEM > UI brightness, PARAMS page, real window, white, greys 0.5")
+      os.path.join(out, "ui-brightness.png"), "SYSTEM > UI brightness, PARAMS page, real window, white, contrast 0.5")
