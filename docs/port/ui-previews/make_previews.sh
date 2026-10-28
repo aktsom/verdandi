@@ -141,4 +141,95 @@ cap "$HERE/layout-ui-b-labels.png" "B (alternative) with labels" "$W/u-3.png"
 cap "$HERE/layout-ui-b-nolabels.png" "B without labels" "$W/u-4.png"
 cap "$HERE/layout-ui-a-labels-muted.png" "A, MUTE on" "$W/u-5.png"
 convert \( "$W/u-0.png" "$W/u-1.png" "$W/u-2.png" +append \) \( "$W/u-3.png" "$W/u-4.png" "$W/u-5.png" +append \) -append "$HERE/layout-compare-ui.png"
+echo "== round 2b: the margin around the screen (ui-plan.md 1.8)"
+convert -size 128x64 xc:white "$W/white.png"
+cc $CFLAGS "$HERE/render_preview.c" "$SKIN/device_skin.c" -o "$W/r_mac" $LIBS
+# the Mac layout: device_skin.c without NORNS_LINUX_DESKTOP, exactly what the Mac app compiles
+"$W/r_mac" "$HERE/layout-margin-mac-reference.png" "$W/oled.png" "$W/current.lut" 100
+"$W/r_mac" "$W/mac-white.png" "$W/white.png" "$W/current.lut" 100
+{
+    echo "margin around the screen, measured on renders whose screen is all white (device pixels at scale 1 = layout units)"
+    echo "mac (the Mac layout, device_skin.c without the define): bezel 417 x 220 units (x 77..494, y 356..576), pad 14, 3 px per screen pixel:"
+    echo "   $(python3 "$HERE/measure_margin.py" "$W/mac-white.png" 301.5 482)"
+} > "$HERE/ui-margins.txt"
+for m in today abs shrink grow; do
+    d="$W/m-$m"
+    mkdir -p "$d"
+    python3 "$HERE/gen_variant_margin.py" "$m" "$d" | sed 's/^/   /' | tee -a "$HERE/ui-margins.txt" > /dev/null
+    cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -I"$d" -I"$SKIN" $(pkg-config --cflags cairo) -DVARIANT "$HERE/render_preview.c" "$d/device_skin_variant.c" -o "$d/render" $LIBS
+    "$d/render" "$HERE/layout-margin-$m.png" "$W/oled.png" "$W/current.lut" 100 4
+    "$d/render" "$d/white.png" "$W/white.png" "$W/current.lut" 100 4
+    read -r cx cy <<< "$(python3 - "$d/variant.h" << 'PY'
+import re, sys
+v = open(sys.argv[1]).read()
+g = lambda n: float(re.search(n + r" ([0-9.]+)", v).group(1))
+print(16 + g("V_BEZEL_X") + g("V_BEZEL_W") / 2, 16 + g("V_BEZEL_Y") + g("V_BEZEL_H") / 2)
+PY
+)"
+    echo "      measured: $(python3 "$HERE/measure_margin.py" "$d/white.png" "$cx" "$cy")" >> "$HERE/ui-margins.txt"
+done
+cat "$HERE/ui-margins.txt" | sed 's/^/   /'
+# the top-left corner of each bezel, 3x: the margin and the first line of text
+corner() { # IMAGE X Y LABEL OUT   (X Y: the bezel's top-left corner in units; 16 is the window's margin)
+    convert "$1" -crop 230x110+$(( $2 + 16 - 8 ))+$(( $3 + 16 - 8 )) +repage -filter point -resize 300% -background '#1a1a1c' -gravity north -splice 0x26 \
+        -fill white -pointsize 16 -annotate +0+4 "$4" "$5"
+}
+corner "$HERE/layout-margin-mac-reference.png" 77 356 "Mac layout (reference)" "$W/k-0.png"
+corner "$HERE/layout-margin-today.png" 36 310 "Linux today" "$W/k-1.png"
+corner "$HERE/layout-margin-abs.png" 36 310 "Mac margins in units" "$W/k-2.png"
+corner "$HERE/layout-margin-shrink.png" 36 310 "Mac proportions, bezel kept" "$W/k-3.png"
+corner "$HERE/layout-margin-grow.png" 36 301 "Mac proportions, bezel grown" "$W/k-4.png"
+convert "$W/k-0.png" "$W/k-1.png" "$W/k-2.png" +append "$W/kr1.png"
+convert "$W/k-3.png" "$W/k-4.png" +append -background '#1a1a1c' -extent $(identify -format %w "$W/kr1.png")x "$W/kr2.png"
+convert "$W/kr1.png" "$W/kr2.png" -background '#1a1a1c' -append "$HERE/margin-corner-compare.png"
+mcap() { convert "$1" -resize 50% -background '#1a1a1c' -gravity north -splice 0x24 -fill white -pointsize 15 -annotate +0+3 "$2" -gravity northwest -extent 496x355 "$3"; }
+mcap "$HERE/layout-margin-mac-reference.png" "Mac layout (reference): margin 4.3 % / 7.3 %" "$W/q-0.png"
+mcap "$HERE/layout-margin-today.png" "Linux today: 2.7 % / 5.5 %" "$W/q-1.png"
+mcap "$HERE/layout-margin-abs.png" "Mac margins in units (545 x 284)" "$W/q-2.png"
+mcap "$HERE/layout-margin-shrink.png" "Mac proportions, bezel kept (screen 3.87 px)" "$W/q-3.png"
+mcap "$HERE/layout-margin-grow.png" "Mac proportions, bezel grown (556 x 293, 4 px)" "$W/q-4.png"
+convert \( "$W/q-0.png" "$W/q-1.png" "$W/q-2.png" +append \) \( "$W/q-3.png" "$W/q-4.png" +append \) -append "$HERE/layout-margin-compare.png"
+
+echo "== round 2b: resizing (ui-plan.md 1.9)"
+{
+    echo "== Linux layout (device_skin.c with NORNS_LINUX_DESKTOP)"
+    cc -std=gnu11 -DNORNS_LINUX_DESKTOP -I"$SKIN" $(pkg-config --cflags cairo) "$HERE/geom_table.c" "$SKIN/device_skin.c" -o "$W/gt_linux" $LIBS && "$W/gt_linux"
+    echo
+    echo "== Mac layout (device_skin.c without the define)"
+    cc -std=gnu11 -I"$SKIN" $(pkg-config --cflags cairo) "$HERE/geom_table.c" "$SKIN/device_skin.c" -o "$W/gt_mac" $LIBS && "$W/gt_mac"
+} > "$HERE/ui-resize-numbers.txt"
+if [ "${UIPREVIEW_SKIP_RESIZE:-0}" != 1 ]; then
+    # the real window of the real norns, resized: a big virtual screen of its own
+    Xvfb :98 -screen 0 2000x1400x24 > /dev/null 2>&1 &
+    XV=$!
+    sleep 1
+    mkdir -p "$W/rhome/dust/code/uipreview"
+    cp "$HERE/uipreview.lua" "$W/rhome/dust/code/uipreview/"
+    ln -s "$REPO" "$W/rhome/norns"
+    DISPLAY=:98 NORNS_HOME="$W/rhome" "$REPO/linux/tests/norns_probe.sh" "$HERE/resize_capture.lua" "$W/rhome/probe.log" > /dev/null 2>&1 || true
+    kill $XV 2> /dev/null || true
+    for sz in 60:595x397 75:744x496 80:794x530 100:992x662 125:1240x828 130:1290x861 150:1488x993 160:1587x1059; do
+        pc="${sz%%:*}"; dim="${sz#*:}"
+        [ -s "$W/rhome/xs-$pc.png" ] || { echo "resize capture failed: xs-$pc.png missing"; exit 1; }
+        convert "$W/rhome/xs-$pc.png" -crop "${dim}+0+0" +repage "$HERE/resize-real-$pc.png"
+    done
+fi
+# option A (simulated): the box and controls drawn by the real code at the window's size (vector, as today), the screen scaled with the window: nearest at a whole
+# number of device pixels per screen pixel, otherwise enlarged by a whole number and scaled down smoothly
+for sz in 60:595x397 75:744x496 80:794x530 100:992x662 125:1240x828 130:1290x861 150:1488x993 160:1587x1059; do
+    pc="${sz%%:*}"; dim="${sz#*:}"
+    "$W/m-today/render" "$HERE/resize-optionA-$pc.png" "$W/oled.png" "$W/current.lut" 100 3 0 "${dim%x*}" "${dim#*x}"
+done
+rcap() { convert "$1" -resize 480x -background '#1a1a1c' -gravity north -splice 0x24 -fill white -pointsize 15 -annotate +0+3 "$2" -gravity northwest -extent 480x345 "$3"; }
+for pc in 60 80 100 130 160; do
+    rcap "$HERE/resize-real-$pc.png" "today, $pc %" "$W/rr-$pc.png"
+    rcap "$HERE/resize-optionA-$pc.png" "option A, $pc %" "$W/ra-$pc.png"
+done
+convert \( "$W/rr-60.png" "$W/rr-80.png" "$W/rr-100.png" "$W/rr-130.png" "$W/rr-160.png" +append \) \
+    \( "$W/ra-60.png" "$W/ra-80.png" "$W/ra-100.png" "$W/ra-130.png" "$W/ra-160.png" +append \) -append "$HERE/resize-compare.png"
+# the screen at 80 percent (3.2 px per screen pixel): today's whole 3 px against option A, 4x zoom of the text
+zoom() { convert "$1" -crop "$2" +repage -filter point -resize 400% -background '#1a1a1c' -gravity north -splice 0x26 -fill white -pointsize 16 -annotate +0+4 "$3" "$4"; }
+zoom "$HERE/resize-real-80.png" 190x50+40+276 "today, 80 percent: 3 px per screen pixel (ideal 3.2)" "$W/zr.png"
+zoom "$HERE/resize-optionA-80.png" 190x50+40+276 "option A, 80 percent: 3.2 px, enlarged 4x then scaled down" "$W/za.png"
+convert "$W/zr.png" "$W/za.png" -append "$HERE/resize-zoom-80.png"
 echo "done: $(ls "$HERE"/*.png | wc -l) PNGs in $HERE"

@@ -10,7 +10,7 @@ import sys, re, os
 
 factor = float(sys.argv[1])
 out = sys.argv[2]
-src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../matron/src/platform/macos/device_skin.c")
+src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base/device_skin.c")
 s = open(src).read()
 unit = 3.0 * factor
 pad = 14

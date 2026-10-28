@@ -2,7 +2,7 @@
  * render_preview.c: the norns window as the real skin code draws it (device_skin.c or a variant of it made by gen_variant.py), with an oled image
  * from the real norns (capture.lua) mapped through a grey table and a brightness. the whole window as a PNG, 992 x 662 like the real one.
  *
- *   render_preview OUT.png OLED.png LUT.txt BRIGHTNESS_PERCENT [FRACTIONAL: 1 = oled at V_UNIT device pixels per oled pixel, nearest neighbour; 2 = the same, bilinear]
+ *   render_preview OUT.png OLED.png LUT.txt BRIGHTNESS_PERCENT [FRACTIONAL: 1 = oled at V_UNIT device pixels per oled pixel, nearest neighbour; 2 = the same, bilinear; 3 = option A (snapped rectangle; nearest at a whole number, else enlarged by a whole number and scaled smoothly); 4 = snapped, always nearest] [MUTED] [W H]
  *
  * LUT.txt: 256 numbers, the output grey for every input grey of the oled image. a variant.h is included when the build defines VARIANT.
  * what is NOT the product code: the fractional oled drawing (the product floors to whole pixels and has no grey table or brightness).
@@ -73,7 +73,8 @@ int main(int argc, char **argv) {
         cairo_surface_mark_dirty(oled);
     }
 
-    const int W = SKIN_W + 2 * SKIN_MARGIN, H = SKIN_H + 2 * SKIN_MARGIN;
+    // the canvas: the design size, or the window size given as arguments 7 and 8 (a resized window)
+    const int W = argc > 8 ? atoi(argv[7]) : SKIN_W + 2 * SKIN_MARGIN, H = argc > 8 ? atoi(argv[8]) : SKIN_H + 2 * SKIN_MARGIN;
     cairo_surface_t *canvas = cairo_image_surface_create(CAIRO_FORMAT_RGB24, W, H);
     cairo_t *cr = cairo_create(canvas);
     skin_geom_t g;
@@ -87,6 +88,52 @@ int main(int argc, char **argv) {
     skin_draw_static(cr, &g);
     skin_draw_controls(cr, &g, &st);
 #ifdef VARIANT
+    if (fractional == 3 || fractional == 4) {
+        // option A of ui-plan.md section 1.8: the screen scaled with the window. its rectangle is snapped to whole device pixels; at a whole number of
+        // device pixels per screen pixel it is drawn nearest neighbour (crisp), otherwise the image is first enlarged by a whole number (nearest) and then
+        // scaled down smoothly (cairo's best filter), so the pixels stay as even as they can
+        double scale = V_UNIT * g.s;
+        double sx = g.ox + (V_BEZEL_X + V_BEZEL_W / 2) * g.s - 64 * scale;
+        double sy = g.oy + (V_BEZEL_Y + V_BEZEL_H / 2) * g.s - 32 * scale;
+        int x0 = (int)lround(sx), y0 = (int)lround(sy);
+        int exact = fabs(scale - round(scale)) < 0.02 && round(scale) >= 1;
+        int whole = exact || fractional == 4; // 4: always nearest neighbour, at a size that is not a whole number (some screen pixels one device pixel wider)
+        int w = exact ? 128 * (int)round(scale) : (int)lround(128 * scale);
+        int h = exact ? 64 * (int)round(scale) : (int)lround(64 * scale);
+        cairo_save(cr);
+        cairo_save(cr);
+        cairo_translate(cr, g.ox, g.oy);
+        cairo_scale(cr, g.s, g.s);
+        rounded_rect(cr, V_BEZEL_X, V_BEZEL_Y, V_BEZEL_W, V_BEZEL_H, 7);
+        cairo_restore(cr);
+        cairo_clip(cr);
+        cairo_set_source_rgb(cr, 0, 0, 0);
+        cairo_paint(cr);
+        if (whole) {
+            cairo_translate(cr, x0, y0);
+            cairo_scale(cr, w / 128.0, h / 64.0);
+            cairo_set_source_surface(cr, oled, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+        } else {
+            int k = (int)ceil(scale);
+            if (k < 1) k = 1;
+            cairo_surface_t *big = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 128 * k, 64 * k);
+            cairo_t *bc = cairo_create(big);
+            cairo_scale(bc, k, k);
+            cairo_set_source_surface(bc, oled, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(bc), CAIRO_FILTER_NEAREST);
+            cairo_paint(bc);
+            cairo_destroy(bc);
+            cairo_translate(cr, x0, y0);
+            cairo_scale(cr, w / (128.0 * k), h / (64.0 * k));
+            cairo_set_source_surface(cr, big, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
+            cairo_surface_destroy(big);
+        }
+        cairo_rectangle(cr, 0, 0, whole ? 128 : (128.0 * ceil(scale)), whole ? 64 : (64.0 * ceil(scale)));
+        cairo_fill(cr);
+        cairo_restore(cr);
+    } else
     if (fractional) {
         // the oled at V_UNIT device pixels per oled pixel, centred in the bezel (nearest neighbour: some oled pixels are one device pixel wider)
         double ox = g.ox + (V_BEZEL_X + V_BEZEL_W / 2) * g.s - 64 * V_UNIT * g.s;

@@ -23,6 +23,10 @@ The page on the screen is the parameter list of PARAMS > EDIT, with one highligh
 | `layout-compare-ui.png` | today's real window against A (labels, no labels), B (labels, no labels) and A with MUTE on |
 | `ui-numbers-*.txt`, `ui-checks-*.txt`, `ui-hit-check-*.txt` | the exact positions, the spacing checks and the result of the hit test (`hit_check.c`, the variant's real `skin_hit`) for each arrangement |
 
+| `layout-margin-compare.png`, `layout-margin-*.png`, `margin-corner-compare.png`, `ui-margins.txt` | round 2b: the Mac layout as the reference, today's Linux layout and three options for the margin around the screen, with measurements (`../ui-plan.md` 1.8) |
+| `resize-real-*.png`, `resize-optionA-*.png`, `resize-compare.png`, `resize-zoom-80.png`, `ui-resize-numbers.txt` | round 2b: the real window resized to 60..160 percent (today), option A simulated, and the screen scale at every size (`../ui-plan.md` 1.9) |
+| `base/` | the product's `device_skin.c/.h` before the Linux layout table: the generators of rounds 1 and 2 patch these copies |
+
 What is real code and what is not: the **screen content** comes from the real norns (menu code, fonts, the screen's own greys). Today's window is the real window. The **layouts** are drawn by the product's own `device_skin.c`
-(`gen_variant.py`, `gen_variant33.py` and `gen_variant_ui.py` make a copy with other constants; the product file is only read). **Not** product code: drawing the screen at a fractional pixel size, the grey table and the brightness (they do not exist yet).
+(`gen_variant.py`, `gen_variant33.py` and `gen_variant_ui.py` and `gen_variant_margin.py` make a copy with other constants; the product file is only read). **Not** product code: drawing the screen at a fractional pixel size, the grey table and the brightness (they do not exist yet).
 The other files: `capture.lua` and `uipreview.lua` (what norns is told to show), `render_preview.c`, `grey_tables.py`.

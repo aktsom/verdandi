@@ -16,7 +16,7 @@ import sys, os, re
 
 arr, labels, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 here = os.path.dirname(os.path.abspath(__file__))
-skin = os.path.join(here, "../../../matron/src/platform/macos")
+skin = os.path.join(here, "base")  # the files as they were before the Linux layout table (base/README.md)
 c = open(os.path.join(skin, "device_skin.c")).read()
 h = open(os.path.join(skin, "device_skin.h")).read()
 

@@ -58,6 +58,7 @@ Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` f
   the enum: `SKIN_MUTE = 17` on Linux, the Mac's `SKIN_FADER = 17` / `SKIN_MUTE = 18` untouched, and `macos/tests/device_skin_test.c` passes unchanged. The slider code in `sdl_bridge.cc` is compiled out on Linux.
   Tests first (55 failures before): `linux/tests/device_skin_linux_test.c` (geometry, hits, rendered window, keyboard-mapping checksum). Updated: the window click coordinates, the maiden and manual button probes, the manual,
   RUN-ON-LAPTOP, HARDWARE-CHECKLIST ("The new window layout"). Not built (later steps): the greys, the brightness, the SCREEN page, the detachable window. Needs the owner's eyes on the laptop.
+  Step 2b (preview and plan only): `ui-plan.md` 1.8 (margin around the screen: the Mac's is 4.3 % / 7.3 % of the screen, Linux today 2.7 % / 5.5 %; options abs / shrink / grow, recommendation grow) and 1.9 (resizing: only the screen is whole-pixel, which explains the text looking different when smaller; option A designed, tests and risks); pictures in `docs/port/ui-previews/`. Nothing built.
   A run of `run_all.sh` while another test was still running on the same Xvfb display produced two false failures (grid LED, maiden launcher); both pass alone and in a clean full run.
 
 ## Test state

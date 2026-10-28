@@ -1,0 +1,11 @@
+margin around the screen, measured on renders whose screen is all white (device pixels at scale 1 = layout units)
+mac (the Mac layout, device_skin.c without the define): bezel 417 x 220 units (x 77..494, y 356..576), pad 14, 3 px per screen pixel:
+   screen 384 x 192 px; margin left 17 right 16 top 14 bottom 14 px; as a fraction of the screen: sides 4.30 % of its width, top and bottom 7.29 % of its height
+   today  bezel 540.0 x 284.0 (x 36.0..576.0, y 310.0..594.0), screen 512.0 x 256.0 = 4.000 px per screen pixel, margins: left/right 14.00, top/bottom 14.00 units = 2.73 % of the screen width, 5.47 % of its height
+      measured: screen 512 x 256 px; margin left 14 right 14 top 14 bottom 14 px; as a fraction of the screen: sides 2.73 % of its width, top and bottom 5.47 % of its height
+   abs    bezel 545.0 x 284.0 (x 36.0..581.0, y 310.0..594.0), screen 512.0 x 256.0 = 4.000 px per screen pixel, margins: left/right 16.50, top/bottom 14.00 units = 3.22 % of the screen width, 5.47 % of its height
+      measured: screen 512 x 256 px; margin left 17 right 16 top 14 bottom 14 px; as a fraction of the screen: sides 3.22 % of its width, top and bottom 5.47 % of its height
+   shrink bezel 540.0 x 284.0 (x 36.0..576.0, y 310.0..594.0), screen 495.7 x 247.9 = 3.873 px per screen pixel, margins: left/right 22.15, top/bottom 18.07 units = 4.47 % of the screen width, 7.29 % of its height
+      measured: screen 496 x 248 px; margin left 22 right 22 top 18 bottom 18 px; as a fraction of the screen: sides 4.44 % of its width, top and bottom 7.26 % of its height
+   grow   bezel 556.0 x 293.3 (x 36.0..592.0, y 300.7..594.0), screen 512.0 x 256.0 = 4.000 px per screen pixel, margins: left/right 22.00, top/bottom 18.67 units = 4.30 % of the screen width, 7.29 % of its height
+      measured: screen 512 x 256 px; margin left 22 right 22 top 18 bottom 19 px; as a fraction of the screen: sides 4.30 % of its width, top and bottom 7.23 % of its height
