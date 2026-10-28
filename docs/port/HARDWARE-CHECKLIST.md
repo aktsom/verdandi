@@ -209,3 +209,8 @@ Look at it on the laptop's real screen (Cinnamon, your scale) next to the real n
 - [ ] **Saved:** quit norns and start it again: the same look from the first screens (the very first frame of the boot is plain white/grey before the file is read). `~/Verdandi/ui.conf` has `brightness=`, `colour=`, `custom=`, `greys=`; edit it by hand to `colour=purple` and start: white, with a line `ui.conf: colour='purple' ...` in `norns.log`. RESET (SYSTEM > RESET) leaves ui.conf alone.
 - [ ] **Screenshot and GIF** (right-click menu) with yellow and brightness 0.7: the PNG and the GIF have the colours of the window. A script's own `screen.export_png` is still plain grey.
 - [ ] If it is wrong: which row, which value, and what you saw.
+
+## Mods (KNOWN-ISSUES 17)
+- [ ] SYSTEM > MODS lists sidvagn (and every other `dust/code/*/lib/mod.lua`: the nb library, doubledecker, ...). E3 right enables, a "+" shows until the next start; restart norns (SYSTEM > RESTART): `norns.log` says `mod found: sidvagn ... enabled` and `loading mod: sidvagn`, the dot shows next to it on the page.
+- [ ] sidvagn: its grid page appears on grid port 2 (or the only grid); notes go to an nb player or MIDI. doubledecker: after the restart its voice is in the nb player list of a script that uses nb (Cheat Codes 2 and others) and sounds (SuperCollider compiled `doubledecker.sc`: `grep -i error sclang.log`).
+- [ ] Disable a mod, restart: it is listed, not loaded. A mod with an error shows `mod failed: <name>: <error>` and the others still work.

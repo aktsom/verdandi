@@ -212,11 +212,14 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <p>Checked by tests: the binds, the editor's file API, installing a script from a zip and running it in norns, the refusals above, the button. Checked once by hand over the network: installing a script from GitHub through maiden's git route, and downloading the catalog. The real browser session with the real catalog is for your computer (<code>docs/port/HARDWARE-CHECKLIST.md</code>).</p>
 </section>
 
-<!-- sources: lua/core/virtual_home.lua; linux/plugin_arch_check.cc, matron/src/platform/linux/plugin_arch.h; linux/shims/*; KNOWN-ISSUES.md items 8, 11;
-     tests: virtual_home_test.lua, virtual_chunkname_test.lua, chunkname_test.sh, plugin_arch_test.cpp, plugin_check_test.sh, plugin_note_test.sh, shim_test.sh, shim_restart_test.sh -->
+<!-- sources: lua/core/virtual_home.lua, lua/core/mods.lua, lua/core/menu/mods.lua, lua/core/startup.lua; linux/plugin_arch_check.cc, matron/src/platform/linux/plugin_arch.h; linux/shims/*; KNOWN-ISSUES.md items 8, 11;
+     tests: virtual_home_test.lua, mods_test.lua, virtual_chunkname_test.lua, chunkname_test.sh, plugin_arch_test.cpp, plugin_check_test.sh, plugin_note_test.sh, shim_test.sh, shim_restart_test.sh -->
 <section id="scripts">
 <h2>8. Scripts</h2>
 <p>Scripts live in <code>dust/code/&lt;name&gt;/&lt;name&gt;.lua</code>. Put them there, import them from the right-click menu, or install them from maiden; choose one in HOME &gt; SELECT.</p>
+<h3>Mods</h3>
+<p>As on the device, every folder <code>dust/code/&lt;name&gt;/</code> that has <code>lib/mod.lua</code> is a mod and is listed in HOME &gt; SYSTEM &gt; MODS (<kbd>E3</kbd> right enables it, left disables it; the choice is kept in <code>dust/data/system.mods</code>). Enabled mods are loaded when norns starts, so enable, then restart norns (SYSTEM &gt; RESTART). <code>norns.log</code> has one line for every mod found (&ldquo;mod found: name &hellip;&rdquo;, enabled or not), one for every mod loaded and, if a mod has an error, &ldquo;mod failed: name: &hellip;&rdquo; with the error; the other mods still load and norns goes on. Mods that need a SuperCollider extension (an nb voice such as doubledecker has a <code>.sc</code> file) are compiled with the rest of <code>dust</code> when SuperCollider starts.</p>
+
 <h3>/home/we</h3>
 <p>Scripts see the device's paths: <code>os.getenv('HOME')</code> and <code>_path</code> say <code>/home/we</code>, and norns translates such paths to the norns home wherever they leave Lua (files, shell commands, <code>require</code>, softcut, SuperCollider, the sidecar). Output coming back is translated the other way. Scripts and libraries are named with the virtual path (<code>debug.getinfo(1).source</code> is <code>@/home/we/dust/code/&hellip;</code>), so libraries that find their own folder with it work (nb, used by Cheat Codes 2, is tested). Error messages and tracebacks therefore show <code>/home/we/&hellip;</code>, as on the device; the real home is printed once at the top of the log (<code>virtual /home/we -&gt; &hellip;</code>).</p>
 <h3>Commands scripts run</h3>

@@ -49,13 +49,37 @@ local function to_list(set)
   return l
 end
 
+-- on a computer (NORNS_PLATFORM, set by the launcher) a mod that fails is reported and the others still load, and every mod found is logged;
+-- on the device a failing mod raises as it always did
+local on_computer = os.getenv("NORNS_PLATFORM") ~= nil
+
 function Mods.load(scan, only_enabled)
   local _load = function(name, package_path)
     Mods.this_name = name
     print('loading mod: ' .. name .. ' (' .. package_path ..')')
+    if on_computer then
+      local ok, err = pcall(require, package_path)
+      Mods.this_name = nil
+      if ok then
+        loaded_mods[name] = true
+      else
+        print('mod failed: ' .. name .. ': ' .. tostring(err))
+      end
+      return
+    end
     require(package_path)
     Mods.this_name = nil
     loaded_mods[name] = true
+  end
+
+  if on_computer then
+    local names = {}
+    for name in pairs(scan) do table.insert(names, name) end
+    table.sort(names)
+    if #names == 0 then print('mods: none found in ' .. tostring(paths.code)) end
+    for _, name in ipairs(names) do
+      print('mod found: ' .. name .. ' (' .. scan[name][2] .. ')' .. (Mods.is_enabled(name) and ', enabled' or ', not enabled'))
+    end
   end
 
   for name, details in pairs(scan) do

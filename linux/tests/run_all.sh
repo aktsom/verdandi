@@ -113,6 +113,8 @@ python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
 run "c:ui_look (grey correction, tint, brightness: equal to the Python reference at 89600 values; black stays black, white stays white; the gif palette)" "$T/ulk" "$T/ui-dump.txt"
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
+D="$(mktemp -d)"
+run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "package:the .deb version grows with every commit (dpkg --compare-versions)" linux/tests/package_version_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
@@ -612,6 +614,31 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         cp "$UH/ui-window.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
     }
     ui_look_scenario
+    # mods: a mod found in dust/code/*/lib/mod.lua, enabled in dust/data/system.mods, is loaded at start and listed on SYSTEM > MODS; a mod with an error is reported
+    mods_scenario() {
+        MD="$(mktemp -d)"
+        ln -s "$REPO" "$MD/norns"
+        mkdir -p "$MD/dust/code/fakemod/lib" "$MD/dust/code/badmod/lib" "$MD/dust/code/notamod/lib" "$MD/dust/data"
+        printf 'local mod = require "core/mods"\nprint("FAKEMOD loaded as " .. tostring(mod.this_name))\nmod.hook.register("system_post_startup", "fakemod", function() print("FAKEMOD post_startup hook ran") end)\n' > "$MD/dust/code/fakemod/lib/mod.lua"
+        printf 'error("boom in the mod")\n' > "$MD/dust/code/badmod/lib/mod.lua"
+        echo "x = 1" > "$MD/dust/code/notamod/lib/other.lua"
+        MODS_FILE="$MD/dust/data/system.mods" lua5.3 -e 'package.path = "lua/lib/?.lua;" .. package.path; require("tabutil").save({"fakemod", "badmod"}, os.getenv("MODS_FILE"))'
+        NORNS_HOME="$MD" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_mods.lua" "$T/mods.log" > /dev/null 2>&1
+        mods_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE mods done" "$T/mods.log"'
+            chk "one line per mod found" 'grep -q "mod found: fakemod" "$T/mods.log" && grep -q "mod found: badmod" "$T/mods.log"'
+            chk "a folder without lib/mod.lua is not a mod" '! grep -q "mod found: notamod" "$T/mods.log"'
+            chk "fakemod loaded at start" 'grep -q "FAKEMOD loaded as fakemod" "$T/mods.log" && grep -q "PROBE mods loaded fakemod.true" "$T/mods.log"'
+            chk "its post_startup hook ran" 'grep -q "FAKEMOD post_startup hook ran" "$T/mods.log"'
+            chk "the failing mod is reported with its error, norns went on" 'grep -q "mod failed: badmod" "$T/mods.log" && grep -q "boom in the mod" "$T/mods.log" && grep -q "PROBE mods loaded fakemod.true.badmod.false" "$T/mods.log"'
+            chk "SYSTEM > MODS lists both" 'grep -q "PROBE mods page.badmod,fakemod" "$T/mods.log"'
+            return $bad
+        }
+        run "window:mods (found in dust/code/*/lib/mod.lua, enabled ones loaded at start, a failing one reported, SYSTEM > MODS lists them)" mods_ok
+    }
+    mods_scenario
 else
     echo "SKIP  window (xdotool and imagemagick not installed)"
 fi

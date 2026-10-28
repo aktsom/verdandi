@@ -163,6 +163,18 @@ local PATH_FUNCTIONS = {
   'choose_file',
 }
 
+-- a glob pattern goes out real and the matches come back virtual (SYSTEM > MODS and the mod loader scan "<code>*/lib/mod.lua" with it)
+local system_glob = _norns.system_glob
+if type(system_glob) == 'function' then
+  _norns.system_glob = function(pattern, ...)
+    local matches, status = system_glob(to_real(pattern), ...)
+    if type(matches) == 'table' then
+      for i, path in ipairs(matches) do matches[i] = to_virtual(path) end
+    end
+    return matches, status
+  end
+end
+
 local function wrap_arg(a)
   if type(a) == 'function' then
     return function(...) return a(map(to_virtual, ...)) end
