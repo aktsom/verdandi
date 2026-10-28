@@ -636,7 +636,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "SYSTEM > MODS lists both" 'grep -q "PROBE mods page.badmod,fakemod" "$T/mods.log"'
             return $bad
         }
-        run "window:mods (found in dust/code/*/lib/mod.lua, enabled ones loaded at start, a failing one reported, SYSTEM > MODS lists them)" mods_ok
+        run "window:mods (found by their lib mod.lua, enabled ones loaded at start, a failing one reported, SYSTEM > MODS lists them)" mods_ok
     }
     mods_scenario
 else
