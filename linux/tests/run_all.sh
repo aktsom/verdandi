@@ -104,6 +104,10 @@ run "udev:rule syntax and narrowness (monome devices only, uaccess only)" linux/
 run "manual:file, table of contents, sources comments, names exist in the code" linux/tests/manual_test.sh
 run "screen:a script's global refresh() is called about 60 times a second, stops with the script, scripts without it are unaffected" linux/tests/refresh_test.sh
 run "window:buttons start the system xdg-open with the user's own HOME and XDG folders (not the norns home)" linux/tests/open_browser_test.sh
+g++ -std=gnu++14 -D_GNU_SOURCE -DNORNS_LINUX_DESKTOP -I matron/src -I matron/src/device -I matron/src/platform/linux -I matron/src/platform/macos \
+    $(pkg-config --cflags lua5.3 libevdev 2>/dev/null) -I/usr/include/libevdev-1.0 linux/tests/device_monitor_null_test.cc -o "$T/dmn" \
+    && run "c:device_monitor (devices without node, product, vendor or model: no strdup(NULL), no crash)" "$T/dmn"
+run "linux:crash report (signal, thread name, backtrace in the log and crash-report.txt; the default action and the core dump kept)" linux/tests/crash_report_test.sh
 run "package:the .deb version grows with every commit (dpkg --compare-versions)" linux/tests/package_version_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh

@@ -69,15 +69,15 @@ int osc_receive(const char *path, const char *types, lo_arg **argv, int argc, lo
 
     union event_data *ev = event_data_new(EVENT_OSC);
 
-    ev->osc_event.path = strdup(path);
+    ev->osc_event.path = strdup(path != NULL ? path : "");
     ev->osc_event.msg = lo_message_clone(msg);
 
     lo_address source = lo_message_get_source(msg);
     const char *host = lo_address_get_hostname(source);
     const char *port = lo_address_get_port(source);
 
-    ev->osc_event.from_host = strdup(host);
-    ev->osc_event.from_port = strdup(port);
+    ev->osc_event.from_host = strdup(host != NULL ? host : "");
+    ev->osc_event.from_port = strdup(port != NULL ? port : "");
 
     event_post(ev);
 

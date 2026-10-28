@@ -194,3 +194,7 @@ Look at the window on your laptop (Cinnamon, your real scale) and tell me what i
 - [ ] Anything cramped or odd: the empty area top right (where the slider was), the tighter spacing of K2 K3 E2 E3 (130 units instead of 155), the screen's nearness to the box's bottom edge.
 - [ ] **Margin around the screen (UI step 2b):** the black frame around the screen looks like the Mac's (a bit wider than before, more room above and below than at the sides); the keys and encoders moved a little (K1 E1 up, K2 K3 E2 E3 right).
 - [ ] **Resizing:** drag the window to about 75, 100, 125 and 150 percent of its size (and 200 if your screen is big): at 100 and 75 and 125 and 150 the screen's pixels are crisp and even; at sizes in between (for example 90 or 115 percent) the screen is very slightly soft but keeps its shape and its place in the black frame; the window cannot be made smaller than half. Try a script with small text (the MIX page) at each size. Also with your real display scale (fractional scaling, HiDPI) - not testable here.
+
+## Crash fix (KNOWN-ISSUES 15)
+- [ ] With the new build, leave norns running with a script (grid and LFOs) for a few hours; plug and unplug the grid and the mio, plug in a USB stick or headphones: norns stays up. `coredumpctl list | grep norns` shows no new entry.
+- [ ] If it still crashes: send `~/Verdandi/crash-report.txt` (and `coredumpctl info` of the newest norns entry). For the two aborts: `coredumpctl info` of the norns SIGABRT (Monday) and the sclang SIGABRT (Tuesday).

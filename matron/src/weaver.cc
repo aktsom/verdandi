@@ -2536,7 +2536,7 @@ void w_handle_serial_config(char *path, char *name, char *vendor, char *model, c
         return;
     }
 
-    dev_list_add(DEV_TYPE_SERIAL, path, strdup(name), lvm);
+    dev_list_add(DEV_TYPE_SERIAL, path, strdup(name != NULL ? name : "unknown"), lvm);
 }
 
 void w_handle_serial_add(void *p) {

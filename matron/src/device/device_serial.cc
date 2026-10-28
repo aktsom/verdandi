@@ -39,7 +39,12 @@ int dev_serial_init(void *self, lua_State *l) {
         return -1;
     }
 
-    d->handler_id = strdup(lua_tostring(l, -1));
+    const char *handler = lua_tostring(l, -1);
+    if (handler == NULL) {
+        fprintf(stderr, "dev_serial: no handler id for %s, device not started\n", d->base.path);
+        return -1;
+    }
+    d->handler_id = strdup(handler);
     fprintf(stderr, "dev_serial: TTY device %s at %s handled by %s\n", d->base.name, d->base.path, d->handler_id);
 
     // Initialize a new terminal config using the old config. The new config will

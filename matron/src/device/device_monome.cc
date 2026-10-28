@@ -82,10 +82,10 @@ int dev_monome_init(void *self) {
     // drop the name set by udev and use libmonome-provided name
     free(base->name);
     name = monome_get_friendly_name(m);
-    base->name = strdup(name);
+    base->name = strdup(name != NULL ? name : "monome");
 
     serial = monome_get_serial(m);
-    base->serial = strdup(serial);
+    base->serial = strdup(serial != NULL ? serial : "");
 
     base->start = &dev_monome_start;
     base->deinit = &dev_monome_deinit;

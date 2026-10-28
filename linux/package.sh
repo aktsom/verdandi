@@ -208,7 +208,10 @@ build_tree() {
     find "$T" -type f -perm -u+x -exec chmod 755 {} +
     # ELF files: strip (the compiler's paths in debug info are the usual leak of the build user's folders)
     find "$STAGE" -type f -exec sh -c 'head -c4 "$1" | grep -q "^.ELF"' _ {} \; -print | while read -r f; do
-        strip --strip-unneeded "$f" 2>/dev/null || true
+        case "$f" in
+        */build/norns/norns) strip --strip-debug "$f" 2>/dev/null || true ;; # keeps the function names: a crash report and a core dump show them
+        *) strip --strip-unneeded "$f" 2>/dev/null || true ;;
+        esac
     done
 
     # the places the desktop looks in

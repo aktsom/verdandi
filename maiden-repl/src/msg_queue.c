@@ -28,7 +28,7 @@ void msg_queue_push(int page_id, const char *str) {
     if (!entry) {
         return;
     }
-    entry->str = strdup(str);
+    entry->str = strdup(str != NULL ? str : "");
     if (!entry->str) {
         free(entry);
         return;

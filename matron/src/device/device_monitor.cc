@@ -281,6 +281,9 @@ void add_dev_tty(struct udev_device *dev) {
         return;
     }
     char *name = get_device_name(dev);
+    if (name == NULL) {
+        return;
+    }
     if (is_dev_monome_grid(dev)) {
         fprintf(stderr, "dev_monitor: TTY appears to be a monome\n");
         dev_list_add(DEV_TYPE_MONOME, node, name, NULL);
@@ -314,6 +317,9 @@ void add_dev_input(struct udev_device *dev) {
         return;
     }
     char *name = get_device_name(dev);
+    if (name == NULL) {
+        return;
+    }
     dev_list_add(DEV_TYPE_HID, node, name, NULL);
 }
 
@@ -323,6 +329,10 @@ void add_dev_sound(struct udev_device *dev) {
     const char *alsa_node = get_alsa_midi_node(dev);
     if (alsa_node != NULL) {
         char *name = get_device_name(dev);
+        if (name == NULL) {
+            free((void *)alsa_node);
+            return;
+        }
         fprintf(stderr, "dev_monitor: adding midi device %s\n", name);
         dev_list_add(DEV_TYPE_MIDI, alsa_node, name, NULL);
     }
@@ -339,18 +349,23 @@ const char *get_alsa_midi_node(struct udev_device *dev) {
 
     subsys = udev_device_get_subsystem(dev);
 
-    if (strcmp(subsys, "sound") == 0) {
+    if (subsys != NULL && strcmp(subsys, "sound") == 0) {
         syspath = udev_device_get_syspath(dev);
-        sysdir = opendir(syspath);
+        if (syspath == NULL || (sysdir = opendir(syspath)) == NULL) {
+            fprintf(stderr, "dev_monitor: sound device without a readable syspath, skipped\n");
+            return NULL;
+        }
 
         while ((sysdir_ent = readdir(sysdir)) != NULL) {
             if (sscanf(sysdir_ent->d_name, "midiC%uD%u", &alsa_card, &alsa_dev) == 2) {
                 if (asprintf(&result, "/dev/snd/%s", sysdir_ent->d_name) < 0) {
                     fprintf(stderr, "dev_monitor: failed to create alsa device path for %s\n", sysdir_ent->d_name);
+                    closedir(sysdir);
                     return NULL;
                 }
             }
         }
+        closedir(sysdir);
     }
 
     return result;
@@ -367,6 +382,13 @@ char *get_device_name(struct udev_device *dev) {
         if (current_dev == NULL) {
             break;
         }
+    }
+
+    if (current_name == NULL) {
+        // no "product" on the device or any parent (a lid switch, a speaker, a jack): never hand strdup a NULL
+        const char *model = udev_device_get_property_value(dev, "ID_MODEL");
+        current_name = (char *)(model != NULL ? model : "unknown");
+        fprintf(stderr, "dev_monitor: device has no product name, using \"%s\"\n", current_name);
     }
 
     return strdup(current_name);

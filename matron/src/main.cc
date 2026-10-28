@@ -27,6 +27,10 @@
 #include "input.h"
 #include "jack_client.h"
 #include "matron_main.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include <string>
+#include "platform/linux/crash_report.h"
+#endif
 #include "metro.h"
 #include "osc.h"
 #include "platform.h"
@@ -64,6 +68,14 @@ void matron_cleanup(void) {
 }
 
 int matron_main(int argc, char **argv) {
+#ifdef NORNS_LINUX_DESKTOP
+    {
+        // a crash leaves a report in the log and in <norns home>/crash-report.txt (the launcher sets HOME to the norns home)
+        const char *home = getenv("HOME");
+        std::string file = home != NULL && home[0] == '/' ? std::string(home) + "/crash-report.txt" : "";
+        crash_report_install(file.empty() ? NULL : file.c_str());
+    }
+#endif
     args_parse(argc, argv);
 
     print_version();

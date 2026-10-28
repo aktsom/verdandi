@@ -201,6 +201,7 @@ def build(bld):
         ]
         matron_sources = [f for f in matron_sources if f not in replaced] + [
             '../matron/src/platform/linux/app_audio_linux.cc',
+            '../matron/src/platform/linux/crash_report.cc',
             '../matron/src/platform/linux/midi_autoconnect.cc',
             '../matron/src/platform/linux/serialosc_check.cc',
             '../matron/src/platform/linux/plugin_arch_note.cc',
