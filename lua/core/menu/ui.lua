@@ -49,10 +49,11 @@ m.enc = function(n, delta)
   if n == 2 then
     m.pos = util.clamp(m.pos + delta, 1, #ROWS)
   elseif n == 3 then
+    -- delta steps, like every other page (AUDIO: sel + delta): a release of the - and = keys arrives as 0 and changes nothing, a repeat as 2 is two steps
     local row = ROWS[m.pos]
-    if row == "BRIGHTNESS" then ui.step_brightness(delta > 0 and 1 or -1)
-    elseif row == "COLOUR" then ui.step_colour(delta > 0 and 1 or -1)
-    elseif row == "GREYS" then ui.step_greys(delta > 0 and 1 or -1) end
+    if row == "BRIGHTNESS" then ui.step_brightness(delta)
+    elseif row == "COLOUR" then ui.step_colour(delta)
+    elseif row == "GREYS" then ui.step_greys(delta) end
   end
   _menu.redraw()
 end

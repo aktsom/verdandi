@@ -112,6 +112,7 @@ cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -
 python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
 run "c:ui_look (grey correction, tint, brightness: equal to the Python reference at 89600 values; black stays black, white stays white; the gif palette)" "$T/ulk" "$T/ui-dump.txt"
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
+run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
 run "package:the .deb version grows with every commit (dpkg --compare-versions)" linux/tests/package_version_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh

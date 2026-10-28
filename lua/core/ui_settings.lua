@@ -180,18 +180,25 @@ local function changed()
   M.save()
 end
 
+-- the step functions take the encoder's delta in steps (0 = nothing: no change, no apply, no write)
 function M.step_brightness(d)
+  d = math.floor((d or 0) + 0.5)
+  if d == 0 then return end
   M.state.brightness = clamp(tenths(M.state.brightness + d * 0.1), 0.1, 1.0)
   changed()
 end
 
 function M.step_greys(d)
+  d = math.floor((d or 0) + 0.5)
+  if d == 0 then return end
   M.state.greys = clamp(tenths(M.state.greys + d * 0.1), 0.4, 1.0)
   changed()
 end
 
 --- E3 on COLOUR: white, yellow, pink, custom (custom only once a valid hex was entered)
 function M.step_colour(d)
+  d = math.floor((d or 0) + 0.5)
+  if d == 0 then return end
   local n = #M.COLOURS
   if M.state.custom == nil then n = n - 1 end
   local i = 1
