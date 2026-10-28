@@ -1,32 +1,28 @@
-# UI previews (plan only: no product code changed)
+# UI previews (plan documents; the pictures document the owner's decisions)
 
-All images are made by `make_previews.sh` (run it from anywhere; it needs a built norns, Xvfb, xdotool, ImageMagick, a C compiler and cairo's headers).
-The page on the screen is the parameter list of PARAMS > EDIT, with one highlighted line (level 15) and dim lines (level 4).
+Made by `make_previews.sh` (run it from anywhere; it needs a built norns, Xvfb, xdotool, ImageMagick, a C compiler and cairo's headers, and sclang: the script loads an engine).
+Everything is drawn by the product's own skin code (`matron/src/platform/macos/device_skin.c`, only read) or is a capture of the real norns window; nothing in the product is changed.
+`UIPREVIEW_REUSE_CAPTURE=1` reuses `oled-edit.png` instead of starting norns for it, `UIPREVIEW_SKIP_RESIZE=1` keeps the `resize-real-*.png` that are here.
+
+## Pictures and numbers that stay
 
 | file | what it is |
 |---|---|
-| `layout-current-REAL-window.png` | the real window of the real norns under Xvfb, today's layout (the product, unchanged) |
-| `layout-current-REAL-window-params-page.png` | the same, the PARAMS main page |
-| `layout-current-rendered.png` | today's layout drawn by `device_skin.c` through the preview renderer. It differs from the real window by an RMSE of about 2 % (the LED glow and the screen's anti-aliasing), so the renderer is a fair stand-in |
-| `layout-plus20.png`, `layout-plus22.png`, `layout-plus25.png` | the screen 20, 22 and 25 percent bigger (3.6, 3.66 and 3.75 device pixels per screen pixel; today 3), nearest-neighbour; box and window unchanged, the other controls nudged (`../ui-plan.md` section 1.3) |
-| `layout-plus22-smooth.png`, `zoom-nearest-vs-smooth.png` | the +22 layout with a bilinear screen, and a 4x zoom of the text of both |
-| `layout-plus33.png` | the screen at exactly 4 device pixels per screen pixel (+33 percent, whole pixels): box and window the same size, the cluster of K2 K3 E2 E3 re-spaced, K1 and E1 moved up (`../ui-plan.md` section 1.4) |
-| `layout-plus33-wider-box.png` | the same screen with the box and window 26 units wider and the cluster's spacing kept (the alternative) |
-| `zoom-letters-today-25-33.png` | the word LEVELS at 8x: today (3 px), +25 percent (3.75: uneven) and +33 percent (4: even) |
-| `layout-compare.png` | the real window and the five layouts side by side (half size): today, +20, +22 / +25, +33, +33 wider box |
-| `oled-edit.png` | the screen image (128 x 64) captured from the real norns; `UIPREVIEW_REUSE_CAPTURE=1 make_previews.sh` redraws everything else from it without starting norns |
-| `grey-current.png`, `grey-gamma07.png`, `grey-gamma05.png`, `grey-compare.png` | the same page with today's greys and the two brighter options, current layout; `grey-levels.txt` is the exact table for all 16 levels |
-| `brightness-100.png`, `brightness-70.png`, `brightness-40.png`, `brightness-compare.png` | the +22 layout with grey option gamma 0.7 at three brightness settings |
+| `layout-ui-a-nolabels.png` | **the chosen layout** (step 2: arrangement A without labels; `../ui-plan.md` 1.6, 1.7): a render by the skin code, PARAMS > EDIT on the screen |
+| `layout-current-REAL-window.png` | the **real window** of the real norns under Xvfb with that layout built (the render above matches it: RMSE printed by the script) |
+| `layout-margin-compare.png` | the black margin around the screen: the Mac layout (reference), today's Linux layout and the three options `abs`, `shrink` and `grow` (step 2b, `../ui-plan.md` 1.8; the recommended one is `grow`) |
+| `resize-compare.png`, `resize-real-60.png`, `-80`, `-100`, `-130`, `-160` | the real window resized to 60, 80, 100, 130 and 160 percent of 992 x 662 (the `resize-real-*` files), and the comparison sheet with option A simulated (`../ui-plan.md` 1.9) |
+| `grey-levels.txt` | the grey table: the 16 levels today and with gamma 0.7 and gamma 0.5 (`../ui-plan.md` section 2) |
+| `ui-numbers-a.txt`, `ui-checks-a.txt`, `ui-hit-check-a.txt` | the exact positions of the chosen layout, its spacing checks and the result of `hit_check.c` (the skin code's real `skin_hit` on 30 points) |
+| `ui-margins.txt` | the margin measurements: the Mac layout and each option, calculated and measured on renders with a white screen |
+| `ui-resize-numbers.txt` | what `skin_geom` does at 33 to 200 percent of the window size, for the Linux layout and the Mac layout |
+| `oled-edit.png` | the 128 x 64 screen image (PARAMS > EDIT) captured from the real norns, the input of every render |
 
-| `layout-ui-a-labels.png`, `layout-ui-a-nolabels.png`, `layout-ui-a-labels-muted.png` | round 2, arrangement A (no OUT slider, MUTE in the top row, keys and encoders 15 percent bigger, screen at 4 px; box and window as today), with and without the K and E text, and with MUTE on (`../ui-plan.md` section 1.6) |
-| `layout-ui-b-labels.png`, `layout-ui-b-nolabels.png` | arrangement B (alternative: encoders and keys in two bands) |
-| `layout-compare-ui.png` | today's real window against A (labels, no labels), B (labels, no labels) and A with MUTE on |
-| `ui-numbers-*.txt`, `ui-checks-*.txt`, `ui-hit-check-*.txt` | the exact positions, the spacing checks and the result of the hit test (`hit_check.c`, the variant's real `skin_hit`) for each arrangement |
+## Sources the script and the plan use
 
-| `layout-margin-compare.png`, `layout-margin-*.png`, `margin-corner-compare.png`, `ui-margins.txt` | round 2b: the Mac layout as the reference, today's Linux layout and three options for the margin around the screen, with measurements (`../ui-plan.md` 1.8) |
-| `resize-real-*.png`, `resize-optionA-*.png`, `resize-compare.png`, `resize-zoom-80.png`, `ui-resize-numbers.txt` | round 2b: the real window resized to 60..160 percent (today), option A simulated, and the screen scale at every size (`../ui-plan.md` 1.9) |
-| `base/` | the product's `device_skin.c/.h` before the Linux layout table: the generators of rounds 1 and 2 patch these copies |
+`make_previews.sh`; `capture.lua`, `resize_capture.lua` and `uipreview.lua` (what the real norns is told to show); `render_preview.c` (draws a window from the skin code, a screen image, a grey table and a screen mode); `gen_variant_ui.py` (the chosen layout from a copy of the skin code's constants, with `base/`); `gen_variant_margin.py` (the margin options); `measure_margin.py`; `geom_table.c`; `hit_check.c`; `grey_tables.py`; `base/` (the product's `device_skin.c/.h` before the Linux layout table was added: `gen_variant_ui.py` patches these copies; see `base/README.md`).
 
-What is real code and what is not: the **screen content** comes from the real norns (menu code, fonts, the screen's own greys). Today's window is the real window. The **layouts** are drawn by the product's own `device_skin.c`
-(`gen_variant.py`, `gen_variant33.py` and `gen_variant_ui.py` and `gen_variant_margin.py` make a copy with other constants; the product file is only read). **Not** product code: drawing the screen at a fractional pixel size, the grey table and the brightness (they do not exist yet).
-The other files: `capture.lua` and `uipreview.lua` (what norns is told to show), `render_preview.c`, `grey_tables.py`.
+## What was removed (nothing is lost)
+
+The pictures of the options that were not chosen, and the intermediates, were deleted from this folder in the commit that adds this paragraph; **they are in the git history** (the parent of that commit, for example `git show 25916e1:docs/port/ui-previews/layout-plus25.png`): the screen +20, +22, +25 and +33 percent layouts, the wider-box and the arrangement B layouts, the with-labels and the MUTE-on variants, the smooth and nearest zooms, the grey and brightness pictures, the single margin options and the resize pictures of option A, `gen_variant.py` and `gen_variant33.py` (they made the +20 to +33 layouts), and the ui numbers of arrangement B.
+`../ui-plan.md` still names those pictures where it discusses the options; read them as "in the history".

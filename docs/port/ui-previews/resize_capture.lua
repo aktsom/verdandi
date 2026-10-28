@@ -18,26 +18,18 @@ _norns.enc(2, 2)
 #xdo search --name ^Verdandi.Linux$ windowsize %1 595 397
 #sleep 1.5
 #shot @home/xs-60.png
-#xdo search --name ^Verdandi.Linux$ windowsize %1 744 497
-#sleep 1.5
-#shot @home/xs-75.png
 #xdo search --name ^Verdandi.Linux$ windowsize %1 794 530
 #sleep 1.5
 #shot @home/xs-80.png
 #xdo search --name ^Verdandi.Linux$ windowsize %1 992 662
 #sleep 1.5
 #shot @home/xs-100.png
-#xdo search --name ^Verdandi.Linux$ windowsize %1 1240 828
-#sleep 1.5
-#shot @home/xs-125.png
 #xdo search --name ^Verdandi.Linux$ windowsize %1 1290 861
 #sleep 1.5
 #shot @home/xs-130.png
-#xdo search --name ^Verdandi.Linux$ windowsize %1 1488 993
-#sleep 1.5
-#shot @home/xs-150.png
 #xdo search --name ^Verdandi.Linux$ windowsize %1 1587 1059
 #sleep 1.5
 #shot @home/xs-160.png
 #sh xdotool search --name '^Verdandi.Linux$' | head -1 | xargs -I{} xdotool getwindowgeometry --shell {} > "@home/geo-last.txt"
 #sleep 1
+

@@ -1,6 +1,6 @@
 # UI plan, step 1: a bigger screen in the box, brighter greys, a SCREEN page (preview and plan only)
 
-Nothing in the product was changed for this note. The pictures are in `docs/port/ui-previews/` (index and how they were made: its `README.md`; reproduce with `make_previews.sh`).
+Nothing in the product was changed for this note. The pictures are in `docs/port/ui-previews/` (**pictures of options that were not chosen were removed later to keep the folder small; the sections below still name them: they are in the git history, commit `25916e1` and before, see `docs/port/ui-previews/README.md`**) (index and how they were made: its `README.md`; reproduce with `make_previews.sh`).
 The owner wants: (a) the screen about 20 to 25 percent bigger inside the box, box and window the same size, the other controls nudged; (b) brighter dim text by default and an overall brightness setting on a new SYSTEM > SCREEN page, screenshots and GIFs matching the window; (c) later a detachable resizable screen window (only noted here).
 
 ## 0. Summary and recommendation
