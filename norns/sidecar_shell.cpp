@@ -1,5 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
 #include <poll.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -24,6 +26,19 @@ static void fail(sidecar_shell_result_t *result, const char *err, int errnum) {
     result->errnum = errnum;
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+// Linux desktop (Verdandi): a command's stderr is not part of the output a script reads. scripts are written for the device, where
+// os.capture/io.popen gave stdout only: mx.samples looks for ".wav" in what "ls <folder>/*.wav" printed and found it in ls's own error message
+// for a missing folder (docs/port/KNOWN-ISSUES.md item 22). stderr stays the program's own stderr (the log). NORNS_CAPTURE_STDERR=1 merges it as upstream does;
+// a command that says "2>&1" itself is not affected.
+static bool stderr_into_output(void) {
+    const char *e = getenv("NORNS_CAPTURE_STDERR");
+    return e != NULL && *e != '\0' && strcmp(e, "0") != 0;
+}
+#else
+static bool stderr_into_output(void) { return true; }
+#endif
+
 static pid_t shell_spawn(const char *cmd, int *out_fd) {
     int fds[2];
     if (pipe(fds) != 0) {
@@ -47,7 +62,9 @@ static pid_t shell_spawn(const char *cmd, int *out_fd) {
             close(devnull);
         }
         dup2(fds[1], STDOUT_FILENO);
-        dup2(fds[1], STDERR_FILENO);
+        if (stderr_into_output()) {
+            dup2(fds[1], STDERR_FILENO);
+        }
         close(fds[0]);
         close(fds[1]);
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);

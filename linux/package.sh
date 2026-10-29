@@ -332,6 +332,9 @@ build_deb() {
     [ -n "$SHL" ] || die "dpkg-shlibdeps found no dependencies"
     # sound server (the host's libjack: pw-jack works), a file dialog, the browser opener
     DEPENDS="$SHL, pipewire-jack | jackd2, zenity | xdg-desktop-portal, xdg-utils"
+    # programs that scripts run through the shell: mx.samples downloads its sample packs with curl and unpacks them with unzip (docs/port/KNOWN-ISSUES.md item 22). recommended, not
+    # required: apt installs them with the package, norns starts without them
+    RECOMMENDS="curl, unzip"
     local size
     size="$(du -sk --exclude=DEBIAN "$STAGE" | cut -f1)"
     cat > "$D/control" <<CTL
@@ -341,6 +344,7 @@ Architecture: $ARCH
 Maintainer: $MAINTAINER
 Installed-Size: $size
 Depends: $DEPENDS
+Recommends: $RECOMMENDS
 Section: sound
 Priority: optional
 $(deb_description)

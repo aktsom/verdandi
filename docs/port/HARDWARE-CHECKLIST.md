@@ -250,3 +250,10 @@ The tests run under Xvfb with no window manager (stacking order and keyboard foc
 - [ ] **The other scripts you use** (awake, concrete, mlre, ...) still sound as before.
 - [ ] **`sclang.log`:** about two dozen `Extension ... overwrites ...` lines at start are expected; no other `ERROR`.
 - [ ] **mx_malone (item 21):** with nb_mxsynths enabled, `sclang.log` shows `NornsSynthDefCompat: mx_malone ...` once and no `build failed`. Play all 11 models (synthy, icarus, casio, malone, toshiya, piano, epiano, mdapiano, kalimba, triangles, aaaaaa): each one sounds, in particular malone and the ones after it, which were missing before. Say if malone's filter sounds wrong (it is now the intended modulation instead of 3.13's read past the buffer).
+
+## Commands run by scripts (KNOWN-ISSUES 22): what only your laptop can show
+- [ ] **mx.samples:** install the new package, start Verdandi, load mx.samples: the packs that are not downloaded say `- get?`, a pack you have does not. Press K3 on one: it downloads (curl) and unpacks (unzip) into `~/Verdandi/dust/audio/mx.samples/<pack>/`, the `- get?` goes away and the pack plays. `logs/norns.log` has the shell's complaints (if any) and no `ls: cannot access` text on the screen.
+- [ ] **`curl` and `unzip`** are installed (`command -v curl unzip`); the package recommends them.
+- [ ] **Scripts that list folders** (nice-tapes, pitfalls, nornsfetch ...) show nothing odd where a folder is missing.
+- [ ] **Optional, for a possible later mode:** `sysctl kernel.apparmor_restrict_unprivileged_userns` and `unshare -rm true; echo $?` (tells whether a mount namespace for scripts' commands would be allowed on your machine; nothing uses it now).
+
