@@ -516,6 +516,10 @@ void sdl_bridge_set_warning(const char *text) {
 
 #ifdef NORNS_LINUX_DESKTOP
 // any thread: the look of the screen (SYSTEM > UI): brightness 0.1-1, the tint (r, g, b) and the gamma of the grey correction
+void sdl_bridge_set_file_dialog(int on) {
+    shell_set_file_dialog(on);
+}
+
 void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma) {
     double *v = (double *)malloc(5 * sizeof(double));
     if (v == NULL) {
@@ -1988,6 +1992,12 @@ static void menu_item(int id) {
     case SHELL_MENU_QUIT:
         event_post(event_data_new(EVENT_QUIT));
         break;
+#ifdef NORNS_LINUX_DESKTOP
+    case SHELL_MENU_FILE_DIALOG:
+        // the menu flipped its tick: lua decides, saves it in ui.conf (core/ui_settings.lua)
+        call_lua("ui_file_dialog_changed", {shell_get_file_dialog() ? "1" : "0"});
+        break;
+#endif
 #endif
     default:
         break;

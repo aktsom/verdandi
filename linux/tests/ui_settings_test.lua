@@ -135,7 +135,7 @@ check(not ok2 and type(msg) == "string" and s.colour == before and s.custom == "
 ui.state.brightness, ui.state.colour, ui.state.contrast = 0.7, "custom", 0.6
 ui.save()
 local text = slurp("/home/we/ui.conf")
-check(text == "brightness=0.7\ncolour=custom\ncustom=FF8800\ncontrast=0.6\n", "the file: " .. tostring(text))
+check(text == "brightness=0.7\ncolour=custom\ncustom=FF8800\ncontrast=0.6\nfile_dialog=0\n", "the file: " .. tostring(text))
 check(slurp("/home/we/ui.conf.tmp") == nil, "no temporary file is left")
 calls = {}
 package.loaded["core/ui_settings"] = nil

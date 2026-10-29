@@ -4,6 +4,8 @@
 --   colour=yellow     white, yellow, pink or custom, default white
 --   custom=FF8800     the last custom colour (3 or 6 hex digits), none until one was entered
 --   contrast=0.5      how much the dim greys are lifted, 0 to 1 in steps of 0.1 (eleven values), 0 = the old linear mapping, default 0.5 (gamma_of below)
+--   file_dialog=0     1: a script that opens the file chooser also gets the system's file dialog; 0 (default): norns's own on-screen browser only.
+--                     ticked in the window's right-click menu ("Open the file dialog when a script loads a file"), applied at once
 --   greys=0.7         the old key of that setting (a gamma, 0.4 to 1.0): still read, converted to the nearest contrast, never written
 -- unknown keys are ignored with a log line (and kept when the file is written again), missing keys take their defaults, a damaged value
 -- falls back to its own default with a log line. one call, _norns.ui_look(brightness, r, g, b, gamma), tells the window; it exists on the
@@ -113,6 +115,17 @@ local SETTINGS = {
     format = function(v) return M.format_contrast(v) end,
     range = "0..1",
   },
+  {
+    key = "file_dialog", default = false,
+    parse = function(text)
+      text = tostring(text):lower()
+      if text == "1" or text == "on" or text == "true" then return true end
+      if text == "0" or text == "off" or text == "false" then return false end
+      return nil
+    end,
+    format = function(v) return v and "1" or "0" end,
+    range = "0 or 1",
+  },
 }
 local BY_KEY = {}
 for _, s in ipairs(SETTINGS) do BY_KEY[s.key] = s end
@@ -210,6 +223,7 @@ function M.apply()
   if _norns == nil or _norns.ui_look == nil then return end
   local r, g, b = M.tint()
   _norns.ui_look(M.state.brightness, r, g, b, M.gamma_of(M.state.contrast))
+  if _norns.ui_file_dialog ~= nil then _norns.ui_file_dialog(M.state.file_dialog == true) end -- the tick in the window's menu
 end
 
 --- at start: read the file and apply it
@@ -217,6 +231,10 @@ function M.load_and_apply()
   if _norns == nil or _norns.ui_look == nil then return end
   M.load()
   M.apply()
+  if _norns.ui_file_dialog ~= nil then
+    -- the window's menu ticked or unticked the item: C calls this with "1" or "0"
+    _norns.ui_file_dialog_changed = function(v) M.set_file_dialog(tostring(v) == "1") end
+  end
 end
 
 -- every change: apply at once, save at once
@@ -237,6 +255,12 @@ function M.step_contrast(d)
   d = math.floor((d or 0) + 0.5)
   if d == 0 then return end
   M.state.contrast = clamp(tenths(M.state.contrast + d * 0.1), 0, 1)
+  changed()
+end
+
+--- "Open the file dialog when a script loads a file": on or off, applied and saved at once
+function M.set_file_dialog(on)
+  M.state.file_dialog = on and true or false
   changed()
 end
 

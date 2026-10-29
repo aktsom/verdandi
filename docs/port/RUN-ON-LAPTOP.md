@@ -220,8 +220,8 @@ terminal output and `~/verdandi-home/logs/jackd.log` and `logs/sclang.log` if pr
       choose a `.wav`: a note on the device says it was linked in `dust/audio/mac`; with "Copy samples into
       dust" ticked it is copied. Also try dragging a `.wav` from the file manager onto the window (Shift held:
       a copy).
-- [ ] A script's own file chooser (for example buffer 1 sample in PARAMS of a script that has it): your
-      desktop's dialog comes up next to norns' own browser.
+- [ ] A script's own file chooser (for example buffer 1 sample in PARAMS of a script that has it): by default **only norns's own browser** comes up on the screen (drive it with the keys); no window opens over it.
+      Right-click menu > **Open the file dialog when a script loads a file**: tick it, open the chooser again: your desktop's dialog comes up next to the browser; choose a `.wav`: the script gets it as before. Cancel the dialog: the browser is still there and works. Untick it: the next chooser has no dialog. Quit and start Verdandi again: the tick is still there (menu) and the setting is in `~/Verdandi/ui.conf` as `file_dialog=1`.
 - [ ] "Show dust folder" and "Show tape folder" open your file manager.
 
 **Screenshot and GIF**

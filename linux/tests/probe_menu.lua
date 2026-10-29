@@ -20,7 +20,7 @@ _norns.file_chosen = function(p) print("PROBE chosen", p) end
 #sleep 2
 # Import files... (the stub answers with a wav)
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 319 click 1
+#xdo mousemove 340 299 click 1
 #sleep 2
 # a script's file dialog (lua fileselect)
 _norns.choose_file("/tmp")

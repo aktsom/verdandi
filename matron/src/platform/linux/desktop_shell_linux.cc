@@ -6,6 +6,7 @@
  * (hid_virtual.cc), the "norns keys" MIDI source (keys_midi.cc).
  */
 
+#include <atomic>
 #include <SDL2/SDL.h>
 #include <pwd.h>
 #include <stdint.h>
@@ -34,6 +35,7 @@ static char menu_app[MENU_APPS][128]; // the applications in the menu, as built
 static int input_now = 1; // SKIN_INPUT_MIC until lua says otherwise
 static int recording = 0;
 static int copy_samples = 0;
+static std::atomic<int> file_dialog{0}; // "Open the file dialog when a script loads a file": lua owns the value (ui.conf), this is the tick
 static int import_mode = SHELL_IMPORT_LINK;
 
 void shell_install(void (*on_item)(int id), void (*on_import)(const char *path, int mode),
@@ -96,6 +98,14 @@ void shell_choose_file_close(void) {
     picker_close();
 }
 
+void shell_set_file_dialog(int on) {
+    file_dialog = on ? 1 : 0;
+}
+
+int shell_get_file_dialog(void) {
+    return file_dialog.load();
+}
+
 // the menu's Import: every chosen path goes through the import callback
 static void import_done(const char *const *paths, int n, void *ctx) {
     (void)ctx;
@@ -142,6 +152,7 @@ static void menu_build(void) {
     add_item(SHELL_MENU_IMPORT, "Import files...", "Ctrl+O", 0);
     add_item(SHELL_MENU_IMPORT_FOLDER, "Import folder...", "", 0);
     add_item(SHELL_MENU_COPY_SAMPLES, "Copy samples into dust", "", copy_samples);
+    add_item(SHELL_MENU_FILE_DIALOG, "Open the file dialog when a script loads a file", "", file_dialog.load());
     add_separator();
     add_item(SHELL_MENU_DUST, "Show dust folder", "", 0);
     add_item(SHELL_MENU_TAPE, "Show tape folder", "", 0);
@@ -184,6 +195,12 @@ static void menu_do(int id) {
         break;
     case SHELL_MENU_COPY_SAMPLES:
         copy_samples = !copy_samples;
+        break;
+    case SHELL_MENU_FILE_DIALOG:
+        file_dialog = !file_dialog.load();
+        if (cb_item != NULL) {
+            cb_item(id); // the bridge tells lua, which saves it
+        }
         break;
     case SHELL_MENU_INPUT_MIC:
         if (cb_input != NULL) {

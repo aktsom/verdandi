@@ -58,6 +58,8 @@ extern void sdl_bridge_set_warning(const char *text);
 #ifdef NORNS_LINUX_DESKTOP
 // any thread, does not block: the look of the screen (SYSTEM > UI): brightness 0.1-1, the tint colour and the gamma of the grey correction (ui_look.h)
 extern void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma);
+// any thread, does not block: the tick of "Open the file dialog when a script loads a file" in the window's menu (lua reads ui.conf and says what it holds)
+extern void sdl_bridge_set_file_dialog(int on);
 #endif
 
 #ifdef __cplusplus

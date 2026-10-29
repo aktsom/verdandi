@@ -104,11 +104,20 @@ fs.getdir = function()
   return path
 end
 
+-- Linux desktop: a script's chooser is norns's own on-screen browser, as on the hardware. the system's file dialog (_norns.choose_file) comes up with it
+-- only when "Open the file dialog when a script loads a file" is ticked in the window's menu (core/ui_settings.lua, ui.conf file_dialog). where
+-- _norns.ui_file_dialog does not exist (macOS, the device) nothing is asked and the behaviour is the one it always had
+local function dialog_wanted()
+  if _norns.ui_file_dialog == nil then return true end
+  local ok, ui = pcall(require, 'core/ui_settings')
+  return ok and ui.state ~= nil and ui.state.file_dialog == true
+end
+
 fs.getlist = function()
   local dir = fs.getdir()
   -- macOS: the Finder's open panel, in the same folder (a file chosen there or dropped on
   -- the window comes back as _norns.file_chosen / file_dropped)
-  if fs.active and _norns.choose_file then _norns.choose_file(dir) end
+  if fs.active and _norns.choose_file and dialog_wanted() then _norns.choose_file(dir) end
   fs.list = util.scandir(dir)
   fs.display_list = {}
   fs.lengths = {}

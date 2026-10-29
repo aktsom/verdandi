@@ -364,6 +364,7 @@ static int _monitor_out(lua_State *l);
 #ifdef NORNS_LINUX_DESKTOP
 static int _audio_status(lua_State *l);
 static int _ui_look(lua_State *l);
+static int _ui_file_dialog(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -723,6 +724,7 @@ void w_init(void) {
 #ifdef NORNS_LINUX_DESKTOP
     lua_register_norns("audio_status", &_audio_status);
     lua_register_norns("ui_look", &_ui_look);
+    lua_register_norns("ui_file_dialog", &_ui_file_dialog);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3723,6 +3725,16 @@ int _audio_status(lua_State *l) {
 int _ui_look(lua_State *l) {
     sdl_bridge_set_screen_look(luaL_checknumber(l, 1), (int)luaL_checkinteger(l, 2), (int)luaL_checkinteger(l, 3), (int)luaL_checkinteger(l, 4),
                                luaL_checknumber(l, 5));
+    return 0;
+}
+
+/***
+ * Linux desktop: the tick of "Open the file dialog when a script loads a file" in the window's menu
+ * @function ui_file_dialog
+ * @tparam boolean on
+ */
+int _ui_file_dialog(lua_State *l) {
+    sdl_bridge_set_file_dialog(lua_toboolean(l, 1));
     return 0;
 }
 

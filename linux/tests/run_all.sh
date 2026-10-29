@@ -111,6 +111,7 @@ run "linux:crash report (signal, thread name, backtrace in the log and crash-rep
 cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -o "$T/ulk" -lm 2> "$T/ulk.err" || cat "$T/ulk.err"
 python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
 run "c:ui_look (grey correction, tint, brightness: equal to the Python reference at 89600 values; black stays black, white stays white; the gif palette)" "$T/ulk" "$T/ui-dump.txt"
+run "lua:file dialog setting (off by default, ticked, unticked at once, saved, damaged value, result and cancel, macOS unchanged)" lua5.3 linux/tests/file_dialog_setting_test.lua
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
 D="$(mktemp -d)"
@@ -582,6 +583,49 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     else
         echo "SKIP  portal mock (python3 gi and dbus-run-session not installed)"
     fi
+    # "Open the file dialog when a script loads a file": off by default (norns's own browser only), ticked in the window's menu (the dialog opens),
+    # unticked (no dialog), saved in ui.conf, and after a restart the menu shows the tick and the dialog opens. a stub zenity counts the dialogs
+    dialog_scenario() {
+        DH="$(mktemp -d)"
+        ln -s "$REPO" "$DH/norns"
+        mkdir -p "$DH/dust/code/probe" "$DH/stub"
+        DI="$(mktemp -d -p /var/tmp)"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$DH/dust/code/probe/"
+        echo "RIFF" > "$DI/picked.wav"
+        printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/zenity.args"\necho "%s/picked.wav"\n' "$DH" "$DI" > "$DH/stub/zenity"
+        chmod +x "$DH/stub/zenity"
+        DLOG1="$T/dialog1.log"
+        DLOG2="$T/dialog2.log"
+        PATH="$DH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$DH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_file_dialog.lua" "$DLOG1" > /dev/null 2>&1
+        cp "$DH/ui.conf" "$T/dialog-ui.conf" 2> /dev/null
+        PATH="$DH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$DH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_file_dialog_restart.lua" "$DLOG2" > /dev/null 2>&1
+        mark() { sed -n "s/^$1=//p" "$DH/probe.marks" 2> /dev/null | tail -1; }
+        # the menu row of the new item (x 300..600, y 364..390) in the three menu pictures
+        row() { convert "$DH/$1" -crop 300x26+300+364 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,364 600,390" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        dialog_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$DH/probe.marks" 2> /dev/null))"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE file dialog done" "$DLOG1" && grep -q "PROBE file dialog restart done" "$DLOG2"'
+            chk "default: norns's own browser is up" 'grep -q "PROBE browser up.true" "$DLOG1"'
+            chk "default: no system dialog opened" '[ "$(mark default_dialogs)" = 0 ]'
+            chk "ticking in the menu saves file_dialog=1" '[ "$(mark saved_on)" = yes ]'
+            chk "ticked: one dialog opened" '[ "$(mark ticked_dialogs)" = 1 ]'
+            chk "ticked: the file it chose reaches the script" 'grep -q "PROBE fs result.*audio/mac/picked.wav" "$DLOG1"'
+            chk "ticked: the browser is closed after the choice" 'grep -q "PROBE browser after dialog.false" "$DLOG1"'
+            chk "unticking in the menu saves file_dialog=0" '[ "$(mark saved_off)" = yes ]'
+            chk "unticked: no further dialog, without a restart" '[ "$(mark unticked_dialogs)" = 1 ]'
+            chk "ui.conf has file_dialog=1 at the end" 'grep -q "^file_dialog=1" "$T/dialog-ui.conf"'
+            chk "the menu shows the tick: the item's row differs between off and on" '[ "$(row menu-off.png)" != "$(row menu-on.png)" ]'
+            chk "...and nothing else in the picture differs" '[ "$(rest menu-off.png)" = "$(rest menu-on.png)" ]'
+            chk "after a restart the menu shows the tick without a click" '[ "$(row menu-restart.png)" = "$(row menu-on.png)" ]'
+            chk "after a restart the dialog opens (the setting was loaded)" '[ "$(mark restart_dialogs)" = 2 ]'
+            return $bad
+        }
+        run "window:file dialog only when ticked in the menu (off by default, saved, tick after a restart)" dialog_ok
+        rm -rf "$DI"
+    }
+    dialog_scenario
     # the screen's look: yellow, brightness 0.4, contrast 0.5 from ui.conf; window, screenshot and gif show the same colours (docs/port/ui-settings-plan.md)
     ui_look_scenario() {
         UH="$(mktemp -d)"

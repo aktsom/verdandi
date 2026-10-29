@@ -17,6 +17,7 @@ Things that cannot be tested in the build sandbox. Filled in as phases go.
       desktop's own dialog, start in the folder given, and return the chosen paths. (The code was tested
       only against a mock portal on a private bus, `linux/tests/mock_portal.py`; the real portals may
       differ in details such as `current_folder` or the dialog's parent window.)
+- [ ] **A script's file dialog is now off by default** (right-click menu > "Open the file dialog when a script loads a file", saved as `file_dialog=` in `ui.conf`). With the tick set, a script's chooser opens the real portal dialog as described above; without it, only norns's own browser. Check on a real desktop: tick, open a chooser, pick a file in the portal dialog (the script gets it), cancel the dialog (the browser stays usable), untick (no dialog), restart (the tick is still shown). Tested here only with a stub zenity and the mock portal.
 - [ ] The fallbacks on a desktop without a portal: `NORNS_PICKER=zenity` (zenity) and `NORNS_PICKER=kdialog`
       (kdialog was not exercised at all, not even with a stub).
 - [ ] "Show dust folder", "Show tape folder", MAIDEN and MANUAL buttons open the file manager / browser
