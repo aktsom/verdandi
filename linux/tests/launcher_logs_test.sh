@@ -12,7 +12,9 @@ H="$T/home"
 mkdir -p "$H"
 ln -s "$REPO" "$H/norns"
 
-run() { NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_dirs.lua" "$T/probe$1.log" > /dev/null 2>&1; }
+mkdir -p "$T/account-home"
+# the account's own HOME is an empty scratch folder: whatever the launcher writes outside the norns home lands in it and is found below
+run() { HOME="$T/account-home" NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_dirs.lua" "$T/probe$1.log" > /dev/null 2>&1; }
 # (the probe starts norns with --terminal: matron's own output is the probe's log, so norns.log stays empty here; sclang.log and jackd.log are the real files)
 run 1
 P1="$T/probe1.log"
@@ -37,6 +39,8 @@ grep -q "engines: \[" "$H/logs/sclang.1.log" 2>/dev/null && ok "the first run's 
 grep -q "engines: \[" "$H/logs/sclang.log" 2>/dev/null && ok "and sclang.log is the second run" || bad "sclang.log of the second run"
 [ -f "$H/logs/jackd.1.log" ] && ok "jackd keeps its previous run too" || bad "jackd.1.log missing"
 [ $(ls "$H/logs" | grep -c '^norns\.') -le 5 ] && ok "at most 5 runs of a log" || bad "too many norns logs"
+
+[ -z "$(ls -A "$T/account-home")" ] && ok "the launcher wrote nothing into the account's own home (only into the norns home)" || bad "outside the norns home: $(cd "$T/account-home" && find . | head)"
 
 [ $FAIL -eq 0 ] && echo "launcher_logs_test: all passed"
 exit $FAIL

@@ -10,7 +10,10 @@
 #                                       root user and none of the account that starts it; the root is removed after a good build
 #                                       (PACKAGE_KEEP_ROOT=1 keeps it; a failed build always keeps it)
 #        linux/package.sh print-version the version the .deb gets (0.1~git<date>.<commits>.<hash>), nothing is built
+#        linux/package.sh status        what is in build/package, what each part is, sizes, how to clear (reads only)
+#        linux/package.sh clean [cache] removes stage/, cache/, clean-root/, control/ and the logs (or cache/ only); the .deb files stay
 #        linux/package.sh check FILE    metadata and privacy checks of a built .deb
+# the newest 2 .deb files are kept (PACKAGE_KEEP_DEBS); stage/ is removed after a good .deb (PACKAGE_KEEP_STAGE=1 keeps it)
 # output: build/package/verdandi_<version>_<arch>.deb (clean-root: build/package/clean-root/). every command but check keeps its whole
 # output in build/package/package-<command>.log and says on failure which stage failed
 # environment (optional): PACKAGE_MAINTAINER (default: a neutral project identity), PACKAGE_PRIVACY_EXTRA
@@ -49,7 +52,7 @@ on_exit() {
 trap 'on_exit "${1:-}"' EXIT
 
 # every command but check keeps its whole output in <out>/package-<command>.log (a second run overwrites it)
-case "${1:-}" in print-desktop | print-description | print-version) PACKAGE_LOGGING=1 ;; esac
+case "${1:-}" in print-desktop | print-description | print-version | status | clean) PACKAGE_LOGGING=1 ;; esac
 if [ -z "${PACKAGE_LOGGING:-}" ] && [ -n "${1:-}" ] && [ "${1:-}" != check ]; then
     mkdir -p "$OUT"
     export PACKAGE_LOGGING=1 PACKAGE_LOG="$OUT/package-$1.log"
@@ -417,10 +420,56 @@ CPR
     # modification times from the commit (reproducible); owner root through --root-owner-group
     find "$STAGE" -exec touch -h -d "@$EPOCH" {} +
     privacy_scan "$STAGE"
-    rm -f "$OUT"/verdandi_*.deb
     dpkg-deb --build --root-owner-group -Zxz "$STAGE" "$DEB" > /dev/null
     check_deb "$DEB"
     ls -l "$DEB"
+    prune_debs
+    # the stage (about 600 MB) is only a step towards the .deb; it is made again from the cache when needed (PACKAGE_KEEP_STAGE=1 keeps it)
+    if [ "${PACKAGE_KEEP_STAGE:-0}" != 1 ]; then rm -rf "${STAGE:?}"; echo "package.sh: stage/ removed (PACKAGE_KEEP_STAGE=1 keeps it)"; fi
+}
+
+# the newest PACKAGE_KEEP_DEBS (default 2) .deb files stay (the one before can go back to), older ones are removed
+prune_debs() {
+    local keep="${PACKAGE_KEEP_DEBS:-2}" f n=0
+    for f in $(ls -t "$OUT"/verdandi_*.deb 2> /dev/null); do
+        n=$((n + 1))
+        if [ "$n" -gt "$keep" ]; then rm -f -- "$f"; echo "package.sh: removed the older package ${f##*/}"; fi
+    done
+}
+
+# what is in the output folder, what each part is, how big, and how to clear it. reads only
+status_out() {
+    local d label what
+    echo "package output: $OUT"
+    [ -d "$OUT" ] || { echo "  (does not exist: nothing built)"; return 0; }
+    for d in "$OUT"/verdandi_*.deb; do [ -f "$d" ] && echo "  $(du -h "$d" | cut -f1)	${d##*/}	a package; the newest $((${PACKAGE_KEEP_DEBS:-2})) are kept"; done
+    for label in "stage|the files before they are packed; made again from the cache" \
+        "cache|downloaded and built sources (SuperCollider, sc3-plugins, maiden); keeps the next build short" \
+        "clean-root|the clean Ubuntu root of clean-root; removed after a good build" \
+        "control|scratch files of the last package" ; do
+        d="${label%%|*}"; what="${label#*|}"
+        [ -e "$OUT/$d" ] && echo "  $(du -sh "$OUT/$d" | cut -f1)	$d/	$what"
+    done
+    ls "$OUT"/package-*.log > /dev/null 2>&1 && echo "  $(du -ch "$OUT"/package-*.log | tail -1 | cut -f1)	package-*.log	the log of each command (a new run overwrites it)"
+    echo "  total $(du -sh "$OUT" | cut -f1)"
+    echo "clear: linux/package.sh clean         removes stage/, cache/, clean-root/, control/ and the logs (the .deb files stay)"
+    echo "       linux/package.sh clean cache   removes cache/ only (the next build downloads and compiles again)"
+}
+
+# removes only the named parts of the output folder, never the .deb files, never anything outside it
+clean_out() {
+    local part="${1:-all}" d
+    case "$OUT" in "" | / | "$HOME") die "clean: the output folder is $OUT: refused" ;; esac
+    case "$part" in
+        cache) set -- cache ;;
+        all) set -- stage cache clean-root control ;;
+        *) die "usage: package.sh clean [cache]" ;;
+    esac
+    for d in "$@"; do
+        if [ -e "$OUT/$d" ]; then echo "removing $OUT/$d ($(du -sh "$OUT/$d" | cut -f1))"; rm -rf "${OUT:?}/${d:?}"; fi
+    done
+    [ "$part" = all ] && rm -f "$OUT"/package-*.log
+    return 0
 }
 
 # metadata of a built .deb: the maintainer, ownership, the files outside /opt/verdandi, and the privacy scan of the extracted package
@@ -539,6 +588,8 @@ case "${1:-}" in
     print-desktop) desktop_entry ;;
     print-description) deb_description ;;
     print-version) echo "$VERSION" ;;
+    status) status_out ;;
+    clean) clean_out "${2:-all}" ;;
     check) check_deb "${2:?usage: package.sh check FILE.deb}" ;;
     *) die "usage: see the top of this file" ;;
 esac
