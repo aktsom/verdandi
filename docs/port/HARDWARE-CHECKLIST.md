@@ -170,7 +170,7 @@ Needs your laptop (Mint 22, PipeWire, a desktop, a real grid). Headless tests al
 - [ ] Build it: `linux/package.sh clean-root` (needs root, debootstrap) or `linux/setup-deps.sh && linux/build.sh && linux/package.sh all`. Build time, size of the `.deb` (about 14 MB here), no warnings that matter. If you build in your own home folder and the privacy scan stops it, that is the scan working: use `clean-root`.
 - [ ] `sudo apt install ./verdandi_*.deb` on Mint 22: apt resolves every dependency (list what it wants to add; `pipewire-jack` should already be there), no manual step.
 - [ ] Verdandi appears in the application menu with its icon; clicking it starts norns with no terminal; the window opens; the MAIDEN button works; the first start creates `~/Verdandi` (`launcher.log` there holds the launcher's output).
-- [ ] A second click while it runs: nothing breaks. (Known: it says "norns is already running" in a dialog; bringing the first window forward is not built.)
+- [ ] A second click while it runs: **the running window comes to the front, no dialog** (see "Starting it a second time" below).
 - [ ] Break something on purpose (stop PipeWire and jackd): a dialog says what is wrong instead of nothing happening.
 - [ ] **Shared home:** with your developer checkout's home (`NORNS_HOME=… ` or `echo /path/to/home > ~/.config/verdandi/home`), start the package: your scripts and data are there; the `norns` link of that home now leads to `/opt/verdandi`; start the checkout (`linux/norns.sh`) and the link leads back. A real folder called `norns` in the home makes the launcher refuse with a message (it is never replaced).
 - [ ] Your usual scripts and the engines Orgn and Eterna with real audio (the headless check only measured the output level of a dummy driver).
@@ -233,3 +233,13 @@ The tests here run under Xvfb with **no window manager**, so these could not be 
 - [ ] After a restart (SYSTEM > RESTART) and a crash of a script, `logs/norns.1.log` has the previous run; a crash leaves one file in `logs/crash/` and still the coredump in `coredumpctl list`.
 - [ ] CLEAN UP: the numbers on the page match `du -sh`; REMOVE >30 DAYS shows what is older, asks once, removes only that; your `dust/` is unchanged afterwards (`find ~/Verdandi/dust | wc -l` before and after).
 - [ ] The launcher fix: with PipeWire running, start Verdandi from the menu and check that **no** new `~/Verdandi/Verdandi` appears.
+
+## Starting it a second time (docs/port/second-start.md): what only your desktop can show
+The tests run under Xvfb with no window manager (stacking order and keyboard focus only):
+- [ ] **Another window in front:** with Verdandi running and a browser or terminal covering it, start Verdandi again from the application menu: its window comes to the front and has the keyboard focus, no dialog, no second Verdandi (`pgrep -xc norns` says 1).
+- [ ] **A minimised window:** minimise it, start again: it is restored and in front.
+- [ ] **Another workspace:** put it on workspace 2, switch to workspace 1, start again: you are taken to its workspace (this is your window manager's choice; Cinnamon and GNOME normally do; say what yours does).
+- [ ] **A detached screen window:** both windows come to the front.
+- [ ] **Wayland (if you use it):** the compositor may only highlight the window in the panel or ignore the request; there is still no dialog and no second copy.
+- [ ] **No window:** start `linux/norns.sh` with a `matronrc.lua` without `screen:sdl`, start it again: one dialog sentence (it did not answer / has no window), no second copy.
+- [ ] **A crash:** `kill -9 $(pgrep -x norns)`, start again: a normal start, no "already running".

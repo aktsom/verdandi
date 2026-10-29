@@ -170,6 +170,9 @@ enum {
     DEV_INPUT_CHECK = 4, // data1 = which select it checks
     DEV_CHOOSE = 5,      // data1 folder (strdup)
     DEV_CHOOSE_CLOSE = 6,
+#ifdef NORNS_LINUX_DESKTOP
+    DEV_RAISE = 7, // a second start of the launcher asks for the window (raise_poll)
+#endif
 };
 
 //--- drawing (main thread only)
@@ -2031,6 +2034,76 @@ static void screen_toggle(void) {
 }
 #endif
 
+#ifdef NORNS_LINUX_DESKTOP
+// a second start of linux/norns.sh does not start a second copy: it writes <norns home>/.norns-raise and waits for <norns home>/.norns-raise.done. a timer thread
+// looks for the request twice a second (a rename claims it), the main thread raises the norns window and the screen window (if the screen is detached), restores them
+// if minimised, asks the window manager to activate them (SDL_HINT_FORCE_RAISEWINDOW: _NET_ACTIVE_WINDOW, which also switches the desktop where the window manager
+// allows it), and answers "ok" or "no-window". no extra program is needed; on Wayland a compositor may refuse to raise a window of its own accord (then the window
+// is only marked as wanting attention, or nothing happens): the answer says "ok" when the request was made. nothing but these control files is written
+static std::string raise_file(const char *suffix) {
+    const char *h = getenv("HOME");
+    return std::string(h != NULL && h[0] != '\0' ? h : ".") + "/.norns-raise" + suffix;
+}
+
+static Uint32 raise_timer(Uint32 interval, void *unused) {
+    (void)unused;
+    std::string req = raise_file(""), claimed = raise_file(".claimed");
+    if (access(req.c_str(), F_OK) == 0 && rename(req.c_str(), claimed.c_str()) == 0) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = device_event_type;
+        ev.user.code = DEV_RAISE;
+        SDL_PushEvent(&ev);
+    }
+    return interval;
+}
+
+static void raise_answer(const char *text) {
+    std::string tmp = raise_file(".done.tmp");
+    FILE *f = fopen(tmp.c_str(), "w");
+    if (f != NULL) {
+        fprintf(f, "%s\n", text);
+        fclose(f);
+        rename(tmp.c_str(), raise_file(".done").c_str());
+    }
+    unlink(raise_file(".claimed").c_str());
+}
+
+static void raise_windows(void) {
+    SDL_SetHint(SDL_HINT_FORCE_RAISEWINDOW, "1");
+    bool any = false;
+    auto bring = [&](SDL_Window *w) {
+        if (w == NULL) {
+            return;
+        }
+        if (SDL_GetWindowFlags(w) & SDL_WINDOW_MINIMIZED) {
+            SDL_RestoreWindow(w);
+        }
+        SDL_ShowWindow(w);
+        SDL_RaiseWindow(w);
+        any = true;
+    };
+    // the screen window first, the norns window last: that one ends in front and has the keyboard
+    if (screen_window_is_open()) {
+        bring(SDL_GetWindowFromID(screen_window_id()));
+    }
+    bring(the_window);
+    if (the_window != NULL) {
+        SDL_SetWindowInputFocus(the_window);
+    }
+    raise_answer(any ? "ok" : "no-window");
+}
+
+// at start: an old request or answer of a norns that crashed is not this start's business
+static void raise_poll_start(void) {
+    unlink(raise_file("").c_str());
+    unlink(raise_file(".claimed").c_str());
+    unlink(raise_file(".done").c_str());
+    unlink(raise_file(".done.tmp").c_str());
+    SDL_AddTimer(300, raise_timer, NULL);
+}
+#endif
+
 //--- menu bar
 
 static void show_in_finder(const std::string &dir) {
@@ -2593,6 +2666,9 @@ void sdl_bridge_init(void) {
     toast_event_type = bridge_event_type + 3;
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
     shell_install(menu_item, import_path, note_toast, input_chosen);
+#ifdef NORNS_LINUX_DESKTOP
+    raise_poll_start();
+#endif
 }
 
 void sdl_bridge_show_control(int kind, int n, int value) {
@@ -2727,6 +2803,10 @@ void sdl_bridge_run(void) {
                 free(dir);
             } else if (ev.user.code == DEV_CHOOSE_CLOSE) {
                 shell_choose_file_close();
+#ifdef NORNS_LINUX_DESKTOP
+            } else if (ev.user.code == DEV_RAISE) {
+                raise_windows();
+#endif
             } else if (ev.user.code == DEV_ARC_LEDS) {
                 arc_redraw();
             } else {

@@ -80,6 +80,7 @@ cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_geom_test.c ma
 cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_conf_test.c matron/src/platform/linux/screen_window_conf.c -o "$T/swc" \
     && run "c:screen_window_conf (state file: defaults, damaged values with log lines, round trip, atomic write)" "$T/swc"
 run "scan-fkeys:which scripts name F9, F11, F12 (reads only)" linux/tests/scan_fkeys_test.sh
+run "launcher:a second start asks the running Verdandi to raise its window; no answer or no window: one sentence; nothing of its data touched; a crash leaves no lock" linux/tests/second_start_test.sh
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
     -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
@@ -734,6 +735,49 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$XI"
     }
     detach_scenario
+    # a second start of the launcher while Verdandi runs (docs: the Linux manual): no second norns, no dialog, the window (and the screen window) brought to the front; a start
+    # after a crash is not blocked. no window manager here: "to the front" is the stacking order (a magenta window covers the display) and the keyboard focus
+    second_start_scenario() {
+        SH="$(mktemp -d)"
+        ln -s "$REPO" "$SH/norns"
+        mkdir -p "$SH/dust/code/probe" "$SH/stub"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$SH/dust/code/probe/"
+        printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/zenity.log"\n' "$SH" > "$SH/stub/zenity"
+        chmod +x "$SH/stub/zenity"
+        S1="$T/second1.log"; S2="$T/second2.log"
+        NORNS_HOME="$SH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_second_start.lua" "$S1" > /dev/null 2>&1
+        cp "$SH/probe.marks" "$SH/marks1" 2> /dev/null
+        rm -f "$SH/probe.marks"
+        pkill -9 -x norns 2> /dev/null; pkill -x jackd 2> /dev/null; sleep 1
+        # what a crashed norns leaves: a request nobody answered, an old answer
+        echo stale > "$SH/.norns-raise"; echo ok > "$SH/.norns-raise.done"
+        NORNS_HOME="$SH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_second_start_fresh.lua" "$S2" > /dev/null 2>&1
+        cp "$SH/probe.marks" "$SH/marks2" 2> /dev/null
+        k1() { sed -n "s/^$1=//p" "$SH/marks1" 2> /dev/null | tail -1; }
+        k2() { sed -n "s/^$1=//p" "$SH/marks2" 2> /dev/null | tail -1; }
+        hexpx() { convert "$1" -format "%[hex:u.p{$2,$3}]" info:; }
+        second_ok() {
+            local bad=0 f="$SH"
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran to the end" 'grep -q "PROBE second start done" "$S1"'
+            chk "(sanity) another window is in front of the box before the second start" '[ "$(hexpx "$f/before-docked.png" 800 400)" = FF00FF ]'
+            chk "the second start exits 0 and says the window was brought to the front" '[ "$(k1 docked_rc)" = 0 ] && grep -q "brought to the front" "$f/second-docked.out"'
+            chk "no second norns was started" '[ "$(k1 docked_norns)" = 1 ] && [ "$(k1 detached_norns)" = 1 ]'
+            chk "no dialog was shown" '[ "$(k1 docked_dialogs)" = 0 ] && [ "$(k1 detached_dialogs)" = 0 ]'
+            chk "the box is in front of the other window afterwards (the stacking order changed)" '[ "$(hexpx "$f/after-docked.png" 800 400)" != FF00FF ]'
+            chk "the box has the keyboard focus (the other window had it before)" '[ -n "$(k1 main_id)" ] && [ "$(k1 focus_before_docked)" != "$(k1 main_id)" ] && [ "$(k1 focus_after_docked)" = "$(k1 main_id)" ]'
+            chk "the launcher left no control file behind" '[ -z "$(k1 files_after_docked)" ]'
+            chk "(sanity) with the screen detached, another window covers both before" '[ "$(hexpx "$f/before-detached.png" 50 30)" = FF00FF ] && [ "$(hexpx "$f/before-detached.png" 800 400)" = FF00FF ]'
+            chk "detached: the second start worked too" '[ "$(k1 detached_rc)" = 0 ]'
+            chk "detached: both the box and the screen window are in front of the other window" '[ "$(hexpx "$f/after-detached.png" 800 400)" != FF00FF ] && [ "$(hexpx "$f/after-detached.png" 50 30)" != FF00FF ]'
+            chk "after a crash (kill -9, control files left) a new start boots normally" 'grep -q "PROBE fresh start done" "$S2" && grep -q "PROBE window init" "$S2"'
+            chk "...its matron cleared the old request and answer" '[ -z "$(k2 files_after_start)" ]'
+            chk "...and a second start still raises it" '[ "$(k2 fresh_second_rc)" = 0 ] && [ "$(k2 fresh_second_norns)" = 1 ]'
+            return $bad
+        }
+        run "window:second start brings Verdandi to the front (no second copy, no dialog, screen window too, start after a crash)" second_ok
+    }
+    second_start_scenario
     # the screen's look: yellow, brightness 0.4, contrast 0.5 from ui.conf; window, screenshot and gif show the same colours (docs/port/ui-settings-plan.md)
     ui_look_scenario() {
         UH="$(mktemp -d)"

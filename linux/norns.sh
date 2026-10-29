@@ -230,6 +230,37 @@ decide_server
 decide_devices
 read_audio_conf
 decide_rate
+# a second start does not start a second copy: it asks the running Verdandi to bring its window (and its screen window, if the screen is detached) to the front.
+# the request is a small control file in the norns home (.norns-raise); the running matron answers in .norns-raise.done ("ok" or "no-window", matron/src/platform/
+# macos/sdl_bridge.cc, raise_poll). nothing else is written here: no log is rotated, no setting touched, nothing of the running instance changes. an old build, another
+# norns home or a norns that is still starting does not answer: then the one plain sentence below is the dialog of before. no window manager, xdotool or wmctrl is needed.
+# NORNS_RAISE_WAIT: seconds to wait for the answer (default 4). NORNS_CHECK_RUNNING_ONLY=1 (tests): stop after this check when nothing runs
+if pgrep -x norns > /dev/null; then
+    REQ="$NORNS_HOME/.norns-raise"
+    ANS="$NORNS_HOME/.norns-raise.done"
+    rm -f "$ANS" 2> /dev/null
+    if [ -d "$NORNS_HOME" ] && : > "$REQ" 2> /dev/null; then
+        answer=""
+        n=0
+        while [ $n -lt $(( ${NORNS_RAISE_WAIT:-4} * 10 )) ]; do
+            if [ -f "$ANS" ]; then answer="$(head -n 1 "$ANS" 2> /dev/null)"; break; fi
+            sleep 0.1
+            n=$((n + 1))
+        done
+        rm -f "$REQ" "$ANS" 2> /dev/null
+        case "$answer" in
+        ok)
+            echo "norns.sh: Verdandi is already running: its window was brought to the front"
+            exit 0
+            ;;
+        no-window) fail "Verdandi is already running but has no window to bring to the front." ;;
+        esac
+        fail "Verdandi is already running, but it did not answer the request to show its window (it may be starting up, or using another norns home)."
+    fi
+    fail "Verdandi is already running, and its norns home cannot be written to ask it to show its window."
+fi
+if [ "${NORNS_CHECK_RUNNING_ONLY:-0}" = 1 ]; then echo "norns.sh: no Verdandi is running"; exit 0; fi
+
 # the user's own HOME and XDG folders, for the programs the window starts for the user (xdg-open: the default browser is in the
 # user's ~/.config/mimeapps.list, not in the norns home). matron gives them back to xdg-open only (matron/src/platform/macos/open_url.c).
 # recorded ONCE, by the first run: the second run (under pw-jack) sees the norns home as HOME and the norns cache as XDG_CACHE_HOME, and would
