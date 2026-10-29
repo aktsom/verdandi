@@ -328,24 +328,33 @@ _boot.add_io('screen:sdl', {})
 RC
 fi
 
-# sclang: the include paths norns-config.sc sets up on the device
+# sclang: the include paths norns-config.sc sets up on the device, and sc/linux: class extensions that make SuperCollider's own file operations (PathName, File, SoundFile,
+# String.pathMatch, shell commands, the paths sent to scsynth for Buffer.read and the like) understand the virtual /home/we that scripts and engines write into their code
+# (docs/port/KNOWN-ISSUES.md item 20; sc/linux/NornsVirtualHome.sc). NORNS_SC_VIRTUAL_HOME=0 leaves it out (for tests)
 SC_CONF="$NORNS_HOME/.config/SuperCollider"
 mkdir -p "$SC_CONF"
-# written again when the program moved (checkout vs package): the old file is kept as .old
-if [ -f "$SC_CONF/sclang_conf.yaml" ] && ! grep -qF "\"$REPO/sc/core\"" "$SC_CONF/sclang_conf.yaml"; then
-    echo "norns.sh: sclang_conf.yaml named another program folder: written again (the old one is sclang_conf.yaml.old)"
+SC_LINUX_LINE=""
+[ "${NORNS_SC_VIRTUAL_HOME:-1}" != 0 ] && SC_LINUX_LINE="    - \"$REPO/sc/linux\""
+# written again when the program moved (checkout vs package) or when the list of folders is not the one this start wants: the old one is kept as .old
+sc_conf_current() {
+    grep -qF "\"$REPO/sc/core\"" "$SC_CONF/sclang_conf.yaml" || return 1
+    if [ -n "$SC_LINUX_LINE" ]; then grep -qF "\"$REPO/sc/linux\"" "$SC_CONF/sclang_conf.yaml"; else ! grep -qF "/sc/linux\"" "$SC_CONF/sclang_conf.yaml"; fi
+}
+if [ -f "$SC_CONF/sclang_conf.yaml" ] && ! sc_conf_current; then
+    echo "norns.sh: sclang_conf.yaml did not match this program folder or its SuperCollider extensions: written again (the old one is sclang_conf.yaml.old)"
     mv -f "$SC_CONF/sclang_conf.yaml" "$SC_CONF/sclang_conf.yaml.old"
 fi
 if [ ! -f "$SC_CONF/sclang_conf.yaml" ]; then
-    cat > "$SC_CONF/sclang_conf.yaml" <<SC
-includePaths:
-    - "$REPO/sc/core"
-    - "$REPO/sc/engines"
-    - "$NORNS_HOME/dust"
-excludePaths:
-    []
-postInlineWarnings: false
-SC
+    {
+        echo "includePaths:"
+        echo "    - \"$REPO/sc/core\""
+        echo "    - \"$REPO/sc/engines\""
+        [ -n "$SC_LINUX_LINE" ] && echo "$SC_LINUX_LINE"
+        echo "    - \"$NORNS_HOME/dust\""
+        echo "excludePaths:"
+        echo "    []"
+        echo "postInlineWarnings: false"
+    } > "$SC_CONF/sclang_conf.yaml"
 fi
 
 if pgrep -x norns >/dev/null; then

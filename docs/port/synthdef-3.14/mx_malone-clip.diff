@@ -1,0 +1,13 @@
+--- a/nb_mxsynths/lib/nb_mxsynths.sc
++++ b/nb_mxsynths/lib/nb_mxsynths.sc
+@@ -219,8 +219,8 @@
+ 					snd_ = snd_ + PulseDPW.ar(hz_/2, 0.17);
+ 					snd_ = snd_ + PulseDPW.ar(hz_*2, 0.17);
+ 					snd_ = snd_ + LFTri.ar(hz_/4);
+-					snd_ = MoogFF.ar(snd_, Clip.ar(hz_ * filt, 20, 16000),
+-						Clip.ar(LFTri.kr([0.5, 0.45]).range(0.3, 1) * res, 0.2, 3.8)); // RLPF blows up when modulated at high freq!!
++					snd_ = MoogFF.ar(snd_, Clip.kr(hz_ * filt, 20, 16000),
++						Clip.kr(LFTri.kr([0.5, 0.45]).range(0.3, 1) * res, 0.2, 3.8)); // RLPF blows up when modulated at high freq!!
+ 					Pan2.ar(snd_ ,VarLag.kr(LFNoise0.kr(1/3), 3, warp:\sine)) / 10
+ 				}));
+ 

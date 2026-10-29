@@ -243,3 +243,10 @@ The tests run under Xvfb with no window manager (stacking order and keyboard foc
 - [ ] **Wayland (if you use it):** the compositor may only highlight the window in the panel or ignore the request; there is still no dialog and no second copy.
 - [ ] **No window:** start `linux/norns.sh` with a `matronrc.lua` without `screen:sdl`, start it again: one dialog sentence (it did not answer / has no window), no second copy.
 - [ ] **A crash:** `kill -9 $(pgrep -x norns)`, start again: a normal start, no "already running".
+
+## /home/we inside SuperCollider (KNOWN-ISSUES 20, 21): what only your laptop can show
+- [ ] **dronecaster:** install the new package, start Verdandi (the first start rewrites `sclang_conf.yaml`, the old one stays as `.old`), load dronecaster, start a drone: you hear it. `logs/sclang.log` shows `compiling drones in /home/we/...` followed by a dictionary with the drones, and no `does not know this drone`.
+- [ ] **bloom:** load it: the sampled voices sound (its engine reads `/home/we/dust/code/bloom/samples/...`).
+- [ ] **The other scripts you use** (awake, concrete, mlre, ...) still sound as before.
+- [ ] **`sclang.log`:** about two dozen `Extension ... overwrites ...` lines at start are expected; no other `ERROR`.
+- [ ] **mx_malone (item 21):** with nb_mxsynths enabled, `sclang.log` still has `SynthDef mx_malone build failed` until the mod is patched (`docs/port/synthdef-3.14/mx_malone-clip.diff`) or the owner approves the compatibility extension; the other mx voices after it (toshiya, piano, ...) are missing until then. Say which you want.

@@ -77,3 +77,6 @@ Decided by the owner:
 6. **Font licences: unresolved for now**, recorded in `docs/port/DEPS.md` as an open item **before any public release**.
 Privacy: the package metadata (Maintainer, copyright file, changelog, any author line, the build user in the file ownership) must not contain the owner's personal name or email: a neutral project identity is used, upstream authors' notices stay as the licences require. `linux/package.sh` scans the finished package for identity words of the builder and fails if it finds one.
 Done as the first step: see `STATUS.md` ("Gate B first step").
+
+## GATE F (OPEN): SuperCollider 3.14 rejects `Clip.ar` with a control-rate input (mod nb_mxsynths, `mx_malone`; `KNOWN-ISSUES.md` 21)
+Options: (a) patch the mod only (`docs/port/synthdef-3.14/mx_malone-clip.diff`) and tell its author; (b) also ship a Linux-only compatibility extension that wraps a control-rate first input of `Clip.ar` in `K2A.ar` (`ClipKr.sc.proposal`; makes the unmodified mod build, 11 of 11); (c) do nothing. Recommendation: (a) now, (b) as a fallback so that other mods with the same pattern keep working. Nothing built until the owner decides.

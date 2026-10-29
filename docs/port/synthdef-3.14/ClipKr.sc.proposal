@@ -1,0 +1,6 @@
++ Clip {
+	*ar { |in, lo = 0.0, hi = 1.0|
+		var fix = { |x| if(x.isKindOf(UGen) and: { x.rate != \audio }) { K2A.ar(x) } { x } };
+		^this.multiNew('audio', in.asArray.collect(fix).unbubble, lo, hi)
+	}
+}
