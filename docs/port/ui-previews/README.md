@@ -17,6 +17,7 @@ Everything is drawn by the product's own skin code (`matron/src/platform/macos/d
 | `ui-margins.txt` | the margin measurements: the Mac layout and each option, calculated and measured on renders with a white screen |
 | `ui-resize-numbers.txt` | what `skin_geom` does at 33 to 200 percent of the window size, for the Linux layout and the Mac layout |
 | `ui-greys.png`, `ui-colours.png`, `ui-brightness.png` | UI step 3 (`../ui-settings-plan.md`): captures of the **real window with the built UI settings**: a loops page in the style of Cheat Codes 2 at GREYS 1.0 and 0.5; the PARAMS page in white, yellow and pink; white at brightness 1, 0.7 and 0.4. Made by `make_ui_pictures.sh` (`pic_loops.lua`, `pic_params.lua`, `loops_like.lua`, `make_ui_settings_previews.py`); the mapping's reference is `ui_tint.py` |
+| `cleanup-page.png`, `cleanup-tree.png` | the clean-up plan (`../clean-layout.md`): the proposed SYSTEM > CLEAN UP page (a stand-in script in the real window, example numbers: `cleanup_mock.lua`, `pic_cleanup.lua`) and the folder tree; `make_cleanup_pictures.py` |
 | `oled-edit.png` | the 128 x 64 screen image (PARAMS > EDIT) captured from the real norns, the input of every render |
 
 ## Sources the script and the plan use
