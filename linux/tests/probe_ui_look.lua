@@ -6,14 +6,14 @@ norns.script.load("code/probe/ui_look_probe.lua")
 #shot @home/ui-window.png
 # Screenshot (menu opened at 300,300, 26 px rows, as in probe_menu.lua)
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 467 click 1
+#xdo mousemove 340 447 click 1
 #sleep 1
 # Record GIF, then stop it
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 493 click 1
+#xdo mousemove 340 473 click 1
 #sleep 1.5
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 493 click 1
+#xdo mousemove 340 473 click 1
 #sleep 2
 print("PROBE ui_look done")
 #xdo search --name Verdandi windowfocus
