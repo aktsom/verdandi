@@ -1,0 +1,58 @@
+part    today (centre; size)   pixel (centre; size)   change
+K1      (  71.7, 188.3)  71.3   (  100,  188)   112   centre +28.3,-0.3 units; size +57%
+K2      ( 655.6, 517.5)  71.3   (  734,  530)   112   centre +78.4,+12.5 units; size +57%
+K3      ( 785.6, 517.5)  71.3   (  864,  530)   112   centre +78.4,+12.5 units; size +57%
+E1      ( 194.7, 188.3)  87.4   (  240,  188)    80   centre +45.3,-0.3 units; size -8%
+E2      ( 745.4, 377.2)  87.4   (  734,  376)    80   centre -11.4,-1.2 units; size -8%
+E3      ( 875.4, 377.2)  87.4   (  864,  376)    80   centre -11.4,-1.2 units; size -8%
+(today: keys = the key well, 71.3 across, the cap 57.5; encoders = the washer, 87.4 across, the knob 71.3. pixel: key 112 square, encoder disc 80 across)
+key / encoder = 1.40 (the owner's reference 1.3 to 1.5); key vs today's cap +95%, encoder vs today's knob +12%
+
+checks (units):
+  ok   K1 inside the 36 unit margin of the box (44, 132, 156, 244)
+  ok   K1 clear of the bezel by 56.7 units
+  ok   K2 inside the 36 unit margin of the box (678, 474, 790, 586)
+  ok   K2 clear of the bezel by 86.0 units
+  ok   K3 inside the 36 unit margin of the box (808, 474, 920, 586)
+  ok   K3 clear of the bezel by 216.0 units
+  ok   E1 inside the 36 unit margin of the box (200, 148, 280, 228)
+  ok   E1 clear of the bezel by 72.7 units
+  ok   E2 inside the 36 unit margin of the box (694, 336, 774, 416)
+  ok   E2 clear of the bezel by 102.0 units
+  ok   E3 inside the 36 unit margin of the box (824, 336, 904, 416)
+  ok   E3 clear of the bezel by 232.0 units
+  ok   MIX inside the 36 unit margin of the box (36, 36, 106, 64)
+  ok   MIX clear of the bezel by 236.7 units
+  ok   TAPE inside the 36 unit margin of the box (112, 36, 182, 64)
+  ok   TAPE clear of the bezel by 236.7 units
+  ok   HOME inside the 36 unit margin of the box (188, 36, 258, 64)
+  ok   HOME clear of the bezel by 236.7 units
+  ok   PARAMS inside the 36 unit margin of the box (264, 36, 334, 64)
+  ok   PARAMS clear of the bezel by 236.7 units
+  ok   MIC inside the 36 unit margin of the box (359.3, 36, 429.3, 64)
+  ok   MIC clear of the bezel by 236.7 units
+  ok   GRID inside the 36 unit margin of the box (435.3, 36, 505.3, 64)
+  ok   GRID clear of the bezel by 236.7 units
+  ok   ARC inside the 36 unit margin of the box (511.3, 36, 581.3, 64)
+  ok   ARC clear of the bezel by 236.7 units
+  ok   KEYS inside the 36 unit margin of the box (587.3, 36, 657.3, 64)
+  ok   KEYS clear of the bezel by 236.7 units
+  ok   MAIDEN inside the 36 unit margin of the box (682.7, 36, 752.7, 64)
+  ok   MAIDEN clear of the bezel by 253.4 units
+  ok   MANUAL inside the 36 unit margin of the box (758.7, 36, 828.7, 64)
+  ok   MANUAL clear of the bezel by 289.5 units
+  ok   MUTE inside the 36 unit margin of the box (854, 36, 924, 64)
+  ok   MUTE clear of the bezel by 353.1 units
+  ok   no two controls closer than 4 units (the closest pair is 6.0; the hit areas are 2 units bigger on every side, so 0 overlap)
+      K2 - K3: 18.0 units apart
+      E2 - E3: 50.0 units apart
+      K1 - E1: 44.0 units apart
+  ok   K1 above the bezel with 56.7 units to spare
+  ok   E1 above the bezel with 72.7 units to spare
+  ok   keys and encoders start more than 20 units under the button row (bottom 64)
+  ok   the toast pill (up to x 300..865, y 157..193) is clear of E1 (20.0)
+  ok   the toast pill (up to x 300..865, y 157..193) is clear of E2 (143.0)
+  ok   the toast pill (up to x 300..865, y 157..193) is clear of E3 (143.0)
+  ok   the toast pill (up to x 300..865, y 157..193) is clear of K1 (144.0)
+  ok   keys and encoders sit on the 2 unit block grid
+  ok   the screen and the bezel are the aluminium style's, unchanged
