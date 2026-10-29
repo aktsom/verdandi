@@ -124,9 +124,9 @@ run "lua:ui page with the computer keyboard (one press = one step, release chang
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
-run "sc:virtual /home/we in sclang and scsynth (fake engine, control run and fixed run)" linux/tests/sc_virtual_home_test.sh
+run "sc:virtual home in sclang and scsynth (fake engine, control run and fixed run)" linux/tests/sc_virtual_home_test.sh
 run "sc:dronecaster (real engine from a clone) finds its drones and makes signal headless" linux/tests/dronecaster_test.sh
-run "sc:scan-sc-paths (scripts whose .sc/.scd name /home/we)" linux/tests/scan_sc_paths_test.sh
+run "sc:scan-sc-paths (scripts whose sc files name the virtual home)" linux/tests/scan_sc_paths_test.sh
 run "tidy:flatten apply and undo (refusals, backup, checks, rollback, interrupted run, nothing of dust lost)" linux/tests/tidy_flatten_apply_test.sh
 run "tidy:disable and restore with a manifest, list, remove-older (and what it never touches), log rotation, caps, crash report pruning" linux/tests/tidy_test.sh
 CUH="$(mktemp -d)"
