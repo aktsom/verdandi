@@ -188,4 +188,20 @@ mkdir -p "$T/real2"
 ln -s "$REPO" "$T/real2/norns"
 expect "home's norns link already points at this checkout: ok" \
     "DECIDE-HOME mode=dev home=$T/real2 source=env link=ok" "$(homeline "$REPO/linux/norns.sh" "$T/h1" NORNS_HOME="$T/real2")"
+# the installed home survives the re-run under pw-jack (docs/port/clean-layout.md 1.1): the launcher sets HOME to the norns home, and the second run used to
+# work out the default home again from that HOME (~/Verdandi/Verdandi). no NORNS_HOME is given here, on purpose: the default and the config file decide
+rerun_home() { # HOME, env assignments... -> the DECIDE-HOME line of the second run
+    local h="$1"
+    shift
+    env -i PATH="$BIN:/usr/bin:/bin" HOME="$h" NORNS_INSTALLED=1 NORNS_HAVE_TTY=1 NORNS_DECIDE_ONLY=reexec STUB_PW=1 \
+        NORNS_PW_JACK="$BIN/pw-jack-real" "$@" "$REPO/linux/norns.sh" 2>&1 | grep '^DECIDE-HOME ' | sed 's/ source=.*//' || echo "DECIDE-HOME (none)"
+}
+mkdir -p "$T/rr1" "$T/rr2/.config/verdandi" "$T/rr3"
+expect "installed default home is the same after the re-run under pw-jack (not nested)" \
+    "DECIDE-HOME mode=installed home=$T/rr1/Verdandi" "$(rerun_home "$T/rr1")"
+echo "$T/rr2/chosen" > "$T/rr2/.config/verdandi/home"
+expect "a home from ~/.config/verdandi/home is the same after the re-run" \
+    "DECIDE-HOME mode=installed home=$T/rr2/chosen" "$(rerun_home "$T/rr2")"
+expect "no folder is created inside the home by the re-run" "" "$(ls -d "$T/rr1/Verdandi/Verdandi" "$T/rr2/chosen/chosen" "$T/rr2/chosen/Verdandi" 2>/dev/null)"
+
 exit $FAIL

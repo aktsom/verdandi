@@ -90,6 +90,9 @@ else
     HOME_SOURCE=repo
 fi
 case "$NORNS_HOME" in /*) ;; *) echo "norns.sh: the norns home '$NORNS_HOME' is not an absolute path"; exit 1 ;; esac
+# exported now: HOME is set to the norns home below, and the run under pw-jack (a second run of this script) must find the same home, not work out
+# "$HOME/Verdandi" again from the changed HOME (that was ~/Verdandi/Verdandi on PipeWire machines)
+export NORNS_HOME
 
 # <norns home>/norns must lead to this tree (matron reads $HOME/norns/lua and $HOME/norns/resources). ok, create, repoint
 # (a link that points at another tree) or conflict (a real folder that is not this tree)
