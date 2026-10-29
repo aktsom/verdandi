@@ -56,8 +56,8 @@ printf '%s\n' "$OUT" | grep -q "cjson.so" && bad "cjson.so is not a plug-in" "$O
 printf '%s\n' "$OUT" | grep -q "Good_scsynth.so\|Fine.so\|notelf.so" && bad "good and non-ELF files" "$OUT" || ok "x86_64 and non-ELF files are not reported"
 printf '%s\n' "$OUT" | grep -q "stops at the first bad file" && ok "says that SuperCollider stops at the first bad file" || bad "stops at the first" "$OUT"
 [ "$(wc -l < "$H/.plugin-mismatch")" = 7 ] && ok "the list file for the device note still has one path per file (seven)" || bad "list file" "$(cat "$H/.plugin-mismatch" 2>&1)"
-find "$H" -type f -not -name .plugin-mismatch -exec sha1sum {} + | sort > "$T/after"
-cmp -s "$T/before" "$T/after" && [ ! -e "$H/disabled" ] && ok "nothing was moved, changed or created besides the list file" || bad "nothing changed" "files differ"
+find "$H" -type f -not -name .plugin-mismatch -not -name .plugin-fix -exec sha1sum {} + | sort > "$T/after"
+cmp -s "$T/before" "$T/after" && [ ! -e "$H/disabled" ] && ok "nothing was moved, changed or created besides the two list files" || bad "nothing changed" "files differ"
 # the same files on an aarch64 machine: the x86_64 ones are the wrong ones now (and the ARM 32-bit too)
 OUT2="$(PLUGIN_ARCH_UNAME=aarch64 "$T/check" "$H" 2>&1)"
 printf '%s\n' "$OUT2" | grep -q "Good_scsynth.so (64-bit x86_64)" && printf '%s\n' "$OUT2" | grep -q "this machine is aarch64" && ok "an x86_64 file on an aarch64 machine is reported" || bad "aarch64 machine" "$OUT2"

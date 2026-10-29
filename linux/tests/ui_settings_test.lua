@@ -289,7 +289,7 @@ local function system_with(platform)
   return table.concat(m.pages, ","), table.concat(m.list, "|")
 end
 local pages = system_with("linux")
-check(pages == "DEVICES,AUDIO,UI,MODS,RESET,RESTART", "SYSTEM on a computer: " .. pages)
+check(pages == "DEVICES,AUDIO,UI,CLEANUP,MODS,RESET,RESTART", "SYSTEM on a computer: " .. pages)
 local _, list = system_with("linux")
 check(list:find("UI >", 1, true) ~= nil, "the list shows 'UI >'")
 pages = system_with(nil)

@@ -120,7 +120,7 @@ run "tidy:disable and restore with a manifest, list, remove-older (and what it n
 CUH="$(mktemp -d)"
 run "lua:SYSTEM > CLEAN UP page (asks before any change, restore, the age row, nothing of yours touched)" env NORNS_HOME="$CUH" NORNS_TIDY="$REPO/linux/tidy.sh" lua5.3 linux/tests/cleanup_page_test.lua
 run "package:the .deb version grows with every commit (dpkg --compare-versions)" linux/tests/package_version_test.sh
-run "package:build output: status reads only, clean/clean cache, the newest 2 .deb kept" linux/tests/package_out_test.sh
+run "package:build output: status reads only, clean and clean cache, the newest 2 .deb kept" linux/tests/package_out_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
 run "boot:script and library folders from chunk names (norns loads the script)" env NB_DIR="$NB_DIR" linux/tests/chunkname_test.sh "$T/chunk"
@@ -390,7 +390,7 @@ plugin_check_ok() {
 }
 run "plugins:scanner on a fake extension folder (nothing is moved)" plugin_check_ok
 if command -v jackd > /dev/null; then
-    run "launcher:logs/, crash/, cache/ in the home, the last runs of every log kept, no loose logs or hidden cache" linux/tests/launcher_logs_test.sh
+    run "launcher:logs, crash and cache folders in the home, the last runs of every log kept, no loose logs or hidden cache" linux/tests/launcher_logs_test.sh
     PLOG="$T/plugin-note.log"
     "$REPO/linux/tests/plugin_note_test.sh" "$PLOG" > /dev/null 2>&1
     plugin_note_ok() {
