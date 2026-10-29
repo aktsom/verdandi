@@ -127,6 +127,9 @@ run "tidy:flatten dry run (a nested home is reported and nothing is changed; --a
 run "sc:virtual home in sclang and scsynth (fake engine, control run and fixed run)" linux/tests/sc_virtual_home_test.sh
 run "sc:dronecaster (real engine from a clone) finds its drones and makes signal headless" linux/tests/dronecaster_test.sh
 run "sc:scan-sc-paths (scripts whose sc files name the virtual home)" linux/tests/scan_sc_paths_test.sh
+run "sc:launcher's sclang_conf.yaml (both Linux folders, the switches, an older conf written again with .old kept)" linux/tests/sc_conf_test.sh
+run "sc:SynthDef compatibility (mx_malone builds on 3.14, scoped by name, nothing leaks; 3.13.0 and 3.14.1)" linux/tests/sc_synthdef_compat_test.sh
+run "sc:the real nb_mxsynths mod in a headless norns on 3.14.1 (mx_malone builds, all 11 voices exist, the mod's files unchanged)" linux/tests/nb_mxsynths_test.sh
 run "tidy:flatten apply and undo (refusals, backup, checks, rollback, interrupted run, nothing of dust lost)" linux/tests/tidy_flatten_apply_test.sh
 run "tidy:disable and restore with a manifest, list, remove-older (and what it never touches), log rotation, caps, crash report pruning" linux/tests/tidy_test.sh
 CUH="$(mktemp -d)"

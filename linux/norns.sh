@@ -328,17 +328,26 @@ _boot.add_io('screen:sdl', {})
 RC
 fi
 
-# sclang: the include paths norns-config.sc sets up on the device, and sc/linux: class extensions that make SuperCollider's own file operations (PathName, File, SoundFile,
-# String.pathMatch, shell commands, the paths sent to scsynth for Buffer.read and the like) understand the virtual /home/we that scripts and engines write into their code
-# (docs/port/KNOWN-ISSUES.md item 20; sc/linux/NornsVirtualHome.sc). NORNS_SC_VIRTUAL_HOME=0 leaves it out (for tests)
+# sclang: the include paths norns-config.sc sets up on the device, and two Linux-only class folders, loaded here and nowhere else (the device and macOS never see them):
+#   sc/linux          class extensions that make SuperCollider's own file operations (PathName, File, SoundFile, String.pathMatch, shell commands, the paths sent to scsynth for
+#                     Buffer.read and the like) understand the virtual /home/we that scripts and engines write into their code (docs/port/KNOWN-ISSUES.md item 20;
+#                     sc/linux/NornsVirtualHome.sc). NORNS_SC_VIRTUAL_HOME=0 leaves it out (for tests)
+#   sc/linux-compat   lets the few SynthDefs of mods that SuperCollider 3.14 would refuse build (item 21; sc/linux-compat/NornsSynthDefCompat.sc). NORNS_SC_COMPAT=0 leaves it out
 SC_CONF="$NORNS_HOME/.config/SuperCollider"
 mkdir -p "$SC_CONF"
-SC_LINUX_LINE=""
-[ "${NORNS_SC_VIRTUAL_HOME:-1}" != 0 ] && SC_LINUX_LINE="    - \"$REPO/sc/linux\""
+SC_EXTRA_DIRS=""
+[ "${NORNS_SC_VIRTUAL_HOME:-1}" != 0 ] && SC_EXTRA_DIRS="$SC_EXTRA_DIRS linux"
+[ "${NORNS_SC_COMPAT:-1}" != 0 ] && SC_EXTRA_DIRS="$SC_EXTRA_DIRS linux-compat"
 # written again when the program moved (checkout vs package) or when the list of folders is not the one this start wants: the old one is kept as .old
 sc_conf_current() {
+    local d
     grep -qF "\"$REPO/sc/core\"" "$SC_CONF/sclang_conf.yaml" || return 1
-    if [ -n "$SC_LINUX_LINE" ]; then grep -qF "\"$REPO/sc/linux\"" "$SC_CONF/sclang_conf.yaml"; else ! grep -qF "/sc/linux\"" "$SC_CONF/sclang_conf.yaml"; fi
+    for d in linux linux-compat; do
+        case " $SC_EXTRA_DIRS " in
+            *" $d "*) grep -qF "\"$REPO/sc/$d\"" "$SC_CONF/sclang_conf.yaml" || return 1 ;;
+            *) ! grep -qF "/sc/$d\"" "$SC_CONF/sclang_conf.yaml" || return 1 ;;
+        esac
+    done
 }
 if [ -f "$SC_CONF/sclang_conf.yaml" ] && ! sc_conf_current; then
     echo "norns.sh: sclang_conf.yaml did not match this program folder or its SuperCollider extensions: written again (the old one is sclang_conf.yaml.old)"
@@ -349,7 +358,7 @@ if [ ! -f "$SC_CONF/sclang_conf.yaml" ]; then
         echo "includePaths:"
         echo "    - \"$REPO/sc/core\""
         echo "    - \"$REPO/sc/engines\""
-        [ -n "$SC_LINUX_LINE" ] && echo "$SC_LINUX_LINE"
+        for d in $SC_EXTRA_DIRS; do echo "    - \"$REPO/sc/$d\""; done
         echo "    - \"$NORNS_HOME/dust\""
         echo "excludePaths:"
         echo "    []"
