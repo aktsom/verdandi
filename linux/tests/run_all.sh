@@ -632,7 +632,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$DI"
     }
     dialog_scenario
-    # the detachable screen window (docs/port/detach-plan.md), under Xvfb with no window manager: F9, the SCREEN button and the placeholder, the picture crisp at
+    # the detachable screen window (docs/port/detach-plan.md), under Xvfb with no window manager: F9, the menu item and the placeholder, the picture crisp at
     # whole scales and inside a block when in between, the keyboard from the screen window, the shortcuts, F11, F10, close, the saved state, a damaged state file
     detach_scenario() {
         XH="$(mktemp -d)"
@@ -673,15 +673,17 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "the probe ran to the end" 'grep -q "PROBE detach done" "$D1"'
             chk "docked at start: no screen window" '[ "$(m1 windows_start)" = 0 ]'
             chk "F9 in the box: one screen window" '[ "$(m1 windows_detached)" = 1 ]'
-            chk "the screen window opens at 640 x 320 (5 x) by default" '[[ "$(m1 screen_default)" == 640x320+* ]]'
+            chk "the screen window opens at 695 x 367 (5 x, with its black margin) by default" '[[ "$(m1 screen_default)" == 695x367+* ]]'
             # the picture: the same screen pixels as the docked screenshot (look included: yellow)
-            sm "$f/shot-docked.png" "$f/s-docked.png"; sm "$f/screen-default.png" "$f/s-default.png"
+            sm "$f/shot-docked.png" "$f/s-docked.png"; convert "$f/screen-default.png" -crop 640x320+27+23 +repage "$f/p-default.png" 2> /dev/null; sm "$f/p-default.png" "$f/s-default.png"
             chk "the docked screenshot exists (512 x 256)" '[ "$(identify -format %wx%h "$f/shot-docked.png")" = 512x256 ]'
             chk "the screen window shows the same 128 x 64 pixels as the screenshot, 5 x" 'same "$f/s-docked.png" "$f/s-default.png"'
+            chk "the picture sits in a black margin: 27 px at the sides and 23 above and below at 5 x (4.30 and 7.29 percent of the picture)" '[ "$(hexpx "$f/screen-default.png" 26 100)" = 000000 ] && [ "$(hexpx "$f/screen-default.png" 20 100)" = 000000 ] && [ "$(hexpx "$f/screen-default.png" 27 100)" = 000000 ] && [ "$(hexpx "$f/screen-default.png" 150 22)" = 000000 ] && [ "$(hexpx "$f/screen-default.png" 150 23)" = 000000 ]'
             chk "the tint is on in both (yellow: the white rectangle has no blue)" 'h="$(hexpx "$f/s-docked.png" 10 10)"; [ $((16#${h:4:2})) -lt 40 ] && [ $((16#${h:0:2})) -gt 150 ]'
             # the box while detached: the placeholder where the screen was, everything else drawn
             chk "docked box: the script's picture is on the screen" 'near "$(hexpx "$f/box-docked.png" 134 375)" 255 208 0 140'
             chk "detached box: a dark placeholder where the screen was" 'near "$(hexpx "$f/box-detached.png" 134 375)" 22 23 26 14'
+            chk "no SCREEN button on the box: the place above the bezel is bare aluminium, docked and detached" 'near "$(hexpx "$f/box-docked.png" 573 293)" 214 216 220 30 && near "$(hexpx "$f/box-detached.png" 573 293)" 214 216 220 30'
             chk "detached box: the buttons and knobs are still there (a light box around)" 'near "$(hexpx "$f/box-detached.png" 800 300)" 204 205 209 40'
             # keyboard and mouse
             chk "2 in the screen window is K2 (down and up)" 'grep -q "PROBE key.2.1" "$D1" && grep -q "PROBE key.2.0" "$D1"'
@@ -696,22 +698,24 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "a GIF recorded while detached is the same as one recorded docked (size, first frame; a still script is one frame)" '[ -s "$f/gif-docked.gif" ] && [ -s "$f/gif-detached.gif" ] && [ "$(identify "$f/gif-docked.gif" | head -1 | cut -d" " -f3)" = "$(identify "$f/gif-detached.gif" | head -1 | cut -d" " -f3)" ] && convert "$f/gif-docked.gif[0]" "$f/gif-d0.png" && convert "$f/gif-detached.gif[0]" "$f/gif-x0.png" && same "$f/gif-d0.png" "$f/gif-x0.png"'
             chk "Ctrl+O in the screen window opens the import dialog" 'grep -q -- "--multiple" "$f/zenity.args"'
             # sizes
-            convert "$f/screen-700.png" -crop 700x350+0+25 +repage "$f/p700.png" 2> /dev/null
+            convert "$f/screen-700.png" -crop 644x322+28+39 +repage "$f/p700.png" 2> /dev/null
             chk "in between (700 x 400): inside every block the pixel is the screen's level" 'sm "$f/p700.png" "$f/s-700.png"; same "$f/s-docked.png" "$f/s-700.png"'
-            chk "in between: black bars above and below (picture 700 x 350)" '[ "$(hexpx "$f/screen-700.png" 10 5)" = 000000 ] && [ "$(hexpx "$f/screen-700.png" 10 394)" = 000000 ]'
-            sm "$f/screen-1024.png" "$f/s-1024.png"; convert "$f/s-1024.png" -filter point -resize 1024x512! "$f/b-1024.png"
-            chk "8 x (1024 x 512): the same pixels" 'same "$f/s-docked.png" "$f/s-1024.png"'
-            chk "8 x: every 8 x 8 block is one flat colour (nearest neighbour, nothing blurred)" 'same "$f/screen-1024.png" "$f/b-1024.png"'
+            chk "in between: the picture is 644 x 322 in a 700 x 400 window, black all round" '[ "$(hexpx "$f/screen-700.png" 10 5)" = 000000 ] && [ "$(hexpx "$f/screen-700.png" 10 394)" = 000000 ] && [ "$(hexpx "$f/screen-700.png" 28 100)" = 000000 ] && [ "$(hexpx "$f/screen-700.png" 28 150)" = 000000 ]'
+            convert "$f/screen-1024.png" -crop 1024x512+44+37 +repage "$f/p1024.png" 2> /dev/null
+            sm "$f/p1024.png" "$f/s-1024.png"; convert "$f/s-1024.png" -filter point -resize 1024x512! "$f/b-1024.png"
+            chk "8 x (a 1112 x 587 window: the picture 1024 x 512 and its margin): the same pixels" 'same "$f/s-docked.png" "$f/s-1024.png"'
+            chk "8 x: every 8 x 8 block is one flat colour (nearest neighbour, nothing blurred)" 'same "$f/p1024.png" "$f/b-1024.png"'
+            chk "8 x: the margin is 44 px at the sides (4.30 percent of 1024) and 37 above and below (7.29 percent of 512)" '[ "$(hexpx "$f/screen-1024.png" 75 100)" = 000000 ] && [ "$(hexpx "$f/screen-1024.png" 76 100)" != 000000 ] && [ "$(hexpx "$f/screen-1024.png" 100 68)" = 000000 ] && [ "$(hexpx "$f/screen-1024.png" 100 69)" != 000000 ]'
             # a window as big as the display (what fullscreen draws), and the saved fullscreen state
-            convert "$f/screen-big.png" -crop 1280x640+0+80 +repage "$f/pbig.png" 2> /dev/null
-            sm "$f/pbig.png" "$f/s-big.png"; convert "$f/s-big.png" -filter point -resize 1280x640! "$f/b-big.png"
-            chk "1280 x 800 is 10 x, flat blocks, centred (bars of 80 px)" 'same "$f/s-docked.png" "$f/s-big.png" && same "$f/pbig.png" "$f/b-big.png" && [ "$(hexpx "$f/screen-big.png" 5 5)" = 000000 ]'
-            chk "F11 saves fullscreen=1 and F11 again fullscreen=0, back at the windowed size" '[[ "$(m1 conf_fs_on)" == *fullscreen=1* && "$(m1 conf_fs_off)" == *fullscreen=0* && "$(m1 screen_back)" == 640x320+* ]]'
+            convert "$f/screen-big.png" -crop 1152x576+49+42 +repage "$f/pbig.png" 2> /dev/null
+            sm "$f/pbig.png" "$f/s-big.png"; convert "$f/s-big.png" -filter point -resize 1152x576! "$f/b-big.png"
+            chk "a 1251 x 660 window is 9 x, flat blocks, centred in its margin" 'same "$f/s-docked.png" "$f/s-big.png" && same "$f/pbig.png" "$f/b-big.png" && [ "$(hexpx "$f/screen-big.png" 5 5)" = 000000 ]'
+            chk "F11 saves fullscreen=1 and F11 again fullscreen=0, back at the windowed size" '[[ "$(m1 conf_fs_on)" == *fullscreen=1* && "$(m1 conf_fs_off)" == *fullscreen=0* && "$(m1 screen_back)" == 695x367+* ]]'
             # the menu from the screen window
             chk "F10 in the screen window opens the box's menu (dark menu over the box)" 'v="$(convert "$f/box-menu.png" -crop 100x60+256+431 +repage -colorspace Gray -format "%[fx:mean]" info:)"; awk -v v="$v" "BEGIN { exit !(v < 0.2) }"'
             # placeholder, button, close
             chk "a click on the placeholder brings the screen back" '[ "$(m1 windows_after_placeholder)" = 0 ]'
-            chk "the SCREEN button detaches it again" '[ "$(m1 windows_after_button)" = 1 ]'
+            chk "F9 from the box detaches it again" '[ "$(m1 windows_after_f9)" = 1 ]'
             chk "the menu item 'Screen in its own window' detaches it, F9 from the box brings it back" '[ "$(m1 windows_after_menu)" = 1 ] && [ "$(m1 windows_after_menu_off)" = 0 ]'
             chk "the close button of the screen window re-docks it, norns keeps running" '[ "$(m1 windows_after_close)" = 0 ] && [ "$(m1 alive_after_close)" = yes ]'
             chk "the box's close button quits norns with the screen window open" '[ "$(m1 alive_after_box_close)" = no ]'
@@ -722,7 +726,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "restart: the box shows the placeholder" 'near "$(hexpx "$f/restart-box.png" 134 375)" 22 23 26 14'
             chk "restart: F9 brings it back and the state says docked" '[ "$(m2 restart_docked)" = 0 ] && [[ "$(m2 restart_conf)" == *detached=0* ]]'
             # a damaged file
-            chk "damaged file: the defaults for the bad values (640 x 320) and detached is read" '[ "$(m3 damaged_windows)" = 1 ] && [[ "$(m3 damaged_geom)" == 640x320+* ]]'
+            chk "damaged file: the defaults for the bad values (695 x 367) and detached is read" '[ "$(m3 damaged_windows)" = 1 ] && [[ "$(m3 damaged_geom)" == 695x367+* ]]'
             chk "damaged file: a log line for each bad value" 'grep -q "screen-window.conf: w=.abc" "$D3" && grep -q "screen-window.conf: h=.oops" "$D3"'
             return $bad
         }

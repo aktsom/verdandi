@@ -12,7 +12,9 @@ void sw_picture_fit(int win_w, int win_h, sw_picture_t *p) {
     if (win_w < 2 || win_h < 1) {
         return;
     }
-    double k = fmin(win_w / 128.0, win_h / 64.0);
+    // the picture plus its black margin (22/512 of the picture's width at each side, 56/768 of its height above and below: the box's bezel, the Mac's proportions)
+    // has to fit: the frame is 139/128 as wide and 55/48 as high as the picture
+    double k = fmin(win_w * 128.0 / (128.0 * 139.0), win_h * 48.0 / (64.0 * 55.0));
     int r = (int)floor(k + 1e-9);
     if (r >= 1 && k - r <= 0.02 + 1e-9) {
         p->scale = r;
@@ -31,11 +33,18 @@ int sw_picture_contains(const sw_picture_t *p, int x, int y) {
     return x >= p->x && x < p->x + p->w && y >= p->y && y < p->y + p->h;
 }
 
+void sw_frame_size(int scale, int *w, int *h) {
+    *w = 139 * scale;
+    *h = (220 * scale + 2) / 3; // 64 * 55/48 * scale = 73.33 * scale, rounded up
+}
+
 void sw_default_window(int usable_w, int usable_h, int title_h, int *w, int *h) {
     for (int r = 5; r >= 2; r--) {
-        if (128 * r <= usable_w - 16 && 64 * r + title_h <= usable_h - 16) {
-            *w = 128 * r;
-            *h = 64 * r;
+        int fw, fh;
+        sw_frame_size(r, &fw, &fh);
+        if (fw <= usable_w - 16 && fh + title_h <= usable_h - 16) {
+            *w = fw;
+            *h = fh;
             return;
         }
     }

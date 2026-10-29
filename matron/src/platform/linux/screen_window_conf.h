@@ -3,7 +3,7 @@
  * plain key=value lines like audio.conf and ui.conf, written by the C side only (never by lua, so it cannot race with ui.conf):
  *   detached=1       the screen is in its own window (default 0)
  *   x=1480  y=120    the place of the windowed rectangle, in points (none: the window finds its own)
- *   w=1024  h=512    its size, 128..16384 (none: 5 x, 640 x 320, or smaller on a small display)
+ *   w=1024  h=512    its size, 128..16384 (none: 5 x with its margin, 695 x 367, or smaller on a small display)
  *   fullscreen=0     (default 0)
  *   border=1         the desktop's title bar and frame (default 1; Shift+F11 turns it off)
  * a damaged value falls back to its own default with a log line that names it; the rest of the file is used. a missing file is the defaults.

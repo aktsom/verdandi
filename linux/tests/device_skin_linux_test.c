@@ -346,21 +346,30 @@ static void test_scaling(void) {
     cairo_surface_destroy(oled);
 }
 
-// the detachable screen (docs/port/detach-plan.md 3.1): the SCREEN button above the bezel's top right, the placeholder over the screen, the box's other controls unchanged
+// the detachable screen (docs/port/detach-plan.md 3.1): no button on the box, the placeholder over the screen, the box's controls unchanged
 static uint32_t pixel_at(cairo_surface_t *s, int x, int y) {
     cairo_surface_flush(s);
     return ((uint32_t *)(cairo_image_surface_get_data(s) + y * cairo_image_surface_get_stride(s)))[x] & 0xffffff;
 }
 static void test_screen_button(void) {
-    CHECK(SKIN_SCREEN > SKIN_MUTE && SKIN_MUTE == 17 && SKIN_MANUAL == 16, "SKIN_SCREEN is a new id after MUTE (%d); the others keep their values", SKIN_SCREEN);
+    // there is no SCREEN button on the box: the ids stop at MUTE, nothing above the bezel answers, the box hits as before the button existed
+    CHECK(SKIN_MUTE == 17 && SKIN_MANUAL == 16, "the control ids are as before (MUTE %d, MANUAL %d)", SKIN_MUTE, SKIN_MANUAL);
     int sizes[][2] = {{595, 397}, {992, 662}, {1587, 1059}};
     for (unsigned i = 0; i < 3; i++) {
         skin_geom_t g;
         skin_geom(sizes[i][0], sizes[i][1], &g);
-        // the button: x 522..592, y 262..292 units (above the bezel's top right corner)
-        CHECK(skin_hit(&g, px(&g, 557), py(&g, 277)) == SKIN_SCREEN, "%dx%d: the SCREEN button centre", sizes[i][0], sizes[i][1]);
-        CHECK(skin_hit(&g, px(&g, 523), py(&g, 263)) == SKIN_SCREEN && skin_hit(&g, px(&g, 591), py(&g, 291)) == SKIN_SCREEN, "%dx%d: its corners", sizes[i][0], sizes[i][1]);
-        CHECK(skin_hit(&g, px(&g, 480), py(&g, 277)) == SKIN_NONE && skin_hit(&g, px(&g, 557), py(&g, 330)) == SKIN_NONE, "%dx%d: just beside and below it is not the button", sizes[i][0], sizes[i][1]);
+        // where the button was (x 522..592, y 262..292 units, above the bezel's top right corner): nothing
+        int bad = 0;
+        for (double ux = 515; ux <= 600; ux += 5)
+            for (double uy = 255; uy <= 298; uy += 4)
+                if (skin_hit(&g, px(&g, ux), py(&g, uy)) != SKIN_NONE) bad++;
+        CHECK(bad == 0, "%dx%d: the band above the bezel's top right answers to no control (%d points did)", sizes[i][0], sizes[i][1], bad);
+        // no point of the whole box answers with an id above MUTE
+        int high = 0;
+        for (double ux = 0; ux <= SKIN_W; ux += 6)
+            for (double uy = 0; uy <= SKIN_H; uy += 6)
+                if (skin_hit(&g, px(&g, ux), py(&g, uy)) > SKIN_MUTE) high++;
+        CHECK(high == 0, "%dx%d: no control above MUTE (%d points)", sizes[i][0], sizes[i][1], high);
         // the bezel: inside it (the whole recess, where the placeholder is) and not outside
         CHECK(skin_in_bezel(&g, px(&g, 300), py(&g, 450)) && skin_in_bezel(&g, px(&g, 40), py(&g, 305)), "%dx%d: the bezel", sizes[i][0], sizes[i][1]);
         CHECK(!skin_in_bezel(&g, px(&g, 300), py(&g, 250)) && !skin_in_bezel(&g, px(&g, 700), py(&g, 450)), "%dx%d: outside the bezel", sizes[i][0], sizes[i][1]);
@@ -401,7 +410,7 @@ static void test_screen_button(void) {
             if ((pixel_at(b, x, y) & 0xffffff) == 0xffffff)
                 white_px++;
     CHECK(white_px == 0, "no white pixel in the placeholder (%d)", white_px);
-    // the button: drawn by skin_draw_controls; lit when screen_out is set
+    // the box is drawn the same whether the screen is out or not (no button, no lit control): every pixel
     skin_state_t off = {0}, on = {0};
     on.screen_out = 1;
     cairo_surface_t *c0 = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 992, 662), *c1 = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 992, 662);
@@ -412,23 +421,21 @@ static void test_screen_button(void) {
     skin_draw_controls(k1, &g, &on);
     cairo_destroy(k0);
     cairo_destroy(k1);
-    int bx = px(&g, 557), by = py(&g, 277), differ = 0, dark_face = 0;
-    for (int y = by - 12; y <= by + 12; y++)
-        for (int x = bx - 30; x <= bx + 30; x++) {
+    int differ = 0, light = 0, n = 0;
+    for (int y = 0; y < 662; y++)
+        for (int x = 0; x < 992; x++)
             if (pixel_at(c0, x, y) != pixel_at(c1, x, y))
                 differ++;
-            if (((pixel_at(c0, x, y) >> 8) & 255) < 70)
-                dark_face++;
+    CHECK(differ == 0, "the box is drawn the same with the screen out (%d pixels differ)", differ);
+    // where the button was: plain aluminium
+    int bx = px(&g, 557), by = py(&g, 277);
+    for (int y = by - 12; y <= by + 12; y++)
+        for (int x = bx - 30; x <= bx + 30; x++) {
+            n++;
+            if (((pixel_at(c0, x, y) >> 8) & 255) > 150)
+                light++;
         }
-    CHECK(dark_face > 600, "the SCREEN button is drawn (a dark face above the bezel): %d dark pixels", dark_face);
-    CHECK(differ > 20, "the button looks different when the screen is out (%d pixels)", differ);
-    // the rest of the box does not change with screen_out except the button (compare the K1 knob region)
-    int same = 1;
-    for (int y = py(&g, 150); y < py(&g, 230); y++)
-        for (int x = px(&g, 30); x < px(&g, 110); x++)
-            if (pixel_at(c0, x, y) != pixel_at(c1, x, y))
-                same = 0;
-    CHECK(same, "K1 and its surroundings are drawn the same either way");
+    CHECK(light == n, "the place of the old button is bare aluminium (%d of %d pixels light)", light, n);
     cairo_surface_destroy(c0);
     cairo_surface_destroy(c1);
     cairo_surface_destroy(a);

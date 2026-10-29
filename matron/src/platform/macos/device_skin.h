@@ -44,7 +44,6 @@ enum {
 #ifdef NORNS_LINUX_DESKTOP
     // the Linux window has no OUT fader: MUTE is the 11th button of the top row, id SKIN_PAGE1 + 10. the Mac values below are not changed
     SKIN_MUTE = 17, // the last button of the top row: output off and back
-    SKIN_SCREEN = 18, // the button above the bezel's top right: pop the screen out into its own window and back (docs/port/detach-plan.md)
 #else
     SKIN_FADER = 17, // the OUT fader right of E3 (not on the device): norns' output level
     SKIN_MUTE = 18,  // under it: output off and back
@@ -74,7 +73,7 @@ typedef struct {
     double out_level;  // the OUT fader, 0-1 (the output level's place on its scale)
     int out_muted;     // MUTE is on
 #ifdef NORNS_LINUX_DESKTOP
-    int screen_out; // the screen is in its own window: the placeholder shows where it was, the SCREEN button is lit
+    int screen_out; // the screen is in its own window: the placeholder shows where it was (no control of the box changes)
 #endif
 } skin_state_t;
 

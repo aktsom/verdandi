@@ -176,6 +176,10 @@ enum {
 
 static SDL_Window *the_window = NULL;
 static skin_state_t skin = {};
+#ifdef NORNS_LINUX_DESKTOP
+// what a click on the placeholder (the dark panel where the screen was while it is in its own window) answers: not a control of the box, only a click target
+static const int HIT_PLACEHOLDER = 99;
+#endif
 static skin_geom_t geom = {};
 // the last oled frame, kept so the window can be redrawn without matron
 static cairo_surface_t *oled = NULL;
@@ -297,7 +301,7 @@ static void draw_oled(cairo_t *cr) {
 #ifdef NORNS_LINUX_DESKTOP
     // the screen is in its own window (screen_window.h): a placeholder where it was
     if (skin.screen_out) {
-        skin_draw_placeholder(cr, &geom, skin.hover == SKIN_SCREEN);
+        skin_draw_placeholder(cr, &geom, skin.hover == HIT_PLACEHOLDER);
         return;
     }
 #endif
@@ -2004,7 +2008,7 @@ static void gif_toggle(void) {
 }
 
 #ifdef NORNS_LINUX_DESKTOP
-// the screen in its own window and back (F9, the SCREEN button, the menu item, the placeholder, the window's close button); main thread
+// the screen in its own window and back (F9, the menu item, the placeholder, the window's close button); main thread
 static void screen_toggle(void) {
     if (skin.screen_out) {
         screen_window_close();
@@ -2172,7 +2176,7 @@ static void button_action(int control) {
     } else if (control == SKIN_MUTE) {
         call_lua("output_mute", {});
 #ifdef NORNS_LINUX_DESKTOP
-    } else if (control == SKIN_SCREEN) {
+    } else if (control == HIT_PLACEHOLDER) {
         screen_toggle();
 #endif
     }
@@ -2275,11 +2279,11 @@ static SDL_Cursor *cursor_hand = NULL;
 static SDL_Cursor *cursor_arrow = NULL;
 
 #ifdef NORNS_LINUX_DESKTOP
-// the control under the pointer; while the screen is detached the placeholder counts as the SCREEN button
+// the control under the pointer; while the screen is detached the placeholder (where the screen was) is a click target of its own, no control of the box
 static int hit_control(double px, double py) {
     int c = skin_hit(&geom, px, py);
     if (c == SKIN_NONE && skin.screen_out && skin_in_bezel(&geom, px, py)) {
-        return SKIN_SCREEN;
+        return HIT_PLACEHOLDER;
     }
     return c;
 }

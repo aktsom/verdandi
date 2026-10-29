@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mock-ups for docs/port/detach-plan.md, drawn over a real capture of today's window (real-window-today.png, 992 x 662 at 1:1 in a 1280 x 800 screen,
-box origin 160,85): they show the proposed place of the pop-out button, the placeholder and the screen window. They are pictures of a proposal, not of
+box origin 160,85): they show the placeholder and the screen window (the pop-out button of the first plan was removed). They are pictures of a proposal, not of
 code. run: python3 make_detach_pictures.py"""
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -25,14 +25,6 @@ def button(d, x0, y0, w, h, label, icon=True):
     tw = d.textlength(text, font=f)
     d.text((x0 + (w - tw) / 2, y0 + h / 2 - 8), text, font=f, fill=(222, 223, 226))
 
-# 1. docked: today's window with the proposed pop-out button above the bezel's top right
-a = src.copy(); d = ImageDraw.Draw(a)
-b0 = unit(522, 262)
-button(d, b0[0], b0[1], 70, 30, "SCREEN")
-d.text((b0[0] - 250, b0[1] + 6), "new: pop the screen out (F9)", font=font(12), fill=(200, 60, 40))
-d.line((b0[0] - 8, b0[1] + 14, b0[0] - 1, b0[1] + 14), fill=(200, 60, 40), width=2)
-a.save(os.path.join(here, "docked-with-button.png"))
-
 # 2. detached: the main window keeps every control; the screen is a dark placeholder with one sentence
 p = src.copy(); d = ImageDraw.Draw(p)
 d.rounded_rectangle((sx0, sy0, sx1, sy1), radius=4, fill=(22, 23, 26))
@@ -42,8 +34,6 @@ cy = (sy0 + sy1) / 2 - 22
 for i, t in enumerate(lines):
     tw = d.textlength(t, font=f)
     d.text(((sx0 + sx1) / 2 - tw / 2, cy + i * 28), t, font=f, fill=(170, 172, 178))
-button(d, b0[0], b0[1], 70, 30, "SCREEN")
-d.rounded_rectangle((b0[0] - 2, b0[1] - 2, b0[0] + 72, b0[1] + 32), radius=8, outline=(255, 170, 40), width=2)  # lit: it is out
 p.save(os.path.join(here, "detached-main-window.png"))
 
 # 3. the screen window: only the picture, 640 x 320 (5 x 128 by 5 x 64), no box (the title bar is the desktop's, drawn here as a plain bar)

@@ -32,7 +32,7 @@ Nothing here is designed or scheduled; each entry is a first note only.
 4. **MIDI control of the on-screen controls** (idea, not designed): MIDI control of the on-screen keys, encoders, OUT fader and MUTE button. Before designing,
    check how this relates to PARAMS > MAP and the `.pmap` files, which map a script's own parameters (these controls belong to the window, not to a script).
 5. **Snap the screen window to the nearest whole scale** (decided by the owner, not built now): a hidden helper that jumps the detached screen window to the
-   nearest whole multiple of 128 x 64 (for example 8x = 1024 x 512) so that every screen pixel is a flat square. **It stays hidden when it is built later:
+   nearest whole multiple of 128 x 64 (for example 8x: a 1024 x 512 picture in a 1112 x 587 window with its margin) so that every screen pixel is a flat square. **It stays hidden when it is built later:
    the shortcut key is F12 (pressed in the screen window) plus one item in the in-window right-click menu, and nothing visible on the screen window itself.**
    F12 is not used by this port, and no script in the owner's `dust/code` was found to use it: **this was not checked here** (his scripts are on his laptop);
    `verdandi scan-fkeys` lists any script that names F9, F11 or F12, and its output on his laptop settles it (`docs/port/detach-plan.md` section 10).

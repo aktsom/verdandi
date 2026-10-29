@@ -80,18 +80,18 @@ _norns.grid_window("keys")
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" newgif "$NORNS_HOME/gif-detached.gif"
 #sleep 4
-# 3. the picture at several sizes, before anything changes what the script shows: an in-between size (700 x 400), a whole scale (8x), and a window as big as the display
-#    (10x: what fullscreen draws; with no window manager here SDL's own fullscreen cannot change the size of the X window, that is checked by the saved state below)
+# 3. the picture at several sizes, before anything changes what the script shows: an in-between size (700 x 400), a whole scale (8x: 1112 x 587 with its margin), and a big window
+#    (9x: 1251 x 660, about what fullscreen draws; with no window manager here SDL's own fullscreen cannot change the size of the X window, that is checked by the saved state below)
 #xdo search --name ^Verdandi.screen$ windowsize 700 400
 #sleep 1.2
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" cap '^Verdandi.screen$' "$NORNS_HOME/screen-700.png"
-#xdo search --name ^Verdandi.screen$ windowsize 1024 512
+#xdo search --name ^Verdandi.screen$ windowsize 1112 587
 #sleep 1.2
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" cap '^Verdandi.screen$' "$NORNS_HOME/screen-1024.png"
-#xdo search --name ^Verdandi.screen$ windowsize 1280 800
+#xdo search --name ^Verdandi.screen$ windowsize 1251 660
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" cap '^Verdandi.screen$' "$NORNS_HOME/screen-big.png"
-#xdo search --name ^Verdandi.screen$ windowsize 640 320
+#xdo search --name ^Verdandi.screen$ windowsize 695 367
 #sleep 1
 # 4. shortcuts from the screen window: Ctrl+Shift+S (the same picture as docked), then Ctrl+O (the import dialog: it changes what the script shows afterwards)
 #xdo search --name ^Verdandi.screen$ windowfocus
@@ -122,10 +122,11 @@ _norns.grid_window("keys")
 #xdo mousemove 474 532 click 1
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" count windows_after_placeholder '^Verdandi.screen$'
-# 8. the SCREEN button above the bezel detaches again; then the screen window's close button re-docks
-#xdo mousemove 717 362 click 1
+# 8. F9 from the box detaches again; then the screen window's close button re-docks
+#xdo search --name ^Verdandi.Linux$ windowfocus
+#xdo key F9
 #sleep 1.5
-#sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" count windows_after_button '^Verdandi.screen$'
+#sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" count windows_after_f9 '^Verdandi.screen$'
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" close '^Verdandi.screen$'
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" count windows_after_close '^Verdandi.screen$'

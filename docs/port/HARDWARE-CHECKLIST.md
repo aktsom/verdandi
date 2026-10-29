@@ -225,6 +225,7 @@ The tests here run under Xvfb with **no window manager**, so these could not be 
 - [ ] **Wayland** (if you ever use it): the saved position may be ignored by the compositor (the size is restored); F10 may not bring the main window forward (focus-stealing rules); borderless dragging may not work.
 - [ ] **A second monitor that is later unplugged:** start with `screen-window.conf` holding a place on it (`x=3000`): the window opens on the main display and the log (`~/Verdandi/logs/norns.log`) says the saved place is not on any display.
 - [ ] **Stacking and focus:** with focus-follows-mouse or a tiling window manager, the screen window still gets the keys when you click it; F9 works from the main, the screen and the grid window.
+- [ ] **The black margin** round the picture in the screen window (like the box's bezel: 4.30 percent at the sides, 7.29 percent above and below) at a small window, a big one and **in real fullscreen on your display**: text never touches the edge. Fullscreen 1920 x 1080 is an in-between size (13.8x) now: look at a letter and say if you would rather have a flat 13x with a bigger margin (`detach-plan.md` section 12).
 - [ ] **How the in-between sizes look** to your eye (the fast bilinear filter against the box's slower one; mean difference about 1 of 255 in `docs/port/detach-measurements/`): tell me if an in-between size looks soft.
 
 ## Clean layout and CLEAN UP (docs/port/clean-layout.md)
