@@ -41,6 +41,12 @@
 
 set -u
 
+# `verdandi tidy ...`: the clean-up tool (linux/tidy.sh), nothing of the launcher runs
+if [ "${1:-}" = tidy ]; then
+    shift
+    exec "$(cd "$(dirname "$0")" && pwd)/tidy.sh" "$@"
+fi
+
 TERMINAL=0
 [ "${1:-}" = "--terminal" ] && TERMINAL=1
 
