@@ -172,8 +172,11 @@ TEST_CASE("the log line: one line per folder; the files, what they are, why it f
     CHECK(m.find("A_scsynth.so (32-bit ARM), B_scsynth.so (32-bit ARM)") != std::string::npos);
     CHECK(m.find("this machine is x86_64") != std::string::npos);
     CHECK(m.find("stops at the first") != std::string::npos);
-    CHECK(m.find("mkdir -p '/home/n/disabled-plugins' && mv '" + e + "/pl/A_scsynth.so' '" + e + "/pl/B_scsynth.so' '/home/n/disabled-plugins/'") !=
-          std::string::npos);
+    CHECK(m.find("verdandi tidy disable '" + e + "/pl/A_scsynth.so' 'wrong-architecture plug-in (32-bit ARM) on x86_64' ; verdandi tidy disable '" + e +
+                 "/pl/B_scsynth.so' ") != std::string::npos);
+    CHECK(m.find("/home/n/disabled/, restorable") != std::string::npos);
+    CHECK(m.find("SYSTEM > CLEAN UP") != std::string::npos);
+    CHECK(m.find("mkdir ") == std::string::npos);
     CHECK(m.find("rm ") == std::string::npos);
     CHECK(m.find("NORNS_PLUGIN_CHECK=0") != std::string::npos);
     CHECK(m.find("plugin_check=0 in audio.conf") != std::string::npos);
@@ -189,12 +192,17 @@ TEST_CASE("the log line: one line per folder; the files, what they are, why it f
     // when the whole folder is bad, the command moves the folder
     Group whole{e + "/pl", g.items, e + "/pl"};
     std::string m2 = message(whole, "x86_64", "/home/n");
-    CHECK(m2.find("mv '" + e + "/pl' '/home/n/disabled-plugins/'") != std::string::npos);
-    CHECK(m2.find("mv '" + e + "/pl/A_scsynth.so'") == std::string::npos);
+    CHECK(m2.find("verdandi tidy disable '" + e + "/pl' '") != std::string::npos);
+    CHECK(m2.find("disable '" + e + "/pl/A_scsynth.so'") == std::string::npos);
+    // a folder outside the norns home cannot be moved by the tool: the line says to do it by hand, and never to delete
+    Group outside{"/usr/share/SuperCollider/Extensions/pl", g.items, "/usr/share/SuperCollider/Extensions/pl"};
+    std::string mo = message(outside, "x86_64", "/home/n");
+    CHECK(mo.find("verdandi tidy") == std::string::npos);
+    CHECK(mo.find("outside your norns home") != std::string::npos);
 }
 
 TEST_CASE("the note on the device window is short") {
-    CHECK(std::string(note()) == "PLUGINS: wrong-architecture plug-in, see log");
+    CHECK(std::string(note()) == "PLUGINS: wrong-architecture plug-in, see SYSTEM > CLEAN UP");
 }
 
 TEST_CASE("the switch") {

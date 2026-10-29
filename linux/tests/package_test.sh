@@ -76,7 +76,7 @@ verdandi --terminal < /tmp/vfifo > /home/tester/launcher.out 2>&1 &
 PID=$!
 exec 3> /tmp/vfifo
 n=0
-until grep -aq 'startup_status.ok' /home/tester/launcher.out 2>/dev/null && grep -aq 'engines: \[' /home/tester/Verdandi/sclang.log 2>/dev/null; do
+until grep -aq 'startup_status.ok' /home/tester/launcher.out 2>/dev/null && grep -aq 'engines: \[' /home/tester/Verdandi/logs/sclang.log 2>/dev/null; do
     n=$((n + 1)); [ $n -gt 450 ] && break
     kill -0 $PID 2>/dev/null || break
     sleep 0.2
@@ -96,12 +96,12 @@ RUN
 chmod 755 /home/tester/run.sh
 runuser -u tester -- /home/tester/run.sh
 H=/home/tester/Verdandi
-grep -aq startup_status.ok /home/tester/launcher.out && p "installed launcher boots norns as a normal user (headless)" || { f "norns did not boot"; tail -25 /home/tester/launcher.out | sed 's/^/   /'; tail -10 $H/norns.log $H/jackd.log 2>/dev/null | sed 's/^/   /'; }
-grep -a 'engines: \[' $H/sclang.log | head -1 | grep -q PolyPerc && p "bundled SuperCollider lists the engines: $(grep -a 'engines: \[' $H/sclang.log | head -1 | cut -c1-100)" || { f "no engine list"; tail -20 $H/sclang.log | sed 's/^/   /'; }
+grep -aq startup_status.ok /home/tester/launcher.out && p "installed launcher boots norns as a normal user (headless)" || { f "norns did not boot"; tail -25 /home/tester/launcher.out | sed 's/^/   /'; tail -10 $H/logs/norns.log $H/logs/jackd.log 2>/dev/null | sed 's/^/   /'; }
+grep -a 'engines: \[' $H/logs/sclang.log | head -1 | grep -q PolyPerc && p "bundled SuperCollider lists the engines: $(grep -a 'engines: \[' $H/logs/sclang.log | head -1 | cut -c1-100)" || { f "no engine list"; tail -20 $H/logs/sclang.log | sed 's/^/   /'; }
 grep -aq 'PROBE-OK' /home/tester/launcher.out && p "the Lua prompt answers" || f "the Lua prompt does not answer"
 [ "$(readlink $H/norns)" = /opt/verdandi ] && p "~/Verdandi/norns leads to /opt/verdandi" || f "norns link: $(readlink $H/norns)"
 grep -q '/opt/verdandi/sc/core' /home/tester/.config/SuperCollider/sclang_conf.yaml 2>/dev/null || grep -q '/opt/verdandi/sc/core' $H/.config/SuperCollider/sclang_conf.yaml && p "sclang_conf.yaml names the installed program" || f "sclang_conf.yaml"
-grep -aq '200\|302\|301' /home/tester/maiden.http 2>/dev/null && p "maiden answers on 127.0.0.1:5000 ($(cat /home/tester/maiden.http | tr -d '\r'))" || { f "maiden does not answer"; tail -5 $H/maiden.log; }
+grep -aq '200\|302\|301' /home/tester/maiden.http 2>/dev/null && p "maiden answers on 127.0.0.1:5000 ($(cat /home/tester/maiden.http | tr -d '\r'))" || { f "maiden does not answer"; tail -5 $H/logs/maiden.log; }
 [ ! -f /home/tester/write.out ] && p "the program tree is read-only for the user" || f "a normal user could write into /opt/verdandi"
 [ -s /home/tester/left.out ] && { f "processes left after the stop: $(tr '\n' ' ' < /home/tester/left.out)"; } || p "no process left after the stop"
 [ -d /opt/verdandi/supercollider ] && ! [ -e /root/Verdandi ] && p "nothing written outside the user's home by the user's run" || f "root home touched"

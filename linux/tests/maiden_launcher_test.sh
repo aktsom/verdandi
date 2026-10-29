@@ -50,7 +50,7 @@ start() { # name, env assignments...
         kill -0 "$RUN" 2> /dev/null || break
         sleep 0.2
     done
-    for _ in $(seq 100); do grep -q "running post-startup" "$T/$name/norns.log" "$T/$name.out" 2> /dev/null && break; sleep 0.2; done
+    for _ in $(seq 100); do grep -q "running post-startup" "$T/$name/logs/norns.log" "$T/$name.out" 2> /dev/null && break; sleep 0.2; done
 }
 procs() { pgrep -f "maiden server --host 127.0.0.1 --port $1" | wc -l; }
 
@@ -95,7 +95,7 @@ newhome b
 start b NORNS_MAIDEN="$MD" NORNS_MAIDEN_PORT="$PM"
 has "the launcher says the port is in use" "$(cat "$T/b.out")" "port $PM is in use"
 check "no maiden was started" "$(procs "$PM")" 0
-check "norns booted" "$(grep -c 'running post-startup' "$T/b/norns.log")" 1
+check "norns booted" "$(grep -c 'running post-startup' "$T/b/logs/norns.log")" 1
 stop_norns
 kill "$HOLD" 2> /dev/null
 
@@ -103,7 +103,7 @@ echo "== maiden is not built"
 newhome c
 start c NORNS_MAIDEN="$T/none" NORNS_MAIDEN_PORT="$PM"
 has "the launcher says so" "$(cat "$T/c.out")" "maiden is not built"
-check "norns booted" "$(grep -c 'running post-startup' "$T/c/norns.log")" 1
+check "norns booted" "$(grep -c 'running post-startup' "$T/c/logs/norns.log")" 1
 stop_norns
 
 echo "== --terminal: matron's prompt is the terminal, there is no norns console for maiden"

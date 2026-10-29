@@ -50,7 +50,7 @@ done
 # load needs), not after a fixed sleep: under load sclang takes longer than any fixed time (docs/port/KNOWN-ISSUES.md).
 # up to 90 s.
 n=0
-until grep -q "norns.startup_status.ok" "$LOG" 2> /dev/null && grep -q "engines: \[" "$NORNS_HOME/sclang.log" 2> /dev/null; do
+until grep -q "norns.startup_status.ok" "$LOG" 2> /dev/null && grep -q "engines: \[" "$NORNS_HOME/logs/sclang.log" 2> /dev/null; do
     n=$((n + 1))
     if [ $n -gt 450 ] || ! kill -0 $RUN 2> /dev/null; then
         echo "norns_probe: norns not ready after 90 s, see $LOG"

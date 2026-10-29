@@ -194,7 +194,7 @@ Files from the container's file manager and portals do not exist in a container 
 ## 4. Checklist: what to try
 
 Run with `--terminal` so that you can see messages. Tick or note what happened; whatever fails, copy the
-terminal output and `~/verdandi-home/jackd.log` and `sclang.log` if present.
+terminal output and `~/verdandi-home/logs/jackd.log` and `logs/sclang.log` if present.
 
 **Window**
 - [ ] The device window opens (aluminium box, black screen, buttons MIX TAPE HOME PARAMS MIC GRID ARC KEYS
@@ -260,11 +260,11 @@ programs reading one serial stream steal each other's bytes: grid events lag, ar
 
 ## Scripts that install SuperCollider libraries, and scripts that restart norns
 - **A script's own installer (K3 "Install") may download Raspberry Pi files** (for example `PortedPlugins-RaspberryPi.zip`). Those 32-bit ARM `.so` files cannot load on your
-  machine, and SuperCollider then does not start at all ("SUPERCOLLIDER FAIL", no engines, `wrong ELF class: ELFCLASS32` in `sclang.log`). norns now **checks for this before SuperCollider starts**:
+  machine, and SuperCollider then does not start at all ("SUPERCOLLIDER FAIL", no engines, `wrong ELF class: ELFCLASS32` in `logs/sclang.log`). norns now **checks for this before SuperCollider starts**:
   it reads the header of every plug-in in `~/verdandi-home/.local/share/SuperCollider/Extensions`, `/usr/local/share/SuperCollider/Extensions`, `/usr/share/SuperCollider/Extensions`
   (and `*_scsynth.so` in `dust/code`) and compares it with this machine. For each **folder** with wrong files it prints **one line** in the terminal with the folder, each bad file in it and what it is ("A_scsynth.so (32-bit ARM); this machine is x86_64"), why SuperCollider will fail,
-  and the exact command to move it (or its folder) into `~/verdandi-home/disabled-plugins` (it **never** moves or deletes anything itself), and the device window shows
-  `PLUGINS: wrong-architecture plug-in, see log` until no wrong file is left. SuperCollider stops at the first bad file, so `sclang.log` shows only one of them: the list from norns can be longer. After moving the files, restart norns.
+  and the exact command (`verdandi tidy disable '<folder>' '<why>'`) to move it (or its folder) into `~/verdandi-home/disabled/` with a line in `disabled/MANIFEST.tsv`, restorable (it **never** moves or deletes anything itself; SYSTEM > CLEAN UP does the same after a confirmation), and the device window shows
+  `PLUGINS: wrong-architecture plug-in, see SYSTEM > CLEAN UP` until no wrong file is left. SuperCollider stops at the first bad file, so `sclang.log` shows only one of them: the list from norns can be longer. After moving the files, restart norns.
   Turn the check off with `NORNS_PLUGIN_CHECK=0` or `plugin_check=0` in `~/verdandi-home/audio.conf`.
 - **"sudo systemctl restart norns-..." from a script** (a script's installer asks for a restart this way, for the Raspberry Pi's services): on this build norns now answers it itself. The command returns at
   once with exit 0, prints one line (`norns: there is no systemd for norns on this build ... norns restarts itself instead`), and norns restarts within a few seconds (through its own restart, `linux/norns.sh` starts it again). Other
@@ -289,3 +289,10 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - **What installing a script does:** maiden only downloads it (git clone, or unzip) into `dust/code`. It runs nothing. What a script does after (its own K3 "Install" dependency step) is as described above under "Scripts that install SuperCollider libraries":
   Raspberry Pi plug-ins are reported and do not load on this machine; `sudo systemctl restart norns-*` becomes a norns restart. maiden's own console commands `;restart` and the like (they talk to systemd) answer
   "not available in Verdandi" here: restart norns from its window.
+
+## Files, logs and cleaning up (docs/port/clean-layout.md)
+- [ ] Everything Verdandi makes is in `~/Verdandi`: `logs/`, `logs/crash/`, `disabled/` (when you moved something), `backups/` (only before a migration), `cache/`; no `norns.log`, `sclang.log` etc. loose in the home, no hidden `.cache`. `ls -A ~/Verdandi` shows it.
+- [ ] Start and stop norns three times: `ls ~/Verdandi/logs` shows `sclang.log`, `sclang.1.log`, `sclang.2.log` (and the same for norns, jackd, maiden); the log of the run before the last is still there.
+- [ ] HOME > SYSTEM > CLEAN UP: each group is one line with a size; compare with `du -sh ~/Verdandi/logs ~/Verdandi/cache ~/Verdandi/disabled`. K3 on a line opens it; nothing changes until a second K3; K2 says no.
+- [ ] **If you have the nested folder `~/Verdandi/Verdandi`:** run `verdandi tidy flatten` (it only reads, norns may be running) and **send me the whole output**. Nothing is moved by it. The real move is built only after I have seen that output and you have said go.
+- [ ] A plug-in for another machine (a file `X_scsynth.so` that is 32-bit ARM, in `dust/code/<script>/`): the line "ARM PLUG-INS" appears on CLEAN UP; K3 K3 moves it to `disabled/`; DISABLED lists it with its reason; K3 on it, K3 restores it. Your scripts and samples are untouched either way.

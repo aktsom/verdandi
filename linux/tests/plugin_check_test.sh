@@ -41,11 +41,12 @@ for f in AnalogChew AnalogLoss AnalogDegrade; do
     printf '%s\n' "$LINE_P" | grep -q "${f}_scsynth.so (32-bit ARM)" && ok "$f is on the line of its folder" || bad "$f listed" "$OUT"
 done
 printf '%s\n' "$LINE_P" | grep -q "this machine is x86_64" && ok "the line says what this machine is" || bad "machine" "$LINE_P"
-printf '%s\n' "$OUT" | grep -q "mv '$E/supercollider-plugins' '$H/disabled-plugins/'" && ok "a folder that is all bad: the one command moves the folder" || bad "folder command" "$OUT"
-printf '%s\n' "$OUT" | grep -q "mv '$E/mixed/Bad_scsynth.so' '$H/disabled-plugins/'" && ok "a folder with good files too: the command moves the file" || bad "file command" "$OUT"
+printf '%s\n' "$OUT" | grep -q "verdandi tidy disable '$E/supercollider-plugins' 'wrong-architecture plug-in (32-bit ARM) on x86_64'" && ok "a folder that is all bad: the one command moves the folder into disabled/" || bad "folder command" "$OUT"
+printf '%s\n' "$OUT" | grep -q "verdandi tidy disable '$E/mixed/Bad_scsynth.so' '" && ok "a folder with good files too: the command moves the file" || bad "file command" "$OUT"
 LINE_M2="$(printf '%s\n' "$OUT" | grep "^SuperCollider plug-ins in $E/mixed2: ")"
 [ -n "$LINE_M2" ] && printf '%s\n' "$LINE_M2" | grep -q "BadOne_scsynth.so (32-bit ARM), BadTwo.scx (32-bit ARM)" && ok "two bad files in one folder: one line listing both" || bad "mixed2 line" "$OUT"
-printf '%s\n' "$LINE_M2" | grep -q "mv '$E/mixed2/BadOne_scsynth.so' '$E/mixed2/BadTwo.scx' '$H/disabled-plugins/'" && ok "...and one command with both files (the good one stays)" || bad "mixed2 command" "$LINE_M2"
+printf '%s\n' "$LINE_M2" | grep -q "verdandi tidy disable '$E/mixed2/BadOne_scsynth.so' '.*' ; verdandi tidy disable '$E/mixed2/BadTwo.scx' '" && ok "...and one command per file (the good one stays)" || bad "mixed2 command" "$LINE_M2"
+printf '%s\n' "$OUT" | grep -q "SYSTEM > CLEAN UP" && ok "every line points to SYSTEM > CLEAN UP" || bad "clean up" "$OUT"
 printf '%s\n' "$OUT" | grep -q "Fine2.so" && bad "good file listed" "$OUT" || ok "the good file in that folder is not mentioned"
 printf '%s\n' "$OUT" | grep -q "^SuperCollider plug-in in $E/mixed: Bad_scsynth.so (32-bit ARM); this machine is x86_64" && ok "one bad file in a folder: the singular line" || bad "singular" "$OUT"
 printf '%s\n' "$OUT" | grep -q "NORNS_PLUGIN_CHECK=0 or plugin_check=0 in audio.conf" && ok "every line says how to turn the check off" || bad "off switch" "$OUT"
@@ -56,7 +57,7 @@ printf '%s\n' "$OUT" | grep -q "Good_scsynth.so\|Fine.so\|notelf.so" && bad "goo
 printf '%s\n' "$OUT" | grep -q "stops at the first bad file" && ok "says that SuperCollider stops at the first bad file" || bad "stops at the first" "$OUT"
 [ "$(wc -l < "$H/.plugin-mismatch")" = 7 ] && ok "the list file for the device note still has one path per file (seven)" || bad "list file" "$(cat "$H/.plugin-mismatch" 2>&1)"
 find "$H" -type f -not -name .plugin-mismatch -exec sha1sum {} + | sort > "$T/after"
-cmp -s "$T/before" "$T/after" && [ ! -e "$H/disabled-plugins" ] && ok "nothing was moved, changed or created besides the list file" || bad "nothing changed" "files differ"
+cmp -s "$T/before" "$T/after" && [ ! -e "$H/disabled" ] && ok "nothing was moved, changed or created besides the list file" || bad "nothing changed" "files differ"
 # the same files on an aarch64 machine: the x86_64 ones are the wrong ones now (and the ARM 32-bit too)
 OUT2="$(PLUGIN_ARCH_UNAME=aarch64 "$T/check" "$H" 2>&1)"
 printf '%s\n' "$OUT2" | grep -q "Good_scsynth.so (64-bit x86_64)" && printf '%s\n' "$OUT2" | grep -q "this machine is aarch64" && ok "an x86_64 file on an aarch64 machine is reported" || bad "aarch64 machine" "$OUT2"
@@ -65,8 +66,11 @@ OUT3="$(NORNS_PLUGIN_CHECK=0 PLUGIN_ARCH_UNAME=x86_64 "$T/check" "$H" 2>&1)"
 [ -z "$OUT3" ] && [ ! -e "$H/.plugin-mismatch" ] && ok "NORNS_PLUGIN_CHECK=0: nothing reported, no list file" || bad "switch" "$OUT3"
 # after the files are moved away by hand, nothing is left and the list file goes
 PLUGIN_ARCH_UNAME=x86_64 "$T/check" "$H" > /dev/null 2>&1
-mkdir -p "$H/disabled-plugins"
-mv "$E/supercollider-plugins" "$E/mixed/Bad_scsynth.so" "$E/mixed2/BadOne_scsynth.so" "$E/mixed2/BadTwo.scx" "$H/dust/code/foo/ignore/PulsePTR_scsynth.so" "$H/disabled-plugins/"
+# (the tool does it: the same command the line printed, one folder and one file here, then the rest by hand into the same disabled/)
+NORNS_HOME="$H" "$REPO/linux/tidy.sh" disable "$E/supercollider-plugins" "test" > /dev/null 2>&1 && ok "the printed command moves the folder into disabled/ with a manifest line" || bad "tidy disable"
+[ -f "$H/disabled/MANIFEST.tsv" ] && [ "$(grep -c supercollider-plugins "$H/disabled/MANIFEST.tsv")" = 1 ] && ok "and the manifest names it" || bad "manifest"
+mkdir -p "$H/disabled/by-hand"
+mv "$E/mixed/Bad_scsynth.so" "$E/mixed2/BadOne_scsynth.so" "$E/mixed2/BadTwo.scx" "$H/dust/code/foo/ignore/PulsePTR_scsynth.so" "$H/disabled/by-hand/"
 OUT4="$(PLUGIN_ARCH_UNAME=x86_64 "$T/check" "$H" 2>&1)"
 [ -z "$OUT4" ] && [ ! -s "$H/.plugin-mismatch" ] && ok "after moving them: no line, the list is empty" || bad "after moving" "$OUT4"
 exit $FAIL

@@ -21,5 +21,5 @@ dpkg -l | grep -E "libjack|pipewire-jack|jackd2" | awk '{print $2}' | tr '\n' ' 
 mkdir -p /root/vhome && ln -sfn /opt/verdandi /root/vhome/norns
 export LD_LIBRARY_PATH=/opt/verdandi/lib PATH=/opt/verdandi/supercollider/bin:$PATH
 NORNS_HOME=/root/vhome /opt/verdandi/linux/tests/norns_probe.sh /root/ro.lua /root/probe.log > /root/probe.out 2>&1
-echo "boot: startup_status.ok x$(grep -ac startup_status.ok /root/probe.log); engines: $(grep -a 'engines: \[' /root/vhome/sclang.log | cut -c1-90)"
+echo "boot: startup_status.ok x$(grep -ac startup_status.ok /root/probe.log); engines: $(grep -a 'engines: \[' /root/vhome/logs/sclang.log | cut -c1-90)"
 grep -a "SUPERCOLLIDER\|PROBE" /root/probe.log | head -3

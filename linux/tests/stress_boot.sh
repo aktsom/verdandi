@@ -60,8 +60,8 @@ LUA
         fails=$((fails + 1))
         mv "$LOG" "$OUT/fail-$n.log"
         # what the home had: jack and sclang logs
-        cp "$H/jackd.log" "$OUT/fail-$n.jackd.log" 2> /dev/null
-        cp "$H/sclang.log" "$OUT/fail-$n.sclang.log" 2> /dev/null
+        cp "$H/logs/jackd.log" "$OUT/fail-$n.jackd.log" 2> /dev/null
+        cp "$H/logs/sclang.log" "$OUT/fail-$n.sclang.log" 2> /dev/null
         echo "run $n load=$load ${secs}s FAIL missing:$missing"
     fi
     rm -rf "$H"

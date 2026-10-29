@@ -200,28 +200,47 @@ inline std::vector<Group> groupFindings(const std::vector<Finding> &found, const
     return groups;
 }
 
-// the one log line of a folder: the folder, its bad files and what each is, why SuperCollider fails, the one command that moves them, how to turn the check off
+// the one log line of a folder: the folder, its bad files and what each is, what is wrong (SuperCollider will not start) and what to do (one command per item that
+// moves it into <home>/disabled/ with a line in the manifest, restorable), how to turn the check off. a path outside the norns home cannot be moved by the tool
 inline std::string message(const Group &g, const std::string &uname, const std::string &home) {
-    std::string dir = home + "/disabled-plugins";
     bool many = g.items.size() > 1;
     std::string names;
-    std::string files;
+    std::vector<std::string> targets;
     for (const auto &f : g.items) {
         names += (names.empty() ? "" : ", ") + f.path.substr(f.path.rfind('/') + 1) + " (" + describe(f.info) + ")";
-        files += "'" + f.path + "' ";
     }
-    std::string src = g.moveFolder.empty() ? files : "'" + g.moveFolder + "' ";
+    if (!g.moveFolder.empty()) {
+        targets.push_back(g.moveFolder);
+    } else {
+        for (const auto &f : g.items) {
+            targets.push_back(f.path);
+        }
+    }
+    std::string why = "wrong-architecture plug-in (" + describe(g.items.front().info) + ") on " + uname;
+    std::string fix;
+    bool inside = true;
+    for (const auto &t : targets) {
+        if (t.compare(0, home.size() + 1, home + "/") != 0) {
+            inside = false;
+        }
+        fix += (fix.empty() ? "" : " ; ") + std::string("verdandi tidy disable '") + t + "' '" + why + "'";
+    }
+    std::string todo;
+    if (inside) {
+        todo = "to fix: " + fix + " (moves " + (many ? "them" : "it") + " into " + home + "/disabled/, restorable; also SYSTEM > CLEAN UP)";
+    } else {
+        todo = "to fix: move " + std::string(many ? "them" : "it") + " out of SuperCollider's extension folder by hand, it is outside your norns home (never delete)";
+    }
     return std::string("SuperCollider plug-in") + (many ? "s" : "") + " in " + g.folder + ": " + names + "; this machine is " + uname +
            ": SuperCollider cannot load " + (many ? "them" : "it") +
-           " and stops at the first bad file, so it will not start (no engines, SUPERCOLLIDER FAIL), and the list "
-           "of bad files may be longer than the one error in sclang.log. nothing was changed. to move " + (many ? "them" : "it") +
-           " out of the way (never deleted): mkdir -p '" + dir + "' && mv " + src + "'" + dir + "/' ; "
+           " and stops at the first bad file, so SuperCollider will not start (no engines, SUPERCOLLIDER FAIL); the list "
+           "of bad files may be longer than the one error in sclang.log. nothing was changed. " + todo + " ; "
            "to turn this check off: NORNS_PLUGIN_CHECK=0 or plugin_check=0 in audio.conf";
 }
 
 // the standing note on the device window
 inline const char *note(void) {
-    return "PLUGINS: wrong-architecture plug-in, see log";
+    return "PLUGINS: wrong-architecture plug-in, see SYSTEM > CLEAN UP";
 }
 
 // NORNS_PLUGIN_CHECK / audio.conf plugin_check: 0, off, false, no (any case) turn the check off

@@ -82,7 +82,7 @@ The keys window's MIDI device is named "Verdandi keys", as on macOS (`MACOS_PROD
       change; BUFFER is marked "exp." and, after APPLY and the restart, `pw-top` shows the quantum you chose for
       the norns clients (a request only: PipeWire may refuse it).
 - [ ] Under your own jackd (`NORNS_AUDIO_SERVER=jackd`, needs a card nothing else holds): SYSTEM > AUDIO lists your
-      ALSA cards, APPLY restarts jackd with them (`jackd.log`); a setting that does not start falls back to the defaults
+      ALSA cards, APPLY restarts jackd with them (`logs/jackd.log`); a setting that does not start falls back to the defaults
       and leaves `audio.conf.failed`. Two different cards as input and output are untested (clocks may drift).
 - [ ] SYSTEM > RESTART and SLEEP work (the sidecar used `sudo -n systemd-run` on Linux before this step; now a plain
       shell signals `norns.sh`, as on macOS).
@@ -197,7 +197,7 @@ Look at the window on your laptop (Cinnamon, your real scale) and tell me what i
 
 ## Crash fix (KNOWN-ISSUES 15)
 - [ ] With the new build, leave norns running with a script (grid and LFOs) for a few hours; plug and unplug the grid and the mio, plug in a USB stick or headphones: norns stays up. `coredumpctl list | grep norns` shows no new entry.
-- [ ] If it still crashes: send `~/Verdandi/crash-report.txt` (and `coredumpctl info` of the newest norns entry). For the two aborts: `coredumpctl info` of the norns SIGABRT (Monday) and the sclang SIGABRT (Tuesday).
+- [ ] If it still crashes: send the newest file in `~/Verdandi/logs/crash/` (and `coredumpctl info` of the newest norns entry). For the two aborts: `coredumpctl info` of the norns SIGABRT (Monday) and the sclang SIGABRT (Tuesday).
 
 ## SYSTEM > UI: brightness, colour, contrast (UI step 3: `docs/port/ui-settings-plan.md`, pictures `docs/port/ui-previews/ui-greys.png`, `ui-colours.png`, `ui-brightness.png`)
 Look at it on the laptop's real screen (Cinnamon, your scale) next to the real norns if you can; the tests check the numbers, not the taste.
@@ -214,3 +214,9 @@ Look at it on the laptop's real screen (Cinnamon, your scale) next to the real n
 - [ ] SYSTEM > MODS lists sidvagn (and every other `dust/code/*/lib/mod.lua`: the nb library, doubledecker, ...). E3 right enables, a "+" shows until the next start; restart norns (SYSTEM > RESTART): `norns.log` says `mod found: sidvagn ... enabled` and `loading mod: sidvagn`, the dot shows next to it on the page.
 - [ ] sidvagn: its grid page appears on grid port 2 (or the only grid); notes go to an nb player or MIDI. doubledecker: after the restart its voice is in the nb player list of a script that uses nb (Cheat Codes 2 and others) and sounds (SuperCollider compiled `doubledecker.sc`: `grep -i error sclang.log`).
 - [ ] Disable a mod, restart: it is listed, not loaded. A mod with an error shows `mod failed: <name>: <error>` and the others still work.
+
+## Clean layout and CLEAN UP (docs/port/clean-layout.md)
+- [ ] `ls -A ~/Verdandi` after a start: `dust`, `audio.conf`/`ui.conf` (if used), `logs`, `cache`, `norns`, `matronrc.lua`, `version.txt`, `.config`, `.local` and a few small marks; no loose logs, no `crash-report.txt`, no `.cache`.
+- [ ] After a restart (SYSTEM > RESTART) and a crash of a script, `logs/norns.1.log` has the previous run; a crash leaves one file in `logs/crash/` and still the coredump in `coredumpctl list`.
+- [ ] CLEAN UP: the numbers on the page match `du -sh`; REMOVE >30 DAYS shows what is older, asks once, removes only that; your `dust/` is unchanged afterwards (`find ~/Verdandi/dust | wc -l` before and after).
+- [ ] The launcher fix: with PipeWire running, start Verdandi from the menu and check that **no** new `~/Verdandi/Verdandi` appears.

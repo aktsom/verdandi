@@ -80,6 +80,7 @@ int main(int argc, char **argv) {
     std::string list = home + "/.plugin-mismatch";
     if (!enabled(getenv("NORNS_PLUGIN_CHECK"))) {
         unlink(list.c_str());
+        unlink((home + "/.plugin-fix").c_str());
         return 0;
     }
     std::string machine;
@@ -101,7 +102,29 @@ int main(int argc, char **argv) {
     files.erase(std::unique(files.begin(), files.end()), files.end());
 
     std::vector<Finding> found = scan(files, read_head, machine);
-    FILE *lf = fopen(list.c_str(), "w");
+    // what the CLEAN UP page offers to move into disabled/ (one target per line: the folder when it is all bad, else the file; then a tab and the reason).
+    // like the list below it exists only while something is wrong
+    std::string fixfile = home + "/.plugin-fix";
+    if (found.empty()) {
+        unlink(fixfile.c_str());
+    } else if (FILE *ff = fopen(fixfile.c_str(), "w")) {
+        for (const auto &g : groupFindings(found, files, roots)) {
+            std::string why = "wrong-architecture plug-in (" + describe(g.items.front().info) + ") on " + machine;
+            if (!g.moveFolder.empty()) {
+                fprintf(ff, "%s\t%s\n", g.moveFolder.c_str(), why.c_str());
+            } else {
+                for (const auto &f : g.items) {
+                    fprintf(ff, "%s\t%s\n", f.path.c_str(), why.c_str());
+                }
+            }
+        }
+        fclose(ff);
+    }
+    // the list for the window note exists only while something is wrong (no empty file at every start)
+    FILE *lf = found.empty() ? NULL : fopen(list.c_str(), "w");
+    if (found.empty()) {
+        unlink(list.c_str());
+    }
     // one line per folder (a script's installer drops a dozen plug-ins in one place); the list for the device note keeps one path per file
     for (const auto &g : groupFindings(found, files, roots)) {
         printf("%s\n", message(g, machine, home).c_str());

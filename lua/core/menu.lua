@@ -696,6 +696,7 @@ m["AUDIO"] = require 'core/menu/audio'
 -- the look of the screen (brightness, colour, greys): computers only (docs/port/ui-settings-plan.md)
 if os.getenv("NORNS_PLATFORM") ~= nil then
   m["UI"] = require 'core/menu/ui'
+  m["CLEANUP"] = require 'core/menu/cleanup' -- docs/port/clean-layout.md
   require('core/ui_settings').load_and_apply() -- ui.conf, once at start (does nothing without _norns.ui_look)
 end
 m["UPDATE"] = require 'core/menu/update'

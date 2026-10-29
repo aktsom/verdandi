@@ -14,8 +14,8 @@
 #
 # usage: linux/norns.sh [--terminal]
 #   default: matron and sclang REPLs are websockets (127.0.0.1:5555/5556), the log is in
-#            <norns home>/norns.log; maiden (the web editor and script catalog) at http://127.0.0.1:5000/maiden,
-#            its log in <norns home>/maiden.log
+#            <norns home>/logs/norns.log (the last 5 runs are kept: norns.1.log ...); maiden (the web editor and script catalog) at
+#            http://127.0.0.1:5000/maiden, its log in <norns home>/logs/maiden.log
 #   --terminal: matron's lua REPL and log are this terminal
 #
 # environment (all optional):
@@ -248,6 +248,8 @@ for v in XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME; do
     [ -n "${!v:-}" ] && export "NORNS_USER_$v=${!v}"
 done
 export HOME="$NORNS_HOME"
+# the caches of libraries (the graphics shader cache) go to <norns home>/cache and are capped, not into a hidden folder of the home
+export XDG_CACHE_HOME="$NORNS_HOME/cache" MESA_SHADER_CACHE_MAX_SIZE=64M
 export JACK_NO_START_SERVER=1
 # no norns hardware: the keyboard drives K1-3 / E1-3 when nothing else wants the keys
 # (lua/core/keyboard.lua)
@@ -258,9 +260,14 @@ export NORNS_PLATFORM=linux
 export SDL_NO_SIGNAL_HANDLERS=1
 mkdir -p "$NORNS_HOME" || fail "cannot create the norns home $NORNS_HOME"
 cd "$NORNS_HOME" || exit 1
+# logs/, logs/crash/ and cache/ (docs/port/clean-layout.md): the clean-up tool keeps the last 5 runs of every log, caps launcher.log (1 MB) and keeps the last
+# 5 crash reports; the PATH of the tool is also what the CLEAN UP page runs
+export NORNS_TIDY="$REPO/linux/tidy.sh"
+"$NORNS_TIDY" rotate || echo "norns.sh: could not prepare logs/ and cache/ in $NORNS_HOME"
+NORNS_LOGS="$NORNS_HOME/logs"
 # from the desktop: what this script says goes to a file
 if [ -z "${NORNS_HAVE_TTY:-}" ] && [ "$INSTALLED" = 1 ] && [ $TERMINAL -eq 0 ] && [ "${NORNS_LAUNCHER_LOG:-1}" != 0 ]; then
-    exec >> "$NORNS_HOME/launcher.log" 2>&1
+    exec >> "$NORNS_LOGS/launcher.log" 2>&1
 fi
 case "$LINK_STATE" in
 conflict) fail "$LINK is a folder that is not this program ($REPO). Move it away, or choose another norns home (NORNS_HOME, or ~/.config/verdandi/home)." ;;
@@ -376,7 +383,8 @@ AUDIO_CONF="$NORNS_HOME/audio.conf"
 run_jackd() {
     jackd_args
     echo "norns.sh: starting jackd (${JACK_DRIVER}, ${JACK_RATE} Hz, period ${JACK_PERIOD}${JACK_IN:+, input $JACK_IN}${JACK_OUT:+, output $JACK_OUT})"
-    jackd "${JACKD_ARGS[@]}" < /dev/null > "$NORNS_HOME/jackd.log" 2>&1 &
+    "$NORNS_TIDY" rotate jackd
+    jackd "${JACKD_ARGS[@]}" < /dev/null >> "$NORNS_LOGS/jackd.log" 2>&1 &
     JACK_PID=$!
     PIDS="$PIDS $JACK_PID"
     local n=0
@@ -400,8 +408,8 @@ start_jackd() {
         read_audio_conf
         run_jackd && return 0
     fi
-    echo "norns.sh: jackd did not start, see $NORNS_HOME/jackd.log"
-    [ -z "${NORNS_HAVE_TTY:-}" ] && fail "jackd did not start (no sound server). See $NORNS_HOME/jackd.log"
+    echo "norns.sh: jackd did not start, see $NORNS_LOGS/jackd.log"
+    [ -z "${NORNS_HAVE_TTY:-}" ] && fail "jackd did not start (no sound server). See $NORNS_LOGS/jackd.log"
     return 1
 }
 if [ "$ACTION" = start-jackd ]; then
@@ -424,11 +432,14 @@ start_norns() {
     # installer) becomes a restart request, and sudo never waits for a password (linux/shims/norns-shim-lib.sh). NORNS_NO_SHIMS=1: not
     local shimpath="$PATH"
     [ "${NORNS_NO_SHIMS:-0}" = 1 ] || shimpath="$REPO/linux/shims:$PATH"
+    # every start of norns and sclang is a new run: the logs of the earlier ones stay (logs/norns.1.log ...), the files are opened for appending so that
+    # the cap of a running log (verdandi tidy cap) works
+    "$NORNS_TIDY" rotate norns sclang
     if [ $TERMINAL -eq 1 ]; then
         # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin
         PATH="$shimpath" "$NORNS_BIN" <&0 &
     else
-        WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" PATH="$shimpath" "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null > "$NORNS_HOME/norns.log" 2>&1 &
+        WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" PATH="$shimpath" "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null >> "$NORNS_LOGS/norns.log" 2>&1 &
     fi
     NORNS_PID=$!
     PIDS="$PIDS $NORNS_PID"
@@ -446,12 +457,15 @@ start_norns() {
     # sclang's Qt WebEngine refuses to start as root (containers) without this
     [ "$(id -u)" -eq 0 ] && export QTWEBENGINE_DISABLE_SANDBOX=1 QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox
     WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" QT_QPA_PLATFORM=offscreen "$WS" "ws://127.0.0.1:5556" sclang -i maiden \
-        < /dev/null > "$NORNS_HOME/sclang.log" 2>&1 &
+        < /dev/null >> "$NORNS_LOGS/sclang.log" 2>&1 &
     SCLANG_PID=$!
     PIDS="$PIDS $SCLANG_PID"
 }
 
 start_norns
+# a log that grows over 10 MB while running is cut to its last megabyte (checked once a minute; the helper ends with the launcher)
+( while :; do sleep 60; "$NORNS_TIDY" cap; done ) &
+PIDS="$PIDS $!"
 
 # maiden: the web editor, the REPL consoles and the script catalog, as on the Mac: on 127.0.0.1 only (--host, a patch of
 # macos/patches), and its guard (linux/patches) also refuses requests that a web page on another site makes. the same
@@ -465,15 +479,16 @@ if [ -x "$MAIDEN/maiden" ]; then
     if (exec 3<>"/dev/tcp/127.0.0.1/$MAIDEN_PORT") 2>/dev/null; then
         echo "norns.sh: port $MAIDEN_PORT is in use: maiden is not started (another port: NORNS_MAIDEN_PORT=5001 linux/norns.sh)"
     else
+        "$NORNS_TIDY" rotate maiden
         (cd "$MAIDEN" && exec ./maiden server --host 127.0.0.1 --port "$MAIDEN_PORT" --app ./app/build \
-            --data "$NORNS_HOME/dust" --doc "$NORNS_HOME/norns/doc" < /dev/null > "$NORNS_HOME/maiden.log" 2>&1) &
+            --data "$NORNS_HOME/dust" --doc "$NORNS_HOME/norns/doc" < /dev/null >> "$NORNS_LOGS/maiden.log" 2>&1) &
         PIDS="$PIDS $!"
-        echo "norns.sh: maiden at http://127.0.0.1:$MAIDEN_PORT/maiden (log: $NORNS_HOME/maiden.log)"
+        echo "norns.sh: maiden at http://127.0.0.1:$MAIDEN_PORT/maiden (log: $NORNS_LOGS/maiden.log)"
     fi
 else
     echo "norns.sh: maiden is not built (linux/maiden-build.sh): no web editor"
 fi
-[ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_HOME/norns.log"
+[ $TERMINAL -eq 0 ] && echo "norns.sh: matron log in $NORNS_LOGS/norns.log"
 [ $TERMINAL -eq 1 ] && echo "norns.sh: --terminal: matron's Lua prompt is this terminal, so maiden's norns console (port 5555) is not available; start without --terminal for it (and run build/maiden-repl/maiden-repl for a terminal prompt next to it)"
 
 while :; do

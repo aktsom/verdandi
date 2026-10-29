@@ -12,10 +12,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
+#include <time.h>
 #include <unistd.h>
 
-static int report_fd = -1;
+// where a report goes: <dir>/crash-<unix seconds>-<pid>.txt, made at the crash and only then (no empty file at every start)
+static char crash_dir[400];
+static size_t crash_dir_len;
 
 static void put(int fd, const char *s) {
     if (fd >= 0) {
@@ -86,19 +90,56 @@ static void on_crash(int sig, siginfo_t *si, void *ctx) {
     void *frames[64];
     int n = backtrace(frames, 64);
     report_to(2, sig, si, frames, n);
-    if (report_fd >= 0) {
-        report_to(report_fd, sig, si, frames, n);
+    if (crash_dir_len > 0) {
+        // the file name is built by hand: nothing here may allocate or take a lock
+        char path[480];
+        size_t k = 0;
+        for (size_t i = 0; i < crash_dir_len && k < sizeof path - 64; i++) {
+            path[k++] = crash_dir[i];
+        }
+        static const char pre[] = "/crash-";
+        for (size_t i = 0; pre[i] != 0; i++) {
+            path[k++] = pre[i];
+        }
+        char num[24];
+        int ni = 0;
+        for (long v = (long)time(NULL); v > 0 && ni < 20; v /= 10) {
+            num[ni++] = (char)('0' + v % 10);
+        }
+        while (ni > 0) {
+            path[k++] = num[--ni];
+        }
+        path[k++] = '-';
+        ni = 0;
+        for (long v = (long)getpid(); v > 0 && ni < 20; v /= 10) {
+            num[ni++] = (char)('0' + v % 10);
+        }
+        while (ni > 0) {
+            path[k++] = num[--ni];
+        }
+        static const char suf[] = ".txt";
+        for (size_t i = 0; suf[i] != 0; i++) {
+            path[k++] = suf[i];
+        }
+        path[k] = 0;
+        int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            report_to(fd, sig, si, frames, n);
+            close(fd);
+        }
     }
     // the default action (SA_RESETHAND) with the same signal: the core dump is made as without this handler
     raise(sig);
 }
 
-extern "C" void crash_report_install(const char *file) {
+extern "C" void crash_report_install(const char *dir) {
     // backtrace() loads libgcc the first time: do that now, not in the handler
     void *prime[4];
     backtrace(prime, 4);
-    if (file != NULL) {
-        report_fd = open(file, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    if (dir != NULL && strlen(dir) < sizeof crash_dir) {
+        strcpy(crash_dir, dir);
+        crash_dir_len = strlen(dir);
+        mkdir(dir, 0755); // the launcher made it already; a plain call so that the handler never has to
     }
     // a stack of its own, for a crash from a stack overflow (of the thread that installs this)
     static char altstack[64 * 1024];

@@ -1,5 +1,7 @@
 # A clean norns home: inventory, layout and clean-up (plan only; nothing is built, nothing on the laptop is touched)
 
+> **Status:** steps 1-3 built (launcher fix, `tidy flatten` dry run, `tidy` tool + CLEAN UP page + log limits); step 4 (build output) in progress; the migration move (`--apply`/`--undo`) waits for the owner. See `STATUS.md`.
+
 The owner's second design rule: **keep everything clean, easy to manage and easy to clean up; no build-up of files all over.** This is the inventory, the layout I propose, the SYSTEM page, the limits, the build output, and the migration of what already exists. **Nothing is moved or deleted until the owner confirms it in the chat** (questions at the end). Everything marked "measured" was run here in a scratch home; what I know about the owner's laptop comes only from the owner's reports (paths, `coredumpctl` list, the nested folder) and is marked "reported".
 
 Pictures: `ui-previews/cleanup-page.png` (the proposed page, a stand-in drawn in the real window with example numbers), `ui-previews/cleanup-tree.png` (the folder tree). Made by `ui-previews/make_cleanup_pictures.py`.
