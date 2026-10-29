@@ -123,6 +123,7 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <tr><td><kbd>Shift</kbd> added</td><td>5 steps at a time</td></tr>
 <tr><td><kbd>F1</kbd>&ndash;<kbd>F4</kbd>, <kbd>F5</kbd></td><td>the menu pages; F5 opens and closes the menu</td></tr>
 <tr><td><kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd></td><td>the virtual grid / keyboard / arc windows</td></tr>
+<tr><td><kbd>F9</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd></td><td>the screen window: detach the screen or bring it back (<kbd>F9</kbd>, from any window), fullscreen on and off (<kbd>F11</kbd>, in the screen window), its title bar on and off (<kbd>Shift</kbd>+<kbd>F11</kbd>). A script that reads these keys itself does not get them on the Linux desktop (<code>verdandi scan-fkeys</code> lists which of yours name them)</td></tr>
 </table>
 <p>Scripts that read the keyboard themselves (<code>keyboard.code</code> / <code>keyboard.char</code>) get the keyboard. For those, <kbd>Alt</kbd> plus the keys above always works as K and E, and <kbd>Alt</kbd>+<kbd>Esc</kbd> switches the hardware keys on or off by force. The automatic part is <code>lua/core/keyboard.lua</code>; the launcher sets <code>NORNS_HARDWARE_KEYS=1</code> for it (it is off on the device).</p>
 
@@ -143,6 +144,10 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 </table>
 <p>The settings are in <code>ui.conf</code> in the norns home (<code>brightness=</code>, <code>colour=</code>, <code>custom=</code>, <code>contrast=</code>, <code>file_dialog=</code>); it can be edited by hand (an old file with <code>greys=</code> is still read and converted). A missing file means white, brightness 1, contrast 0.5; a bad value falls back to its own default with a line in <code>logs/norns.log</code>; unknown keys are ignored. The recording of a script's own PNG (<code>screen.export_png</code>) is not changed by these settings.</p>
 
+<h3>The screen in its own window</h3>
+<p>The <strong>SCREEN</strong> button above the top right corner of the screen, <kbd>F9</kbd>, or the menu item &ldquo;Screen in its own window&rdquo; pops the screen out into a second window called &ldquo;Verdandi screen&rdquo;: only the picture, live, with the brightness, colour and contrast of SYSTEM &gt; UI, and no box around it. Resize it as you like: at a whole multiple of 128 &times; 64 (for example 640 &times; 320 or 1024 &times; 512) every screen pixel is a flat square; between those sizes the picture is enlarged to a whole multiple first and then scaled, so pixels stay as sharp as they can be, with black bars when the window is not 2:1. <kbd>F11</kbd> (or a double click) is fullscreen; <kbd>Shift</kbd>+<kbd>F11</kbd> takes the title bar away (then drag the picture to move the window, and its edges to resize it).</p>
+<p>While the screen is out, the main window keeps all its controls and shows a dark panel where the screen was: <em>The screen is in its own window. Click here or press F9 to bring it back.</em> Click it, press <kbd>F9</kbd>, or close the screen window to bring the screen back. <strong>Closing the main window quits norns</strong>, with the screen window open or not. The keyboard works in the screen window exactly as in the main window (K1&ndash;K3, encoders, <kbd>F1</kbd>&ndash;<kbd>F8</kbd>, <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd>); <kbd>F10</kbd> there brings the main window forward and opens its menu. The mouse over the picture does nothing (only the window itself: move, resize, fullscreen). Screenshots and GIFs are the same in both modes; their messages show in both windows. The virtual grid, arc and keyboard windows, real grids, arcs and MIDI devices are not affected by which window shows the screen.</p>
+<p>Size, place, fullscreen, frame and whether the screen was out are remembered in <code>screen-window.conf</code> in the norns home (plain <code>key=value</code> lines, written by Verdandi: <code>detached</code>, <code>x</code>, <code>y</code>, <code>w</code>, <code>h</code>, <code>fullscreen</code>, <code>border</code>); a damaged value is replaced by its default with a line in <code>logs/norns.log</code>, and a saved place that is no longer on any display is forgotten. On Wayland the desktop may ignore the saved place.</p>
 <h3>The right-click menu</h3>
 <table>
 <tr><th>item</th><th>does</th></tr>
@@ -152,6 +157,7 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <tr><td>Show dust folder, Show tape folder</td><td>opens the folder with <code>xdg-open</code></td></tr>
 <tr><td>Screenshot (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>), Record GIF</td><td>a PNG of the screen at 4&times; (or a GIF of up to 60 seconds) named <code>Verdandi YYYY-MM-DD at HH.MM.SS</code>, saved to your Pictures folder (<code>XDG_PICTURES_DIR</code>, or <code>~/Pictures</code>) if it exists, otherwise into dust; the window says where</td></tr>
 <tr><td>Virtual grid, arc, keyboard</td><td>as the buttons and <kbd>F6</kbd>&ndash;<kbd>F8</kbd></td></tr>
+<tr><td>Screen in its own window (<kbd>F9</kbd>)</td><td>ticked while the screen is out, see above</td></tr>
 <tr><td>Input: &hellip;</td><td>microphone, all apps, a single app, off (see <a href="#audio">section 5</a>)</td></tr>
 <tr><td>Quit (<kbd>Ctrl</kbd>+<kbd>Q</kbd>)</td><td>ends norns</td></tr>
 </table>
@@ -237,7 +243,7 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <tr><th>in the norns home</th><th>what</th><th>whose</th></tr>
 <tr><td><code>norns</code></td><td>a link to the program</td><td>Verdandi</td></tr>
 <tr><td><code>dust/</code></td><td>scripts (<code>code</code>), audio, data, catalogs, screenshots and GIFs</td><td><strong>yours</strong>: clean up never touches it</td></tr>
-<tr><td><code>audio.conf</code>, <code>ui.conf</code></td><td>settings, see <a href="#settings">section 10</a> and <a href="#window">section 4</a></td><td><strong>yours</strong></td></tr>
+<tr><td><code>audio.conf</code>, <code>ui.conf</code>, <code>screen-window.conf</code></td><td>settings, see <a href="#settings">section 10</a> and <a href="#window">section 4</a></td><td><strong>yours</strong></td></tr>
 <tr><td><code>matronrc.lua</code>, <code>version.txt</code></td><td>generated on the first start, tiny</td><td>Verdandi</td></tr>
 <tr><td><code>logs/</code></td><td><code>norns.log</code>, <code>sclang.log</code> (look here for &ldquo;SUPERCOLLIDER FAIL&rdquo;), <code>jackd.log</code>, <code>maiden.log</code>, <code>launcher.log</code>: the current run, and the last four runs as <code>norns.1.log</code> &hellip; <code>norns.4.log</code>. A log that grows past 10 MB while running is cut to its last megabyte; <code>launcher.log</code> stays under 1 MB. So the log of a run that crashed is still there after the restart.</td><td>Verdandi</td></tr>
 <tr><td><code>logs/crash/</code></td><td>one file per crash (<code>crash-&lt;time&gt;-&lt;pid&gt;.txt</code>: the signal, the thread, a backtrace); made only by a crash, the last 5 are kept</td><td>Verdandi</td></tr>

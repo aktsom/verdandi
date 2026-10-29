@@ -37,6 +37,8 @@ static const button_t buttons[] = {
     {854, "MUTE"},                                                               // SKIN_MUTE
 };
 static const double button_y = 36, button_w = 70, button_h = 40;
+// the SCREEN button: above the bezel's top right corner, in the free band right of E1 (docs/port/detach-plan.md 3.1)
+static const double screen_btn_x = 522, screen_btn_y = 262, screen_btn_w = 70, screen_btn_h = 30;
 // sizes of the drawn parts (the Mac's 25, 23, 31, 25 and the well's inset 4, times 1.15)
 #define KEY_CAP 28.75
 #define KEY_CAP_DOWN 26.45
@@ -127,6 +129,11 @@ int skin_hit(const skin_geom_t *g, double x, double y) {
             return SKIN_PAGE1 + i;
         }
     }
+#ifdef NORNS_LINUX_DESKTOP
+    if (p.x >= screen_btn_x - 3 && p.x <= screen_btn_x + screen_btn_w + 3 && p.y >= screen_btn_y - 3 && p.y <= screen_btn_y + screen_btn_h + 3) {
+        return SKIN_SCREEN;
+    }
+#endif
     for (int i = 0; i < 3; i++) {
         if (dist(p, key_pos[i]) <= key_r + 6) {
             return SKIN_K1 + i;
@@ -674,6 +681,85 @@ static void draw_fader(cairo_t *cr, const skin_state_t *st) {
 }
 #endif
 
+#ifdef NORNS_LINUX_DESKTOP
+int skin_in_bezel(const skin_geom_t *g, double x, double y) {
+    pt_t p = to_units(g, x, y);
+    return p.x >= bezel_x && p.x <= bezel_x + bezel_w && p.y >= bezel_y && p.y <= bezel_y + bezel_h;
+}
+
+// the SCREEN button: the same face as the row of buttons, with the arrow the MAIDEN and MANUAL buttons have; lit (white label, amber edge) while the screen is out
+static void draw_screen_button(cairo_t *cr, const skin_state_t *st) {
+    double x = screen_btn_x, y = screen_btn_y, w = screen_btn_w, h = screen_btn_h;
+    int down = st->button_down == SKIN_SCREEN, lit = st->screen_out;
+    double dy = down ? 1.0 : 0;
+    rounded_rect(cr, x - 2.5, y - 2.5, w + 5, h + 5, 9);
+    cairo_pattern_t *p = cairo_pattern_create_linear(0, y - 2.5, 0, y + h + 2.5);
+    stop(p, 0, "8e9196", 1);
+    stop(p, 1, "e3e5e8", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+    rounded_rect(cr, x, y + dy, w, h, 7);
+    p = cairo_pattern_create_linear(0, y + dy, 0, y + dy + h);
+    stop(p, 0, down ? "232427" : "3d3f43", 1);
+    stop(p, 1, down ? "17181a" : "232427", 1);
+    cairo_set_source(cr, p);
+    cairo_fill(cr);
+    cairo_pattern_destroy(p);
+    if (lit) {
+        cairo_set_line_width(cr, 1.5);
+        rounded_rect(cr, x + 0.75, y + dy + 0.75, w - 1.5, h - 1.5, 6.5);
+        hex(cr, "ffa828", 0.9);
+        cairo_stroke(cr);
+    }
+    if (st->hover == SKIN_SCREEN && !down) {
+        rounded_rect(cr, x, y, w, h, 7);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.07);
+        cairo_fill(cr);
+    }
+    double mid = y + dy + h / 2;
+    draw_out_arrow(cr, x + 12, mid);
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 11);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, "SCREEN", &te);
+    double area = x + 20, area_w = w - 23;
+    cairo_move_to(cr, area + (area_w - te.width) / 2 - te.x_bearing, mid - te.height / 2 - te.y_bearing);
+    hex(cr, lit ? "ffffff" : "c3c6cb", 1);
+    cairo_show_text(cr, "SCREEN");
+}
+
+void skin_draw_placeholder(cairo_t *cr, const skin_geom_t *g, int hover) {
+    cairo_save(cr);
+    cairo_rectangle(cr, g->oled_x, g->oled_y, g->oled_w, g->oled_h);
+    cairo_clip(cr);
+    hex(cr, hover ? "1c1d21" : "16171a", 1);
+    cairo_paint(cr);
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    double size = 17 * g->s;
+    static const char *line[2] = {"The screen is in its own window.", "Click here or press F9 to bring it back."};
+    cairo_set_font_size(cr, size);
+    // a smaller size rather than text that touches the edge, for the longer line
+    cairo_text_extents_t te;
+    for (;;) {
+        cairo_text_extents(cr, line[1], &te);
+        if (te.width <= g->oled_w - 24 * g->s || size <= 8) {
+            break;
+        }
+        size -= 0.5;
+        cairo_set_font_size(cr, size);
+    }
+    double cx = g->oled_x + g->oled_w / 2.0, cy = g->oled_y + g->oled_h / 2.0;
+    hex(cr, "aaacb2", 1);
+    for (int i = 0; i < 2; i++) {
+        cairo_text_extents(cr, line[i], &te);
+        cairo_move_to(cr, cx - te.width / 2 - te.x_bearing, cy + (i == 0 ? -0.35 : 1.15) * size - te.height / 2 - te.y_bearing);
+        cairo_show_text(cr, line[i]);
+    }
+    cairo_restore(cr);
+}
+#endif
+
 void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st) {
     cairo_save(cr);
     cairo_translate(cr, g->ox, g->oy);
@@ -681,6 +767,9 @@ void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *s
     for (int i = 0; i < NBUTTONS; i++) {
         draw_button(cr, i, st);
     }
+#ifdef NORNS_LINUX_DESKTOP
+    draw_screen_button(cr, st);
+#endif
     if (st->toast != NULL && st->toast[0] != '\0') {
         draw_toast(cr, st->toast, st->recording);
     }

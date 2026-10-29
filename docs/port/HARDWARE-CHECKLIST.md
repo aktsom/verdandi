@@ -216,6 +216,17 @@ Look at it on the laptop's real screen (Cinnamon, your scale) next to the real n
 - [ ] sidvagn: its grid page appears on grid port 2 (or the only grid); notes go to an nb player or MIDI. doubledecker: after the restart its voice is in the nb player list of a script that uses nb (Cheat Codes 2 and others) and sounds (SuperCollider compiled `doubledecker.sc`: `grep -i error sclang.log`).
 - [ ] Disable a mod, restart: it is listed, not loaded. A mod with an error shows `mod failed: <name>: <error>` and the others still work.
 
+## The detachable screen window (docs/port/detach-plan.md): what only your desktop can show
+The tests here run under Xvfb with **no window manager**, so these could not be seen:
+- [ ] **The window frame:** "Verdandi screen" has your desktop's title bar, moves, resizes by its edges and corners, minimises, closes (close = the screen returns to the main window).
+- [ ] **Fullscreen (F11)** really fills the display (SDL's own fullscreen needs the window manager; here only the saved state `fullscreen=1` could be checked), on a second monitor too, and F11 returns to the saved size and place. With several monitors: it goes fullscreen on the display it is on.
+- [ ] **Borderless (Shift+F11):** the frame goes away; **dragging the picture moves the window and dragging an edge resizes it** (this uses SDL's hit test, which depends on the compositor); Shift+F11 brings the frame back. If dragging does not work on your desktop, tell me which one.
+- [ ] **Fractional scaling / high DPI** (Mint: Display > fractional scaling, or 2x): the picture is still crisp at whole multiples of the real pixels and the sizes in the title (points) match; the placeholder text in the main window is readable.
+- [ ] **Wayland** (if you ever use it): the saved position may be ignored by the compositor (the size is restored); F10 may not bring the main window forward (focus-stealing rules); borderless dragging may not work.
+- [ ] **A second monitor that is later unplugged:** start with `screen-window.conf` holding a place on it (`x=3000`): the window opens on the main display and the log (`~/Verdandi/logs/norns.log`) says the saved place is not on any display.
+- [ ] **Stacking and focus:** with focus-follows-mouse or a tiling window manager, the screen window still gets the keys when you click it; F9 works from the main, the screen and the grid window.
+- [ ] **How the in-between sizes look** to your eye (the fast bilinear filter against the box's slower one; mean difference about 1 of 255 in `docs/port/detach-measurements/`): tell me if an in-between size looks soft.
+
 ## Clean layout and CLEAN UP (docs/port/clean-layout.md)
 - [ ] `ls -A ~/Verdandi` after a start: `dust`, `audio.conf`/`ui.conf` (if used), `logs`, `cache`, `norns`, `matronrc.lua`, `version.txt`, `.config`, `.local` and a few small marks; no loose logs, no `crash-report.txt`, no `.cache`.
 - [ ] After a restart (SYSTEM > RESTART) and a crash of a script, `logs/norns.1.log` has the previous run; a crash leaves one file in `logs/crash/` and still the coredump in `coredumpctl list`.

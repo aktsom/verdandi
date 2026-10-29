@@ -200,6 +200,7 @@ build_tree() {
     cp "$REPO/matronrc.lua" "$T/" 2>/dev/null || true
     install -m 755 "$REPO/linux/norns.sh" "$T/linux/norns.sh"
     install -m 755 "$REPO/linux/tidy.sh" "$T/linux/tidy.sh"
+    install -m 755 "$REPO/linux/scan-fkeys.sh" "$T/linux/scan-fkeys.sh"
     cp -a "$REPO/linux/shims" "$REPO/linux/manual" "$T/linux/"
     install -m 644 "$REPO/linux/brand.sh" "$T/linux/brand.sh"
     # the marker that makes linux/norns.sh use the installed layout (home in ~/Verdandi, program tree read-only)

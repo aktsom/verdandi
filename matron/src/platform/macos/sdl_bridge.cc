@@ -39,6 +39,7 @@
 #include <cairo.h>
 #ifdef NORNS_LINUX_DESKTOP
 #include "ui_look.h"
+#include "platform/linux/screen_window.h"
 #endif
 #ifdef NORNS_LINUX_DESKTOP
 #include <arpa/inet.h>
@@ -293,6 +294,13 @@ static void gif_palette(uint8_t pal[16][3]) {
 #endif
 
 static void draw_oled(cairo_t *cr) {
+#ifdef NORNS_LINUX_DESKTOP
+    // the screen is in its own window (screen_window.h): a placeholder where it was
+    if (skin.screen_out) {
+        skin_draw_placeholder(cr, &geom, skin.hover == SKIN_SCREEN);
+        return;
+    }
+#endif
     if (have_frame) {
         skin_draw_oled(cr, &geom, OLED_SHOWN());
     }
@@ -303,6 +311,11 @@ static void redraw(bool full) {
     if (the_window == NULL) {
         return;
     }
+#ifdef NORNS_LINUX_DESKTOP
+    if (!full && skin.screen_out) {
+        return; // the box shows the placeholder: only a full redraw changes anything
+    }
+#endif
     SDL_Surface *dst = SDL_GetWindowSurface(the_window);
     if (dst == NULL || !ensure_layers(dst->w, dst->h)) {
         return;
@@ -339,6 +352,21 @@ static void redraw(bool full) {
 
 static void gif_add_frame(void);
 
+#ifdef NORNS_LINUX_DESKTOP
+// the screen window (when the screen is detached) shows the current picture with the current toast; the box is not redrawn for it
+static void screen_refresh(void) {
+    if (skin.screen_out && have_frame) {
+        screen_window_draw(OLED_SHOWN(), skin.toast, skin.recording != 0);
+    }
+}
+#define SCREEN_REFRESH() screen_refresh()
+#define SCREEN_SAVE() screen_window_save_now()
+static void screen_toggle(void);
+#else
+#define SCREEN_REFRESH() ((void)0)
+#define SCREEN_SAVE() ((void)0)
+#endif
+
 static void present(SDL_Window *window, SDL_Surface *src) {
     // a frame for a window that is gone (quit) is dropped
     if (src == NULL || window == NULL || window != the_window) {
@@ -356,6 +384,17 @@ static void present(SDL_Window *window, SDL_Surface *src) {
 #endif
     bool first = !have_frame;
     have_frame = 1;
+#ifdef NORNS_LINUX_DESKTOP
+    if (skin.screen_out) {
+        // detached: the picture goes to the screen window; the box keeps its placeholder (drawn once, and whenever the box changes)
+        if (first || canvas == NULL) {
+            redraw(true);
+        }
+        screen_refresh();
+        gif_add_frame();
+        return;
+    }
+#endif
     redraw(first || canvas == NULL);
     gif_add_frame();
 }
@@ -405,6 +444,11 @@ static void bridge_do(bridge_req_t *req) {
             the_window = req->window;
             // drops from apps other than the Finder
             shell_adopt_windows();
+#ifdef NORNS_LINUX_DESKTOP
+            if (screen_window_wanted_at_start()) {
+                screen_toggle();
+            }
+#endif
         }
         break;
     case BRIDGE_PRESENT:
@@ -461,6 +505,7 @@ static void show_toast(const std::string &text, Uint32 ms = 3500) {
     toast_gen++;
     skin.toast = toast_text.c_str();
     redraw(true);
+    SCREEN_REFRESH();
     if (ms > 0) {
         SDL_AddTimer(ms, toast_timeout, (void *)(uintptr_t)toast_gen);
     }
@@ -488,6 +533,7 @@ static void toast_expired(unsigned gen) {
     toast_text.clear();
     skin.toast = NULL;
     redraw(true);
+    SCREEN_REFRESH();
 }
 
 // any thread: a message, through the event queue
@@ -1957,6 +2003,30 @@ static void gif_toggle(void) {
     recording_toast();
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+// the screen in its own window and back (F9, the SCREEN button, the menu item, the placeholder, the window's close button); main thread
+static void screen_toggle(void) {
+    if (skin.screen_out) {
+        screen_window_close();
+        skin.screen_out = 0;
+        shell_set_screen_out(0);
+        redraw(true);
+        return;
+    }
+    if (the_window == NULL) {
+        return;
+    }
+    if (!screen_window_open(the_window, set_icon)) {
+        show_toast("the screen window could not be opened");
+        return;
+    }
+    skin.screen_out = 1;
+    shell_set_screen_out(1);
+    redraw(true);
+    screen_refresh();
+}
+#endif
+
 //--- menu bar
 
 static void show_in_finder(const std::string &dir) {
@@ -1990,9 +2060,13 @@ static void menu_item(int id) {
         break;
 #ifndef __APPLE__
     case SHELL_MENU_QUIT:
+        SCREEN_SAVE();
         event_post(event_data_new(EVENT_QUIT));
         break;
 #ifdef NORNS_LINUX_DESKTOP
+    case SHELL_MENU_SCREEN:
+        screen_toggle();
+        break;
     case SHELL_MENU_FILE_DIALOG:
         // the menu flipped its tick: lua decides, saves it in ui.conf (core/ui_settings.lua)
         call_lua("ui_file_dialog_changed", {shell_get_file_dialog() ? "1" : "0"});
@@ -2097,6 +2171,10 @@ static void button_action(int control) {
         toggle_keys();
     } else if (control == SKIN_MUTE) {
         call_lua("output_mute", {});
+#ifdef NORNS_LINUX_DESKTOP
+    } else if (control == SKIN_SCREEN) {
+        screen_toggle();
+#endif
     }
 }
 
@@ -2148,6 +2226,14 @@ static bool menu_event(const SDL_Event *ev) {
         return ev->wheel.windowID == id && shell_menu_is_open();
     case SDL_KEYDOWN:
     case SDL_KEYUP: {
+#ifdef NORNS_LINUX_DESKTOP
+        // the screen window's keys: the shortcuts (Ctrl+O, Ctrl+Shift+S, Ctrl+Q) and F10 work from there too. F10 brings the box forward and opens its menu there
+        if (ev->key.windowID != id && screen_window_is_open() && ev->key.windowID == screen_window_id()) {
+            if (ev->type == SDL_KEYDOWN && ev->key.keysym.scancode == SDL_SCANCODE_F10 && !shell_menu_is_open()) {
+                SDL_RaiseWindow(the_window);
+            }
+        } else
+#endif
         if (ev->key.windowID != id) {
             return false;
         }
@@ -2187,6 +2273,20 @@ static double drag_step(void) {
 
 static SDL_Cursor *cursor_hand = NULL;
 static SDL_Cursor *cursor_arrow = NULL;
+
+#ifdef NORNS_LINUX_DESKTOP
+// the control under the pointer; while the screen is detached the placeholder counts as the SCREEN button
+static int hit_control(double px, double py) {
+    int c = skin_hit(&geom, px, py);
+    if (c == SKIN_NONE && skin.screen_out && skin_in_bezel(&geom, px, py)) {
+        return SKIN_SCREEN;
+    }
+    return c;
+}
+#define SKIN_HIT(px, py) hit_control(px, py)
+#else
+#define SKIN_HIT(px, py) skin_hit(&geom, px, py)
+#endif
 
 static void set_hover(int control) {
     if (control == skin.hover) {
@@ -2243,7 +2343,7 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
         if (held_key != 0 || drag_enc != 0 || drag_fader || drag_oled || skin.button_down != SKIN_NONE) {
             return;
         }
-        int c = skin_hit(&geom, px, py);
+        int c = SKIN_HIT(px, py);
         int ox, oy;
 #ifndef NORNS_LINUX_DESKTOP
         if (c == SKIN_FADER) {
@@ -2282,7 +2382,7 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
             int c = skin.button_down;
             skin.button_down = SKIN_NONE;
             redraw(true);
-            if (skin_hit(&geom, px, py) == c) {
+            if (SKIN_HIT(px, py) == c) {
                 button_action(c);
             }
         }
@@ -2341,7 +2441,7 @@ static void handle_motion(const SDL_MouseMotionEvent *m) {
     }
     double px, py;
     to_pixels(m->windowID, m->x, m->y, &px, &py);
-    set_hover(skin_hit(&geom, px, py));
+    set_hover(SKIN_HIT(px, py));
 }
 
 static void handle_wheel(const SDL_MouseWheelEvent *w) {
@@ -2352,7 +2452,7 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
     SDL_GetMouseState(&mx, &my);
     double px, py;
     to_pixels(w->windowID, mx, my, &px, &py);
-    int c = skin_hit(&geom, px, py);
+    int c = SKIN_HIT(px, py);
     int delta = w->direction == SDL_MOUSEWHEEL_FLIPPED ? -w->y : w->y;
     int ox, oy;
     // over the fader: the output level a step; over the oled on the MIX page: the level there
@@ -2396,6 +2496,11 @@ static void handle_key(const SDL_KeyboardEvent *k) {
         break;
     case WK_MODE: {
         SDL_Window *window = SDL_GetWindowFromID(k->windowID);
+#ifdef NORNS_LINUX_DESKTOP
+        if (screen_window_is_open() && k->windowID == screen_window_id()) {
+            window = NULL; // the screen window keeps its title
+        }
+#endif
         if (window != NULL) {
             const char *name = display_name(MACOS_PRODUCT);
             if (out.value) {
@@ -2476,6 +2581,9 @@ void sdl_bridge_init(void) {
     // right button on a trackpad: ctrl-click
     SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
     bridge_event_type = SDL_RegisterEvents(4);
+#ifdef NORNS_LINUX_DESKTOP
+    screen_window_init();
+#endif
     show_event_type = bridge_event_type + 1;
     device_event_type = bridge_event_type + 2;
     toast_event_type = bridge_event_type + 3;
@@ -2644,6 +2752,7 @@ void sdl_bridge_run(void) {
                 make_view();
                 if (have_frame) {
                     redraw(false);
+                    screen_refresh();
                 }
 #endif
             } else if (ev.user.code == 2) {
@@ -2655,6 +2764,7 @@ void sdl_bridge_run(void) {
                         toast_text.clear();
                         skin.toast = NULL;
                         redraw(true);
+                        SCREEN_REFRESH();
                     } else {
                         show_toast(sticky_text, 0);
                     }
@@ -2666,6 +2776,20 @@ void sdl_bridge_run(void) {
             }
             continue;
         }
+#ifdef NORNS_LINUX_DESKTOP
+        {
+            // the screen window, F9 and F11 (screen_window.h)
+            sw_action_t act;
+            if (screen_window_event(&ev, &act)) {
+                if (act == SW_TOGGLE || act == SW_REDOCK) {
+                    screen_toggle();
+                } else if (act == SW_REDRAW) {
+                    screen_refresh();
+                }
+                continue;
+            }
+        }
+#endif
 #ifndef __APPLE__
         if (menu_event(&ev)) {
             continue;
@@ -2675,6 +2799,7 @@ void sdl_bridge_run(void) {
         case SDL_QUIT:
             // window closed: let matron leave its event loop; the norns thread cleans up
             // and exits the process
+            SCREEN_SAVE();
             event_post(event_data_new(EVENT_QUIT));
             break;
         case SDL_KEYDOWN:
@@ -2755,6 +2880,7 @@ void sdl_bridge_run(void) {
             }
             if (e == SDL_WINDOWEVENT_CLOSE) {
                 // with a device window open, closing the norns window is no SDL_QUIT
+                SCREEN_SAVE();
                 event_post(event_data_new(EVENT_QUIT));
             } else if (repaint) {
                 redraw(true);

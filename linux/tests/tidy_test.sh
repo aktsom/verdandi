@@ -17,6 +17,7 @@ echo "print(1)" > "$H/dust/code/a script/a.lua"
 head -c 2000 /dev/urandom > "$H/dust/audio/s.wav"
 echo "rate=48000" > "$H/audio.conf"
 echo "brightness=1.0" > "$H/ui.conf"
+printf "detached=0\n" > "$H/screen-window.conf"
 echo "so" > "$H/.local/share/SuperCollider/Extensions/mi-UGens/MiPlaits.so"
 snap > "$T/user-before"
 
@@ -37,7 +38,7 @@ printf '%s' "$(F 9)" | grep -q "^mv '.*/disabled/$ID/mi-UGens' '.*/mi-UGens'$" &
 [ -z "$(ls "$H/disabled" | grep -v "^$ID$\|MANIFEST.tsv")" ] && [ ! -e "$H/disabled/MANIFEST.tsv.tmp" ] && ok "no stray files (no temporary manifest)" || bad "stray files in disabled/"
 
 # ---- the things it refuses to move ----
-for p in "$H/dust" "$H/dust/code" "$H/audio.conf" "$H/ui.conf" "$H" "$H/disabled"; do
+for p in "$H/dust" "$H/dust/code" "$H/audio.conf" "$H/ui.conf" "$H/screen-window.conf" "$H" "$H/disabled"; do
     if tidy disable "$p" "test" > /dev/null 2>&1; then bad "disable moved $p"; else ok "disable refuses $(basename "$p")"; fi
 done
 mkdir -p "$T/outside" && echo x > "$T/outside/f"

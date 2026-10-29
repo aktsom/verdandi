@@ -13,7 +13,7 @@
 #                                         dust/ before and after, an automatic rollback on any mismatch. norns must not be running
 #   verdandi tidy flatten --undo [ID]     puts it back from the manifest in backups/flatten-<time>/ and checks the result (docs/port/clean-layout.md section 7)
 #
-# nothing here ever touches dust/ (scripts, samples, data), audio.conf or ui.conf, except `disable` of a path the user names (a plug-in file or folder inside
+# nothing here ever touches dust/ (scripts, samples, data), audio.conf, ui.conf or screen-window.conf, except `disable` of a path the user names (a plug-in file or folder inside
 # dust that stops SuperCollider): a restorable move, never a delete
 set -u
 
@@ -119,7 +119,7 @@ cmd_disable() {
     esac
     local rel="${abs#"$home_real"/}"
     case "$rel" in
-    dust | dust/code | dust/audio | dust/data | audio.conf | ui.conf | norns | matronrc.lua | version.txt | disabled | backups | logs | cache | .config | .local | .local/share | .local/share/SuperCollider | .local/share/SuperCollider/Extensions)
+    dust | dust/code | dust/audio | dust/data | audio.conf | ui.conf | screen-window.conf | norns | matronrc.lua | version.txt | disabled | backups | logs | cache | .config | .local | .local/share | .local/share/SuperCollider | .local/share/SuperCollider/Extensions)
         die "$rel is not something to move out of the way (your scripts, samples, data and settings, and Verdandi's own folders are never moved)" ;;
     disabled/* | backups/* | logs/* | cache/*) die "$rel is already in one of Verdandi's own folders" ;;
     esac

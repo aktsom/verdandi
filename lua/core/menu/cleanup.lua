@@ -4,7 +4,7 @@
 --   PROBLEM lines (a plug-in for another machine that stops SuperCollider): K3 moves it into disabled/ (restorable)
 --   DISABLED: K3 lists the items, K3 on one restores it
 --   REMOVE >N DAYS (E3 sets N): what is older than N days in disabled/, the old logs, the crash reports, the seeded packs and the cache; K3 removes exactly that
--- never touched: dust/ (scripts, samples, data, captures), audio.conf, ui.conf. the work is done by linux/tidy.sh (NORNS_TIDY, set by the launcher)
+-- never touched: dust/ (scripts, samples, data, captures), audio.conf, ui.conf, screen-window.conf. the work is done by linux/tidy.sh (NORNS_TIDY, set by the launcher)
 
 local m = {pos = 1, rows = {}, mode = "groups", items = {}, ipos = 1, confirm = nil, msg = nil}
 

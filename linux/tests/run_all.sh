@@ -74,6 +74,12 @@ cc $CFLAGS -DNORNS_LINUX_DESKTOP linux/tests/device_skin_linux_test.c "$P/device
     $(pkg-config --cflags --libs cairo) -lm && run "c:device_skin_linux (geometry, hit testing, rendered window, keyboard mapping unchanged)" "$T/dsl"
 cc $CFLAGS -I matron/src/platform/linux $(pkg-config --cflags cairo) linux/tests/menu_skin_test.c \
     matron/src/platform/linux/menu_skin.c -o "$T/mst" $(pkg-config --libs cairo) -lm && run "c:menu_skin" "$T/mst"
+# the screen window's picture rule and its state file (docs/port/detach-plan.md): pure C, no window
+cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_geom_test.c matron/src/platform/linux/screen_window_geom.c -lm -o "$T/swg" \
+    && run "c:screen_window_geom (whole scales crisp, in between by the two-step rule, centred, never cut off)" "$T/swg"
+cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_conf_test.c matron/src/platform/linux/screen_window_conf.c -o "$T/swc" \
+    && run "c:screen_window_conf (state file: defaults, damaged values with log lines, round trip, atomic write)" "$T/swc"
+run "scan-fkeys:which scripts name F9, F11, F12 (reads only)" linux/tests/scan_fkeys_test.sh
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
     -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
@@ -600,9 +606,9 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         cp "$DH/ui.conf" "$T/dialog-ui.conf" 2> /dev/null
         PATH="$DH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$DH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_file_dialog_restart.lua" "$DLOG2" > /dev/null 2>&1
         mark() { sed -n "s/^$1=//p" "$DH/probe.marks" 2> /dev/null | tail -1; }
-        # the menu row of the new item (x 300..600, y 364..390) in the three menu pictures
-        row() { convert "$DH/$1" -crop 300x26+300+364 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
-        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,364 600,390" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        # the menu row of the new item (x 300..600, y 338..364) in the three menu pictures
+        row() { convert "$DH/$1" -crop 300x26+300+338 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,338 600,364" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
         dialog_ok() {
             local bad=0
             chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$DH/probe.marks" 2> /dev/null))"; bad=1; }; }
@@ -626,6 +632,104 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$DI"
     }
     dialog_scenario
+    # the detachable screen window (docs/port/detach-plan.md), under Xvfb with no window manager: F9, the SCREEN button and the placeholder, the picture crisp at
+    # whole scales and inside a block when in between, the keyboard from the screen window, the shortcuts, F11, F10, close, the saved state, a damaged state file
+    detach_scenario() {
+        XH="$(mktemp -d)"
+        ln -s "$REPO" "$XH/norns"
+        mkdir -p "$XH/dust/code/probe" "$XH/stub"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$XH/dust/code/probe/"
+        printf 'brightness=0.8\ncolour=yellow\ncontrast=0.5\n' > "$XH/ui.conf"
+        XI="$(mktemp -d -p /var/tmp)"
+        echo "RIFF" > "$XI/picked.wav"
+        printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/zenity.args"\necho "%s/picked.wav"\n' "$XH" "$XI" > "$XH/stub/zenity"
+        chmod +x "$XH/stub/zenity"
+        D1="$T/detach1.log"; D2="$T/detach2.log"; D3="$T/detach3.log"
+        probe_run() { PATH="$XH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$XH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/$1" "$2" > /dev/null 2>&1; }
+        probe_run probe_detach.lua "$D1"
+        cp "$XH/probe.marks" "$XH/marks1" 2> /dev/null
+        cp "$XH/screen-window.conf" "$XH/conf1" 2> /dev/null
+        rm -f "$XH/probe.marks"
+        probe_run probe_detach_restart.lua "$D2"
+        cp "$XH/probe.marks" "$XH/marks2" 2> /dev/null
+        rm -f "$XH/probe.marks"
+        printf 'detached=1\nw=abc\nh=oops\n' > "$XH/screen-window.conf"
+        probe_run probe_detach_damaged.lua "$D3"
+        cp "$XH/probe.marks" "$XH/marks3" 2> /dev/null
+        m1() { sed -n "s/^$1=//p" "$XH/marks1" 2> /dev/null | tail -1; }
+        m2() { sed -n "s/^$1=//p" "$XH/marks2" 2> /dev/null | tail -1; }
+        m3() { sed -n "s/^$1=//p" "$XH/marks3" 2> /dev/null | tail -1; }
+        sm() { convert "$1" -filter point -resize 128x64! "$2"; } # the middle of every screen pixel's block
+        same() { [ "$(compare -metric AE "$1" "$2" null: 2>&1)" = 0 ]; }
+        hexpx() { convert "$1" -format "%[hex:u.p{$2,$3}]" info:; }
+        near() { # hex colour, r g b, tolerance
+            local h="$1" r g b
+            r=$((16#${h:0:2})); g=$((16#${h:2:2})); b=$((16#${h:4:2}))
+            [ $((r > $2 ? r - $2 : $2 - r)) -le "$5" ] && [ $((g > $3 ? g - $3 : $3 - g)) -le "$5" ] && [ $((b > $4 ? b - $4 : $4 - b)) -le "$5" ]
+        }
+        detach_ok() {
+            local bad=0 f="$XH"
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran to the end" 'grep -q "PROBE detach done" "$D1"'
+            chk "docked at start: no screen window" '[ "$(m1 windows_start)" = 0 ]'
+            chk "F9 in the box: one screen window" '[ "$(m1 windows_detached)" = 1 ]'
+            chk "the screen window opens at 640 x 320 (5 x) by default" '[[ "$(m1 screen_default)" == 640x320+* ]]'
+            # the picture: the same screen pixels as the docked screenshot (look included: yellow)
+            sm "$f/shot-docked.png" "$f/s-docked.png"; sm "$f/screen-default.png" "$f/s-default.png"
+            chk "the docked screenshot exists (512 x 256)" '[ "$(identify -format %wx%h "$f/shot-docked.png")" = 512x256 ]'
+            chk "the screen window shows the same 128 x 64 pixels as the screenshot, 5 x" 'same "$f/s-docked.png" "$f/s-default.png"'
+            chk "the tint is on in both (yellow: the white rectangle has no blue)" 'h="$(hexpx "$f/s-docked.png" 10 10)"; [ $((16#${h:4:2})) -lt 40 ] && [ $((16#${h:0:2})) -gt 150 ]'
+            # the box while detached: the placeholder where the screen was, everything else drawn
+            chk "docked box: the script's picture is on the screen" 'near "$(hexpx "$f/box-docked.png" 134 375)" 255 208 0 140'
+            chk "detached box: a dark placeholder where the screen was" 'near "$(hexpx "$f/box-detached.png" 134 375)" 22 23 26 14'
+            chk "detached box: the buttons and knobs are still there (a light box around)" 'near "$(hexpx "$f/box-detached.png" 800 300)" 204 205 209 40'
+            # keyboard and mouse
+            chk "2 in the screen window is K2 (down and up)" 'grep -q "PROBE key.2.1" "$D1" && grep -q "PROBE key.2.0" "$D1"'
+            chk "no other key or encoder came from the screen window (a click and the wheel are not controls)" '[ "$(grep -c "PROBE key" "$D1")" = 2 ] && [ "$(grep -c "PROBE enc" "$D1")" = 0 ]'
+            chk "F6 in the screen window opens the grid" '[ "$(m1 grid_open)" = 1 ]'
+            chk "a cell press reaches the script while the screen is detached" '[ "$(grep -c "PROBE gridkey.2.2.1" "$D1")" -ge 1 ]'
+            chk "...and again while the screen window is hidden" '[ "$(grep -c "PROBE gridkey.2.2.1" "$D1")" -ge 2 ]'
+            chk "the virtual keys window plays a note while the screen window is hidden" 'grep -q "PROBE midi.note_on" "$D1"'
+            chk "F6 again closes the grid" '[ "$(m1 grid_closed)" = 0 ]'
+            # shortcuts
+            chk "Ctrl+Shift+S in the screen window gives the same picture as docked" 'same "$f/shot-docked.png" "$f/shot-detached.png"'
+            chk "a GIF recorded while detached is the same as one recorded docked (size, first frame; a still script is one frame)" '[ -s "$f/gif-docked.gif" ] && [ -s "$f/gif-detached.gif" ] && [ "$(identify "$f/gif-docked.gif" | head -1 | cut -d" " -f3)" = "$(identify "$f/gif-detached.gif" | head -1 | cut -d" " -f3)" ] && convert "$f/gif-docked.gif[0]" "$f/gif-d0.png" && convert "$f/gif-detached.gif[0]" "$f/gif-x0.png" && same "$f/gif-d0.png" "$f/gif-x0.png"'
+            chk "Ctrl+O in the screen window opens the import dialog" 'grep -q -- "--multiple" "$f/zenity.args"'
+            # sizes
+            convert "$f/screen-700.png" -crop 700x350+0+25 +repage "$f/p700.png" 2> /dev/null
+            chk "in between (700 x 400): inside every block the pixel is the screen's level" 'sm "$f/p700.png" "$f/s-700.png"; same "$f/s-docked.png" "$f/s-700.png"'
+            chk "in between: black bars above and below (picture 700 x 350)" '[ "$(hexpx "$f/screen-700.png" 10 5)" = 000000 ] && [ "$(hexpx "$f/screen-700.png" 10 394)" = 000000 ]'
+            sm "$f/screen-1024.png" "$f/s-1024.png"; convert "$f/s-1024.png" -filter point -resize 1024x512! "$f/b-1024.png"
+            chk "8 x (1024 x 512): the same pixels" 'same "$f/s-docked.png" "$f/s-1024.png"'
+            chk "8 x: every 8 x 8 block is one flat colour (nearest neighbour, nothing blurred)" 'same "$f/screen-1024.png" "$f/b-1024.png"'
+            # a window as big as the display (what fullscreen draws), and the saved fullscreen state
+            convert "$f/screen-big.png" -crop 1280x640+0+80 +repage "$f/pbig.png" 2> /dev/null
+            sm "$f/pbig.png" "$f/s-big.png"; convert "$f/s-big.png" -filter point -resize 1280x640! "$f/b-big.png"
+            chk "1280 x 800 is 10 x, flat blocks, centred (bars of 80 px)" 'same "$f/s-docked.png" "$f/s-big.png" && same "$f/pbig.png" "$f/b-big.png" && [ "$(hexpx "$f/screen-big.png" 5 5)" = 000000 ]'
+            chk "F11 saves fullscreen=1 and F11 again fullscreen=0, back at the windowed size" '[[ "$(m1 conf_fs_on)" == *fullscreen=1* && "$(m1 conf_fs_off)" == *fullscreen=0* && "$(m1 screen_back)" == 640x320+* ]]'
+            # the menu from the screen window
+            chk "F10 in the screen window opens the box's menu (dark menu over the box)" 'v="$(convert "$f/box-menu.png" -crop 100x60+256+431 +repage -colorspace Gray -format "%[fx:mean]" info:)"; awk -v v="$v" "BEGIN { exit !(v < 0.2) }"'
+            # placeholder, button, close
+            chk "a click on the placeholder brings the screen back" '[ "$(m1 windows_after_placeholder)" = 0 ]'
+            chk "the SCREEN button detaches it again" '[ "$(m1 windows_after_button)" = 1 ]'
+            chk "the menu item 'Screen in its own window' detaches it, F9 from the box brings it back" '[ "$(m1 windows_after_menu)" = 1 ] && [ "$(m1 windows_after_menu_off)" = 0 ]'
+            chk "the close button of the screen window re-docks it, norns keeps running" '[ "$(m1 windows_after_close)" = 0 ] && [ "$(m1 alive_after_close)" = yes ]'
+            chk "the box's close button quits norns with the screen window open" '[ "$(m1 alive_after_box_close)" = no ]'
+            chk "the state was saved at quit: detached, 1024 x 512, framed off (Shift+F11), a place" 'c="$(m1 conf_after_quit)"; [[ "$c" == *detached=1* && "$c" == *w=1024* && "$c" == *h=512* && "$c" == *x=* && "$c" == *y=* && "$c" == *border=0* ]]'
+            # restart with that state
+            chk "restart: the screen window is there at once" '[ "$(m2 restart_windows)" = 1 ]'
+            chk "restart: at the saved size" '[[ "$(m2 restart_geom)" == 1024x512+* ]]'
+            chk "restart: the box shows the placeholder" 'near "$(hexpx "$f/restart-box.png" 134 375)" 22 23 26 14'
+            chk "restart: F9 brings it back and the state says docked" '[ "$(m2 restart_docked)" = 0 ] && [[ "$(m2 restart_conf)" == *detached=0* ]]'
+            # a damaged file
+            chk "damaged file: the defaults for the bad values (640 x 320) and detached is read" '[ "$(m3 damaged_windows)" = 1 ] && [[ "$(m3 damaged_geom)" == 640x320+* ]]'
+            chk "damaged file: a log line for each bad value" 'grep -q "screen-window.conf: w=.abc" "$D3" && grep -q "screen-window.conf: h=.oops" "$D3"'
+            return $bad
+        }
+        run "window:detached screen (F9, button, placeholder, crisp scales, keys, shortcuts, F11, F10, close, saved state)" detach_ok
+        rm -rf "$XI"
+    }
+    detach_scenario
     # the screen's look: yellow, brightness 0.4, contrast 0.5 from ui.conf; window, screenshot and gif show the same colours (docs/port/ui-settings-plan.md)
     ui_look_scenario() {
         UH="$(mktemp -d)"

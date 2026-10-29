@@ -1,6 +1,8 @@
-# Step 4: a detachable screen window (plan only; no product code is changed by this note)
+# Step 4: a detachable screen window (plan, the owner's answers, and what was built)
 
-Linux desktop build only (`NORNS_LINUX_DESKTOP`). Written from the code of this repository (read, not changed: `matron/src/platform/macos/sdl_bridge.cc`, `device_skin.c/.h`, `window_keys.c/.h`, `matron/src/platform/linux/desktop_shell_linux.cc`, `menu_skin.c`, `matron/src/hardware/screen/sdl.cc`, `lua/core/keyboard.lua`), plus three small measurements made for this plan (`docs/port/detach-measurements/`) and mock-up pictures (`docs/port/detach-previews/`, made over a real capture of today's window). **`macos/` is only read. The Mac build and the device build do not change: everything new is behind `NORNS_LINUX_DESKTOP`, in new Linux-only files or in `#ifdef` blocks that the Mac never compiles.** Nothing is built before the owner answers the questions in section 8.
+**Status: BUILT (4a-4d in one go, after the owner's answers in section 8).** Sections 0 to 7 are the plan as it was written; section 8 has the owner's answers; section 10 lists what was built and where it differs from the plan; section 11 is about the function keys scripts use.
+
+Linux desktop build only (`NORNS_LINUX_DESKTOP`). Written from the code of this repository (read, not changed: `matron/src/platform/macos/sdl_bridge.cc`, `device_skin.c/.h`, `window_keys.c/.h`, `matron/src/platform/linux/desktop_shell_linux.cc`, `menu_skin.c`, `matron/src/hardware/screen/sdl.cc`, `lua/core/keyboard.lua`), plus three small measurements made for this plan (`docs/port/detach-measurements/`) and mock-up pictures (`docs/port/detach-previews/`, made over a real capture of today's window). **`macos/` is only read. The Mac build and the device build do not change: everything new is behind `NORNS_LINUX_DESKTOP`, in new Linux-only files or in `#ifdef` blocks that the Mac never compiles.** The questions of section 8 were answered; nothing in sections 0-7 changed except where section 10 says so.
 
 "The box" is the main window (the device picture). "The screen" is the 128 x 64 OLED picture.
 
@@ -72,7 +74,7 @@ Closing: `SDL_WINDOWEVENT_CLOSE` on a pane calls its `toggle_*` (so the window j
 
 ### 3.2 The screen window
 
-- **Creation** (main thread, from `screen_window_toggle()` / at start from the saved state): `SDL_CreateWindow("screen", x, y, w, h, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE)`, minimum size 256 x 128 points (2 x), the app icon (`set_icon`), `SDL_SetWindowFullscreen(..., SDL_WINDOW_FULLSCREEN_DESKTOP)` when saved as fullscreen (desktop resolution: no mode change, no flicker, works with any WM; I checked that SDL 2.30 does it under Xvfb with no window manager, `detach-measurements/sdl_fullscreen_xvfb.c`). Title **"screen"**, like "grid", "arc", "keys". It is a `pane_t`-style window (its own cairo canvas via `pane_begin/pane_end`), so no new drawing infrastructure is needed.
+- **Creation** (main thread, from `screen_window_toggle()` / at start from the saved state): `SDL_CreateWindow("Verdandi screen", x, y, w, h, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE)`, minimum size 256 x 128 points (2 x), the app icon (`set_icon`), `SDL_SetWindowFullscreen(..., SDL_WINDOW_FULLSCREEN_DESKTOP)` when saved as fullscreen (desktop resolution: no mode change, no flicker, works with any WM; I checked that SDL 2.30 does it under Xvfb with no window manager, `detach-measurements/sdl_fullscreen_xvfb.c`). Title **"Verdandi screen"** (the owner chose it; the other windows are "grid", "arc", "keys"). It is a `pane_t`-style window (its own cairo canvas via `pane_begin/pane_end`), so no new drawing infrastructure is needed.
 - **Drawing:** a new `screen_window_draw(cr, w, h, oled_shown())` (new file `matron/src/platform/linux/screen_window.cc`; the geometry rule in `screen_window_geom.c`, pure C): black background; `k = min(w / 128, h / 64)` in surface pixels; if `|k - round(k)| <= 0.02` (and `round(k) >= 1`) the picture is `128 round(k)` wide, nearest; otherwise an even width `2 floor(32 k)` that fits, drawn by the same two-step rule (nearest to a whole multiple, then scaled), **centred**, black bars at the sides or top and bottom. Free resizing therefore gives letterboxing, not distortion; the aspect ratio cannot be locked on every desktop (SDL has no portable aspect lock), so the bars are the honest way.
 - **Cost, measured** (`detach-measurements/screen_cost.c`, cairo calls identical to `skin_draw_oled`, 4 cores here, per frame, including the copy to the window surface):
 
@@ -106,7 +108,7 @@ Closing: `SDL_WINDOWEVENT_CLOSE` on a pane calls its `toggle_*` (so the window j
 | size/move/exposed | redraw; save the state after 500 ms without further change | as today | as today |
 | focus lost | nothing | nothing | the keys window releases typed notes (unchanged) |
 
-Two small details: `WK_MODE` changes the title of the window that had the key (norns mode); for the screen window the title change is skipped (it keeps "screen"). The text-entry and menu pages of norns need no change: they run in Lua and draw into the same 128 x 64 picture.
+Two small details: `WK_MODE` changes the title of the window that had the key (norns mode); for the screen window the title change is skipped (it keeps its title). The text-entry and menu pages of norns need no change: they run in Lua and draw into the same 128 x 64 picture.
 
 ### 3.4 The other windows and devices
 
@@ -157,13 +159,13 @@ Missing file or missing keys: `detached=0`, `fullscreen=0`, `border=1`; size 640
 
 - **Brightness, colour, contrast (SYSTEM > UI):** the screen window draws `oled_shown()`; `ui_look` events rebuild it and redraw both windows. No second copy of the tables.
 - **"Open the file dialog when a script loads a file", Copy samples, input choice:** menu items, unrelated; the menu stays in the box.
-- **Display name / title:** "screen" for the window; the main window keeps "Verdandi Linux" (the window tests find the box by that name; a test that detaches finds the second window by "screen").
+- **Display name / title:** "Verdandi screen" for the window; the main window keeps "Verdandi Linux" (the window tests find the box by that name; a test that detaches finds the second window by "Verdandi screen").
 - **MIX page mouse on the screen** (the mouse drag on the MIX page levels, `drag_oled`) works only on the box's screen; the owner said clicks over the picture need not act. While detached the placeholder owns that rectangle.
 
 ## 6. Tests (written first, each shown failing before it is built)
 
 - **Pure C, no SDL, like `device_skin_linux_test.c`** (registered in `run_all.sh`): `screen_window_geom_test.c` (window size to picture rectangle: whole scales within 0.02 give `128 r` with nearest, in-between sizes give an even width that fits and is centred, tiny and huge windows, 2:1 and other aspects, the hit rectangle) and `screen_window_conf_test.c` (parse: defaults, every damaged value in 4.3 with its log line, an off-screen rectangle, round trip write/read, the atomic rename, unknown keys).
-- **Window scenario under Xvfb** (`probe_detach.lua`, xdotool, a stub zenity as in the dialog scenario): (1) default start: one window; (2) F9: a second window named "screen" exists and the box shows the placeholder (the screen rectangle is the placeholder grey, not the script's picture); (3) the picture in the screen window equals the box's picture for a known script (pixel compare at a whole scale: `window_probe.lua`'s white rectangle); (4) `ui.conf` yellow/0.4: the same level has the same colour in both windows (the technique of `ui_look_scenario`); (5) resize by `xdotool windowsize` to a whole scale (nearest: block interiors uniform, edges at multiples) and to an in-between size (the centre pixel of every block equals the source level; no row or column is blurred beyond the edge pixels); letterboxing when the aspect changes; (6) keyboard in the screen window: `1`, `2`, `3`, `Q`, arrows reach the script's `key`/`enc` handlers exactly as in the box (a probe prints them), F6 opens the virtual grid and a cell press reaches the script while detached, Ctrl+Shift+S makes the same PNG as docked, a GIF is recorded (same frame count and palette as docked), Ctrl+O reaches the import (stub zenity), Ctrl+Q quits; (7) F11 makes the window the display size and back to the saved size; (8) close the screen window: it re-docks, the placeholder is gone, one window left; (9) detach again, quit with Ctrl+Q, start again: it comes back detached with the same size, and a `screen-window.conf` with damaged values starts with defaults and a log line; (10) the box's close button ends norns even with the screen window open; (11) a hidden (unmapped) screen window or box: the virtual grid and the MIDI test device still work (the existing probes run once with the screen detached).
+- **Window scenario under Xvfb** (`probe_detach.lua`, xdotool, a stub zenity as in the dialog scenario): (1) default start: one window; (2) F9: a second window named "Verdandi screen" exists and the box shows the placeholder (the screen rectangle is the placeholder grey, not the script's picture); (3) the picture in the screen window equals the box's picture for a known script (pixel compare at a whole scale: `window_probe.lua`'s white rectangle); (4) `ui.conf` yellow/0.4: the same level has the same colour in both windows (the technique of `ui_look_scenario`); (5) resize by `xdotool windowsize` to a whole scale (nearest: block interiors uniform, edges at multiples) and to an in-between size (the centre pixel of every block equals the source level; no row or column is blurred beyond the edge pixels); letterboxing when the aspect changes; (6) keyboard in the screen window: `1`, `2`, `3`, `Q`, arrows reach the script's `key`/`enc` handlers exactly as in the box (a probe prints them), F6 opens the virtual grid and a cell press reaches the script while detached, Ctrl+Shift+S makes the same PNG as docked, a GIF is recorded (same frame count and palette as docked), Ctrl+O reaches the import (stub zenity), Ctrl+Q quits; (7) F11 makes the window the display size and back to the saved size; (8) close the screen window: it re-docks, the placeholder is gone, one window left; (9) detach again, quit with Ctrl+Q, start again: it comes back detached with the same size, and a `screen-window.conf` with damaged values starts with defaults and a log line; (10) the box's close button ends norns even with the screen window open; (11) a hidden (unmapped) screen window or box: the virtual grid and the MIDI test device still work (the existing probes run once with the screen detached).
 - **Existing tests that must stay green:** every existing `run_all.sh` window test (the screen starts docked: no change), `device_skin_linux_test.c` (the new control id and `skin_in_bezel` are tested there too), the Mac tests under `macos/tests` (they compile the shared files without the Linux define).
 - **Cannot be tested here (added to `HARDWARE-CHECKLIST.md` when built):** the window frame, move and resize on the owner's real desktop (there is no window manager in this container: Xvfb only), double click and cursor hiding, **borderless drag/resize** (`SDL_SetWindowHitTest` on his compositor), fullscreen on several monitors and across a resolution change, high-DPI and fractional scaling on Mint, a Wayland session (positions are not restored there), the saved position on a second monitor that is later unplugged, and how the in-between sizes look to his eye (the filter choice).
 
@@ -176,18 +178,18 @@ Missing file or missing keys: `detached=0`, `fullscreen=0`, `border=1`; size 640
 
 After each of 4a-4c: build, `run_all.sh`, push.
 
-## 8. Questions for the owner (answer in the chat; nothing is built before)
+## 8. The owner's answers (the questions were these, with the answers)
 
-1. **Frame:** normal title bar by default and `Shift+F11` for borderless (my recommendation: always movable and resizable, borderless is one key away), or borderless by default?
-2. **Keys:** F9 = detach / re-dock, F11 = fullscreen, Shift+F11 = frame on/off. Every F-key can be read by scripts today (F1-F8 and F10 are already taken from them), so any choice costs scripts a key; F9 sits next to F6-F8 and F10. OK, or other keys (for example Ctrl+Shift+D and Ctrl+Shift+F, which no script uses)?
-3. **Remember "detached" between starts** (my recommendation: yes; the box then shows the placeholder at start), or always start docked and remember only size and position?
-4. **Closing the box quits norns** (my recommendation), or should a detached screen keep running without the box?
-5. **F10 in the screen window** raises the box and opens its menu there (my recommendation), or nothing?
-6. **The SCREEN button above the bezel's top right** (picture `docked-with-button.png`), or only the menu item and F9 (no new button)?
-7. **Toast pill in the screen window** (screenshot saved, REC GIF): yes (my recommendation) or only in the box?
-8. **In-between scaling in the screen window: BILINEAR** (fast; mean difference to today's filter about 1 of 255) or the same `BEST` as the box (identical but 80 to 300 ms per frame at large sizes)? And should the box also move to the fast filter later?
-9. **Title "screen"** like grid, arc, keys, or "Verdandi screen"?
-10. **Whole-scale snapping:** free resizing gives black bars at other shapes and slightly softer in-between scales. A later key that jumps the window to the nearest whole scale (for example 8x = 1024 x 512) is easy; wanted for the wishlist?
+1. **Frame:** the normal title bar, with Shift+F11 for borderless. (Built.)
+2. **Keys:** F9 detach / re-dock, F11 fullscreen, Shift+F11 frame / borderless. (Built; which of the owner's scripts name these keys: section 11.)
+3. **Remember "detached" between starts:** yes. (Built: `detached=` in `screen-window.conf`.)
+4. **Closing the main window quits norns:** yes. (Built.)
+5. **F10 in the screen window opens the main window's menu:** yes. (Built: it raises the box and opens the menu there.)
+6. **The SCREEN button above the bezel's top right:** yes. (Built, as in `detach-previews/docked-with-button.png`.)
+7. **Toast messages also show in the screen window:** yes. (Built: the same pill, at the bottom of the screen window.)
+8. **Scaling in between whole multiples in the screen window: bilinear, crisp whole scales, the main window unchanged:** yes. (Built.)
+9. **Window title: "Verdandi screen"** (not "screen" as in the plan). (Built.)
+10. **Snap to the nearest whole scale:** on the wishlist, **not built**; when it is built it stays hidden: the key **F12** (in the screen window) plus an item in the in-window right-click menu, nothing visible on the screen window. Noted in `WISHLIST.md` (item 5).
 
 ## 9. Risks
 
@@ -197,3 +199,24 @@ After each of 4a-4c: build, `run_all.sh`, push.
 - **Wayland:** window positions are not restorable; hit-test dragging of a borderless window depends on the SDL version and compositor.
 - **Shared file:** `sdl_bridge.cc` is compiled by the Mac too; every edit is inside `#ifdef NORNS_LINUX_DESKTOP` or in new Linux-only files (`matron/src/platform/linux/`, added to `norns/wscript` next to `menu_skin.c`), and the Mac unit tests build the shared files without the define. I cannot build the Mac app here; I will re-read each shared hunk against that rule.
 - **Frame cost** when docked is unchanged; detached, the box is not redrawn per frame, so the total work is about the same as today.
+
+## 10. What was built, and where it differs from the plan
+
+Files: `matron/src/platform/linux/screen_window_geom.{h,c}` and `screen_window_conf.{h,c}` (pure C, unit tested), `screen_window.{h,cc}` (the SDL window: placement, drawing, events, state), edits in `sdl_bridge.cc` (inside `#ifdef NORNS_LINUX_DESKTOP`, plus four no-op macros that the Mac expands to nothing), `device_skin.{h,c}` (the `SKIN_SCREEN` button, `skin_in_bezel`, `skin_draw_placeholder`, all Linux only), `desktop_shell.h` / `desktop_shell_linux.cc` (the menu item), `norns/wscript`. `macos/` was not touched, and the Mac build path of every shared file is unchanged (the Mac unit test `device_skin_test` still passes).
+
+Tests (written first, then the code): `screen_window_geom_test.c` and `screen_window_conf_test.c` (their first run failed to compile, the modules did not exist), the new `test_screen_button` in `device_skin_linux_test.c` (failed to compile on `SKIN_SCREEN`), `tidy_test.sh` (the refusal of `screen-window.conf` failed before the tidy edit), the Xvfb scenario `detach_scenario` in `run_all.sh` (probes `probe_detach*.lua`, helper `detach_check.sh`, `x_close_window.py` which plays the window manager's close button), and `scan_fkeys_test.sh`. The window scenario was written before the code but could only be run against the finished code; it then failed three times on mistakes of its own (the screen window lay under the box, so clicks and captures hit the box; a wrong grid cell; the script's screen had changed after a key) and passes now. The menu and file-dialog scenarios were re-pointed at the longer menu (one row more).
+
+Differences from the plan:
+- **Fullscreen cannot be tested end to end here:** under Xvfb with no window manager SDL's fullscreen changes its own idea of the size but not the X window (measured with `detach-measurements/sdl_fullscreen_xvfb.c`). The scenario checks that F11 saves `fullscreen=1` and back to `0`, and the picture at a window the size of the display (1280 x 800: 10x, bars of 80 px). The real fullscreen is on `HARDWARE-CHECKLIST.md`.
+- **Whole-scale tolerance:** a window counts as a whole multiple when it is that size or up to **0.02 of a scale step above it** (about 2.5 pixels of width); one pixel below is in between (so nothing is ever cut off). A visibly larger window (12 x 6 pixels more) is in between: nothing snaps by itself (hence the wishlist item).
+- **The SCREEN button's place** was measured on today's layout: x 522..592, y 262..292 units (the bezel is x 36..592, y 300.7..594).
+- **A placeholder drawn over the screen rectangle** (the recess stays black around it), as in the mock-up.
+- **Placement of a new screen window:** right of the box if the display has room, else below it, else centred over it; a saved place that shows fewer than 64 x 64 pixels on any display is dropped with a log line.
+- **No menu is drawn over the screen window** (F10 there opens the box's menu in the box).
+- The state is written 500 ms after a change and at quit (`screen_window_save_now`).
+
+## 11. Which function keys the owner's scripts use (what he gives up)
+
+**Not found out here:** his scripts live on his laptop (`dust/code`); this machine has none of them. Verdandi takes **F9** (detach / re-dock, from any window) and **F11** (fullscreen in the screen window; ignored in the others) from scripts on the Linux desktop, as F1-F8 and F10 are already taken. **F12 is not used by this port** (it is reserved, hidden, for the later "snap to a whole scale", wishlist item 5).
+
+To find out, on the laptop: `verdandi scan-fkeys` (or `linux/scan-fkeys.sh ~/Verdandi/dust/code`). It only reads: it counts the `.lua` files and how many set `keyboard.code` or `keyboard.char`, then lists every script that names `"F9"`, `"F11"` or `"F12"` (file and line), and prints one RESULT line ("none of your scripts name F9, F11 or F12: nothing is given up", or "some scripts name those keys"). **Send me the output**; if a script names F12 the hidden snap key will be chosen again before it is built. The checklist item is in `RUN-ON-LAPTOP.md`.

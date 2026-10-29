@@ -346,6 +346,96 @@ static void test_scaling(void) {
     cairo_surface_destroy(oled);
 }
 
+// the detachable screen (docs/port/detach-plan.md 3.1): the SCREEN button above the bezel's top right, the placeholder over the screen, the box's other controls unchanged
+static uint32_t pixel_at(cairo_surface_t *s, int x, int y) {
+    cairo_surface_flush(s);
+    return ((uint32_t *)(cairo_image_surface_get_data(s) + y * cairo_image_surface_get_stride(s)))[x] & 0xffffff;
+}
+static void test_screen_button(void) {
+    CHECK(SKIN_SCREEN > SKIN_MUTE && SKIN_MUTE == 17 && SKIN_MANUAL == 16, "SKIN_SCREEN is a new id after MUTE (%d); the others keep their values", SKIN_SCREEN);
+    int sizes[][2] = {{595, 397}, {992, 662}, {1587, 1059}};
+    for (unsigned i = 0; i < 3; i++) {
+        skin_geom_t g;
+        skin_geom(sizes[i][0], sizes[i][1], &g);
+        // the button: x 522..592, y 262..292 units (above the bezel's top right corner)
+        CHECK(skin_hit(&g, px(&g, 557), py(&g, 277)) == SKIN_SCREEN, "%dx%d: the SCREEN button centre", sizes[i][0], sizes[i][1]);
+        CHECK(skin_hit(&g, px(&g, 523), py(&g, 263)) == SKIN_SCREEN && skin_hit(&g, px(&g, 591), py(&g, 291)) == SKIN_SCREEN, "%dx%d: its corners", sizes[i][0], sizes[i][1]);
+        CHECK(skin_hit(&g, px(&g, 480), py(&g, 277)) == SKIN_NONE && skin_hit(&g, px(&g, 557), py(&g, 330)) == SKIN_NONE, "%dx%d: just beside and below it is not the button", sizes[i][0], sizes[i][1]);
+        // the bezel: inside it (the whole recess, where the placeholder is) and not outside
+        CHECK(skin_in_bezel(&g, px(&g, 300), py(&g, 450)) && skin_in_bezel(&g, px(&g, 40), py(&g, 305)), "%dx%d: the bezel", sizes[i][0], sizes[i][1]);
+        CHECK(!skin_in_bezel(&g, px(&g, 300), py(&g, 250)) && !skin_in_bezel(&g, px(&g, 700), py(&g, 450)), "%dx%d: outside the bezel", sizes[i][0], sizes[i][1]);
+        // every other control still answers as before (keys, encoders, the row of buttons)
+        CHECK(skin_hit(&g, px(&g, KEY[0][0]), py(&g, KEY[0][1])) == SKIN_K1 && skin_hit(&g, px(&g, BTN_X[10] + 35), py(&g, BTN_Y + 20)) == SKIN_MUTE, "%dx%d: the old controls are unchanged", sizes[i][0], sizes[i][1]);
+    }
+    // drawing: the placeholder is dark and quiet (no white screen pixels), the picture it replaces is not; the button lights while the screen is out
+    skin_geom_t g;
+    skin_geom(992, 662, &g);
+    cairo_surface_t *white = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 128, 64);
+    cairo_t *wc = cairo_create(white);
+    cairo_set_source_rgb(wc, 1, 1, 1);
+    cairo_paint(wc);
+    cairo_destroy(wc);
+    cairo_surface_t *a = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 992, 662), *b = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 992, 662);
+    cairo_t *ca = cairo_create(a), *cb = cairo_create(b);
+    skin_draw_static(ca, &g);
+    skin_draw_static(cb, &g);
+    skin_draw_oled(ca, &g, white);
+    skin_draw_placeholder(cb, &g, 0);
+    cairo_destroy(ca);
+    cairo_destroy(cb);
+    int mx = g.oled_x + 8, my = g.oled_y + 8;
+    CHECK(pixel_at(a, mx, my) == 0xffffff, "the screen drawn: white at its corner");
+    uint32_t dark = pixel_at(b, mx, my);
+    CHECK(((dark >> 16) & 255) < 60 && ((dark >> 8) & 255) < 60 && (dark & 255) < 60 && dark != 0x000000, "the placeholder is a dark grey, not black and not the picture (%06x)", dark);
+    // the sentence is drawn: some lighter pixels in the middle of the rectangle
+    int lighter = 0;
+    for (int y = g.oled_y + g.oled_h / 2 - 30; y < g.oled_y + g.oled_h / 2 + 30; y++)
+        for (int x = g.oled_x + 20; x < g.oled_x + g.oled_w - 20; x++)
+            if (((pixel_at(b, x, y) >> 8) & 255) > 100)
+                lighter++;
+    CHECK(lighter > 200, "the placeholder has text in it (%d light pixels)", lighter);
+    // no white anywhere in the screen rectangle
+    int white_px = 0;
+    for (int y = g.oled_y; y < g.oled_y + g.oled_h; y++)
+        for (int x = g.oled_x; x < g.oled_x + g.oled_w; x++)
+            if ((pixel_at(b, x, y) & 0xffffff) == 0xffffff)
+                white_px++;
+    CHECK(white_px == 0, "no white pixel in the placeholder (%d)", white_px);
+    // the button: drawn by skin_draw_controls; lit when screen_out is set
+    skin_state_t off = {0}, on = {0};
+    on.screen_out = 1;
+    cairo_surface_t *c0 = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 992, 662), *c1 = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 992, 662);
+    cairo_t *k0 = cairo_create(c0), *k1 = cairo_create(c1);
+    skin_draw_static(k0, &g);
+    skin_draw_static(k1, &g);
+    skin_draw_controls(k0, &g, &off);
+    skin_draw_controls(k1, &g, &on);
+    cairo_destroy(k0);
+    cairo_destroy(k1);
+    int bx = px(&g, 557), by = py(&g, 277), differ = 0, dark_face = 0;
+    for (int y = by - 12; y <= by + 12; y++)
+        for (int x = bx - 30; x <= bx + 30; x++) {
+            if (pixel_at(c0, x, y) != pixel_at(c1, x, y))
+                differ++;
+            if (((pixel_at(c0, x, y) >> 8) & 255) < 70)
+                dark_face++;
+        }
+    CHECK(dark_face > 600, "the SCREEN button is drawn (a dark face above the bezel): %d dark pixels", dark_face);
+    CHECK(differ > 20, "the button looks different when the screen is out (%d pixels)", differ);
+    // the rest of the box does not change with screen_out except the button (compare the K1 knob region)
+    int same = 1;
+    for (int y = py(&g, 150); y < py(&g, 230); y++)
+        for (int x = px(&g, 30); x < px(&g, 110); x++)
+            if (pixel_at(c0, x, y) != pixel_at(c1, x, y))
+                same = 0;
+    CHECK(same, "K1 and its surroundings are drawn the same either way");
+    cairo_surface_destroy(c0);
+    cairo_surface_destroy(c1);
+    cairo_surface_destroy(a);
+    cairo_surface_destroy(b);
+    cairo_surface_destroy(white);
+}
+
 // the keyboard mapping of the window is not touched: a checksum of every answer of window_keys_process
 static void test_keys_unchanged(void) {
     uint32_t h = 2166136261u;
@@ -373,6 +463,7 @@ int main(int argc, char **argv) {
     test_render(argc > 1 ? argv[1] : NULL);
     test_margin();
     test_scaling();
+    test_screen_button();
     test_keys_unchanged();
     printf(failures ? "device_skin_linux_test: %d failed\n" : "device_skin_linux_test: all passed\n", failures);
     return failures != 0;

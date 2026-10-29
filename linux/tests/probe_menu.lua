@@ -9,18 +9,18 @@ _norns.file_chosen = function(p) print("PROBE chosen", p) end
 #sleep 0.4
 #shot @home/menu-open.png
 # Screenshot
-#xdo mousemove 340 467 click 1
+#xdo mousemove 340 447 click 1
 #sleep 1
 # Record GIF, then stop it
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 493 click 1
+#xdo mousemove 340 473 click 1
 #sleep 1.5
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 493 click 1
+#xdo mousemove 340 473 click 1
 #sleep 2
 # Import files... (the stub answers with a wav)
 #xdo mousemove 300 300 click 3
-#xdo mousemove 340 299 click 1
+#xdo mousemove 340 273 click 1
 #sleep 2
 # a script's file dialog (lua fileselect)
 _norns.choose_file("/tmp")

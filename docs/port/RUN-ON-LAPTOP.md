@@ -290,6 +290,17 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
   Raspberry Pi plug-ins are reported and do not load on this machine; `sudo systemctl restart norns-*` becomes a norns restart. maiden's own console commands `;restart` and the like (they talk to systemd) answer
   "not available in Verdandi" here: restart norns from its window.
 
+## The screen in its own window (docs/port/detach-plan.md)
+- [ ] Which of your scripts read the keys Verdandi now takes (F9 detach, F11 fullscreen; F12 is reserved and not used yet): run `verdandi scan-fkeys` (it only reads `~/Verdandi/dust/code`) and read the RESULT line. Send me the output if a script is named.
+- [ ] Click the **SCREEN** button above the top right corner of the screen (or press F9, or menu > Screen in its own window): a window "Verdandi screen" opens with only the picture; the main window shows the dark panel with the sentence "The screen is in its own window. Click here or press F9 to bring it back." and every control still works.
+- [ ] With the screen window focused, use the **keyboard only**: 1 2 3, Q W A S Z X, arrows, F1-F5, F6 (grid window), Ctrl+Shift+S (a screenshot appears), Ctrl+O. They do what they do in the main window. Clicking and scrolling over the picture does nothing.
+- [ ] Resize the screen window by dragging its edge: at exactly 640 x 320, 1024 x 512, 1280 x 640 the pixels are flat squares; in between they stay sharp (look closely at a letter), with black bars when it is not 2:1.
+- [ ] F11 in the screen window: fullscreen on your display, the cursor hides after 2 seconds, F11 or a double click returns to the same size and place. Shift+F11: the title bar goes away (drag the picture to move it, drag an edge to resize); Shift+F11 brings it back.
+- [ ] SYSTEM > UI: change brightness, colour, contrast: both windows change together. Record a GIF and take a screenshot from each mode: the same.
+- [ ] F10 in the screen window: the main window comes forward with its menu. Close the **screen window** with its close button: the screen is back in the main window and norns keeps running. Detach again, close the **main window**: norns quits.
+- [ ] Detach, move and resize the screen window, quit with Ctrl+Q, start again: it comes back detached at the same place and size. `cat ~/Verdandi/screen-window.conf` shows what is kept.
+- [ ] Open the virtual grid, arc and keyboard windows with the screen detached, press cells, play a note, use your real grid or MIDI keyboard: nothing changes. Minimise the screen window and the main window in turn: the other still works.
+
 ## Files, logs and cleaning up (docs/port/clean-layout.md)
 - [ ] Everything Verdandi makes is in `~/Verdandi`: `logs/`, `logs/crash/`, `disabled/` (when you moved something), `backups/` (only before a migration), `cache/`; no `norns.log`, `sclang.log` etc. loose in the home, no hidden `.cache`. `ls -A ~/Verdandi` shows it.
 - [ ] Start and stop norns three times: `ls ~/Verdandi/logs` shows `sclang.log`, `sclang.1.log`, `sclang.2.log` (and the same for norns, jackd, maiden); the log of the run before the last is still there.

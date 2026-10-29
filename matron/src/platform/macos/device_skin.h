@@ -44,6 +44,7 @@ enum {
 #ifdef NORNS_LINUX_DESKTOP
     // the Linux window has no OUT fader: MUTE is the 11th button of the top row, id SKIN_PAGE1 + 10. the Mac values below are not changed
     SKIN_MUTE = 17, // the last button of the top row: output off and back
+    SKIN_SCREEN = 18, // the button above the bezel's top right: pop the screen out into its own window and back (docs/port/detach-plan.md)
 #else
     SKIN_FADER = 17, // the OUT fader right of E3 (not on the device): norns' output level
     SKIN_MUTE = 18,  // under it: output off and back
@@ -72,6 +73,9 @@ typedef struct {
     const char *toast; // a short message on the box (import, screenshot), NULL for none
     double out_level;  // the OUT fader, 0-1 (the output level's place on its scale)
     int out_muted;     // MUTE is on
+#ifdef NORNS_LINUX_DESKTOP
+    int screen_out; // the screen is in its own window: the placeholder shows where it was, the SCREEN button is lit
+#endif
 } skin_state_t;
 
 typedef struct {
@@ -98,6 +102,13 @@ extern int skin_nearest_enc(const skin_geom_t *g, double x, double y);
 #ifndef NORNS_LINUX_DESKTOP
 // the OUT fader's value (0-1) for the pointer at device pixel height y
 extern double skin_fader_value(const skin_geom_t *g, double y);
+#endif
+
+#ifdef NORNS_LINUX_DESKTOP
+// the bezel (the recess the screen sits in) under device pixel x/y: where the placeholder is
+extern int skin_in_bezel(const skin_geom_t *g, double x, double y);
+// the screen's place while the screen is in its own window: a dark rectangle with one plain sentence
+extern void skin_draw_placeholder(cairo_t *cr, const skin_geom_t *g, int hover);
 #endif
 
 // the oled pixel (0-127, 0-63) under device pixel x/y; false if it is not on the oled

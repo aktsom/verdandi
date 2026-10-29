@@ -46,6 +46,8 @@ if [ "${1:-}" = tidy ]; then
     shift
     exec "$(cd "$(dirname "$0")" && pwd)/tidy.sh" "$@"
 fi
+# `verdandi scan-fkeys`: which of your scripts read F9, F11 or F12 (the keys of the screen window); reads only
+if [ "${1:-}" = scan-fkeys ]; then shift; exec "$(cd "$(dirname "$0")" && pwd)/scan-fkeys.sh" "$@"; fi
 
 TERMINAL=0
 [ "${1:-}" = "--terminal" ] && TERMINAL=1

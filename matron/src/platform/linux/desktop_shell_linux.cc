@@ -35,6 +35,7 @@ static char menu_app[MENU_APPS][128]; // the applications in the menu, as built
 static int input_now = 1; // SKIN_INPUT_MIC until lua says otherwise
 static int recording = 0;
 static int copy_samples = 0;
+static int screen_out = 0; // the screen is in its own window
 static std::atomic<int> file_dialog{0}; // "Open the file dialog when a script loads a file": lua owns the value (ui.conf), this is the tick
 static int import_mode = SHELL_IMPORT_LINK;
 
@@ -96,6 +97,10 @@ void shell_choose_file(const char *dir, const char *dust, void (*done)(const cha
 
 void shell_choose_file_close(void) {
     picker_close();
+}
+
+void shell_set_screen_out(int on) {
+    screen_out = on ? 1 : 0;
 }
 
 void shell_set_file_dialog(int on) {
@@ -163,6 +168,7 @@ static void menu_build(void) {
     add_item(SHELL_MENU_GRID, "Virtual grid", "F6", 0);
     add_item(SHELL_MENU_ARC, "Virtual arc", "F8", 0);
     add_item(SHELL_MENU_KEYS, "Virtual keyboard", "F7", 0);
+    add_item(SHELL_MENU_SCREEN, "Screen in its own window", "F9", screen_out);
     add_separator();
     // what norns hears: the sound card's input, every application but norns, one application, off
     const char *cur = app_audio_current();

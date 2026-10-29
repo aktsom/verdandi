@@ -77,6 +77,7 @@ enum {
     SHELL_MENU_INPUT_SYSTEM,  // all applications but norns
     SHELL_MENU_INPUT_MONITOR, // the monitor of the output card (an option: it hears norns too)
     SHELL_MENU_QUIT,
+    SHELL_MENU_SCREEN,      // toggle: the screen in its own window (the bridge does it; the shell only shows the tick)
     SHELL_MENU_FILE_DIALOG, // toggle: a script's file chooser also opens the system's file dialog (saved by lua, ui.conf file_dialog)
     SHELL_MENU_INPUT_APP = 40, // + n: the n-th application of the list
 };
@@ -103,6 +104,7 @@ extern void shell_choose_file(const char *dir, const char *dust, void (*done)(co
 extern void shell_choose_file_close(void);
 extern void shell_set_file_dialog(int on); // any thread: lua says what ui.conf holds (the tick in the menu)
 extern int shell_get_file_dialog(void);
+extern void shell_set_screen_out(int on); // main thread: the screen is in its own window (the tick of "Screen in its own window")
 extern void shell_hid_keyboard_event(uint16_t usage, int value);
 
 // the in-window menu (there is no menu bar). the window gives it the events of the norns window

@@ -1,0 +1,43 @@
+#!/bin/bash
+# linux/scan-fkeys.sh [DUST_CODE_FOLDER]: which of your scripts read the function keys that Verdandi's screen window takes (docs/port/detach-plan.md).
+#   F9   detach the screen / bring it back        F11  fullscreen of the screen window        F12  (kept for a later "snap to a whole scale", hidden)
+# it only READS the .lua files of the folder (default: <norns home>/dust/code, the norns home as `verdandi` finds it: NORNS_HOME, or ~/Verdandi) and prints
+# every script that names one of those keys the way norns scripts do (keyboard.code gets "F9", "F11", "F12" as text), the lines it is on, and how many
+# scripts read the keyboard at all. nothing is changed.
+set -u
+dir="${1:-}"
+if [ -z "$dir" ]; then
+    home="${NORNS_HOME:-}"
+    if [ -z "$home" ]; then
+        # the home as the launcher finds it: the first line of ~/.config/verdandi/home, else ~/Verdandi
+        home="$(head -n 1 "${XDG_CONFIG_HOME:-${HOME:-}/.config}/verdandi/home" 2> /dev/null | tr -d '\r')"
+        case "$home" in "~/"*) home="${HOME:-}/${home#\~/}" ;; esac
+        [ -n "$home" ] || home="${HOME:-}/Verdandi"
+    fi
+    dir="$home/dust/code"
+fi
+[ -d "$dir" ] || { echo "scan-fkeys: $dir is not a folder (give the dust/code folder as the argument)"; exit 1; }
+echo "scanning the .lua files under $dir (reading only)"
+total=$(find "$dir" -name '*.lua' -type f 2> /dev/null | wc -l)
+readers=$(grep -rlE 'keyboard\.(code|char)[[:space:]]*=|function[[:space:]]+keyboard\.(code|char)' --include='*.lua' "$dir" 2> /dev/null | wc -l)
+echo "$total .lua files, $readers of them set keyboard.code or keyboard.char"
+rc=0
+for k in F9 F11 F12; do
+    echo
+    hits=$(grep -rnE "[\"']${k}[\"']" --include='*.lua' "$dir" 2> /dev/null)
+    if [ -z "$hits" ]; then
+        echo "$k: no script names it"
+    else
+        n=$(printf '%s\n' "$hits" | cut -d: -f1 | sort -u | wc -l)
+        echo "$k: $n script file(s) name it:"
+        printf '%s\n' "$hits" | sed "s|^$dir/||" | sed 's/^/   /' | head -40
+        rc=2
+    fi
+done
+echo
+if [ $rc = 0 ]; then
+    echo "RESULT none of your scripts name F9, F11 or F12: nothing is given up"
+else
+    echo "RESULT some scripts name those keys (above): in the screen window F9 and F11 are taken by Verdandi on the Linux desktop; F12 is not used yet"
+fi
+exit 0
