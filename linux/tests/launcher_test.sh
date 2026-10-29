@@ -204,4 +204,16 @@ expect "a home from ~/.config/verdandi/home is the same after the re-run" \
     "DECIDE-HOME mode=installed home=$T/rr2/chosen" "$(rerun_home "$T/rr2")"
 expect "no folder is created inside the home by the re-run" "" "$(ls -d "$T/rr1/Verdandi/Verdandi" "$T/rr2/chosen/chosen" "$T/rr2/chosen/Verdandi" 2>/dev/null)"
 
+# the user's own HOME and XDG folders (given back to xdg-open: the browser must not keep its profile or cache in the norns home) are recorded by the first
+# run and are the same after the re-run under pw-jack. the second run sees HOME = the norns home and XDG_CACHE_HOME = <home>/cache and used to record those
+userenv() { # extra env assignments... -> the DECIDE-USERENV line of the second run
+    env -i PATH="$BIN:/usr/bin:/bin" HOME="$T/ue" NORNS_INSTALLED=1 NORNS_HAVE_TTY=1 NORNS_DECIDE_ONLY=reexec STUB_PW=1 \
+        NORNS_PW_JACK="$BIN/pw-jack-real" "$@" "$REPO/linux/norns.sh" 2>&1 | grep '^DECIDE-USERENV ' || echo "DECIDE-USERENV (none)"
+}
+mkdir -p "$T/ue"
+expect "after the re-run the user's HOME is still the user's, an XDG folder they did not set stays unset" \
+    "DECIDE-USERENV home=$T/ue cache=unset config=unset" "$(userenv)"
+expect "an XDG folder they did set is passed on unchanged" \
+    "DECIDE-USERENV home=$T/ue cache=$T/ue/mycache config=$T/ue/mycfg" "$(userenv XDG_CACHE_HOME="$T/ue/mycache" XDG_CONFIG_HOME="$T/ue/mycfg")"
+
 exit $FAIL

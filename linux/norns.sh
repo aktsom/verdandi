@@ -228,6 +228,16 @@ decide_server
 decide_devices
 read_audio_conf
 decide_rate
+# the user's own HOME and XDG folders, for the programs the window starts for the user (xdg-open: the default browser is in the
+# user's ~/.config/mimeapps.list, not in the norns home). matron gives them back to xdg-open only (matron/src/platform/macos/open_url.c).
+# recorded ONCE, by the first run: the second run (under pw-jack) sees the norns home as HOME and the norns cache as XDG_CACHE_HOME, and would
+# record those as the user's (a browser then keeps its cache in the norns home)
+if [ -z "${NORNS_USER_HOME:-}" ]; then
+    export NORNS_USER_HOME="${HOME:-}"
+    for v in XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME; do
+        [ -n "${!v:-}" ] && export "NORNS_USER_$v=${!v}"
+    done
+fi
 # NORNS_DECIDE_ONLY=reexec: as 1, but a decision to re-run under pw-jack is carried out (tests the re-run)
 if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ] || { [ "${NORNS_DECIDE_ONLY:-0}" = reexec ] && [ "$ACTION" != reexec-pw-jack ]; }; then
     echo "DECIDE action=$ACTION server=$SERVER in=$IN_PORTS out=$OUT_PORTS"
@@ -236,17 +246,12 @@ if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ] || { [ "${NORNS_DECIDE_ONLY:-0}" = reexec ]
         jackd_args
         echo "DECIDE-JACKD ${JACKD_ARGS[*]}"
     fi
+    echo "DECIDE-USERENV home=${NORNS_USER_HOME:-} cache=${NORNS_USER_XDG_CACHE_HOME-unset} config=${NORNS_USER_XDG_CONFIG_HOME-unset}"
     echo "DECIDE-RATE ${AUDIO_RATE:-}"
     echo "DECIDE-QUANTUM ${QUANTUM}"
     exit 0
 fi
 
-# the user's own HOME and XDG folders, for the programs the window starts for the user (xdg-open: the default browser is in the
-# user's ~/.config/mimeapps.list, not in the norns home). matron gives them back to xdg-open only (matron/src/platform/macos/open_url.c)
-export NORNS_USER_HOME="${NORNS_USER_HOME:-${HOME:-}}"
-for v in XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME; do
-    [ -n "${!v:-}" ] && export "NORNS_USER_$v=${!v}"
-done
 export HOME="$NORNS_HOME"
 # the caches of libraries (the graphics shader cache) go to <norns home>/cache and are capped, not into a hidden folder of the home
 export XDG_CACHE_HOME="$NORNS_HOME/cache" MESA_SHADER_CACHE_MAX_SIZE=64M

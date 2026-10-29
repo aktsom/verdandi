@@ -1,7 +1,7 @@
 #!/bin/bash
 # `verdandi tidy flatten` (docs/port/clean-layout.md section 7), the DRY RUN: it reports what is in a nested home and changes NOTHING (every path, size, mode,
 # time and content hash is the same before and after). a fixture home with the things that matter: user data, links into the nested folder, an outer leftover,
-# a name on both sides, a settings file with the old path. the real move (--apply) is not built and must refuse.
+# a name on both sides, a settings file with the old path. --apply is tested in tidy_flatten_apply_test.sh; here it only has to refuse without the typed confirmation.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 T="$(mktemp -d)"
@@ -42,7 +42,7 @@ has "DRY RUN" && ok "says it is a dry run" || bad "no DRY RUN line"
 has "nested home: $N" && ok "names the nested home" || bad "nested home not named"
 has "dust/ (yours): 5 files and links" && ok "counts the user's files and links in dust/ (3 files, 2 links)" || bad "dust file count"
 has "scripts 1, audio files 1, data files 1" && ok "counts scripts, audio, data" || bad "scripts/audio/data counts"
-has "dust/audio/mac/sample.wav" && has "points into the nested folder" && ok "reports the link that points into the nested folder" || bad "link into the nested folder not reported"
+has "into the nested folder: dust/audio/mac/sample.wav" && ok "reports the link that points into the nested folder" || bad "link into the nested folder not reported"
 has "2 link(s) point elsewhere" && ok "counts the links that point elsewhere (the norns link and one other)" || bad "link elsewhere count"
 has "already broken" && ok "counts broken links" || bad "broken links"
 has ".config/SuperCollider/sclang_conf.yaml" && has "sclang_conf.yaml.old" && ok "reports the settings file with the old path and what happens to it" || bad "settings file with the old path"
@@ -59,9 +59,9 @@ OUT2="$(HOME="$T/user" NORNS_INSTALLED=1 "$REPO/linux/norns.sh" tidy flatten 2>&
 [ "$OUT" = "$OUT2" ] && ok "linux/norns.sh tidy flatten gives the same" || bad "norns.sh tidy differs"
 snapshot > "$T/after2"; cmp -s "$T/before" "$T/after2" && ok "still nothing changed" || bad "changed by the second run"
 
-# --apply refuses: the real move is not built
-OUT3="$(HOME="$T/user" NORNS_INSTALLED=1 "$REPO/linux/tidy.sh" flatten --apply 2>&1)"; rc3=$?
-[ $rc3 -ne 0 ] && printf '%s' "$OUT3" | grep -q "not built yet" && ok "--apply refuses (not built)" || bad "--apply did not refuse"
+# --apply without the typed confirmation refuses (the full tests of --apply and --undo are in tidy_flatten_apply_test.sh)
+OUT3="$(HOME="$T/user" NORNS_INSTALLED=1 "$REPO/linux/tidy.sh" flatten --apply 2>&1 < /dev/null)"; rc3=$?
+[ $rc3 -ne 0 ] && printf '%s' "$OUT3" | grep -q "confirmation" && ok "--apply refuses without the typed confirmation" || bad "--apply did not refuse"
 snapshot > "$T/after3"; cmp -s "$T/before" "$T/after3" && ok "the refusal changed nothing" || bad "changed by --apply"
 
 # a home that is not nested

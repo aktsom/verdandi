@@ -115,7 +115,8 @@ run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damag
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
-run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses)" linux/tests/tidy_flatten_test.sh
+run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
+run "tidy:flatten --apply and --undo (refusals, backup, renames only, checks, rollback on a signal or a mismatch, interrupted run, nothing of dust/ lost or changed)" linux/tests/tidy_flatten_apply_test.sh
 run "tidy:disable and restore with a manifest, list, remove-older (and what it never touches), log rotation, caps, crash report pruning" linux/tests/tidy_test.sh
 CUH="$(mktemp -d)"
 run "lua:SYSTEM > CLEAN UP page (asks before any change, restore, the age row, nothing of yours touched)" env NORNS_HOME="$CUH" NORNS_TIDY="$REPO/linux/tidy.sh" lua5.3 linux/tests/cleanup_page_test.lua
