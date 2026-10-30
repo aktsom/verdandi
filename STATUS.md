@@ -227,6 +227,7 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 ## Fixes after the owner's test of the box styles (0.1~git20261030.3318.5f4909cb)
 - Hex entry pile-up fixed (6 digits max, hint on its own line, clean redraw; names 18 characters); BOX stuck navigation: causes found by test fixed (double enter, stale redraw, handlers reclaimed), the owner's exact stuck state not reproduced; style and look independent (looks = five colours); window scaling: pixel box layers cached, quick drawing while dragging, resize events coalesced, settle redraw, ghost frames fixed. Details and measurements in `docs/port/box-style-plan.md` section 8. New tests: `textentry_test.lua`, `box_frame_test.sh`.
 - Not measured: the owner's display and Muffin live resize (HARDWARE-CHECKLIST).
+- Full `run_all.sh` from a clean environment (`env -i`, nothing else running, no test file edited during the run): 105 PASS, 0 known failures, 0 unexpected failures; the opt-in clean-root package build was skipped.
 
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
