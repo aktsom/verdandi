@@ -73,3 +73,6 @@ Approach note: `docs/port/linux-vst3.md` (written before any plug-in code). Work
 - Reuse the protocol, the bridge logic and the plug-in code of Phase 7; what changes is the norns-side delivery (JACK MIDI becomes the internal pipe device of the keys type), the audio path (JACK for Windows or the Windows standalone's audio path from Gate D), process start and the bundle layout.
 - Windows-specific checks as in Phase 6 (ASIO, the owner uses an RME Fireface); tests that cannot run here go to the hardware checklist.
 - The same one-instance guard and message.
+
+## Phase 9: MIDI MAP, MIDI control of the on-screen keys and encoders (Linux desktop; plan only)
+Plan: `docs/port/midi-map-plan.md` (no code yet; one stand-in picture). A tap in `_norns.midi.event` that turns mapped CC / notes into E1-E3 and K1-K3 events; learn by clicking a control in the window; absolute and relative (two's complement, sign-magnitude, offset binary) encoders; `midimap.conf` and presets; a MIDI MAP page below THEME. The params MAP wins a clash; scripts always receive every message. Starts only when the owner says so; the open decisions are in section 8 of the plan.

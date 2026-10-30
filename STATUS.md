@@ -280,6 +280,11 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 - **Decisions needed from the owner:** toolchain and engine design; ASIO SDK licence for a GPL-3.0 app; check whether the Fireface UC's TotalMix FX offers a Loopback option; the 2023-24 grid's USB device name; installer and data location; enable Actions on the fork; bundle busybox/curl.
 - **Not verified:** everything on Windows, Ableton, the Fireface, the grids, the SuperCollider patch. Nothing was built.
 
+## MIDI MAP plan (`docs/port/midi-map-plan.md`, plan only, no product code)
+- **Written:** how MIDI reaches Lua today (device_midi, JACK MIDI input, `_norns.midi.event`, the params MAP with its per-script `pmap` and vport numbers), where the layer sits (a tap after the existing handlers), the conflict rule (params MAP wins; scripts always get every message), absolute and relative value handling with the three relative formats and format suggestion, learn flow with the window click (the K/E hit test does not depend on the hidden top row or the style), the page rows, `midimap.conf` and presets, the tests to write first, risks. One picture, a **stand-in** drawn with the real screen API in the real window (`docs/port/midi-map-previews/`).
+- **Finding:** a network MIDI link (RTP-MIDI) arrives as ALSA sequencer ports, not as an ordinary raw MIDI device; norns can only take it through the JACK MIDI input, where all sources are one merged device ("Verdandi JACK in"). So "device by name" only separates USB controllers; decision 1 in the plan.
+- **Not verified:** the Push 2 CC numbers and encoder format (vendor document not read), the network link, any real controller. PLAN.md Phase 9 added.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
