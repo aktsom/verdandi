@@ -235,6 +235,11 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 - Full `run_all.sh` from a clean environment (`env -i`, no test file edited during the run): 107 PASS, 0 known failures, 0 unexpected failures.
 - Not verified here: the owner's real keyboard on the laptop (HARDWARE-CHECKLIST has the two steps).
 
+## Text entry on the desktop: arrows, value keys, encoders' keys (installed 0.1~git20261030.3320.148910a2)
+- `docs/port/KNOWN-ISSUES.md` 18 lists what upstream's entry handles on the hardware and what the desktop lost: while an entry is open the hardware key mapping is off, arrows and PageUp/Down were ignored, the value keys (- and =) only jumped the selection. Fixed (computers only): LEFT/RIGHT = E2, UP/DOWN = E3, PageUp/Down = 5 steps of E2, Shift = 5 steps, the value keys step E2 with repeat when the entry would refuse their character (hex entry: both); a release never steps; every control redraws; typing, the 6 digit limit, hint and clean redraw unchanged. The on-screen encoders, K2/K3 and Alt-mapped keys already reached the entry in the headless model: I could not reproduce a failure there.
+- Tests: the entry section and the random events of `menu_stress_test.lua` (screen levels now compared too), `textentry_test.lua`.
+- Full `run_all.sh` from a clean environment: 107 PASS, 0 known failures, 0 unexpected failures. Not verified: the owner's real keyboard (HARDWARE-CHECKLIST).
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
