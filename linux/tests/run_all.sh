@@ -130,6 +130,7 @@ run "sc:scan-sc-paths (scripts whose sc files name the virtual home)" linux/test
 run "sc:launcher's sclang_conf.yaml (both Linux folders, the switches, an older conf written again with .old kept)" linux/tests/sc_conf_test.sh
 run "sc:SynthDef compatibility (mx_malone builds on 3.14, scoped by name, nothing leaks; 3.13.0 and 3.14.1)" linux/tests/sc_synthdef_compat_test.sh
 run "sc:the real nb_mxsynths mod in a headless norns on 3.14.1 (mx_malone builds, all 11 voices exist, the mod's files unchanged)" linux/tests/nb_mxsynths_test.sh
+run "box:C side (palette, pixel style, hidden row, fonts, sizes; the aluminium style byte for byte; the Mac build)" linux/tests/box_c_test.sh
 run "shell:stderr of a command is not part of what a script reads (sidecar_shell, desktop vs device build)" linux/tests/sidecar_stderr_test.sh
 run "shell:commands with the virtual home from scripts (os.capture, popen, execute, system_cmd, spaces, look-alikes, a download sequence, mx.samples)" linux/tests/script_shell_test.sh
 run "shell:scan-shell-paths (scripts whose shell commands name a norns path)" linux/tests/scan_shell_paths_test.sh

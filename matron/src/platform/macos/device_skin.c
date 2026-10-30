@@ -7,10 +7,23 @@
 #include <stdint.h>
 
 #include "device_skin.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "../linux/box_palette.h"
+#include "../linux/box_style.h"
+#endif
 
 typedef struct {
     double x, y;
 } pt_t;
+
+#ifdef NORNS_LINUX_DESKTOP
+// the look of the box (box_palette.h): see skin_set_look
+static int look_style = SKIN_STYLE_ALUMINIUM;
+static int look_shown = 1; // the page buttons are shown (the right-click item)
+static int look_muted = 0;  // for the hit test of the MUTE chip while the row is hidden
+static box_rgb_t look_col[BOX_PARTS];
+static int part_tinted[BOX_PARTS];
+#endif
 
 // the button row along the top: menu pages on the left, tools on the right
 typedef struct {
@@ -79,6 +92,41 @@ static const double button_y = 70, button_w = 70, button_h = 40;
 #define KNURLS 60
 #define KNURL_STEP (2 * M_PI / KNURLS / 3)
 
+#ifdef NORNS_LINUX_DESKTOP
+void skin_set_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font) {
+    const char *in[BOX_PARTS] = {box, keys, encoders, buttons, font};
+    look_style = style == SKIN_STYLE_PIXEL ? SKIN_STYLE_PIXEL : SKIN_STYLE_ALUMINIUM;
+    for (int i = 0; i < BOX_PARTS; i++) {
+        box_rgb_t c;
+        unsigned d = box_default_rgb[i];
+        if (in[i] == NULL || !box_parse_hex(in[i], &c)) {
+            c.r = (d >> 16) & 0xff;
+            c.g = (d >> 8) & 0xff;
+            c.b = d & 0xff;
+        }
+        look_col[i] = c;
+        part_tinted[i] = ((unsigned)c.r << 16 | (unsigned)c.g << 8 | c.b) != d;
+    }
+    box_style_set_colours(look_col);
+}
+
+void skin_set_buttons_shown(int shown) {
+    look_shown = shown != 0;
+}
+
+int skin_buttons_shown(void) {
+    return look_shown;
+}
+
+void skin_note_muted(int muted) {
+    look_muted = muted != 0;
+}
+
+int skin_look_style(void) {
+    return look_style;
+}
+#endif
+
 void skin_geom(int w, int h, skin_geom_t *g) {
     g->w = w;
     g->h = h;
@@ -120,8 +168,19 @@ static double dist(pt_t a, pt_t b) {
 }
 
 int skin_hit(const skin_geom_t *g, double x, double y) {
+#ifdef NORNS_LINUX_DESKTOP
+    if (look_style == SKIN_STYLE_PIXEL) {
+        return box_style_hit(g, x, y, look_shown, look_muted);
+    }
+#endif
     pt_t p = to_units(g, x, y);
     for (int i = 0; i < NBUTTONS; i++) {
+#ifdef NORNS_LINUX_DESKTOP
+        // the row hidden: no button is there, except the MUTE chip while muted
+        if (!look_shown && !(SKIN_PAGE1 + i == SKIN_MUTE && look_muted)) {
+            continue;
+        }
+#endif
         if (p.x >= buttons[i].x - 3 && p.x <= buttons[i].x + button_w + 3 && p.y >= button_y - 3 &&
             p.y <= button_y + button_h + 3) {
             return SKIN_PAGE1 + i;
@@ -172,6 +231,11 @@ int skin_oled_pixel(const skin_geom_t *g, double x, double y, int *ox, int *oy) 
 }
 
 int skin_nearest_enc(const skin_geom_t *g, double x, double y) {
+#ifdef NORNS_LINUX_DESKTOP
+    if (look_style == SKIN_STYLE_PIXEL) {
+        return box_style_nearest_enc(g, x, y);
+    }
+#endif
     pt_t p = to_units(g, x, y);
     int best = 0;
     for (int i = 1; i < 3; i++) {
@@ -213,6 +277,26 @@ static void stop(cairo_pattern_t *p, double at, const char *rgb, double a) {
                                       a);
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+// the five colours of the Linux box (docs/port/box-style-plan.md): a part whose colour is not its default is drawn with the original gradients remapped onto that colour (box_palette.c),
+// a part at its default is drawn by the original code, byte for byte
+
+static void stopt(cairo_pattern_t *p, double at, const char *rgb, double a, int part) {
+    if (!part_tinted[part]) {
+        stop(p, at, rgb, a);
+        return;
+    }
+    unsigned v = 0;
+    for (const char *c = rgb; *c; c++) {
+        v = v * 16 + (unsigned)(*c <= '9' ? *c - '0' : (*c | 0x20) - 'a' + 10);
+    }
+    box_rgb_t t = box_tint_stop(v, part, look_col[part]);
+    cairo_pattern_add_color_stop_rgba(p, at, t.r / 255.0, t.g / 255.0, t.b / 255.0, a);
+}
+#else
+#define stopt(p, at, rgb, a, part) stop(p, at, rgb, a)
+#endif
+
 // small deterministic noise for the brushed finish
 static uint32_t lcg(uint32_t *s) {
     *s = *s * 1664525u + 1013904223u;
@@ -231,8 +315,8 @@ static void draw_box(cairo_t *cr, const skin_geom_t *g) {
 
     rounded_rect(cr, 0, 0, SKIN_W, SKIN_H, r);
     cairo_pattern_t *p = cairo_pattern_create_linear(0, 0, 0, SKIN_H);
-    stop(p, 0, "dfe1e4", 1);
-    stop(p, 1, "c4c7cb", 1);
+    stopt(p, 0, "dfe1e4", 1, BOX_PART_BOX);
+    stopt(p, 1, "c4c7cb", 1, BOX_PART_BOX);
     cairo_set_source(cr, p);
     cairo_fill_preserve(cr);
     cairo_pattern_destroy(p);
@@ -308,8 +392,8 @@ static void draw_label(cairo_t *cr, pt_t c, double r, const char *text) {
 static void draw_washer(cairo_t *cr, pt_t c) {
     circle(cr, c.x, c.y, enc_r);
     cairo_pattern_t *p = cairo_pattern_create_linear(0, c.y - enc_r, 0, c.y + enc_r);
-    stop(p, 0, "a3a6ab", 1);
-    stop(p, 1, "d3d5d8", 1);
+    stopt(p, 0, "a3a6ab", 1, BOX_PART_ENCODERS);
+    stopt(p, 1, "d3d5d8", 1, BOX_PART_ENCODERS);
     cairo_set_source(cr, p);
     cairo_fill(cr);
     cairo_pattern_destroy(p);
@@ -320,6 +404,12 @@ static void draw_washer(cairo_t *cr, pt_t c) {
 }
 
 void skin_draw_static(cairo_t *cr, const skin_geom_t *g) {
+#ifdef NORNS_LINUX_DESKTOP
+    if (look_style == SKIN_STYLE_PIXEL) {
+        box_style_draw_static(cr, g);
+        return;
+    }
+#endif
     cairo_save(cr);
     hex(cr, "1a1a1c", 1);
     cairo_paint(cr);
@@ -336,8 +426,8 @@ void skin_draw_static(cairo_t *cr, const skin_geom_t *g) {
         // key well
         circle(cr, key_pos[i].x, key_pos[i].y, key_r);
         cairo_pattern_t *p = cairo_pattern_create_linear(0, key_pos[i].y - key_r, 0, key_pos[i].y + key_r);
-        stop(p, 0, "8e9196", 1);
-        stop(p, 1, "e3e5e8", 1);
+        stopt(p, 0, "8e9196", 1, BOX_PART_BOX);
+        stopt(p, 1, "e3e5e8", 1, BOX_PART_BOX);
         cairo_set_source(cr, p);
         cairo_fill(cr);
         cairo_pattern_destroy(p);
@@ -360,8 +450,8 @@ static void draw_key(cairo_t *cr, pt_t c, int down, int hover) {
     circle(cr, c.x, c.y + dy, r);
     cairo_pattern_t *p = down ? cairo_pattern_create_radial(c.x, c.y + dy + 6, 2, c.x, c.y + dy, r)
                               : cairo_pattern_create_radial(c.x - 7, c.y - 9, 2, c.x, c.y, r);
-    stop(p, 0, down ? "2c2d30" : "5b5e63", 1);
-    stop(p, 1, down ? "0e0e10" : "26272a", 1);
+    stopt(p, 0, down ? "2c2d30" : "5b5e63", 1, BOX_PART_KEYS);
+    stopt(p, 1, down ? "0e0e10" : "26272a", 1, BOX_PART_KEYS);
     cairo_set_source(cr, p);
     cairo_fill(cr);
     cairo_pattern_destroy(p);
@@ -398,8 +488,8 @@ static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
     // knurled side
     circle(cr, c.x, c.y, r);
     cairo_pattern_t *p = cairo_pattern_create_linear(0, c.y - r, 0, c.y + r);
-    stop(p, 0, "f1f2f4", 1);
-    stop(p, 1, "8f9399", 1);
+    stopt(p, 0, "f1f2f4", 1, BOX_PART_ENCODERS);
+    stopt(p, 1, "8f9399", 1, BOX_PART_ENCODERS);
     cairo_set_source(cr, p);
     cairo_fill(cr);
     cairo_pattern_destroy(p);
@@ -415,8 +505,8 @@ static void draw_knob(cairo_t *cr, pt_t c, int ticks, int hover) {
     // top face
     circle(cr, c.x, c.y, top);
     p = cairo_pattern_create_radial(c.x - 8, c.y - 10, 1, c.x, c.y, top + 4);
-    stop(p, 0, "fbfbfc", 1);
-    stop(p, 1, "c0c3c8", 1);
+    stopt(p, 0, "fbfbfc", 1, BOX_PART_ENCODERS);
+    stopt(p, 1, "c0c3c8", 1, BOX_PART_ENCODERS);
     cairo_set_source(cr, p);
     cairo_fill(cr);
     cairo_pattern_destroy(p);
@@ -478,8 +568,8 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     // well
     rounded_rect(cr, x - 2.5, y - 2.5, button_w + 5, button_h + 5, 10);
     cairo_pattern_t *p = cairo_pattern_create_linear(0, y - 2.5, 0, y + button_h + 2.5);
-    stop(p, 0, "8e9196", 1);
-    stop(p, 1, "e3e5e8", 1);
+    stopt(p, 0, "8e9196", 1, BOX_PART_BOX);
+    stopt(p, 1, "e3e5e8", 1, BOX_PART_BOX);
     cairo_set_source(cr, p);
     cairo_fill(cr);
     cairo_pattern_destroy(p);
@@ -487,8 +577,8 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     // face
     rounded_rect(cr, x, y + dy, button_w, button_h, 8);
     p = cairo_pattern_create_linear(0, y + dy, 0, y + dy + button_h);
-    stop(p, 0, down ? "232427" : "3d3f43", 1);
-    stop(p, 1, down ? "17181a" : "232427", 1);
+    stopt(p, 0, down ? "232427" : "3d3f43", 1, BOX_PART_BUTTONS);
+    stopt(p, 1, down ? "17181a" : "232427", 1, BOX_PART_BUTTONS);
     cairo_set_source(cr, p);
     cairo_fill(cr);
     cairo_pattern_destroy(p);
@@ -536,6 +626,11 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
         size -= 0.5;
     }
     cairo_move_to(cr, area + (area_w - te.width) / 2 - te.x_bearing, mid - te.height / 2 - te.y_bearing);
+#ifdef NORNS_LINUX_DESKTOP
+    if (part_tinted[BOX_PART_FONT]) {
+        cairo_set_source_rgb(cr, look_col[BOX_PART_FONT].r / 255.0, look_col[BOX_PART_FONT].g / 255.0, look_col[BOX_PART_FONT].b / 255.0);
+    } else
+#endif
     hex(cr, lit ? "ffffff" : "c3c6cb", 1);
     cairo_show_text(cr, label);
 }
@@ -712,10 +807,22 @@ void skin_draw_placeholder(cairo_t *cr, const skin_geom_t *g, int hover) {
 #endif
 
 void skin_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st) {
+#ifdef NORNS_LINUX_DESKTOP
+    look_muted = st->out_muted != 0;
+    if (look_style == SKIN_STYLE_PIXEL) {
+        box_style_draw_controls(cr, g, st, look_shown);
+        return;
+    }
+#endif
     cairo_save(cr);
     cairo_translate(cr, g->ox, g->oy);
     cairo_scale(cr, g->s, g->s);
     for (int i = 0; i < NBUTTONS; i++) {
+#ifdef NORNS_LINUX_DESKTOP
+        if (!look_shown && !(SKIN_PAGE1 + i == SKIN_MUTE && st->out_muted)) {
+            continue; // the row is hidden: only the MUTE chip stays while muted
+        }
+#endif
         draw_button(cr, i, st);
     }
     if (st->toast != NULL && st->toast[0] != '\0') {

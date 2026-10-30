@@ -22,13 +22,14 @@ SETS = {  # box, keys, encoders, buttons, font
     "DARK":   ("2c2e33", "444853", "5d6270", "3a3d45", "e4e6ea"),
     "LIGHT":  ("d8d5ce", "f4f2ed", "b9b5ab", "ebe8e1", "34343a"),
     "COLOUR": ("2b6f73", "f2b63d", "e9dfc8", "1d4a4d", "f7f0de"),
+    "MAC":    ("d1d4d8", "404246", "dcdde0", "303135", "c3c6cb"),   # the Mac look: the colours of the aluminium box as the Mac app draws it (box_palette.c)
 }
 
 # ---------------------------------------------------------------- the pixel layout table, in layout units (plan section 2.2); one block = 2 units
 BOX_W, BOX_H, BLOCK = 960, 630, 2
 BTN = [("MIX", 36), ("TAPE", 112), ("HOME", 188), ("PARAMS", 264), ("MIC", 359.3333), ("GRID", 435.3333), ("ARC", 511.3333), ("KEYS", 587.3333),
        ("MAIDEN", 682.6667), ("MANUAL", 758.6667), ("MUTE", 854)]
-BTN_Y, BTN_W, BTN_H = 36, 70, 28
+BTN_Y, BTN_W, BTN_H = 36, 70, 40   # the owner chose 40 (answer 4 of section 5)
 KEY_C = [(100, 188), (734, 530), (864, 530)]
 KEY_S = 112
 ENC_C = [(240, 188), (734, 376), (864, 376)]
@@ -158,24 +159,29 @@ def screen(lines, sel=None, hint="", marker_col=None, title=None, scroll=None, b
 def save(im, name):
     p = os.path.join(tempfile.gettempdir(), name); im.save(p); return p
 
-page_top = screen([("STYLE", "ALUMINIUM"), ("PRESET", "DARK"), ("BOX", "#2C2E33"), ("KEYS", "#444853"), ("ENCODERS", "#5D6270"), ("BUTTONS", "#3A3D45")], sel=0,
-                  hint="E2 row  E3 change  (pixel only)", scroll=(0, 9, 6))
-page_top_px = screen([("STYLE", "PIXEL"), ("PRESET", "DARK"), ("BOX", "#2C2E33"), ("KEYS", "#444853"), ("ENCODERS", "#5D6270"), ("BUTTONS", "#3A3D45")], sel=1,
-                     hint="E2 row  E3 change  K3 list", scroll=(0, 9, 6))
-preset_list_light = screen([("DARK", ""), ("LIGHT", "in use"), ("COLOUR", ""), ("- MY PRESETS -", ""), ("* BARN DOOR", ""), ("* SUNDAY", "")], sel=1,
-                           hint="E2 pick  K3 use  K2 back", scroll=(0, 8, 6))
-page_end_colour = screen([("ENCODERS", "#E9DFC8"), ("BUTTONS", "#1D4A4D"), ("FONT", "#F7F0DE"), ("SAVE", "name..."), ("DELETE", "* BARN DOOR")], sel=3,
-                         hint="K3 save these colours", scroll=(4, 9, 6))
-paths = {k: save(v, "bp_%s.png" % k) for k, v in dict(top=page_top, top_px=page_top_px, list_light=preset_list_light, end_colour=page_end_colour).items()}
+def main():
+    page_top = screen([("STYLE", "ALUMINIUM"), ("PRESET", "DARK"), ("BOX", "#2C2E33"), ("KEYS", "#444853"), ("ENCODERS", "#5D6270"), ("BUTTONS", "#3A3D45")], sel=0,
+                      hint="E2 row  E3 change  (pixel only)", scroll=(0, 9, 6))
+    page_top_px = screen([("STYLE", "PIXEL"), ("PRESET", "DARK"), ("BOX", "#2C2E33"), ("KEYS", "#444853"), ("ENCODERS", "#5D6270"), ("BUTTONS", "#3A3D45")], sel=1,
+                         hint="E2 row  E3 change  K3 list", scroll=(0, 9, 6))
+    preset_list_light = screen([("DARK", ""), ("LIGHT", "in use"), ("COLOUR", ""), ("- MY PRESETS -", ""), ("* BARN DOOR", ""), ("* SUNDAY", "")], sel=1,
+                               hint="E2 pick  K3 use  K2 back", scroll=(0, 8, 6))
+    page_end_colour = screen([("ENCODERS", "#E9DFC8"), ("BUTTONS", "#1D4A4D"), ("FONT", "#F7F0DE"), ("SAVE", "name..."), ("DELETE", "* BARN DOOR")], sel=3,
+                             hint="K3 save these colours", scroll=(4, 9, 6))
+    paths = {k: save(v, "bp_%s.png" % k) for k, v in dict(top=page_top, top_px=page_top_px, list_light=preset_list_light, end_colour=page_end_colour).items()}
 
-def sheet(left, right, path):
-    w = left.width + right.width + 30
-    s = Image.new("RGB", (w, max(left.height, right.height) + 20), (24, 24, 26)); s.paste(left, (10, 10)); s.paste(right, (left.width + 20, 10)); s.save(path)
+    def sheet(left, right, path):
+        w = left.width + right.width + 30
+        s = Image.new("RGB", (w, max(left.height, right.height) + 20), (24, 24, 26)); s.paste(left, (10, 10)); s.paste(right, (left.width + 20, 10)); s.save(path)
 
-alu = render_aluminium(paths["top"])
-pic1 = render_pixel(SETS["DARK"], paths["top_px"], lit=("PARAMS", "MIC"))
-sheet(alu, pic1, os.path.join(OUT, "box-style-dark-vs-aluminium.png"))
-pic_light = render_pixel(SETS["LIGHT"], paths["list_light"], lit=("KEYS",), hover="E2")
-pic_colour = render_pixel(SETS["COLOUR"], paths["end_colour"], lit=("MIC", "MUTE"), down="K3")
-sheet(pic_light, pic_colour, os.path.join(OUT, "box-style-light-and-colour.png"))
-print("ok")
+    alu = render_aluminium(paths["top"])
+    pic1 = render_pixel(SETS["DARK"], paths["top_px"], lit=("PARAMS", "MIC"))
+    sheet(alu, pic1, os.path.join(OUT, "box-style-dark-vs-aluminium.png"))
+    pic_light = render_pixel(SETS["LIGHT"], paths["list_light"], lit=("KEYS",), hover="E2")
+    pic_colour = render_pixel(SETS["COLOUR"], paths["end_colour"], lit=("MIC", "MUTE"), down="K3")
+    sheet(pic_light, pic_colour, os.path.join(OUT, "box-style-light-and-colour.png"))
+    print("ok")
+
+
+if __name__ == '__main__':
+    main()

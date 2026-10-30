@@ -104,6 +104,15 @@ extern double skin_fader_value(const skin_geom_t *g, double y);
 #endif
 
 #ifdef NORNS_LINUX_DESKTOP
+// the look of the box (docs/port/box-style-plan.md): the style (the shape language) and the five colours, hex "RRGGBB" or "RGB"; NULL or an invalid colour = that part's default. a colour
+// that is not the default tints the aluminium style (box_palette.c) and is the palette of the pixel style; with all five at their defaults the aluminium drawing is the original
+enum { SKIN_STYLE_ALUMINIUM = 0, SKIN_STYLE_PIXEL = 1 };
+extern void skin_set_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font);
+extern int skin_look_style(void);
+// the page buttons shown or hidden (the right-click item): hidden, they are not drawn and have no hit area, except the MUTE chip while muted (skin_note_muted: draw_controls does it by itself)
+extern void skin_set_buttons_shown(int shown);
+extern int skin_buttons_shown(void);
+extern void skin_note_muted(int muted);
 // the bezel (the recess the screen sits in) under device pixel x/y: where the placeholder is
 extern int skin_in_bezel(const skin_geom_t *g, double x, double y);
 // the screen's place while the screen is in its own window: a dark rectangle with one plain sentence
