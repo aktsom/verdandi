@@ -1,0 +1,24 @@
+== no script, idle (15 s window)
+norns       pid 435    threads 59  RSS  424196 kB  PSS  311055 kB  private  251640 kB  CPU   6.7 %
+sclang      pid 557    threads 31  RSS  218112 kB  PSS  158740 kB  private  126960 kB  CPU   0.1 %
+scsynth     pid 744    threads 8   RSS  137364 kB  PSS   59438 kB  private   21368 kB  CPU   1.1 %
+jackd       pid 359    threads 4   RSS  131140 kB  PSS   56307 kB  private   20304 kB  CPU   0.3 %
+ws-wrapper  pid 536    threads 21  RSS    3060 kB  PSS     832 kB  private     420 kB  CPU   0.0 %
+Xvfb        pid 257    threads 1   RSS   62424 kB  PSS   32074 kB  private   18152 kB  CPU   0.7 %
+TOTAL (without Xvfb)  RSS 913872 kB  PSS 586372 kB  private 420692 kB  CPU 8.2 % of one core
+== script loaded (PolyPerc 4 notes a second, softcut loop) (20 s window)
+norns       pid 435    threads 58  RSS  424276 kB  PSS  311137 kB  private  251724 kB  CPU   6.6 %
+sclang      pid 557    threads 27  RSS  218384 kB  PSS  159011 kB  private  127232 kB  CPU   0.2 %
+scsynth     pid 744    threads 8   RSS  137364 kB  PSS   59437 kB  private   21368 kB  CPU   1.4 %
+jackd       pid 359    threads 4   RSS  131140 kB  PSS   56308 kB  private   20304 kB  CPU   0.4 %
+ws-wrapper  pid 536    threads 21  RSS    3060 kB  PSS     832 kB  private     420 kB  CPU   0.0 %
+Xvfb        pid 257    threads 1   RSS   62424 kB  PSS   32074 kB  private   18152 kB  CPU   0.5 %
+TOTAL (without Xvfb)  RSS 914224 kB  PSS 586725 kB  private 421048 kB  CPU 8.6 % of one core
+== heavy script (PolySub, 4 notes a second with a 4 s release, six softcut voices) (20 s window)
+norns       pid 1177   threads 59  RSS  425116 kB  PSS  310727 kB  private  251072 kB  CPU  26.9 %
+sclang      pid 1290   threads 27  RSS  221036 kB  PSS  159937 kB  private  127616 kB  CPU   0.1 %
+scsynth     pid 1340   threads 8   RSS  137316 kB  PSS   59286 kB  private   21152 kB  CPU   1.1 %
+jackd       pid 1145   threads 4   RSS  131208 kB  PSS   56303 kB  private   20276 kB  CPU   0.4 %
+ws-wrapper  pid 1269   threads 21  RSS    3084 kB  PSS     834 kB  private     420 kB  CPU   0.0 %
+Xvfb        pid 1049   threads 1   RSS   65304 kB  PSS   33035 kB  private   18192 kB  CPU   0.7 %
+TOTAL (without Xvfb)  RSS 917760 kB  PSS 587087 kB  private 420536 kB  CPU 28.5 % of one core
