@@ -481,6 +481,13 @@ if command -v jackd > /dev/null; then
     for sc in conf env; do
         GLOG="$T/midilink-$sc.log"
         MIDI_SCENARIO=$sc "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
+        # (conf: the cut is only visible until the 2 s timer repairs it; on a loaded machine the snapshot can come after the repair: the scenario is run again, at most twice, when the cut was not seen)
+        if [ $sc = conf ]; then
+            for _retry in 1 2; do
+                peers "$GLOG.cut" Verdandi:midi_in | grep -qx "Fake DAW:out" || break
+                MIDI_SCENARIO=$sc "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
+            done
+        fi
         midilink_ok() {
             local bad=0
             has() { peers "$GLOG.$1" Verdandi:midi_in | grep -qx "$2"; }
