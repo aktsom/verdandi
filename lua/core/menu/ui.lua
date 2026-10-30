@@ -3,6 +3,8 @@
 -- docs/port/ui-settings-plan.md. E2 row, E3 value, K3 on HEX opens the text entry that also names a pset (lib/textentry), K2 back.
 
 local ui = require 'core/ui_settings'
+local keyboard = require 'core/keyboard'
+local clipboard = require 'core/clipboard'
 
 local ROWS = {"BRIGHTNESS", "COLOUR", "CONTRAST", "HEX"}
 
@@ -29,21 +31,24 @@ local function key_raw(n, z)
   if n == 2 then
     _menu.set_page("SYSTEM")
   elseif n == 3 and ROWS[m.pos] == "HEX" then
-    local textentry = require 'textentry'
     m.msg = nil
-    textentry.enter(m.hex_done, ui.state.custom and ("#" .. ui.state.custom) or "", "HEX (3 or 6 digits):", ui.hex_hint, {accept = ui.hex_accept, replace = true})
+    m.open_picker()
   end
 end
 
--- the text entry is done: text is nil on cancel
-m.hex_done = function(text)
-  -- after the text entry the page must have its keys again (see core/menu/box.lua)
-  if norns.menu.status() and norns.menu.get_key() ~= m.key then norns.menu.set(m.enc, m.key, m.redraw, m.refresh) end
-  if text ~= nil then
-    local ok, why = ui.set_custom(text)
-    m.msg = (not ok) and ("bad hex: " .. why) or nil
-  end
-  _menu.redraw()
+-- K3 on HEX: the colour picker, live on the screen until K3 (keep and save) or K2 (give the old colour back)
+function m.open_picker()
+  require('core/menu/picker').open({
+    label = "SCREEN HEX",
+    value = ui.state.custom,
+    preview = function(hex) ui.preview_custom(hex) end,
+    restore = function() ui.apply() end,
+    ok = function(hex)
+      local ok, why = ui.set_custom(hex)
+      m.msg = (not ok) and ("bad hex: " .. tostring(why)) or nil
+    end,
+    return_page = "UI",
+  })
 end
 
 local function enc_raw(n, delta)
@@ -82,6 +87,43 @@ end
 
 -- the handlers the menu calls: every key press and encoder turn ends with a redraw, and an error in a handler is logged (one line in logs/norns.log) and leaves the page with its own handlers
 local function dbg(s) print("SCREEN page: " .. s) end
+
+-- Ctrl+C copies the custom colour of the HEX row, Ctrl+V pastes one (3 or 6 digits, with or without #) and keeps it at once; everything else is the menu's
+local function keycode_raw(c, value)
+  if not (keyboard.ctrl() and (c == "C" or c == "V")) or ROWS[m.pos] ~= "HEX" then return false end
+  if value ~= 1 then return true end
+  if c == "C" then
+    if ui.state.custom then
+      local text = "#" .. ui.state.custom
+      m.msg = clipboard.copy(text) and ("copied " .. text) or "no clipboard"
+    else
+      m.msg = "no colour set yet"
+    end
+  else
+    m.msg = "pasting.."
+    clipboard.paste_colour(function(hex, why)
+      if _menu.page ~= "UI" then return end -- the answer came after the page was left (the picker is open, or another page): it is not for this page
+      if hex then
+        local ok, w = ui.set_custom(hex)
+        m.msg = ok and ("pasted #" .. hex) or ("bad hex: " .. tostring(w))
+      else
+        m.msg = why
+      end
+      if _menu.page == "UI" and norns.menu.status() then _menu.redraw() end
+    end)
+  end
+  return true
+end
+
+m.keycode = function(c, value)
+  local ok, used = pcall(keycode_raw, c, value)
+  if not ok then
+    dbg("keycode " .. tostring(c) .. " raised an error: " .. tostring(used))
+    used = false
+  end
+  if used and norns.menu.status() then _menu.redraw() end
+  return used
+end
 local function recover(what, err)
   dbg(what .. " raised an error: " .. tostring(err))
   m.pos = util.clamp(m.pos, 1, #ROWS)

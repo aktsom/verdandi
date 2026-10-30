@@ -201,7 +201,7 @@ terminal output and `~/verdandi-home/logs/jackd.log` and `logs/sclang.log` if pr
       MAIDEN MANUAL MUTE across the top, the screen at its lower left, K1 E1 above it, E2 E3 K2 K3 to its right; no OUT slider and no K/E text); the black frame around the screen has the Mac's proportions; it resizes without breaking (the screen scales with the window: crisp at 75/100/125/150 percent, very slightly soft in between; smallest size is half); closing it ends norns.
 - [ ] With the script above loaded, or from HOME > SELECT, the screen shows the script's picture.
 - [ ] It looks right on your screen scale (HiDPI) and in X11 *and* Wayland if you can try both.
-- [ ] **SYSTEM > UI** (HOME > SYSTEM > UI): BRIGHTNESS, COLOUR (white, yellow, pink, custom hex typed on the keyboard), CONTRAST (0 = the old linear look, higher = lighter dim greys). The detailed list is in `HARDWARE-CHECKLIST.md`, "SYSTEM > UI". In short: the Cheat Codes 2 loops page at CONTRAST 0, 0.3 and 0.5 (which is closest to your norns?), one colour change, one custom hex colour, a low brightness.
+- [ ] **SYSTEM > SCREEN** (HOME > SYSTEM > SCREEN, was UI): BRIGHTNESS, COLOUR (white, yellow, pink, custom hex typed on the keyboard), CONTRAST (0 = the old linear look, higher = lighter dim greys). The detailed list is in `HARDWARE-CHECKLIST.md`, "SYSTEM > SCREEN". In short: the Cheat Codes 2 loops page at CONTRAST 0, 0.3 and 0.5 (which is closest to your norns?), one colour change, one custom hex colour, a low brightness.
 
 **Keys and knobs**
 - [ ] Click K1-K3 (they light and norns reacts); drag a knob; scroll over E1-E3.
@@ -296,7 +296,7 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - [ ] With the screen window focused, use the **keyboard only**: 1 2 3, Q W A S Z X, arrows, F1-F5, F6 (grid window), Ctrl+Shift+S (a screenshot appears), Ctrl+O. They do what they do in the main window. Clicking and scrolling over the picture does nothing.
 - [ ] Resize the screen window by dragging its edge: the picture has a black margin round it like the box's bezel, at every size and in fullscreen (the text never touches the window edge). At exactly 556 x 294, 695 x 367, 834 x 440, 1112 x 587 (4x, 5x, 6x, 8x) the pixels are flat squares; in between they stay sharp (look closely at a letter), with black bars when the window is not that shape. Full screen 1920 x 1080 is in between (13.8x).
 - [ ] F11 in the screen window: fullscreen on your display, the cursor hides after 2 seconds, F11 or a double click returns to the same size and place. Shift+F11: the title bar goes away (drag the picture to move it, drag an edge to resize); Shift+F11 brings it back.
-- [ ] SYSTEM > UI: change brightness, colour, contrast: both windows change together. Record a GIF and take a screenshot from each mode: the same.
+- [ ] SYSTEM > SCREEN: change brightness, colour, contrast: both windows change together. Record a GIF and take a screenshot from each mode: the same.
 - [ ] F10 in the screen window: the main window comes forward with its menu. Close the **screen window** with its close button: the screen is back in the main window and norns keeps running. Detach again, close the **main window**: norns quits.
 - [ ] Detach, move and resize the screen window, quit with Ctrl+Q, start again: it comes back detached at the same place and size. `cat ~/Verdandi/screen-window.conf` shows what is kept.
 - [ ] Open the virtual grid, arc and keyboard windows with the screen detached, press cells, play a note, use your real grid or MIDI keyboard: nothing changes. Minimise the screen window and the main window in turn: the other still works.
@@ -315,8 +315,14 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - [ ] Quit Verdandi with `kill -9 $(pgrep -x norns)` and start it again: it starts normally.
 - [ ] Look in `~/Verdandi/logs`: a second start must not have made a new `norns.1.log` (it used to rotate the running instance's logs).
 
+## The colour picker (docs/port/colour-picker-plan.md)
+- [ ] THEME > a colour row (or SCREEN > HEX), K3: the norns screen shows HUE, SATURATION, BRIGHTNESS and HEX; the box (keys, encoders, buttons, font; or the screen) changes live as you move a row; K3 keeps and saves, K2 gives the old colour back (try it, and check the box goes back).
+- [ ] Keyboard: UP/DOWN choose the row, LEFT/RIGHT and the keys right of 0 change it (hold: it repeats; let go: it stops), Shift is bigger, Ctrl is finer, C centres, H types a code, R resets, F1 cancels.
+- [ ] Ctrl+C on a colour row or in the picker copies `#RRGGBB`; paste it into another program. Copy a code in another program (`#3B6EA8`, `3b6`, `336699`) and press Ctrl+V in the picker or on a colour row: the colour is applied. Copy something else (a sentence, a very long text, an image): a short message and no change. Tell me if it fails on your session (X11 or Wayland).
+- [ ] Ctrl+O, Ctrl+Q, Ctrl+M and Ctrl+Shift+S still do what they did.
+
 ## The look of the box (docs/port/box-style-plan.md)
-- **SYSTEM > BOX** (HOME > SYSTEM, below UI): STYLE (aluminium is the default; pixel is the new one; it changes only the style), PRESET (DARK, LIGHT, COLOUR, MAC, then your own marked with `*`; a look is the five colours and never changes the style), the five colours BOX, KEYS, ENCODERS, BUTTONS, FONT (each a hex code; the same text entry as UI's HEX), SAVE and, for one of your own looks, DELETE. The colours work for **both** styles: in aluminium they tint the brushed metal.
+- **SYSTEM > THEME** (HOME > SYSTEM, below SCREEN; was BOX): STYLE (aluminium is the default; pixel is the new one; it changes only the style), PRESET (DARK, LIGHT, COLOUR, MAC, then your own marked with `*`; a look is the five colours and never changes the style), the five colours BOX, KEYS, ENCODERS, BUTTONS, FONT (each opens the colour picker, see below), SAVE and, for one of your own looks, DELETE. The colours work for **both** styles: in aluminium they tint the brushed metal.
 - **Show the page buttons** in the right-click menu hides the row above the device (both styles); F1-F4, F5, F6-F8 keep working; "Open maiden" and "Open the manual" are menu items now; **Ctrl+M** mutes (a small MUTE button stays while muted).
 - Your own looks are files: `~/Verdandi/box-presets/<name>.box` (copy one to another computer and it appears in the list). The settings are `~/Verdandi/box.conf`. `verdandi scan-fkeys` also reports scripts that test `keyboard.ctrl()` and name the letter M (what Ctrl+M would take from them).
 

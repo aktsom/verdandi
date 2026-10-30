@@ -68,7 +68,49 @@ local function navigate(c, value)
   return false
 end
 
+-- computers, an entry opened with opts.clip = "colour" (the picker's hex entry): Ctrl+C copies the code (when the text is a colour) and Ctrl+V pastes one (3 or 6 digits, with or without #)
+-- into the text; a clipboard that is empty, too long, binary or not a colour changes nothing and says so on the hint line. these two never type a character
+local function clip_keys(c, value)
+  if not desktop or not te.active or te.clip ~= "colour" or not keyboard.ctrl() or (c ~= "C" and c ~= "V") then
+    return false
+  end
+  if value ~= 1 then
+    return true
+  end
+  local clipboard = require 'core/clipboard'
+  local colour = require 'core/colour'
+  if c == "C" then
+    local hex = colour.hex(te.txt)
+    if hex == nil then
+      te.warn = "not a colour yet"
+    else
+      te.warn = clipboard.copy("#" .. hex) and ("copied #" .. hex) or "no clipboard"
+    end
+    te.redraw()
+  else
+    te.warn = "pasting.."
+    clipboard.paste_colour(function(hex, why)
+      if not te.active then return end
+      if hex then
+        te.txt = "#" .. hex
+        te.fresh = false
+        te.row = 1
+        te.delok = 1
+        te.warn = "pasted #" .. hex
+      else
+        te.warn = why
+      end
+      te.redraw()
+    end)
+    te.redraw()
+  end
+  return true
+end
+
 local function keycode(c,value)
+  if clip_keys(c, value) then
+    return
+  end
   if navigate(c, value) then
     return
   end
@@ -90,6 +132,9 @@ local function keycode(c,value)
 end
 
 local function keychar(a)
+  if desktop and te.clip == "colour" and keyboard.ctrl() then
+    return -- Ctrl+C and Ctrl+V are keys of the entry, not letters
+  end
   if desktop and te.skip_char then
     te.skip_char = false -- this character was a value key: it has stepped the selection already
     return
@@ -115,6 +160,7 @@ te.enter = function(callback, default, heading, check, opts)
   te.active = true
   te.accept = desktop and opts and opts.accept or nil
   te.refuse = desktop and opts and opts.refuse or nil
+  te.clip = desktop and opts and opts.clip or nil
   te.fresh = desktop and opts and opts.replace and default ~= nil and default ~= "" or false
   te.txt = default or ""
   te.heading = heading or ""

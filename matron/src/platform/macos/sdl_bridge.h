@@ -62,6 +62,10 @@ extern void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, d
 extern void sdl_bridge_set_file_dialog(int on);
 // any thread, does not block: the look of the box (SYSTEM > BOX, docs/port/box-style-plan.md): style 0 aluminium / 1 pixel, the five colours as "RRGGBB", and whether the page buttons are shown
 extern void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font, int show_buttons);
+// any thread, does not block: the system clipboard (docs/port/colour-picker-plan.md). set: the text goes to the clipboard; request: the window reads it (at most 64 characters, see clip_text.h)
+// and answers later with _norns.clipboard_text(text, status) through the event queue
+extern void sdl_bridge_clipboard_set(const char *text);
+extern void sdl_bridge_clipboard_request(void);
 #endif
 
 #ifdef __cplusplus

@@ -234,6 +234,15 @@ function M.apply()
   if _norns.ui_file_dialog ~= nil then _norns.ui_file_dialog(M.state.file_dialog == true) end -- the tick in the window's menu
 end
 
+--- the colour picker: show one custom colour on the screen without storing or saving anything; restore with M.apply()
+function M.preview_custom(text)
+  if _norns == nil or _norns.ui_look == nil then return false end
+  local r, g, b = M.parse_hex(text)
+  if r == nil then return false end
+  _norns.ui_look(M.state.brightness, r, g, b, M.gamma_of(M.state.contrast))
+  return true
+end
+
 --- at start: read the file and apply it
 function M.load_and_apply()
   if _norns == nil or _norns.ui_look == nil then return end

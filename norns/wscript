@@ -213,6 +213,7 @@ def build(bld):
             '../matron/src/platform/linux/menu_skin.c',
             '../matron/src/platform/linux/box_palette.c',
             '../matron/src/platform/linux/box_style.c',
+            '../matron/src/platform/linux/clip_text.c',
             '../matron/src/platform/linux/screen_window.cc',
             '../matron/src/platform/linux/screen_window_conf.c',
             '../matron/src/platform/linux/screen_window_geom.c',

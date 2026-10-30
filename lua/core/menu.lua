@@ -591,9 +591,9 @@ function _menu.keycode(c,value)
   end
 
   -- if a sub-menu defines its own handler, it takes precedence...
+  -- (a handler that answers false did not want the key: the default bindings below are used for it; the Linux pages THEME, SCREEN and PICKER do this)
   if _menu.keyboardcode then
-    _menu.keyboardcode(c,value)
-    return
+    if _menu.keyboardcode(c,value) ~= false then return end
   end
 
   -- ... otherwise we use those default bindings in most places
@@ -695,8 +695,12 @@ m["RESET"] = require 'core/menu/reset'
 m["AUDIO"] = require 'core/menu/audio'
 -- the look of the screen (brightness, colour, greys): computers only (docs/port/ui-settings-plan.md)
 if os.getenv("NORNS_PLATFORM") ~= nil then
-  m["UI"] = require 'core/menu/ui'
-  m["BOX"] = require 'core/menu/box' -- the look of the box (docs/port/box-style-plan.md)
+  m["UI"] = require 'core/menu/ui' -- shown as SCREEN (docs/port/colour-picker-plan.md: the visible names are SCREEN and THEME, the ids and the files keep their names)
+  m["BOX"] = require 'core/menu/box' -- shown as THEME: the look of the box (docs/port/box-style-plan.md)
+  m["SCREEN"] = m["UI"]
+  m["THEME"] = m["BOX"]
+  m["PICKER"] = require 'core/menu/picker' -- the colour picker, opened by K3 on a hex row (docs/port/colour-picker-plan.md)
+  require 'core/clipboard' -- the window's answer to Ctrl+V (_norns.clipboard_text)
   m["CLEANUP"] = require 'core/menu/cleanup' -- docs/port/clean-layout.md
   require('core/ui_settings').load_and_apply() -- ui.conf, once at start (does nothing without _norns.ui_look)
   require('core/box_settings').load_and_apply() -- box.conf, once at start (does nothing without _norns.box_look)

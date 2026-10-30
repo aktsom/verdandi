@@ -237,10 +237,19 @@ keyboard.clear()
 page.init()
 page.enc(2, 1); page.enc(2, 1); page.enc(2, 1) -- HEX row (4th)
 calls = {}
-page.key(3, 1)
-check(te_kbd.char ~= nil and te_kbd.code ~= nil, "K3 on HEX opens the text entry (the keyboard handlers are set)")
+-- K3 on HEX opens the colour picker; its HEX row (K3) opens the text entry. K3 on another row of the picker keeps the colour, K2 gives the old one back
+local picker = require 'core/menu/picker'
+local function open_entry()
+  page.key(3, 1)
+  picker.init() -- what the menu's set_page does
+  picker.enc(2, 3)
+  picker.key(3, 1)
+end
+local function keep() picker.enc(2, -3) picker.key(3, 1) end
+open_entry()
+check(te_kbd.char ~= nil and te_kbd.code ~= nil, "K3 on HEX, then the picker's HEX row, opens the text entry (the keyboard handlers are set)")
 check(textentry.heading:find("HEX", 1, true) ~= nil, "the heading says HEX: " .. tostring(textentry.heading))
-check(textentry.txt == "", "no custom colour yet: the entry starts empty")
+check(textentry.txt == "#408080", "no custom colour yet: the picker is at the middle and the entry starts with it: " .. tostring(textentry.txt))
 local presses = {}
 _norns.key = function(n, z) presses[#presses + 1] = n .. "=" .. z end
 typed("12")
@@ -253,31 +262,36 @@ typed("ff8800")
 check(textentry.txt == "FF8800" or textentry.txt == "ff8800", "typed ff8800: '" .. tostring(textentry.txt) .. "'")
 check(textentry.warn == nil or textentry.warn == "", "a valid code has no warning")
 tap("ENTER")
-check(ui.state.custom == "FF8800" and ui.state.colour == "custom", "Enter accepts: CUSTOM with FF8800")
-check(#calls >= 1 and calls[#calls][2] == 255 and calls[#calls][3] == 136 and calls[#calls][4] == 0, "and the colour was applied")
+check(ui.state.custom == nil, "Enter in the entry only shows the colour: nothing is stored until the picker keeps it")
+check(#calls >= 1 and calls[#calls][2] == 255 and calls[#calls][3] == 136 and calls[#calls][4] == 0, "the colour was applied to the screen at once")
+keep()
+check(ui.state.custom == "FF8800" and ui.state.colour == "custom", "K3 in the picker keeps it: CUSTOM with FF8800")
 check(#presses == 0, "Enter in the entry is not K3")
 check(te_kbd.char == nil and te_kbd.code == nil, "the entry is closed: the keyboard handlers are gone")
 -- a bad code: the page says so, the colour stays
 page.redraw()
-page.key(3, 1)
+open_entry()
 tap("BACKSPACE"); tap("BACKSPACE"); tap("BACKSPACE"); tap("BACKSPACE"); tap("BACKSPACE"); tap("BACKSPACE")
 typed("12")
 tap("ENTER")
-page.redraw()
+check(picker.msg ~= nil and picker.msg:find("bad hex", 1, true), "a bad hex: the picker says so")
 check(ui.state.custom == "FF8800" and ui.state.colour == "custom", "a bad hex keeps the previous colour")
-check(shown("3 or 6"), "and the page shows the message")
+picker.key(2, 1) -- K2: the old colour back
 -- Escape cancels
-page.key(3, 1)
+page.init()
+open_entry()
 typed("00ff00")
 tap("ESC")
 check(ui.state.custom == "FF8800", "Esc cancels: nothing changed")
 check(te_kbd.char == nil, "and the entry is closed")
+picker.key(2, 1)
 -- the '#' typed with shift is accepted too
-page.key(3, 1)
+open_entry()
 for _ = 1, 8 do tap("BACKSPACE") end
 typed("#0f0")
 check(textentry.txt:upper() == "#0F0" or textentry.txt == "#0f0", "# typed with shift: '" .. tostring(textentry.txt) .. "'")
 tap("ENTER")
+keep()
 check(ui.state.custom == "00FF00", "#0f0 is 00FF00: " .. tostring(ui.state.custom))
 
 -- ---- the page is in SYSTEM's list on a computer only ----
@@ -289,9 +303,9 @@ local function system_with(platform)
   return table.concat(m.pages, ","), table.concat(m.list, "|")
 end
 local pages = system_with("linux")
-check(pages == "DEVICES,AUDIO,UI,BOX,CLEANUP,MODS,RESET,RESTART", "SYSTEM on a computer: " .. pages)
+check(pages == "DEVICES,AUDIO,UI,BOX,CLEANUP,MODS,RESET,RESTART", "SYSTEM on a computer keeps the page ids: " .. pages)
 local _, list = system_with("linux")
-check(list:find("UI >", 1, true) ~= nil, "the list shows 'UI >'")
+check(list:find("SCREEN >", 1, true) ~= nil and not list:find("UI >", 1, true), "the list shows 'SCREEN >' (the visible name of the page UI)")
 pages = system_with(nil)
 check(pages == "DEVICES,WIFI,MODS,SETTINGS,RESTART,UPDATE" and not pages:find("UI", 1, true), "SYSTEM on a device is as before and has no UI: " .. pages)
 -- without _norns.ui_look nothing is applied or written

@@ -18,6 +18,7 @@ local real_execute = os.execute
 os.execute = function(cmd) return real_execute((cmd:gsub("/home/we", tmp))) end
 
 local fails = 0
+local sent
 local function check(ok, what) if not ok then fails = fails + 1; print("FAIL " .. what) end end
 
 -- the screen: what one redraw draws (the screen is cleared first), with x, y and the text; the width of a text is 5 per character
@@ -47,21 +48,41 @@ norns.menu.get_enc = function() return _menu.penc end
 norns.menu.get_key = function() return _menu.key end
 norns.menu.get_redraw = function() return _menu.redraw end
 norns.menu.get_refresh = function() return _menu.refresh end
-_menu.set_page = function(p) _menu.last_page = p end
+local pages = {}
+_menu.set_page = function(p)
+  _menu.last_page = p
+  local pg = p == "PICKER" and package.loaded["core/menu/picker"] or pages[p]
+  if pg then
+    pg.init()
+    current_page = pg
+    norns.menu.set(pg.enc, pg.key, pg.redraw, nil)
+    pg.redraw()
+  end
+end
 util = {clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
   scandir = function(dir) local out = {} local p = io.popen("ls -p '" .. map(dir) .. "' 2>/dev/null") for l in p:lines() do out[#out + 1] = l end p:close() return out end}
 package.loaded.util = util
 -- the real keyboard module is not needed: the entry is driven through its keyboard hooks (te_kbd) and its key / enc handlers, as the menu does
-package.loaded["core/keyboard"] = {state = {}}
+package.loaded["core/keyboard"] = {state = {}, ctrl = function() return false end, shift = function() return false end}
 local te_kbd = require 'lib/textentry_kbd'
 local te = require 'textentry'
 local box = require 'core/box_settings'
 box.log = function() end
 local ui = require 'core/ui_settings'
 ui.log = function() end
-_norns = {box_look = function() end}
+_norns = {box_look = function(...) sent = {...} end}
+local picker = require 'core/menu/picker'
 local page = dofile("lua/core/menu/box.lua")
 local uipage = dofile("lua/core/menu/ui.lua")
+pages.BOX, pages.UI = page, uipage
+-- the entry is reached through the colour picker: K3 on the hex row opens the picker, the HEX row of the picker opens the entry (K3), and the picker gives the page back (K2: the old colour)
+local function open_entry(pg)
+  pg.key(3, 1) pg.key(3, 0)
+  assert(norns.menu.get_key() == picker.key, "the picker did not open")
+  picker.enc(2, 3) -- the HEX row
+  picker.key(3, 1) picker.key(3, 0)
+end
+local function close_picker() picker.key(2, 1) picker.key(2, 0) end
 
 local function type_text(s) for c in s:gmatch(".") do te_kbd.char(c) end end
 local function press_code(code) -- a key like Return: the keyboard sets the state, then calls the hook (the entry looks at the state)
@@ -87,7 +108,7 @@ end
 
 -- ---- 1. the pile-up ----
 fresh_box()
-page.key(3, 1) page.key(3, 0)
+open_entry(page)
 check(te.active == true and not owner_is(page), "the entry is open and has the keys")
 check(shown("#404246") ~= nil, "the entry starts with the code that is set")
 type_text("4")
@@ -136,16 +157,21 @@ package.loaded["core/keyboard"].state.BACKSPACE = false
 check(te.txt == "40424", "backspace removes a digit: " .. te.txt)
 -- finish with Return: the code is set
 press_code("ENTER")
-check(te.active == false and owner_is(page), "Return closes the entry, the page has the keys")
-check(box.state.colours.keys == "404246" and page.msg ~= nil and page.msg:find("bad hex", 1, true), "five digits are not a code: refused with a message, the colour kept (" .. box.state.colours.keys .. ")")
+check(te.active == false and owner_is(picker), "Return closes the entry, the picker has the keys")
+check(box.state.colours.keys == "404246" and picker.msg ~= nil and picker.msg:find("bad hex", 1, true), "five digits are not a code: refused with a message, the colour kept (" .. box.state.colours.keys .. ")")
+close_picker()
+check(owner_is(page), "K2 in the picker gives the page back")
 
 -- typing "#40424B" with the hash is fine too, and 3 digits
 fresh_box()
-page.key(3, 1) page.key(3, 0)
+open_entry(page)
 type_text("#f80")
 check(te.txt == "#f80", "# and three digits are accepted: " .. te.txt)
 press_code("ENTER")
-check(box.state.colours.keys == "FF8800", "#f80 is FF8800")
+check(sent and sent[3] == "FF8800" and box.state.colours.keys == "404246", "#f80 is FF8800 on the window at once, stored only when kept")
+picker.enc(2, -3)
+picker.key(3, 1) picker.key(3, 0)
+check(box.state.colours.keys == "FF8800", "K3 in the picker keeps it")
 
 -- other uses of the entry: a long name. the screen is cleared, the text is cut at the left, nothing runs past the screen; the device layout is untouched (below)
 te.enter(function() end, "", "NAME:", function(t) return #t > 10 and "long name" or nil end)
@@ -181,10 +207,12 @@ for cname, close in pairs(closers) do
   for iname, input in pairs(inputs) do
     local label = cname .. " after " .. iname .. ", BOX"
     fresh_box()
-    page.key(3, 1) page.key(3, 0)
+    open_entry(page)
     type_text(input)
     close()
     check(te.active == false and te_kbd.code == nil and te_kbd.char == nil, label .. ": the entry is off and its keyboard hooks are off")
+    check(owner_is(picker), label .. ": the picker owns the keys and encoders again")
+    close_picker()
     check(owner_is(page), label .. ": the page owns the keys and encoders again")
     page.pos = 4
     page.enc(2, 1)
@@ -193,11 +221,12 @@ for cname, close in pairs(closers) do
     page.enc(3, 1)
     page.redraw()
     check(shown("KEYS") ~= nil or shown("BUTTONS") ~= nil, label .. ": the page draws")
-    -- K3 opens the entry again, K2 leaves the page
-    page.key(3, 1) page.key(3, 0)
-    check(te.active == true, label .. ": K3 opens the entry again")
+    -- K3 opens the picker and the entry again, K2 leaves the page
+    open_entry(page)
+    check(te.active == true, label .. ": the entry opens again")
     te.key(2, 1) te.key(2, 0)
     check(not te.active, label .. ": and it closes again")
+    close_picker()
     page.key(2, 1)
     check(_menu.last_page == "SYSTEM", label .. ": K2 leaves the page")
     _menu.last_page = nil
@@ -213,11 +242,13 @@ for cname, close in pairs(closers) do
     norns.menu.set(uipage.enc, uipage.key, uipage.redraw, nil)
     current_page = uipage
     uipage.pos = 4 -- HEX
-    uipage.key(3, 1) uipage.key(3, 0)
-    check(te.active == true, label .. ": the HEX row opens the entry")
+    open_entry(uipage)
+    check(te.active == true, label .. ": the HEX row opens the picker and the entry")
     type_text(input)
     close()
-    check(te.active == false and te_kbd.code == nil and owner_is(uipage), label .. ": the UI page has the keys again")
+    check(te.active == false and te_kbd.code == nil and owner_is(picker), label .. ": the picker has the keys again")
+    close_picker()
+    check(owner_is(uipage), label .. ": the UI page has the keys again")
     uipage.enc(2, -1)
     check(uipage.pos == 3, label .. ": E2 moves (pos " .. uipage.pos .. ")")
     check(#(ui.state.custom or "") <= 6, label .. ": the custom colour is never longer than 6 digits")
@@ -226,13 +257,15 @@ end
 
 -- opened twice: the second enter is ignored, the first one's restore stays right
 fresh_box()
-page.key(3, 1) page.key(3, 0)
+open_entry(page)
 local first_txt = te.txt
 te.enter(function() print("PROBE second callback must not run") end, "x", "SECOND", nil)
 check(te.txt == first_txt and te.heading ~= "SECOND", "a second enter while one is open is ignored")
 check(norns.menu.get_key() == te.key, "the entry still has the keys")
 te.key(2, 1) te.key(2, 0)
-check(owner_is(page) and te.active == false, "closing it gives the keys back to the page, not to the entry")
+check(owner_is(picker) and te.active == false, "closing it gives the keys back to the picker, not to the entry")
+close_picker()
+check(owner_is(page), "the picker gives them to the page")
 page.enc(2, 1)
 check(page.pos == 5, "and the page navigates")
 -- closed twice: harmless
@@ -240,7 +273,7 @@ te.exit()
 check(owner_is(page), "exit() when nothing is open changes nothing")
 -- the menu was left while the entry was open (the box key mode): the keys come back right
 fresh_box()
-page.key(3, 1) page.key(3, 0)
+open_entry(page)
 _menu.mode = false
 local saved_key = key
 te.key(2, 1) te.key(2, 0)

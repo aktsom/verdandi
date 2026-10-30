@@ -134,14 +134,29 @@ send("1", 1); send("1", 0)
 check(pressed[1] == "1=1" and pressed[2] == "1=0", "K1 from the keyboard works while the entry is closed: " .. table.concat(pressed, " "))
 pressed = {}
 send("RIGHT", 1); send("RIGHT", 0)
-check(te_kbd.char ~= nil, "K3 (RIGHT) on HEX opens the entry")
+check(pushed[#pushed] == "PICKER", "K3 (RIGHT) on HEX opens the colour picker")
+-- the menu's set_page: the picker is the page now (its own key, encoder, keyboard handlers)
+local ui_page = page
+local picker = require 'core/menu/picker'
+picker.init()
+page = picker
+_menu.key, _menu.penc, _menu.keyboardcode, _menu.keyboardchar = picker.key, picker.enc, picker.keycode, picker.keychar
+send("DOWN", 1); send("DOWN", 0); send("DOWN", 1); send("DOWN", 0); send("DOWN", 1); send("DOWN", 0) -- the HEX row
+send("ENTER", 1); send("ENTER", 0) -- K3 on it
+check(te_kbd.char ~= nil, "K3 on the picker's HEX row opens the entry")
 send("1", 1); send("1", 0)
 check(textentry.txt:sub(-1) == "1", "a typed 1 goes into the entry")
 for _ = 1, 20 do send("BACKSPACE", 1); send("BACKSPACE", 0) end
 for _, ch in ipairs({"0", "0", "F", "F", "0", "0"}) do send(ch, 1); send(ch, 0) end
 send("ENTER", 1); send("ENTER", 0)
-check(ui.state.custom == "00FF00" and ui.state.colour == "custom", "Enter accepts 00ff00: " .. tostring(ui.state.custom))
+check(ui.state.custom == "FF8800", "Enter in the entry shows the colour, the picker keeps it only on K3")
+send("UP", 1); send("UP", 0); send("UP", 1); send("UP", 0); send("UP", 1); send("UP", 0)
+send("ENTER", 1); send("ENTER", 0)
+check(ui.state.custom == "00FF00" and ui.state.colour == "custom", "K3 in the picker keeps 00ff00: " .. tostring(ui.state.custom))
 check(te_kbd.char == nil and te_kbd.code == nil, "the entry is closed again: the keys are free")
+check(pushed[#pushed] == "UI", "the picker gives the page back")
+page = ui_page
+_menu.key, _menu.penc, _menu.keyboardcode, _menu.keyboardchar = page.key, page.enc, page.keycode, nil
 -- a release applies and writes nothing at all (delta 0), a press does
 page.pos = 1
 local n0 = #looks

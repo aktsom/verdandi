@@ -38,10 +38,12 @@ util = {
   scandir = function(dir) local out = {} local p = io.popen("ls -p '" .. map(dir) .. "' 2>/dev/null") for l in p:lines() do out[#out + 1] = l end p:close() return out end,
 }
 package.loaded.util = util
-local entry
+local entry, opened
 package.loaded.textentry = {enter = function(cb, default, title, hint, opts) entry = {cb = cb, default = default, title = title, hint = hint, accept = opts and opts.accept} end}
 local sent
 _norns = {box_look = function(...) sent = {...} end}
+_path = {keyboard_layout = "/nonexistent/keyboard.layout"}
+package.loaded['core/menu/picker'] = {open = function(o) opened = o end, take_returning = function() return false end}
 local box = require 'core/box_settings'
 local logs = {}
 box.log = function(s) logs[#logs + 1] = s end
@@ -130,40 +132,34 @@ press(3)
 check(page.mode == "rows" and box.state.preset == "Sunday", "K3 uses the look and returns to the rows")
 check(shown("* Sunday") ~= nil, "the PRESET row says * Sunday for his own look")
 
--- ---- hex rows ----
+-- ---- hex rows: K3 opens the colour picker (the text entry is reached from inside it: core/menu/picker.lua, linux/tests/picker_test.lua) ----
 start()
 goto_row("KEYS")
 press(3)
-check(entry and entry.title == "HEX (3 or 6 digits):" and entry.default == "#404246" and entry.hint == box.hex_hint and entry.accept == box.hex_accept, "K3 on a colour opens the text entry with the current hex, the title and the live hint")
-entry.cb("#E8A317")
+check(opened and opened.label == "THEME KEYS" and opened.value == "404246" and opened.return_page == "BOX", "K3 on a colour opens the picker with the label, the current hex and the page to return to")
+local conf_before = slurp("/home/we/box.conf")
+opened.preview("E8A317")
+check(sent and sent[3] == "E8A317", "the picker's preview reaches the window at once")
+check(box.state.colours.keys == "404246" and slurp("/home/we/box.conf") == conf_before, "a preview stores and writes nothing")
+opened.restore()
+check(sent[3] == "404246", "restore gives the stored colour back to the window")
+opened.ok("E8A317")
 page.redraw()
-check(box.state.colours.keys == "E8A317" and shown("#E8A317"), "a valid hex is applied")
-check(sent and sent[3] == "E8A317", "applied to the window at once")
-press(3)
-entry.cb("12zz")
-page.redraw()
-check(box.state.colours.keys == "E8A317", "a bad hex: the previous colour is kept")
-check(shown("bad hex: 3 or 6 digits"), "and a clear message is shown")
-page.enc(3, 1)
-page.redraw()
-check(not shown("bad hex"), "the message goes away with the next move")
-press(3)
-entry.cb(nil)
-check(box.state.colours.keys == "E8A317", "cancelling the entry changes nothing")
+check(box.state.colours.keys == "E8A317" and shown("#E8A317"), "ok keeps the colour and the row shows it")
+check(slurp("/home/we/box.conf"):find("keys=E8A317", 1, true), "and saves it once")
 goto_row("BUTTONS")
 press(3)
-entry.cb("303030")
+opened.ok("303030")
 goto_row("FONT")
 press(3)
-entry.cb("323232")
+opened.ok("323232")
 page.redraw()
 check(box.state.colours.font == "323232" and shown("low contrast"), "a hard to read pair is accepted with a message")
-local rows_before = row_names()
 for _, part in ipairs({"BOX", "ENCODERS", "BUTTONS", "FONT"}) do
   goto_row(part)
+  opened = nil
   press(3)
-  check(entry and entry.default:sub(1, 1) == "#", part .. ": K3 opens the entry")
-  entry = nil
+  check(opened and opened.label == "THEME " .. part and opened.value:match("^%x%x%x%x%x%x$"), part .. ": K3 opens the picker")
 end
 
 -- ---- SAVE ----
@@ -266,8 +262,10 @@ pushed = {}
 press(2)
 check(pushed[1] == "SYSTEM", "K2 goes back to SYSTEM")
 local sys = slurp_sys or assert(real_open("lua/core/menu/system.lua")):read("a")
-check(sys:find('"UI >", "BOX >"', 1, true) or sys:find('"UI >",%s*"BOX >"'), "SYSTEM's list has BOX below UI")
-check(sys:find('"UI", "BOX"', 1, true), "SYSTEM's pages have BOX below UI")
+check(sys:find('"SCREEN >", "THEME >"', 1, true), "SYSTEM's list has THEME below SCREEN (the visible names of the pages UI and BOX)")
+check(sys:find('"UI", "BOX"', 1, true), "SYSTEM's pages keep the ids UI and BOX")
+local mn = io.open("lua/core/menu.lua"):read("a")
+check(mn:find('m["SCREEN"] = m["UI"]', 1, true) and mn:find('m["THEME"] = m["BOX"]', 1, true), "the page ids SCREEN and THEME are accepted as well")
 local menu = assert(real_open("lua/core/menu.lua")):read("a")
 check(menu:find("core/menu/box", 1, true) and menu:find("core/box_settings", 1, true), "menu.lua loads the page and the settings on a computer")
 

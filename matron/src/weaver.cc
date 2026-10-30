@@ -366,6 +366,8 @@ static int _audio_status(lua_State *l);
 static int _ui_look(lua_State *l);
 static int _ui_file_dialog(lua_State *l);
 static int _box_look(lua_State *l);
+static int _clipboard_set(lua_State *l);
+static int _clipboard_request(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -727,6 +729,8 @@ void w_init(void) {
     lua_register_norns("ui_look", &_ui_look);
     lua_register_norns("ui_file_dialog", &_ui_file_dialog);
     lua_register_norns("box_look", &_box_look);
+    lua_register_norns("clipboard_set", &_clipboard_set);
+    lua_register_norns("clipboard_request", &_clipboard_request);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3754,6 +3758,26 @@ int _ui_file_dialog(lua_State *l) {
 int _box_look(lua_State *l) {
     sdl_bridge_set_box_look((int)luaL_checkinteger(l, 1), luaL_checkstring(l, 2), luaL_checkstring(l, 3), luaL_checkstring(l, 4), luaL_checkstring(l, 5),
                             luaL_checkstring(l, 6), (int)luaL_optinteger(l, 7, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: put a text on the system clipboard (the colour picker's Ctrl+C)
+ * @function clipboard_set
+ * @tparam string text
+ */
+int _clipboard_set(lua_State *l) {
+    sdl_bridge_clipboard_set(luaL_checkstring(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: ask for the system clipboard (the colour picker's Ctrl+V): the answer comes later as _norns.clipboard_text(text, status)
+ * @function clipboard_request
+ */
+int _clipboard_request(lua_State *l) {
+    (void)l;
+    sdl_bridge_clipboard_request();
     return 0;
 }
 

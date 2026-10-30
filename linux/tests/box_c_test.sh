@@ -52,5 +52,21 @@ for f in ("matron/src/platform/macos/device_skin.c", "matron/src/platform/macos/
             if "L" not in depth_stack and not s.startswith(("//", "*", "/*")):
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY
+# the clipboard and picker additions to the shared window and Lua binding files are all inside NORNS_LINUX_DESKTOP blocks
+python3 - "$REPO" << 'PY' && ok "the clipboard additions to sdl_bridge.cc/.h and weaver.cc are all inside NORNS_LINUX_DESKTOP blocks" || bad "a clipboard line of a shared file is outside NORNS_LINUX_DESKTOP"
+import re, sys
+for f in ("matron/src/platform/macos/sdl_bridge.cc", "matron/src/platform/macos/sdl_bridge.h", "matron/src/weaver.cc"):
+    stack = []
+    for n, line in enumerate(open(sys.argv[1] + "/" + f), 1):
+        s = line.strip()
+        if s.startswith("#ifdef NORNS_LINUX_DESKTOP"): stack.append("L")
+        elif s.startswith("#ifndef NORNS_LINUX_DESKTOP"): stack.append("M")
+        elif s.startswith("#if"): stack.append("?")
+        elif s.startswith("#else") and stack: stack[-1] = {"L": "M", "M": "L"}.get(stack[-1], "?")
+        elif s.startswith("#endif") and stack: stack.pop()
+        if re.search(r"clipboard|clip_text|clip_classify|CLIP_MAX|clip_status", line) and not s.startswith(("//", "*", "/*")):
+            if "L" not in stack:
+                print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
+PY
 [ $FAIL = 0 ] && echo "box_c_test: all passed"
 exit $FAIL

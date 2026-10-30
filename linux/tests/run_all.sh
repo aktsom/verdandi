@@ -121,8 +121,12 @@ run "c:ui_look (grey correction, tint, brightness: equal to the Python reference
 run "lua:file dialog setting (off by default, ticked, unticked at once, saved, damaged value, result and cancel, macOS unchanged)" lua5.3 linux/tests/file_dialog_setting_test.lua
 run "lua:box settings and looks (hex, box.conf, built-in and own looks, files, names, both styles take colours)" lua5.3 linux/tests/box_settings_test.lua
 run "lua:text entry (6-digit hex limit and hint, clean redraw, every way of closing hands the page back, double enter, long names; device path unchanged)" env NORNS_PLATFORM=1 lua5.3 linux/tests/textentry_test.lua
-run "lua:THEME and SCREEN pages under random keys (every state change is drawn, handlers stay the page's own, selection in range, modal flags, ESC always leaves; handler errors logged)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/menu_stress_test.lua 120 500
+run "lua:THEME and SCREEN pages under random keys, the colour picker and the clipboard (every state change is drawn, handlers stay the page's own, selection in range, modal flags, ESC always leaves; handler errors logged)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/menu_stress_test.lua 120 500
 run "lua:network page without the iw tool (short message, no error)" env NORNS_PLATFORM=linux lua5.3 linux/tests/wifi_iw_test.lua
+run "lua:colour conversion and steps (hex <-> hue, saturation, brightness: round trips for every grey, a million spread and 100k random codes, black and white, the middle #408080, steps, clamping)" lua5.3 linux/tests/colour_test.lua
+run "lua:clipboard (copy, the window's answer, valid and refused texts: empty, long, binary, 3 digits, with and without #)" lua5.3 linux/tests/clipboard_test.lua
+run "c:clipboard classifier and the real SDL clipboard round trip (valid, empty, 65 characters, binary, 50 MB never walked through)" linux/tests/clip_test.sh
+run "lua:renames (SCREEN and THEME in the list, the manual and RUN-ON-LAPTOP.md; ids, aliases and files unchanged; the device list as before)" env NORNS_PLATFORM=linux lua5.3 linux/tests/rename_test.lua
 run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
@@ -692,6 +696,42 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$BH"
     }
     box_scenario
+    # the colour picker in the real window (docs/port/colour-picker-plan.md): K3 on a colour row opens it, the box changes live while it is open and no file is written, K2 gives the colour back, K3 keeps it once
+    picker_scenario() {
+        PH="$(mktemp -d)"
+        ln -s "$REPO" "$PH/norns"
+        mkdir -p "$PH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$PH/dust/code/probe/"
+        printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$PH/box.conf"
+        PLOG="$T/picker.log"
+        NORNS_HOME="$PH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_picker.lua" "$PLOG" > /dev/null 2>&1
+        pmark() { sed -n "s/^$1=//p" "$PH/probe.marks" 2> /dev/null | tail -1; }
+        ppx() { convert "$PH/$1" -format "%[hex:u.p{$2,$3}]" info:; }
+        picker_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            local live kept
+            live="$(sed -n 's/^PROBE picker live[[:space:]]//p' "$PLOG" | tail -1)"
+            kept="$(sed -n 's/^PROBE picker keep[[:space:]]//p' "$PLOG" | tail -1)"
+            chk "the probe ran" 'grep -q "PROBE picker done" "$PLOG"'
+            chk "K3 on the KEYS row opens the picker" 'grep -q "PROBE picker open.true.PICKER" "$PLOG"'
+            chk "the key (K1, layout 100 188) is the KEYS colour before" '[ "$(ppx pk-before.png 260 273)" = 444853 ]'
+            chk "opening the picker changes nothing: the key is still 444853 and no file was written" '[ "$(ppx pk-open.png 260 273)" = 444853 ] && [ "$(pmark conf_same_open)" = yes ]'
+            chk "live: the key is drawn with the picked colour ($live) while the picker is open" '[ -n "$live" ] && [ "$(ppx pk-live.png 260 273)" = "$live" ] && [ "$live" != 444853 ]'
+            chk "live: box.conf is not written" '[ "$(pmark conf_same_live)" = yes ]'
+            chk "K2: the picker is closed, the page is back, the stored colour is the old one" 'grep -q "PROBE picker cancelled.false.BOX.444853" "$PLOG"'
+            chk "K2: the key shows the old colour again and no file was written" '[ "$(ppx pk-cancel.png 260 273)" = 444853 ] && [ "$(pmark conf_same_cancel)" = yes ]'
+            chk "K3: the page is back and the colour is stored" 'grep -q "PROBE picker kept.BOX.$kept" "$PLOG" && [ -n "$kept" ]'
+            chk "K3: the key shows it and box.conf has it" '[ "$(ppx pk-kept.png 260 273)" = "$kept" ] && grep -q "^keys=$kept" "$PH/box.conf"'
+            return $bad
+        }
+        run "window:colour picker (opens from a colour row, the box changes live without a file, K2 gives it back, K3 keeps it once)" picker_ok
+        mkdir -p "${SHOT_DIR:-/dev/null}" 2> /dev/null
+        cp "$PH/pk-live.png" "${SHOT_DIR:-/dev/null}/picker-live.png" 2> /dev/null
+        cp "$PH/pk-live.png" "$T/picker-live-full.png" 2> /dev/null
+        rm -rf "$PH"
+    }
+    picker_scenario
     # the detachable screen window (docs/port/detach-plan.md), under Xvfb with no window manager: F9, the menu item and the placeholder, the picture crisp at
     # whole scales and inside a block when in between, the keyboard from the screen window, the shortcuts, F11, F10, close, the saved state, a damaged state file
     detach_scenario() {

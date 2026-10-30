@@ -5,6 +5,8 @@
 --   DELETE asks once. K2 goes back (out of the list or the question, else to SYSTEM)
 
 local box = require 'core/box_settings'
+local keyboard = require 'core/keyboard'
+local clipboard = require 'core/clipboard'
 
 local m = {pos = 1, top = 1, msg = nil, mode = "rows", lpos = 1, confirm = nil}
 
@@ -66,6 +68,12 @@ end
 
 m.init = function()
   box.load()
+  if require('core/menu/picker').take_returning() then
+    -- back from the colour picker: the row, the scroll and the message are as they were
+    m.mode, m.confirm = "rows", nil
+    clamp_rows()
+    return
+  end
   m.pos, m.top, m.msg, m.mode, m.confirm = 1, 1, nil, "rows", nil
 end
 
@@ -122,18 +130,6 @@ local function reclaim()
   end
 end
 
-local function hex_done(row)
-  return function(text)
-    reclaim()
-    if text ~= nil then
-      local ok, why = box.set_part(PARTS[row], text)
-      if not ok then m.msg = "bad hex: " .. why
-      else m.msg = why end
-    end
-    _menu.redraw()
-  end
-end
-
 local function name_done(text)
   reclaim()
   if text ~= nil then
@@ -149,6 +145,22 @@ local function name_done(text)
   end
   clamp_rows()
   _menu.redraw()
+end
+
+-- K3 on a colour row: the colour picker, live on the box until K3 (keep and save) or K2 (give the old colour back)
+function m.open_picker(row)
+  local part = PARTS[row]
+  require('core/menu/picker').open({
+    label = "THEME " .. row,
+    value = box.state.colours[part],
+    preview = function(hex) box.preview_part(part, hex) end,
+    restore = function() box.apply() end,
+    ok = function(hex)
+      local ok, why = box.set_part(part, hex)
+      m.msg = ok and why or ("bad hex: " .. tostring(why))
+    end,
+    return_page = "BOX",
+  })
 end
 
 -- the entry for a name takes only what a name may hold, up to 18 characters
@@ -208,7 +220,7 @@ local function key_raw(n, z)
   elseif row == "PRESET" then
     open_list()
   elseif PARTS[row] then
-    textentry.enter(hex_done(row), "#" .. box.state.colours[PARTS[row]], "HEX (3 or 6 digits):", box.hex_hint, {accept = box.hex_accept, replace = true})
+    m.open_picker(row)
   elseif row == "SAVE" then
     textentry.enter(name_done, "", "NAME FOR THIS LOOK:", name_hint, {accept = name_accept})
   elseif row == "DELETE" then
@@ -332,6 +344,42 @@ local function recover(what, err)
   m.mode, m.confirm = "rows", nil
   pcall(clamp_rows)
   reclaim()
+end
+
+-- Ctrl+C copies the code of the colour row under the selection, Ctrl+V pastes one (3 or 6 digits, with or without #) and keeps it at once; everything else is the menu's
+local function keycode_raw(c, value)
+  if not (keyboard.ctrl() and (c == "C" or c == "V")) or m.mode ~= "rows" then return false end
+  local row = m.rows()[m.pos]
+  local part = row and PARTS[row]
+  if part == nil then return false end
+  if value ~= 1 then return true end
+  if c == "C" then
+    local text = "#" .. box.state.colours[part]
+    m.msg = clipboard.copy(text) and ("copied " .. text) or "no clipboard"
+  else
+    m.msg = "pasting.."
+    clipboard.paste_colour(function(hex, why)
+      if _menu.page ~= "BOX" or m.mode ~= "rows" then return end -- the answer came after the page was left (the picker is open, or another page): it is not for this page
+      if hex then
+        local ok, w = box.set_part(part, hex)
+        m.msg = ok and (w or ("pasted #" .. hex)) or ("bad hex: " .. tostring(w))
+      else
+        m.msg = why
+      end
+      if _menu.page == "BOX" and norns.menu.status() then _menu.redraw() end
+    end)
+  end
+  return true
+end
+
+m.keycode = function(c, value)
+  local ok, used = pcall(keycode_raw, c, value)
+  if not ok then
+    dbg("keycode " .. tostring(c) .. " raised an error: " .. tostring(used))
+    used = false
+  end
+  if used and norns.menu.status() then _menu.redraw() end
+  return used
 end
 
 m.key = function(n, z)

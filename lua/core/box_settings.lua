@@ -316,6 +316,18 @@ function M.apply()
   _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0)
 end
 
+--- the colour picker: show one colour on the window without storing or saving anything (the state and the file stay as they are); restore with M.apply()
+function M.preview_part(part, text)
+  if _norns == nil or _norns.box_look == nil then return false end
+  local hex = M.hex(text)
+  if hex == nil then return false end
+  local c = {}
+  for k, v in pairs(M.state.colours) do c[k] = v end
+  c[part] = hex
+  _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0)
+  return true
+end
+
 --- at start: read the file and apply it
 function M.load_and_apply()
   if _norns == nil or _norns.box_look == nil then return end

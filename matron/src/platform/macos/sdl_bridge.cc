@@ -86,6 +86,9 @@
 #include "device_runloop.h"
 #endif
 #include "device_skin.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/linux/clip_text.h"
+#endif
 #include "dust_import.h"
 #include "gif_writer.h"
 #include "platform/common/desktop_shell.h"
@@ -633,6 +636,30 @@ void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const
     if (SDL_PushEvent(&ev) < 1) {
         free(m);
     }
+}
+
+// any thread: the clipboard. the SDL clipboard belongs to the main thread, so both calls are events (codes 6 and 7)
+void sdl_bridge_clipboard_set(const char *text) {
+    char *copy = strndup(text != NULL ? text : "", 256);
+    if (copy == NULL) {
+        return;
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 6;
+    ev.user.data1 = copy;
+    if (SDL_PushEvent(&ev) < 1) {
+        free(copy);
+    }
+}
+
+void sdl_bridge_clipboard_request(void) {
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 7;
+    SDL_PushEvent(&ev);
 }
 
 void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma) {
@@ -2927,6 +2954,20 @@ void sdl_bridge_run(void) {
                     redraw(false);
                     screen_refresh();
                 }
+            } else if (ev.user.code == 6) {
+                // Ctrl+C on a colour: the text goes to the system clipboard (SDL: X11 or Wayland, whichever the window runs on)
+                char *text = (char *)ev.user.data1;
+                SDL_SetClipboardText(text);
+                free(text);
+            } else if (ev.user.code == 7) {
+                // Ctrl+V: read the clipboard (at most 64 characters are looked at) and answer Lua through the event queue
+                char out[CLIP_MAX + 1];
+                char *text = SDL_HasClipboardText() ? SDL_GetClipboardText() : NULL;
+                clip_status_t st = clip_classify(text, out, sizeof out);
+                if (text != NULL) {
+                    SDL_free(text);
+                }
+                call_lua("clipboard_text", {st == CLIP_OK ? out : "", clip_status_name(st)});
             } else if (ev.user.code == 5) {
                 // the window stopped changing size: the crisp picture
                 if ((unsigned)(uintptr_t)ev.user.data1 == resize_stamp && resize_fast) {
@@ -2942,6 +2983,7 @@ void sdl_bridge_run(void) {
                 skin_set_buttons_shown(m->show);
                 shell_set_buttons_shown(m->show);
                 free(m);
+                resize_begin(); // a colour that is being changed live (the colour picker) is drawn the quick way, the crisp picture follows when it has been still for a moment
                 free_layers();
                 redraw(true);
 #endif
