@@ -255,6 +255,13 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 - **Tests:** `box_palette_test.c`, `box_retro_test.c`, the PIXEL goldens, `box_frame_test.sh` for every look (dragged 4-5 ms, settled 143-191 ms under Xvfb), `box_settings_test.lua`, `box_page_test.lua`, `menu_stress_test.lua` (THEME with the new row), real-window `retro_scenario`. Full `run_all.sh` from a clean environment: 113 PASS, 0 known failures, 0 unexpected failures.
 - **Not judged here:** eye strain over hours, button text beside the blocks, each variant with each look on the owner's display (HARDWARE-CHECKLIST, RUN-ON-LAPTOP).
 
+## Small fixes after the owner's test of 0.1~git20261030.3331.a4098441
+- **SYSTEM order:** MODS is directly below AUDIO (DEVICES, AUDIO, MODS, SCREEN, THEME, CLEAN UP, RESET, RESTART); ids unchanged; tests, manual updated.
+- **Picker feedback:** K3 shows `saved #HEX` on the page that opened it (this also fixes a bug of the first build: a successful keep without a contrast warning left `bad hex: nil`), K2/Esc show `restored`, F1 or any other way out with an unkept change restores and shows `restored, not saved` as a toast on the box (`_norns.toast`, Linux only) and as the page's message; hint line `K3 keeps  K2 cancels`. The request named F1 under both messages: one message carries both words for that route.
+- **HEX row:** Left/Right, `-`/`=` and E3 step the brightness of the code (same steps, live, releases do nothing): built.
+- **Tests:** the picker feedback, HEX row and SYSTEM list in `menu_stress_test.lua`; `rename_test`, `box_page_test`, `cleanup_page_test`, `ui_settings_test`. The midi auto-connect (conf) test is a timing race of its own (the 2 s repair can come before its snapshot on a loaded machine): `run_all.sh` now repeats that scenario, at most twice, when the cut was not seen.
+- Full `run_all.sh` from a clean environment: 113 PASS, 0 known failures, 0 unexpected failures (the first full run of this step failed only on that midi timing race).
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
