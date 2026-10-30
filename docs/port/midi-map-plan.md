@@ -14,7 +14,8 @@ One picture: `midi-map-previews/midi-map-learn-standin.png`. **It is a stand-in:
 - **Encoders:** an **absolute** knob (0 to 127) becomes steps by its change, with a sensitivity, a baseline for the first message, and a re-baseline after a jump or a pause. **Relative** encoders: three formats exist in the wild (**two's complement**, **sign-magnitude**, **offset binary**); the format is chosen per mapping, and learn makes a **suggestion** that you confirm (a detection can be wrong, section 2.5).
 - **Keys:** a CC (press when the value is above a threshold, release at 0) or a note (note on / note off).
 - **Learn by mouse:** on the MIDI MAP page you start LEARN, **click E1 to E3 or K1 to K3 in the window** (the click selects, it does not turn or press anything), then move the knob or press the button on the controller. Typing a CC number and clearing a mapping are rows on the same page.
-- **A finding that changes the setup (section 1.4):** a network MIDI link such as RTP-MIDI shows up on Linux as **ALSA sequencer ports**, not as an ordinary ALSA raw MIDI device. The only way such a source reaches norns today is the **JACK MIDI input** ("Verdandi JACK in"), and there **every connected source is one merged device**. So for the Push 2 over the network, "device: pick by name" cannot tell it from another network source; "any device" is what works, and a per-source device needs a decision (section 8, decision 1).
+- **The owner's main route is USB: the "mio" (section 1.5).** It is an ordinary ALSA raw MIDI device. norns names it with the USB product string, **`mio`**, and gives **one norns device per MIDI port**: one port is `mio`, several are `mio 1`, `mio 2`, ... Device-by-name works for it (section 2.1a: names are normalised, a stored name `mio` means *the whole interface, every port*, `mio 2` means that port only, so restarts, re-plugging into another USB socket and a changed port-number suffix do not break a mapping). **What the mio cannot do:** controllers on the *same* port are one device, separated only by **channel and CC number**; controllers on *different* ports are different devices.
+- **The network case stays supported (section 1.4):** a network MIDI link such as RTP-MIDI shows up on Linux as **ALSA sequencer ports**, not as an ordinary ALSA raw MIDI device. The only way such a source reaches norns today is the **JACK MIDI input** ("Verdandi JACK in"), and there **every connected source is one merged device**. So for the Push 2 over the network, "device: pick by name" cannot tell it from another network source; "any device" is what works, and a per-source device needs a decision (section 8, decision 1).
 - **Saved** in `midimap.conf` (the `ui.conf` pattern), built-in presets and the user's own in `midimap-presets/` (the THEME pattern). A Push 2 preset can be written but its **numbers cannot be checked without the hardware**.
 - **What can only be tested with real hardware:** the Push 2, the network link, real endless-encoder feel (section 4).
 
@@ -55,12 +56,27 @@ Why there and not in C: all the information (device name, vport number, the para
 
 `pmap` data, the params page, the scripts' handlers, vports, `midi.connect`. The only shared-file change is **one accessor** (section 2.6) so the layer knows when the params page is learning: a few lines in `lua/core/menu/params.lua`, guarded by `NORNS_PLATFORM`.
 
-### 1.4 The Push 2 over the network: what it looks like here (web, partly read)
+### 1.4 The Push 2 over a network link (secondary route): what it looks like here (web, partly read)
 
 - The owner's plan: Push 2 on Windows, sent over **RTP-MIDI** to this Linux machine. On Linux the usual tool, **rtpmidid**, "exposes network RTP-MIDI devices as local **ALSA sequencer** ports" (web). The repository's own notes say the same shape of problem for norns: raw MIDI devices come from udev; sequencer ports need a bridge (`docs/port/INVENTORY.md` and `clock-notes.md`: *"A seq port may need the a2jmidid bridge or PipeWire to show up"*).
 - So the realistic route is: network → ALSA sequencer port → **PipeWire's Midi-Bridge (or a2jmidid) → JACK MIDI port → `Verdandi:midi_in`**, which is exactly what `midi_in_from=Midi-Bridge:...` does (`docs/port/RUN-ON-LAPTOP.md`; a Reaper virtual port was verified on the owner's laptop, `HARDWARE-CHECKLIST.md`). norns then sees **one** device, "Verdandi JACK in".
 - Consequence for **"device per mapping"**: any number of controllers through that one port are the same device to norns, so a mapping set to "Verdandi JACK in" matches all of them; "ANY" matches all devices. A name-per-controller choice exists only for **USB controllers plugged into this machine** (each is its own ALSA device).
 - The ALSA-raw-device wording of the request (an RTP link "appearing as an ordinary ALSA MIDI device") is true only if the link software creates a kernel virtual raw MIDI device (`snd-virmidi` with a connection to the sequencer port); I did not find a ready recipe for that in what I read. This is an open question (section 8) and goes to the hardware checklist.
+
+### 1.5 The mio: how it appears to the midi module (read in the code; the port count is not known here)
+
+**What the code does** (`device_monitor.cc` `add_dev_sound`, `device_list.cc` `dev_list_add`, `device_midi.cc`, `lua/core/midi.lua`, `lua/core/vport.lua`):
+1. udev reports the sound card's `midiC<card>D<dev>` node. The **name is the USB `product` attribute** of the device (or of a parent): for the owner's interface that is `mio`, the string in `norns.log` (`dev_monitor: adding midi device mio`). That log line is printed **once per interface, before the ports are split**, so it does not say how many ports there are.
+2. `dev_midi_port_count` asks ALSA for the number of sub-devices of that raw MIDI device (**one per MIDI port / cable**). norns makes **one MIDI device per port**: with one port the device is called **`mio`**; with several (`> 1`) each is called `<name> <port + 1>`: **`mio 1`, `mio 2`, ...** (the log then also says `assigned device name with port: mio 1`). Each is opened as `hw:<card>,<dev>,<port>`; a port with no input is added without a reader.
+3. `midi.lua` `Midi.new` makes a Lua device from each, with `vport.get_unique_device_name`: if the name is already taken by **another** device (two identical interfaces, or a one-port `mio` next to a second `mio`) a **` 2`, ` 3`, ...** suffix is appended in the order the devices were enumerated. Each device gets the next free **vport** (1 to 16) the first time its name is seen; the vport assignment is by name.
+4. Scripts and the layer get the bytes of **one port** per device (`_norns.midi.event(id, data)`); the device's `id` changes on every re-plug and restart, the **name does not**.
+
+**What it means for several controllers behind the mio.**
+- Controllers on **different ports** (`mio 1`, `mio 2`) are **different norns devices**: the device filter separates them completely (that is the clean way if the interface has more than one port).
+- Everything arriving on **one port** is **one device**: a DIN cable carries no identity, so two controllers merged onto one cable (a Windows MIDI router, a thru box, the Push 2 and another controller through Ableton's output) can only be told apart by **MIDI channel** and **CC/note number**. The mapping's channel filter is therefore the separator: give each controller its own channel, or choose CC numbers that do not overlap; if two send the same CC on the same channel they are the same control to norns and to every script.
+- The Push 2 itself is a USB device on the Windows side; what reaches the mio is whatever Windows sends out (probably Live's or a router's output), so numbers and **channels may differ from the Push 2's own** and have to be learned, not assumed (Push 2 preset caveat in 2.7).
+- A 5-pin DIN link is 31.25 kbaud: a fast turn of several endless encoders can queue messages and arrive late or in bursts; the layer takes the sum of what arrives (the carry in 2.3), so nothing is lost, but **the feel may lag** (hardware check, section 4).
+- **I cannot tell from here** how many ports the owner's mio has (I have no log with the `mio 1` line and no `amidi -l`). Ask for `amidi -l` and the first lines of `norns.log` after plugging it in; section 4.
 
 ## 2. The design
 
@@ -70,11 +86,23 @@ Why there and not in C: all the information (device name, vport number, the para
 |---|---|---|
 | `type` | `none`, `cc`, `note` (keys only for `note`) | `none` |
 | `num` | CC 0 to 127 / note 0 to 127 | none |
-| `dev` | `ANY` or a device name exactly as the DEVICES page lists it | `ANY` |
+| `dev` | `ANY` or a device name as the DEVICES page lists it (matching: 2.1a) | `ANY` |
 | `ch` | `0` = any, 1 to 16 | `0` |
 | encoders: `mode` | `abs`, `rel2c` (two's complement), `relsm` (sign-magnitude), `relob` (offset binary) | `abs` |
 | encoders: `sens` | 1 to 9 (a log scale, 5 = normal, section 2.3) | 5 |
 | keys: `threshold` | 0 to 126 (CC only): pressed when value is **above** it | 63 |
+
+#### 2.1a Device selection by name (USB devices such as the mio)
+
+The goal: a mapping made today for `mio` still works after a restart, after the interface is plugged into another USB socket, after the order of devices changes, and whether norns calls it `mio`, `mio 1` or (a second identical interface) `mio 2`.
+
+- **Stored value** is the name string shown on the page. The mapping never stores an id, a vport number or a `/dev` path (they change; `pmap` stores vport numbers, this does not).
+- **Normalising** both sides before comparing: trim, collapse runs of blanks, ignore case, ignore a trailing `(ABSENT)` marker. Control characters are removed; a name is kept as UTF-8 and compared bytewise after that (no locale-dependent folding).
+- **Rule (in this order):** a device `D` matches a stored name `S` when (1) `norm(D) == norm(S)`; or (2) `norm(D)` is `norm(S)` followed by a single blank and **digits only** (`mio` matches `mio`, `mio 1`, `mio 2`: **the whole interface, every port**). The reverse is not true: a stored `mio 2` matches only `mio 2`. A name that really ends in a number (`Push 2`) stays correct under rule (1) and, under rule (2), also matches `Push 2 1`, `Push 2 2` (its ports), never `Push 3`.
+- **The DEVICE row offers**: `ANY`; one entry per **interface** (`MIO (ALL PORTS)` stores `mio`); one entry per **port** when the interface has several (`MIO 1`, `MIO 2` store those names); and a remembered name of an absent device marked `(ABSENT)`. When there is one port the two entries are the same and only `MIO` is shown.
+- **Re-plugging and restarts:** the name comes from the USB product string, so it is the same for the same model in any socket; the row shows the mapping as **ABSENT** while it is unplugged (dim, no error) and it starts working again the moment the device is added (the layer matches on every message, no cached device object). The first message after an add re-baselines an absolute knob (2.3).
+- **Two identical interfaces** are the one case that name matching cannot fix: norns suffixes the second as `mio 2` in enumeration order, which can swap after a re-plug. The page says so on that row's help line; the stored `mio` then matches both. Telling them apart would need the USB serial number, which `midi.lua` does not receive (a possible later change to `device_monitor.cc`, not planned).
+- **Port-number suffix tolerance** is rule (2); **a changed port count** (a firmware or a different mode) keeps `mio` valid and breaks only a stored `mio 3` that no longer exists.
 
 Global: `on_clash=params` (the params MAP wins, default) or `both`. `ANY` never matches the keys window's own device "Verdandi keys" (the on-screen virtual keyboard); naming it explicitly allows it. Realtime and system messages (status 0xF0 and above, so clock, start, stop, active sensing, sysex) are never looked at.
 
@@ -203,7 +231,8 @@ All Lua tests run under `lua5.3` without hardware and are added to `linux/tests/
 
 **3.2 `midimap_layer_test.lua` (the layer with fake devices; the real `core/midi.lua` event function).**
 - A mapped CC calls `_norns.show_control` then `_norns.enc/_norns.key` with the right numbers; an unmapped one calls nothing.
-- **Device filter:** any, a name, an absent name, two devices with the same CC; "Verdandi keys" is not matched by `ANY` but is by name. **Channel filter:** any, a channel, the wrong one.
+- **Device filter:** any, a name, an absent name, two devices with the same CC; "Verdandi keys" is not matched by `ANY` but is by name. **Name matching, by table (2.1a):** `mio` against `mio`, `mio 1`, `mio 2`, `MIO`, `mio  ` (blanks), `mio 1x` (no), `mioxyz` (no), `mio 2` against `mio` and `mio 1` (no) and `mio 2` (yes); `Push 2` against `Push 2`, `Push 2 1` (yes), `Push 3` (no); trailing `(ABSENT)`; an empty or control-character name; a long name; non-ASCII. **Stability:** the same device re-added with a **new id** and a different vport still matches and acts; removed and re-added; added later than the mapping; the unique-name suffix swapped between two identical devices (documented behaviour); the DEVICE row's entries for one port, several ports, an absent remembered name, two interfaces; a file saved before the device existed loads and matches once it appears.
+- **Several controllers behind one port:** two mappings on the same device with different channels act independently; the same channel and CC would be one control (asserted, so the rule is visible). **Channel filter:** any, a channel, the wrong one.
 - **Scripts still receive everything:** a fake script handler on the device and on the vport receives the same bytes **in the same order and the same table contents**, mapped or not, with the layer on and off, with `on_clash` both values (the default leaves scripts untouched: nothing in the table the script sees is changed).
 - **Conflict with the params MAP:** a real `pmap` with a mapped parameter on the same vport, channel and CC: `params` skips and the param still moves; `both` does both; an "any channel" mapping against a specific-channel pmap entry; the assignment warning text; the load-time recheck after `pmap.read()` of a script; a pmap entry added later; params page **in learn** takes the message and the layer stands down; a different vport is not a clash.
 - **Safety:** device removal while a key is held releases it; changing, clearing, leaving the page and starting learn release; a thrown error in the layer is caught and does not stop the script's or pmap's handling (the layer is called under `pcall`).
@@ -227,6 +256,7 @@ Put in `docs/port/HARDWARE-CHECKLIST.md` when the work is done; **none of it can
 - Push 2 (in User mode): the **CC numbers** for the encoders and the buttons, whether the encoder values are two's complement, the effect of fast turns, whether the touch of an encoder sends notes (the MIDI MAP ignores notes for encoders, but a script mapped to those notes would see them), what happens in Live mode (Live's own script owns the pads).
 - The network link: Windows rtpMIDI (or another) to rtpmidid or PipeWire on this machine, whether the ports appear, **how they reach `Verdandi:midi_in`** (and whether a per-source device is possible), latency and jitter of turns, behaviour after the link drops and returns (held keys, baseline of the knobs).
 - Feel: the sensitivity defaults for absolute and relative knobs, the 1.5 s re-baseline and the jump limit with a real controller.
+- **The mio** (USB, the owner's main route): `amidi -l` and the start of `norns.log` after plugging it in (is it `mio` or `mio 1`, `mio 2`, ...); that a mapping made for `mio` survives a restart, a re-plug into another USB socket and plugging it in after norns started; which **channel** the Push 2's messages arrive on through the interface, and whether CC numbers are the Push 2's own; delay and bursts of a fast encoder turn over DIN.
 - Other controllers the owner will try (the generic presets are guesses until tried): which formats they use.
 - That a script that uses the same CC for itself and a params MAP entry for the same CC behave as 2.2 says.
 
@@ -256,7 +286,7 @@ New: `lua/core/midimap.lua`, `lua/core/midimap_value.lua` (the pure functions), 
 
 ## 8. Decisions for the owner (my recommendation first)
 
-1. **Network source and "device by name".** Recommended: ship with `ANY` and `Verdandi JACK in` as the way to address a network controller; add a per-source choice **only if** the real link gives something to tell sources apart (hardware step). Alternative: make the link software create a virtual raw MIDI device per peer (`snd-virmidi`), which I could not confirm is easy.
+1. **Device by name.** Recommended: name matching as in 2.1a (an interface name means all its ports, a port name means that port) for USB devices such as the mio; `ANY` for everything else, including the network case. **Network source:** Recommended: ship with `ANY` and `Verdandi JACK in` as the way to address a network controller; add a per-source choice **only if** the real link gives something to tell sources apart (hardware step). Alternative: make the link software create a virtual raw MIDI device per peer (`snd-virmidi`), which I could not confirm is easy.
 2. **Conflict rule.** Recommended: **params MAP wins**, a global switch for `both`, warning at assignment and at load. Alternative: the MIDI MAP always wins; or ask on each clash (rejected: it would interrupt a performance).
 3. **Mapped messages and scripts.** Recommended: **both receive** (a tap), forever the default. Optional later: a "swallow mapped messages" row, which would need the layer to run before the script's handlers (a change to `midi.lua`'s order) and is **not** planned.
 4. **Relative format.** Recommended: manual choice plus a suggestion at learn. Alternative: silent auto-detection (rejected: a wrong guess would be invisible).
