@@ -368,6 +368,7 @@ static int _ui_file_dialog(lua_State *l);
 static int _box_look(lua_State *l);
 static int _clipboard_set(lua_State *l);
 static int _clipboard_request(lua_State *l);
+static int _toast(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -731,6 +732,7 @@ void w_init(void) {
     lua_register_norns("box_look", &_box_look);
     lua_register_norns("clipboard_set", &_clipboard_set);
     lua_register_norns("clipboard_request", &_clipboard_request);
+    lua_register_norns("toast", &_toast);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3769,6 +3771,16 @@ int _box_look(lua_State *l) {
  */
 int _clipboard_set(lua_State *l) {
     sdl_bridge_clipboard_set(luaL_checkstring(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: a short message on the box (the toast beside E1)
+ * @function toast
+ * @tparam string text
+ */
+int _toast(lua_State *l) {
+    sdl_bridge_toast(luaL_checkstring(l, 1));
     return 0;
 }
 

@@ -287,3 +287,7 @@ The tests run under Xvfb with no window manager (stacking order and keyboard foc
 - [ ] **Each variant with each look** (DARK, LIGHT, COLOUR, MAC and one of your own): is anything unreadable, too flat or too busy (very light or very dark colour sets saturate the ramp)? Pressed, hover and lit states, MUTE, the toast, the hidden top row.
 - [ ] **Hit areas:** every button, key and encoder reacts where it is drawn in each variant (RETRO and 8-BIT move shapes by up to 2 units, buttons are 72 units wide; 16-BIT's by up to 3 and its hit margin is 1 unit).
 - [ ] **Dragging the window** in each variant: smooth with the quick drawing, the crisp picture a moment after. 16-BIT is crisp at 100 and 200 percent only (its blocks are 3 units); in between its edges are a little soft. Not measured on a real display here (Xvfb only).
+
+## Small fixes: SYSTEM order, picker messages (installed .deb 0.1~git20261030.3331.a4098441)
+- [ ] HOME > SYSTEM lists DEVICES, AUDIO, MODS, SCREEN, THEME, CLEAN UP, RESET, RESTART (MODS directly below AUDIO).
+- [ ] Picker: K3 -> `saved #RRGGBB` on the page; K2/Esc -> `restored`; F1 or a page change with a live change -> `restored, not saved` (a toast on the box, a few seconds); the hint `K3 keeps  K2 cancels` fits the screen; on the HEX row Left/Right and `-`/`=` change the brightness.

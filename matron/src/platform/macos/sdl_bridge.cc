@@ -655,6 +655,10 @@ void sdl_bridge_clipboard_set(const char *text) {
     }
 }
 
+void sdl_bridge_toast(const char *text) {
+    post_toast(text != NULL ? text : "");
+}
+
 void sdl_bridge_clipboard_request(void) {
     SDL_Event ev;
     SDL_zero(ev);

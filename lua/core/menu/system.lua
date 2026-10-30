@@ -8,8 +8,8 @@ local m = {
 -- password, there is no battery and the display settings drive the oled chip: of
 -- SETTINGS only RESET is left, so it moves up here. AUDIO picks the audio device, SCREEN the look of the screen (brightness, colour, contrast; page id UI), THEME the look of the box (style, five colours, saved looks; page id BOX), CLEAN UP what Verdandi keeps in the home (logs, disabled/, cache)
 if os.getenv("NORNS_PLATFORM") ~= nil then
-  m.list = {"DEVICES > ", "AUDIO >", "SCREEN >", "THEME >", "CLEAN UP >", "MODS >", "RESET", "RESTART"}
-  m.pages = {"DEVICES", "AUDIO", "UI", "BOX", "CLEANUP", "MODS", "RESET", "RESTART"}
+  m.list = {"DEVICES > ", "AUDIO >", "MODS >", "SCREEN >", "THEME >", "CLEAN UP >", "RESET", "RESTART"}
+  m.pages = {"DEVICES", "AUDIO", "MODS", "UI", "BOX", "CLEANUP", "RESET", "RESTART"}
 end
 
 m.key = function(n,z)

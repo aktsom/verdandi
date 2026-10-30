@@ -66,6 +66,8 @@ extern void sdl_bridge_set_box_look(int style, const char *box, const char *keys
 // and answers later with _norns.clipboard_text(text, status) through the event queue
 extern void sdl_bridge_clipboard_set(const char *text);
 extern void sdl_bridge_clipboard_request(void);
+// any thread, does not block: a short message on the box (the toast beside E1), for a few seconds
+extern void sdl_bridge_toast(const char *text);
 #endif
 
 #ifdef __cplusplus

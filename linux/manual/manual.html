@@ -164,8 +164,10 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <tr><td><kbd>Up</kbd> / <kbd>Down</kbd>, <kbd>E2</kbd></td><td>choose the row</td></tr>
 <tr><td><kbd>Left</kbd> / <kbd>Right</kbd>, <kbd>-</kbd> / <kbd>=</kbd>, <kbd>E3</kbd></td><td>change the row by a step: 5 degrees of hue, 5 percent of saturation or brightness. <kbd>Shift</kbd> makes it five steps, <kbd>Ctrl</kbd> a fine step of 1. Holding a value key repeats it; letting go changes nothing. The mouse wheel over E3 works too. The values stop at both ends</td></tr>
 <tr><td><kbd>PageUp</kbd> / <kbd>PageDown</kbd>, <kbd>Home</kbd> / <kbd>End</kbd></td><td>five steps; the smallest and the largest value of the row</td></tr>
-<tr><td><kbd>K3</kbd> (<kbd>Enter</kbd>)</td><td>keep the colour and save it (on the HEX row it opens the text entry instead)</td></tr>
-<tr><td><kbd>K2</kbd> (<kbd>Esc</kbd>), <kbd>F1</kbd> to <kbd>F4</kbd></td><td>give the old colour back</td></tr>
+<tr><td><kbd>K3</kbd> (<kbd>Enter</kbd>)</td><td>keep the colour and save it: the page you came from says &ldquo;saved #3B6EA8&rdquo; until the next key (on the HEX row K3 opens the text entry instead). The picker&rsquo;s last line reminds you: K3 keeps, K2 cancels</td></tr>
+<tr><td><kbd>K2</kbd> (<kbd>Esc</kbd>)</td><td>give the old colour back; the page says &ldquo;restored&rdquo;</td></tr>
+<tr><td><kbd>F1</kbd> to <kbd>F4</kbd>, any other way out</td><td>a change you had not kept is given back and the box shows &ldquo;restored, not saved&rdquo; for a few seconds</td></tr>
+<tr><td>on the <strong>HEX</strong> row: <kbd>Left</kbd> / <kbd>Right</kbd>, <kbd>-</kbd> / <kbd>=</kbd>, <kbd>E3</kbd></td><td>make the code lighter or darker (the brightness) by the same steps, without opening the text entry</td></tr>
 <tr><td><kbd>H</kbd></td><td>type a code in the text entry (3 or 6 digits, with or without #); the rows follow what you typed</td></tr>
 <tr><td><kbd>C</kbd></td><td>centre: hue 180, saturation 50, brightness 50 (<code>#408080</code>)</td></tr>
 <tr><td><kbd>R</kbd></td><td>back to the colour the picker opened with</td></tr>
@@ -345,7 +347,7 @@ linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code
 <section id="differences">
 <h2>12. Differences from the device</h2>
 <ul>
-  <li>No hardware: the OLED is a window, the keys and encoders are the keyboard and mouse. The SYSTEM menu has DEVICES, AUDIO, MODS, RESET and RESTART: WIFI, UPDATE, the password and the display settings are not offered, because the operating system owns them. SLEEP (HOME page) quits norns without powering off the computer; RESTART restarts norns through the launcher.</li>
+  <li>No hardware: the OLED is a window, the keys and encoders are the keyboard and mouse. The SYSTEM menu has DEVICES, AUDIO, MODS, SCREEN, THEME, CLEAN UP, RESET and RESTART: WIFI, UPDATE, the password and the display settings are not offered, because the operating system owns them. SLEEP (HOME page) quits norns without powering off the computer; RESTART restarts norns through the launcher.</li>
   <li>Update scripts in maiden, and Verdandi itself by getting a new version of the repository.</li>
   <li>Everything that listens (maiden, the consoles) is on <code>127.0.0.1</code> only, unlike the device.</li>
   <li>No AppImage or Flatpak package yet, and no plug-in version (VST3 is planned for the Windows version).</li>

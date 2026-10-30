@@ -48,8 +48,9 @@ local function world()
   util = {clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
     scandir = function(dir) local out = {} local p = io.popen("ls -p '" .. map(dir) .. "' 2>/dev/null") for l in p:lines() do out[#out + 1] = l end p:close() return out end}
   package.loaded.util = util
-  w.box_calls, w.ui_calls, w.clip, w.clip_asked = {}, {}, nil, 0
+  w.box_calls, w.ui_calls, w.clip, w.clip_asked, w.toasts = {}, {}, nil, 0, {}
   _norns = {box_look = function(...) w.box_calls[#w.box_calls + 1] = {...} end, ui_look = function(...) w.ui_calls[#w.ui_calls + 1] = {...} end, show_control = function() end,
+    toast = function(t) w.toasts[#w.toasts + 1] = t end,
     clipboard_set = function(t) w.clip = t end, clipboard_request = function() w.clip_asked = w.clip_asked + 1 end,
     key = function(n, z) if n ~= 1 then _menu.key(n, z) end end, enc = function(n, d) if n ~= 1 then _menu.penc(n, d) end end}
   write("/home/we/keyboard.layout", "us\n")
@@ -498,6 +499,104 @@ do
   is(w.box_calls[#w.box_calls][8] == 2, "a colour change in the picker keeps the 8-bit look")
   tap(w, "2")
   is(w.box_calls[#w.box_calls][8] == 2 and w.box.state.pixel_look == "8-bit", "and so does cancelling it")
+end
+
+-- ---------------------------------------------------------------- the picker's messages, the HEX row's brightness steps, the SYSTEM list (docs/port/colour-picker-plan.md, small fixes)
+do
+  local function F(what) fails_total = fails_total + 1 print("FAIL picker feedback: " .. what) end
+  local function is(c, what) if not c then F(what) end end
+  local function open_box(w, pos) _menu.set_page("BOX") w.pages.BOX.pos = pos w.pages.BOX.redraw() tap(w, "RIGHT") end
+  local colourm = require('core/colour')
+  local function count(list, text) local n = 0 for _, t in ipairs(list) do if t == text then n = n + 1 end end return n end
+  -- K3 keeps: "saved #HEX" on the page that comes back, once, with the right code; it goes with the next key
+  local w = world()
+  open_box(w, 5) -- KEYS
+  tap(w, "EQUAL") tap(w, "EQUAL")
+  local hex = colourm.value_hex(w.pages.PICKER.val)
+  tap(w, "ENTER")
+  is(_menu.page == "BOX" and w.pages.BOX.msg == "saved #" .. hex, "K3 shows 'saved #" .. hex .. "' on the THEME page (" .. tostring(w.pages.BOX.msg) .. ")")
+  w.pages.BOX.redraw()
+  is(w.shown and table.concat(w.shown, "|"):find("saved #" .. hex, 1, true) ~= nil, "the message is on the norns screen")
+  is(count(w.toasts, "restored, not saved") == 0, "keeping shows no 'not saved'")
+  tap(w, "DOWN")
+  is(w.pages.BOX.msg == nil, "the message goes with the next key (the same life as 'copied')")
+  -- K2 and Esc: "restored"
+  for _, how in ipairs({"2", "ESC"}) do
+    local w2 = world()
+    open_box(w2, 5)
+    tap(w2, "EQUAL")
+    tap(w2, how)
+    is(_menu.page == "BOX" and w2.pages.BOX.msg == "restored", how .. ": 'restored' on the THEME page (" .. tostring(w2.pages.BOX.msg) .. ")")
+    is(#w2.toasts == 0, how .. ": no toast")
+  end
+  -- leaving by a page key or a page change with a live change: the colour comes back and "restored, not saved" is shown once (a toast on the box: the page is gone)
+  local w3 = world()
+  open_box(w3, 5)
+  for _ = 1, 8 do tap(w3, "EQUAL") end -- a colour that really changes (a dark grey needs a few degrees)
+  _menu.set_page("SYSTEM")
+  is(count(w3.toasts, "restored, not saved") == 1, "a page change with a live change: 'restored, not saved' once (" .. table.concat(w3.toasts, "|") .. ")")
+  is(w3.pages.BOX.msg == "restored, not saved", "and it is the THEME page's message too")
+  local w3b = world()
+  open_box(w3b, 5)
+  _menu.set_page("SYSTEM")
+  is(#w3b.toasts == 0, "a page change with nothing changed says nothing")
+  -- the SCREEN page: saved and restored messages (its init keeps the message after the picker)
+  local w4 = world()
+  _menu.set_page("UI") w4.pages.UI.pos = 4
+  tap(w4, "RIGHT")
+  tap(w4, "C")
+  tap(w4, "ENTER")
+  is(w4.pages.UI.msg == "saved #408080", "SCREEN: 'saved #408080' (" .. tostring(w4.pages.UI.msg) .. ")")
+  local w5 = world()
+  _menu.set_page("UI") w5.pages.UI.pos = 4
+  tap(w5, "RIGHT") tap(w5, "C") tap(w5, "2")
+  is(w5.pages.UI.msg == "restored", "SCREEN: 'restored' after K2")
+  -- a contrast warning is kept next to 'saved'
+  local w6 = world()
+  w6.box.set_part("buttons", "808080")
+  open_box(w6, 8) -- FONT
+  for _ = 1, 40 do tap(w6, "MINUS") end
+  tap(w6, "ENTER")
+  is(w6.pages.BOX.msg and w6.pages.BOX.msg:find("^saved #") ~= nil, "a colour that gives low contrast is still 'saved'")
+  -- the hint line: K3 keeps, K2 cancels, and it fits
+  local w7 = world()
+  open_box(w7, 5)
+  local frame = table.concat(w7.shown, "|")
+  is(frame:find("K3 keeps", 1, true) and frame:find("K2 cancels", 1, true), "the picker says that K3 keeps and K2 cancels")
+  -- the HEX row: left, right and the value keys step the brightness, by the same steps, with the live preview and no text entry
+  local pk = w7.pages.PICKER
+  tap(w7, "DOWN") tap(w7, "DOWN") tap(w7, "DOWN")
+  is(pk.row == 4, "DOWN x3 is the HEX row")
+  local v0, h0, s0 = pk.val.v, pk.val.h, pk.val.s
+  local n = #w7.box_calls
+  tap(w7, "RIGHT")
+  is(math.abs(pk.val.v - math.min(100, v0 + 5)) < 1e-9 and pk.val.h == h0 and pk.val.s == s0, "RIGHT on HEX: brightness +5, hue and saturation unchanged")
+  is(#w7.box_calls == n + 1 and not w7.textentry.active, "live, and the text entry stays closed")
+  tap(w7, "LEFT") tap(w7, "LEFT")
+  is(math.abs(pk.val.v - math.max(0, v0 - 5)) < 1e-9, "LEFT x2: brightness -5 from the start")
+  tap(w7, "EQUAL")
+  send(w7, "EQUAL", 0)
+  local vv = pk.val.v
+  send(w7, "EQUAL", 0)
+  is(pk.val.v == vv, "a release changes nothing")
+  w7.keyboard.process(1, w7.codes["LEFTSHIFT"], 1) tap(w7, "MINUS") w7.keyboard.process(1, w7.codes["LEFTSHIFT"], 0)
+  is(math.abs(pk.val.v - math.max(0, vv - 25)) < 1e-9, "Shift is 5 steps")
+  send(w7, "LEFTCTRL", 1) local vc = pk.val.v tap(w7, "RIGHT") send(w7, "LEFTCTRL", 0)
+  is(math.abs(pk.val.v - (vc + 1)) < 1e-9, "Ctrl is a fine step")
+  local f0 = table.concat(w7.shown, "|")
+  tap(w7, "RIGHT")
+  is(table.concat(w7.shown, "|") ~= f0, "and the screen shows the new code")
+  _norns.enc(3, 1)
+  is(pk.val.v > vc, "the encoder E3 on HEX steps the brightness too")
+  -- the SYSTEM list through the real page: MODS is directly below AUDIO, the other pages keep their order
+  local sys = dofile("lua/core/menu/system.lua")
+  is(table.concat(sys.pages, ",") == "DEVICES,AUDIO,MODS,UI,BOX,CLEANUP,RESET,RESTART", "SYSTEM's pages: " .. table.concat(sys.pages, ","))
+  is(table.concat(sys.list, "|") == "DEVICES > |AUDIO >|MODS >|SCREEN >|THEME >|CLEAN UP >|RESET|RESTART", "SYSTEM's list: " .. table.concat(sys.list, "|"))
+  local opened
+  _menu.set_page = function(p) opened = p end
+  sys.pos = 3
+  sys.key(3, 1)
+  is(opened == "MODS", "K3 on the third row opens MODS (" .. tostring(opened) .. ")")
 end
 
 -- what every control does while the hex entry is open (printed with "entry"; the checks below assert it)

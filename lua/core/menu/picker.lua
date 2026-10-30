@@ -1,7 +1,8 @@
 -- the colour picker (computers only, core/menu.lua registers it as the page PICKER): a page of the norns screen's param menu with the rows HUE, SATURATION, BRIGHTNESS and HEX, opened by K3 on a
 -- hex row of THEME (BOX KEYS ENCODERS BUTTONS FONT) and SCREEN (HEX). docs/port/colour-picker-plan.md. every row is a param like any other: E2 (or UP / DOWN) chooses the row, E3 (or LEFT / RIGHT,
 -- the value keys - and =) changes it by a step (5 degrees, 5 percent; Shift 5 steps; Ctrl a fine unit; a release changes nothing), and every change is applied to what is being edited at once
--- (opts.preview) without writing a file. K3 keeps (opts.ok writes once), K2 / Esc / F1 give the old colour back (opts.restore). K3 on HEX opens the text entry; C centres, H opens the text entry, R goes back
+-- (opts.preview) without writing a file. K3 keeps (opts.ok writes once and the page says "saved #HEX"), K2 / Esc give the old colour back ("restored"), a page change or F1 with a live change gives it back
+-- and says "restored, not saved" (opts.restore, opts.note, a toast). on the HEX row left / right and the value keys step the brightness. K3 on HEX opens the text entry; C centres, H opens the text entry, R goes back
 -- to the colour the picker opened with, Ctrl+C copies the code to the clipboard and Ctrl+V pastes one. every handler ends with a redraw, and an error in one is logged and leaves the page whole
 local colour = require 'core/colour'
 local clipboard = require 'core/clipboard'
@@ -56,9 +57,10 @@ local function finish(ok)
   m.active = false
   local hex = current_hex()
   if ok and m.last_hex ~= nil and hex ~= m.orig then
-    o.ok(hex) -- the one write
-  elseif o.restore then
-    o.restore() -- nothing to keep: what is stored is shown
+    o.ok(hex) -- the one write; the page says "saved #HEX"
+  else
+    if o.restore then o.restore() end -- nothing to keep: what is stored is shown
+    if o.note then o.note(ok and "unchanged" or "restored") end
   end
   m.returning = true
   _menu.set_page(o.return_page)
@@ -68,13 +70,21 @@ end
 m.deinit = function()
   if m.active then
     m.active = false
+    local changed = m.last_hex ~= m.orig
     if m.opts and m.opts.restore then m.opts.restore() end
+    if changed then
+      -- a live change that was never kept: the box shows a short message (the page is gone, so a toast), the page that opened the picker has it too
+      local text = "restored, not saved"
+      if _norns ~= nil and _norns.toast ~= nil then _norns.toast(text) end
+      if m.opts and m.opts.note then m.opts.note(text) end
+    end
   end
 end
 
+-- the three rows step their own value; the HEX row steps the brightness of the code (the same steps), so a code can be made lighter or darker without opening the text entry
 local function step(amount)
-  if amount == 0 or ROWS[m.row] == "HEX" then return end
-  colour.move(m.val, STRIP[m.row], amount)
+  if amount == 0 then return end
+  colour.move(m.val, STRIP[m.row] or "v", amount)
   apply_live()
 end
 
@@ -227,7 +237,7 @@ local function redraw_raw()
   screen.text(m.msg or "C centre H hex R reset")
   screen.level(2)
   screen.move(0, 63)
-  screen.text("E2 row E3 step K3 ok K2 x")
+  screen.text("K3 keeps  K2 cancels")
   screen.update()
 end
 

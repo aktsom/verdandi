@@ -21,6 +21,8 @@ end
 
 m.init = function()
   ui.load()
+  -- back from the colour picker: its message (saved, restored) stays until the next key
+  if require('core/menu/picker').take_returning() then return end
   m.msg = nil
 end
 
@@ -45,8 +47,9 @@ function m.open_picker()
     restore = function() ui.apply() end,
     ok = function(hex)
       local ok, why = ui.set_custom(hex)
-      m.msg = (not ok) and ("bad hex: " .. tostring(why)) or nil
+      m.msg = (not ok) and ("bad hex: " .. tostring(why)) or ("saved #" .. hex)
     end,
+    note = function(text) m.msg = text end,
     return_page = "UI",
   })
 end

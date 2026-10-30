@@ -158,8 +158,10 @@ function m.open_picker(row)
     restore = function() box.apply() end,
     ok = function(hex)
       local ok, why = box.set_part(part, hex)
-      m.msg = ok and why or ("bad hex: " .. tostring(why))
+      if not ok then m.msg = "bad hex: " .. tostring(why)
+      else m.msg = "saved #" .. hex .. (why and ", low contrast" or "") end
     end,
+    note = function(text) m.msg = text end,
     return_page = "BOX",
   })
 end

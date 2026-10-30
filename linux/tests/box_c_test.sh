@@ -88,7 +88,7 @@ for f in ("matron/src/platform/macos/sdl_bridge.cc", "matron/src/platform/macos/
         elif s.startswith("#if"): stack.append("?")
         elif s.startswith("#else") and stack: stack[-1] = {"L": "M", "M": "L"}.get(stack[-1], "?")
         elif s.startswith("#endif") and stack: stack.pop()
-        if re.search(r"clipboard|clip_text|clip_classify|CLIP_MAX|clip_status", line) and not s.startswith(("//", "*", "/*")):
+        if re.search(r"clipboard|clip_text|clip_classify|CLIP_MAX|clip_status|sdl_bridge_toast|_toast\(lua_State", line) and not s.startswith(("//", "*", "/*")):
             if "L" not in stack:
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY

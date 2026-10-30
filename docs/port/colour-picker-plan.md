@@ -46,3 +46,10 @@ Every handler ends with a redraw (the lesson of the THEME bug), is wrapped in `p
 - Text entry: Ctrl+C/V work in the picker's entry only (`opts.clip`); names and scripts' entries are unchanged.
 - The pixel style's live preview uses the quick drawing; its smoothness on a real display is **not measured** (Xvfb only). Not measured here either: the real clipboard on the owner's session (X11 or Wayland), and the laptop keyboard (Shift/Ctrl combinations that a window manager may take).
 - The hue of a grey opened first in a session is 180 (the middle), not a guess from the code.
+
+## 6. Small fixes after the owner's test of 0.1~git20261030.3331.a4098441
+- **MODS** is directly below AUDIO in SYSTEM (DEVICES, AUDIO, MODS, SCREEN, THEME, CLEAN UP, RESET, RESTART); the page ids are unchanged.
+- **Messages:** K3 gives `saved #HEX` on the page that opened the picker (a successful keep used to leave the message `bad hex: nil`, a bug of the first build: a missing warning was read as a failure; with a contrast warning it says `saved #HEX, low contrast`); K2 and Esc give `restored`; K3 with nothing changed says `unchanged`. They last until the next key, like `copied` and `pasted`. **F1 and every other way out** with a change that was never kept restore the colour and show **`restored, not saved`** as a toast on the box (`_norns.toast`, Linux only: the page the owner leaves is gone) and as the page's message. The request listed F1 under both "restored" and "not saved"; one message says both words for that route, and K2/Esc say only `restored`. A route with nothing changed is silent.
+- **Hint:** the picker's last line is `K3 keeps  K2 cancels` (the E2/E3 text it replaced is what every param page already teaches).
+- **HEX row:** Left/Right, `-`/`=` and E3 on it step the **brightness** of the code (the same 5 / Shift 25 / Ctrl 1, live preview, releases do nothing): simple and the same keys as the other rows, so built.
+- Tests: `menu_stress_test.lua` (messages in every route, once and with the right code; the HEX row; the SYSTEM list), `rename_test.lua`, `box_page_test.lua`, `cleanup_page_test.lua`, `ui_settings_test.lua`.
