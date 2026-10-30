@@ -1,0 +1,24 @@
+# machine: 4 cores, kernel 6.18.44-fc-v185, 2026-10-30
+sync sr=44100 n=64 period=1451us blocks=3445 | host timer lateness us: p50 49 p99 396 max 5259 | wait for helper us: p50 95 p99 442 p99.9 2180 max 6594 | >80% of period 9, >100% 6 (of 3445)
+sync sr=44100 n=128 period=2902us blocks=1722 | host timer lateness us: p50 66 p99 525 max 2917 | wait for helper us: p50 120 p99 722 p99.9 2780 max 4257 | >80% of period 2, >100% 1 (of 1722)
+sync sr=44100 n=256 period=5805us blocks=861 | host timer lateness us: p50 84 p99 2046 max 24464 | wait for helper us: p50 143 p99 1048 p99.9 30162 max 30162 | >80% of period 2, >100% 2 (of 861)
+sync sr=44100 n=512 period=11610us blocks=430 | host timer lateness us: p50 106 p99 24310 max 34634 | wait for helper us: p50 181 p99 2446 p99.9 28763 max 28763 | >80% of period 1, >100% 1 (of 430)
+sync sr=44100 n=1024 period=23220us blocks=215 | host timer lateness us: p50 152 p99 974 max 2949 | wait for helper us: p50 207 p99 2156 p99.9 24000 max 24000 | >80% of period 1, >100% 1 (of 215)
+sync sr=44100 n=2048 period=46440us blocks=107 | host timer lateness us: p50 143 p99 577 max 2153 | wait for helper us: p50 235 p99 792 p99.9 1561 max 1561 | >80% of period 0, >100% 0 (of 107)
+sync sr=48000 n=64 period=1333us blocks=3750 | host timer lateness us: p50 86 p99 4591 max 27918 | wait for helper us: p50 20 p99 915 p99.9 2530 max 6349 | >80% of period 33, >100% 32 (of 3749)
+sync sr=48000 n=128 period=2667us blocks=1875 | host timer lateness us: p50 85 p99 3136 max 22653 | wait for helper us: p50 139 p99 1990 p99.9 6269 max 25249 | >80% of period 17, >100% 11 (of 1875)
+sync sr=48000 n=256 period=5333us blocks=937 | host timer lateness us: p50 107 p99 17783 max 42309 | wait for helper us: p50 166 p99 2280 p99.9 30379 max 30379 | >80% of period 5, >100% 3 (of 937)
+sync sr=48000 n=512 period=10667us blocks=468 | host timer lateness us: p50 115 p99 2232 max 4461 | wait for helper us: p50 214 p99 2366 p99.9 3613 max 3613 | >80% of period 0, >100% 0 (of 468)
+sync sr=48000 n=1024 period=21333us blocks=234 | host timer lateness us: p50 116 p99 789 max 3965 | wait for helper us: p50 189 p99 1588 p99.9 3940 max 3940 | >80% of period 0, >100% 0 (of 234)
+sync sr=48000 n=2048 period=42667us blocks=117 | host timer lateness us: p50 126 p99 60098 max 102138 | wait for helper us: p50 245 p99 67299 p99.9 72538 max 72538 | >80% of period 4, >100% 4 (of 117)
+async sr=48000 n=128 period=2667us blocks=3750 | host timer lateness us: p50 74 p99 50495 max 90283 | ppm=0 prefill=2 | output ring fill (blocks) min 0 max 43 | underruns helper 0 host 65 overruns 0
+async sr=48000 n=128 period=2667us blocks=3750 | host timer lateness us: p50 69 p99 783 max 38026 | ppm=100 prefill=2 | output ring fill (blocks) min 0 max 14 | underruns helper 13 host 0 overruns 0
+async sr=48000 n=128 period=2667us blocks=3750 | host timer lateness us: p50 57 p99 471 max 3565 | ppm=-100 prefill=2 | output ring fill (blocks) min 1 max 3 | underruns helper 2 host 0 overruns 0
+async sr=48000 n=512 period=10667us blocks=937 | host timer lateness us: p50 91 p99 1129 max 29212 | ppm=0 prefill=2 | output ring fill (blocks) min 1 max 4 | underruns helper 3 host 0 overruns 0
+async sr=48000 n=512 period=10667us blocks=937 | host timer lateness us: p50 97 p99 656 max 6790 | ppm=100 prefill=2 | output ring fill (blocks) min 1 max 2 | underruns helper 1 host 0 overruns 0
+async sr=48000 n=512 period=10667us blocks=937 | host timer lateness us: p50 95 p99 2157 max 31085 | ppm=-100 prefill=2 | output ring fill (blocks) min 1 max 4 | underruns helper 3 host 0 overruns 0
+async sr=48000 n=2048 period=42667us blocks=234 | host timer lateness us: p50 115 p99 7913 max 20567 | ppm=0 prefill=2 | output ring fill (blocks) min 1 max 2 | underruns helper 1 host 0 overruns 0
+async sr=48000 n=2048 period=42667us blocks=234 | host timer lateness us: p50 107 p99 2143 max 27536 | ppm=100 prefill=2 | output ring fill (blocks) min 1 max 2 | underruns helper 1 host 0 overruns 0
+async sr=48000 n=2048 period=42667us blocks=234 | host timer lateness us: p50 123 p99 3837 max 7341 | ppm=-100 prefill=2 | output ring fill (blocks) min 1 max 2 | underruns helper 1 host 0 overruns 0
+async sr=48000 n=128 period=2667us blocks=7500 | host timer lateness us: p50 69 p99 902 max 31822 | ppm=500 prefill=2 | output ring fill (blocks) min 0 max 14 | underruns helper 1 host 12 overruns 0
+async sr=48000 n=128 period=2667us blocks=7500 | host timer lateness us: p50 84 p99 1598 max 42428 | ppm=-500 prefill=2 | output ring fill (blocks) min 0 max 16 | underruns helper 8 host 7 overruns 0
