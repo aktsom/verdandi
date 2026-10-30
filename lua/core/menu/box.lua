@@ -51,9 +51,14 @@ local function value_text(row)
   else return "#" .. st.colours[PARTS[row]] end
 end
 
-local function clamp_rows()
+-- one line in logs/norns.log when a handler raises an error or a selection had to be clamped (a selection that was not in range is a state that should not happen)
+local function dbg(s) print("THEME page: " .. s) end
+
+local function clamp_rows(quiet)
   local n = #m.rows()
+  local was = m.pos
   m.pos = util.clamp(m.pos, 1, n)
+  if m.pos ~= was and not quiet then dbg("selection " .. tostring(was) .. " clamped to " .. m.pos .. " (" .. n .. " rows)") end
   if m.pos < m.top then m.top = m.pos end
   if m.pos > m.top + VISIBLE - 1 then m.top = m.pos - VISIBLE + 1 end
   m.top = util.clamp(m.top, 1, math.max(1, n - VISIBLE + 1))
@@ -78,6 +83,16 @@ local function list_items()
     items[#items + 1] = {look = l}
   end
   return items
+end
+
+-- the list's position must be on a look (not past the end, not on the separator), also when the looks changed under it
+local function clamp_list()
+  local items = list_items()
+  local was = m.lpos
+  m.lpos = util.clamp(m.lpos, 1, #items)
+  while items[m.lpos] and items[m.lpos].sep and m.lpos < #items do m.lpos = m.lpos + 1 end
+  if items[m.lpos] and items[m.lpos].sep then m.lpos = m.lpos - 1 end
+  if m.lpos ~= was then dbg("list position " .. tostring(was) .. " clamped to " .. m.lpos .. " (" .. #items .. " entries)") end
 end
 
 local function open_list()
@@ -150,7 +165,7 @@ local function name_hint(text)
   return v and "" or why
 end
 
-m.key = function(n, z)
+local function key_raw(n, z)
   if z ~= 1 then return end
   if m.mode == "list" then
     if n == 2 then
@@ -205,9 +220,10 @@ m.key = function(n, z)
   end
 end
 
-m.enc = function(n, delta)
+local function enc_raw(n, delta)
   m.msg = nil
   if m.mode == "list" then
+    clamp_list()
     if n == 2 then list_move(delta) end
     return
   elseif m.mode == "confirm" then
@@ -215,7 +231,7 @@ m.enc = function(n, delta)
   end
   if n == 2 then
     m.pos = m.pos + delta
-    clamp_rows()
+    clamp_rows(true) -- scrolling past either end is not an error
   elseif n == 3 then
     local row = m.rows()[m.pos]
     if row == "STYLE" then
@@ -225,7 +241,6 @@ m.enc = function(n, delta)
     end
     clamp_rows()
   end
-  _menu.redraw()
 end
 
 -- ---- drawing ----
@@ -245,6 +260,7 @@ local function hint(text)
 end
 
 local function redraw_list()
+  clamp_list()
   local items = list_items()
   if m.lpos < m.ltop then m.ltop = m.lpos end
   if m.lpos > m.ltop + VISIBLE - 1 then m.ltop = m.lpos - VISIBLE + 1 end
@@ -274,7 +290,7 @@ local function redraw_list()
   hint("E2 pick K3 use *=yours")
 end
 
-m.redraw = function()
+local function redraw_raw()
   screen.clear()
   if m.mode == "confirm" then
     screen.level(15)
@@ -307,6 +323,35 @@ m.redraw = function()
   scrollbar(m.top, #rows)
   hint("E2 row  E3 change  K3 more")
   screen.update()
+end
+
+-- the handlers the menu calls. every key press and every encoder turn ends with a redraw (a state change that is not drawn looks like a page that does not react: K3 on PRESET opens the list,
+-- but without a redraw the screen kept showing the rows and up / down moved an invisible list), and an error in a handler is logged and leaves the page in a whole state (rows mode, its own handlers)
+local function recover(what, err)
+  dbg(what .. " raised an error: " .. tostring(err))
+  m.mode, m.confirm = "rows", nil
+  pcall(clamp_rows)
+  reclaim()
+end
+
+m.key = function(n, z)
+  local ok, err = pcall(key_raw, n, z)
+  if not ok then recover("key " .. tostring(n) .. " " .. tostring(z), err) end
+  if (z == 1 or not ok) and norns.menu.status() then _menu.redraw() end
+end
+
+m.enc = function(n, delta)
+  local ok, err = pcall(enc_raw, n, delta)
+  if not ok then recover("enc " .. tostring(n) .. " " .. tostring(delta), err) end
+  if norns.menu.status() then _menu.redraw() end
+end
+
+m.redraw = function()
+  local ok, err = pcall(redraw_raw)
+  if not ok then
+    dbg("redraw raised an error: " .. tostring(err))
+    m.mode, m.confirm = "rows", nil
+  end
 end
 
 return m

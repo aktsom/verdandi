@@ -350,7 +350,17 @@ function Wifi.update()
     if Wifi.connection:is_wireless() then
       local name = Wifi.connection:device_name()
       if name then
-	wifi.signal = util.os_capture("iw dev " .. name .. " link | grep 'signal' | awk '{print $2}'")
+	if os.getenv("NORNS_PLATFORM") ~= nil then
+	  -- a computer: `iw` may not be installed (then there is no signal to show, and no "sh: iw: not found" in the log)
+	  if wifi.have_iw == nil then local ok = os.execute("command -v iw > /dev/null 2>&1") wifi.have_iw = (ok == true or ok == 0) end
+	  if wifi.have_iw then
+	    wifi.signal = util.os_capture("iw dev " .. name .. " link 2> /dev/null | grep 'signal' | awk '{print $2}'")
+	  else
+	    wifi.signal = ""
+	  end
+	else
+	  wifi.signal = util.os_capture("iw dev " .. name .. " link | grep 'signal' | awk '{print $2}'")
+	end
       end
     else
       wifi.signal = ""

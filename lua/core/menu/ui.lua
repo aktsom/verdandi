@@ -24,7 +24,7 @@ end
 
 m.deinit = norns.none
 
-m.key = function(n, z)
+local function key_raw(n, z)
   if z ~= 1 then return end
   if n == 2 then
     _menu.set_page("SYSTEM")
@@ -46,7 +46,7 @@ m.hex_done = function(text)
   _menu.redraw()
 end
 
-m.enc = function(n, delta)
+local function enc_raw(n, delta)
   m.msg = nil
   if n == 2 then
     m.pos = util.clamp(m.pos + delta, 1, #ROWS)
@@ -57,10 +57,9 @@ m.enc = function(n, delta)
     elseif row == "COLOUR" then ui.step_colour(delta)
     elseif row == "CONTRAST" then ui.step_contrast(delta) end
   end
-  _menu.redraw()
 end
 
-m.redraw = function()
+local function redraw_raw()
   screen.clear()
   for i, row in ipairs(ROWS) do
     screen.level(i == m.pos and 15 or 4)
@@ -79,6 +78,31 @@ m.redraw = function()
   screen.move(0, 62)
   screen.text(m.msg or "E2 row  E3 change  CONTRAST: more = lighter")
   screen.update()
+end
+
+-- the handlers the menu calls: every key press and encoder turn ends with a redraw, and an error in a handler is logged (one line in logs/norns.log) and leaves the page with its own handlers
+local function dbg(s) print("SCREEN page: " .. s) end
+local function recover(what, err)
+  dbg(what .. " raised an error: " .. tostring(err))
+  m.pos = util.clamp(m.pos, 1, #ROWS)
+  if norns.menu.status() and norns.menu.get_key() ~= m.key then norns.menu.set(m.enc, m.key, m.redraw, m.refresh) end
+end
+
+m.key = function(n, z)
+  local ok, err = pcall(key_raw, n, z)
+  if not ok then recover("key " .. tostring(n) .. " " .. tostring(z), err) end
+  if (z == 1 or not ok) and norns.menu.status() then _menu.redraw() end
+end
+
+m.enc = function(n, delta)
+  local ok, err = pcall(enc_raw, n, delta)
+  if not ok then recover("enc " .. tostring(n) .. " " .. tostring(delta), err) end
+  if norns.menu.status() then _menu.redraw() end
+end
+
+m.redraw = function()
+  local ok, err = pcall(redraw_raw)
+  if not ok then dbg("redraw raised an error: " .. tostring(err)) end
 end
 
 return m

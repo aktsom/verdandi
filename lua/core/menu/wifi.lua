@@ -88,7 +88,12 @@ m.redraw = function()
   if wifi.ip and wifi.connection then
     if wifi.connection:is_wireless() then
       screen.move(0,40)
-      screen.text("SIGNAL: " .. wifi.signal .. "dBm")
+      if os.getenv("NORNS_PLATFORM") ~= nil and (wifi.signal == nil or wifi.signal == "") then
+        -- a computer without the `iw` tool (or no reading): a short message instead of an error
+        screen.text("SIGNAL: n/a" .. (wifi.have_iw == false and " (iw missing)" or ""))
+      else
+        screen.text("SIGNAL: " .. wifi.signal .. "dBm")
+      end
     end
   end
 
