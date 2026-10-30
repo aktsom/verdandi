@@ -133,7 +133,7 @@ The pixel box is drawn into a **480 x 315 block image** (RGB, one pixel per bloc
 
 ### 2.7 Looks: built-in and the owner's own
 
-A **look** = the style and the five colours. Choosing one sets all of them (and the style: the built-in looks are pixel looks, so choosing DARK switches to pixel).
+A **look** = the five colours (changed after the owner's test, see section 8; this reverses the earlier "option A"). Choosing one sets the colours and never the style; STYLE changes only the style and keeps the colours. A saved look stores the colours only (a `style=` line in an old file is read and ignored).
 
 - **PRESET list** (K3 on PRESET; E3 on the row steps through the same order): the built-in looks first (`DARK`, `LIGHT`, `COLOUR`), then a dim separator line `- MY PRESETS -` (only when he has any), then his own, each with a leading **`* `**; the look in use has `in use` at the right. E2 moves, K3 uses it and returns, K2 goes back. **Long list:** six rows are visible, the list scrolls, a bar at the right edge shows the position; at most 64 own looks (more files are ignored with a log line). **Long name:** at most 18 characters, so `* ` + name + `in use` fits the 128 px line; a name that is longer than the room (only from a hand-made file) is cut with `..`.
 - **SAVE** (K3): the same text entry as the hex rows asks for a name. Validation (shown as a message, nothing is written when it fails): 1 to 18 characters after trimming; letters, digits, space, `-`, `_` and `.` (not as the first character); **no path characters** (`/ \ : * ? " < > |`, control characters, a leading `.`, `..`); not a built-in name (`DARK`, `LIGHT`, `COLOUR`, `CUSTOM`: "DARK is a built-in name"). Names that differ only in case, or in space vs `-`, are the same look. **If the name exists: the page asks "OVERWRITE BARN DOOR?  K3 yes  K2 no"** and writes only after K3; without a confirmation nothing changes. After saving, the new look is the one in use, shown with the star.
@@ -258,3 +258,24 @@ Tests: `box_palette_test.c`, `box_style_test.c`, `box_c_test.sh` (also: the alum
 - **The pixel style draws its own toast pill** (button colours, same place); MIC shows OFF, MIC, SYS or APP as before. The screen placeholder (detached screen) is the aluminium one in both styles, as planned for the first version.
 - **Not built:** the pixel-font placeholder sentence, Ctrl+Shift+M as an alternative (Ctrl+M was chosen), a configurable font. **Not tested here:** the laptop (HARDWARE-CHECKLIST: the look on a real display, soft sizes, Ctrl+M with real sound), the installed `.deb` (the package copies `lua/`, `resources/` and the build; `norns.ttf` is found as the screen finds it), Wayland.
 
+
+## 8. Fixes after the owner's test (installed .deb 0.1~git20261030.3318.5f4909cb)
+
+**1. Hex entry pile-up.** Cause: the text and the right-aligned hint were on one line, the default text was appended to, and nothing limited the length. Now a hex entry takes an optional `#` and at most 6 hex digits (`box.hex_accept` / `ui.hex_accept`); anything else is refused with a short hint on its own line ("6 digits max", "0-9 and a-f only"); the first typed character replaces the code shown; a long entry is cut at the left with `..` and never wider than the screen; the screen is cleared on every redraw. Names (SAVE) accept 18 characters of `[%w _.-]`. The new behaviour is behind `NORNS_PLATFORM` (the launcher sets it); the device path is the original code. Test: `linux/tests/textentry_test.lua` (fails on the old `textentry.lua`).
+
+**2. Navigation stuck on BOX.** I could not reproduce the exact stuck state with real key flows. Demonstrable causes fixed: a second `enter` while an entry was open overwrote the saved handlers (now ignored), a stale redraw after exit crashed when the menu mode had changed (guarded), and the page now takes its handlers back (`reclaim()`) at the start of `hex_done` / `name_done` if the entry did not hand them back. Test: every way of closing (Return, Esc, OK row, K2) x inputs (valid, nothing, over-long, letters) on the BOX and UI pages, double enter, double exit, menu mode changed under the entry. If it still happens, the log line and the key sequence would let me find it.
+
+**3. Style and look independent (reverses option A, section 6).** PRESET sets only colours, STYLE sets only the style. Saved looks store the five colours; no style. `NAME~` compares colours. Tests, manual, BOX page text updated.
+
+**4. Choppy scaling.** Measured with `linux/tests/box_frame_bench.c` under Xvfb (software rendering), average ms per frame over 121 window sizes 640..1600 wide, per component:
+
+| look | before the fix: layers / controls / screen | before total | dragged (fast) total | settled total |
+|---|---|---|---|---|
+| aluminium (before the box styles, same code path) | 9.9 / 3.9 / 11.9 | 44.7 incl. present 17.5 | 13.6 (no present) | 27.3 |
+| aluminium (now) | same | 44.6 | 13.6 | 27.3 |
+| aluminium tinted | | 46.0 | 14.0 | 25.7 |
+| pixel | 85.7 / 63.1 / 11.9 | 176.7 (worst 387) | 4.4 | 142 |
+
+The pixel style dominated: the 496x331 block image was rendered again at every size, once for the box and once for the controls. Fixes that keep the look: the block images are cached (box by colours, controls by state) and enlarged copies by multiple; while the window is being dragged the box is drawn the quick way (`skin_set_fast(1)`: cached image, no filter on the screen picture); the bridge draws only the newest size when several are queued, and a 180 ms settle timer then draws the crisp picture; layers rebuilt for a new size force a full redraw (the ghost frames were a partial blit onto fresh, empty layers). Regression test: `linux/tests/box_frame_test.sh` (time budget per dragged frame, 250 ms by default, and the final image after resizing equals a cold direct draw, for aluminium, tinted and pixel; the settled final image is identical).
+
+**Measured and not measured.** Measured: the drawing steps (software, Xvfb), a live window resized by xdotool under Xvfb (no crash, clean crisp frame). Not measured: the owner's real display and Muffin's live resize (compositor behaviour, GPU presentation), the real feel of the drag; the "present" step was only measured earlier (17.5 ms) and is not part of the test. Added to the hardware checklist.

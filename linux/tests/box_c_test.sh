@@ -48,7 +48,7 @@ for f in ("matron/src/platform/macos/device_skin.c", "matron/src/platform/macos/
         elif s.startswith("#if"): depth_stack.append("?")
         elif s.startswith("#else") and depth_stack: depth_stack[-1] = {"L": "M", "M": "L"}.get(depth_stack[-1], "?")
         elif s.startswith("#endif") and depth_stack: depth_stack.pop()
-        if re.search(r"\b(skin_set_look|skin_set_buttons_shown|look_style|look_shown|look_muted|part_tinted|look_col|box_style_|box_tint_stop|BOX_PART_)", line) and "stopt(" not in line:
+        if re.search(r"\b(skin_set_look|skin_set_fast|look_fast|skin_set_buttons_shown|look_style|look_shown|look_muted|part_tinted|look_col|box_style_|box_tint_stop|BOX_PART_)", line) and "stopt(" not in line:
             if "L" not in depth_stack and not s.startswith(("//", "*", "/*")):
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY

@@ -32,19 +32,21 @@ screen.update = function() calls = calls + 1 end
 local pushed = {}
 _menu = {redraw = function() end, set_page = function(p) pushed[#pushed + 1] = p end}
 norns = {none = function() end}
+norns.menu = {status = function() return true end, get_key = function() return norns.menu.key end, set = function(e, k) norns.menu.key = k end}
 util = {
   clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
   scandir = function(dir) local out = {} local p = io.popen("ls -p '" .. map(dir) .. "' 2>/dev/null") for l in p:lines() do out[#out + 1] = l end p:close() return out end,
 }
 package.loaded.util = util
 local entry
-package.loaded.textentry = {enter = function(cb, default, title, hint) entry = {cb = cb, default = default, title = title, hint = hint} end}
+package.loaded.textentry = {enter = function(cb, default, title, hint, opts) entry = {cb = cb, default = default, title = title, hint = hint, accept = opts and opts.accept} end}
 local sent
 _norns = {box_look = function(...) sent = {...} end}
 local box = require 'core/box_settings'
 local logs = {}
 box.log = function(s) logs[#logs + 1] = s end
 local page = dofile("lua/core/menu/box.lua")
+norns.menu.key = page.key
 
 local function shown(s) for _, l in ipairs(lines) do if l.s:find(s, 1, true) then return l end end return nil end
 local function row_names() local r = page.rows() local out = {} for _, n in ipairs(r) do out[#out + 1] = n end return table.concat(out, ",") end
@@ -84,7 +86,7 @@ check(shown("SAVE") and not shown("STYLE"), "the list scrolls with the cursor: S
 -- ---- STYLE ----
 start()
 page.enc(3, 1)
-check(box.state.style == "pixel" and box.state.preset == "DARK", "E3 on STYLE: pixel, and the untouched defaults become the DARK look")
+check(box.state.style == "pixel" and box.state.preset == "MAC" and box.state.colours.box == "D1D4D8", "E3 on STYLE: pixel, the colours are not touched")
 check(sent and sent[1] == 1, "applied at once")
 page.redraw()
 check(shown("PIXEL"), "STYLE shows PIXEL")
@@ -98,7 +100,7 @@ start()
 box.select_look("DARK")
 goto_row("PRESET")
 page.enc(3, 1)
-check(box.state.preset == "LIGHT" and box.state.style == "pixel", "E3 on PRESET: the next look, its style too")
+check(box.state.preset == "LIGHT" and box.state.style == "aluminium", "E3 on PRESET: the next look, the style stays")
 page.redraw()
 check(shown("LIGHT"), "the row shows LIGHT")
 box.set_part("box", "112233")
@@ -132,7 +134,7 @@ check(shown("* Sunday") ~= nil, "the PRESET row says * Sunday for his own look")
 start()
 goto_row("KEYS")
 press(3)
-check(entry and entry.title == "HEX COLOUR (3 or 6 digits):" and entry.default == "#404246" and entry.hint == box.hex_hint, "K3 on a colour opens the text entry with the current hex, the title and the live hint")
+check(entry and entry.title == "HEX (3 or 6 digits):" and entry.default == "#404246" and entry.hint == box.hex_hint and entry.accept == box.hex_accept, "K3 on a colour opens the text entry with the current hex, the title and the live hint")
 entry.cb("#E8A317")
 page.redraw()
 check(box.state.colours.keys == "E8A317" and shown("#E8A317"), "a valid hex is applied")

@@ -69,9 +69,10 @@ local csrc = assert(real_open("matron/src/platform/linux/box_palette.c")):read("
 local want = {}
 for name, a, bb, c, d, e in csrc:gmatch('{"(%u+)", 1, {0x(%x+), 0x(%x+), 0x(%x+), 0x(%x+), 0x(%x+)}}') do want[#want + 1] = {name, a, bb, c, d, e} end
 check(#want == 4 and #box.BUILTIN == 4, "four built-in looks, as in the C table (" .. #want .. " found there)")
+for _, l in ipairs(box.BUILTIN) do check(l.style == nil, "a look has no style: " .. l.name) end
 for i, w in ipairs(want) do
   local l = box.BUILTIN[i]
-  check(l and l.name == w[1] and l.style == "pixel" and l.colours.box == w[2] and l.colours.keys == w[3] and l.colours.encoders == w[4] and l.colours.buttons == w[5] and l.colours.font == w[6], "built-in look " .. w[1] .. " matches box_palette.c")
+  check(l and l.name == w[1] and l.colours.box == w[2] and l.colours.keys == w[3] and l.colours.encoders == w[4] and l.colours.buttons == w[5] and l.colours.font == w[6], "built-in look " .. w[1] .. " matches box_palette.c")
 end
 check(box.BUILTIN[1].name == "DARK" and box.BUILTIN[2].name == "LIGHT" and box.BUILTIN[3].name == "COLOUR" and box.BUILTIN[4].name == "MAC", "the order: DARK LIGHT COLOUR MAC")
 
@@ -95,23 +96,38 @@ box.set_style("aluminium")
 box.set_part("font", "fff")
 check(box.state.style == "aluminium" and box.state.colours.font == "FFFFFF", "nor in aluminium")
 
--- ---- a look sets the style and the colours ----
+-- ---- a look sets the colours only; the style is its own choice ----
 box.select_look("LIGHT")
-check(box.state.style == "pixel" and box.state.preset == "LIGHT" and box.state.colours.box == "D8D5CE" and box.state.colours.font == "34343A", "choosing LIGHT: pixel and its five colours")
-check(box.label() == "LIGHT", "the label is just LIGHT")
+check(box.state.preset == "LIGHT" and box.state.colours.box == "D8D5CE" and box.state.colours.font == "34343A", "choosing LIGHT: its five colours")
+check(box.state.style == "aluminium", "...and the style stays as it was (aluminium)")
+box.set_style("pixel")
+box.select_look("COLOUR")
+check(box.state.style == "pixel" and box.state.colours.box == "2B6F73", "a look chosen in pixel stays pixel")
+box.set_style("aluminium")
+check(box.state.colours.box == "2B6F73" and box.state.preset == "COLOUR", "STYLE changes only the style: the colours and the look stay")
+check(box.label() == "COLOUR", "the label is just COLOUR")
+box.select_look("LIGHT")
 box.set_part("box", "112233")
-check(box.label() == "LIGHT~" and box.state.preset == "LIGHT", "a changed colour: LIGHT~, the style stays pixel")
+check(box.label() == "LIGHT~" and box.state.preset == "LIGHT" and box.state.style == "aluminium", "a changed colour: LIGHT~, the style is not touched")
 box.select_look("MAC")
-check(box.state.style == "pixel" and box.state.colours.box == "D1D4D8", "MAC is a pixel look made of the Mac box's colours")
+check(box.state.colours.box == "D1D4D8", "MAC is the Mac box's colours")
 check(not box.select_look("NO SUCH LOOK"), "an unknown look is refused")
+for _, style in ipairs({"aluminium", "pixel"}) do
+  box.set_style(style)
+  for _, l in ipairs(box.BUILTIN) do
+    box.select_look(l.name)
+    check(box.state.style == style, "look " .. l.name .. " leaves the style " .. style)
+    check(last and last[1] == (style == "pixel" and 1 or 0) and last[2] == l.colours.box, "applied: " .. style .. " with " .. l.name)
+  end
+end
 
--- ---- STYLE: first use of pixel with the untouched defaults selects the dark look ----
+-- ---- STYLE never changes the colours (the old "first pixel takes DARK" rule is gone) ----
 os.remove("/home/we/box.conf")
 box.load()
 box.set_style("pixel")
-check(box.state.preset == "DARK" and box.state.colours.box == "2C2E33", "pixel with the untouched defaults: the DARK look (dark matt is the pixel default)")
+check(box.state.style == "pixel" and box.state.preset == "MAC" and box.state.colours.box == "D1D4D8", "pixel with the untouched defaults: still the MAC colours")
 box.set_style("aluminium")
-check(box.state.style == "aluminium" and box.state.preset == "DARK", "back to aluminium keeps the colours")
+check(box.state.style == "aluminium" and box.state.colours.box == "D1D4D8", "back to aluminium: the colours are the same")
 os.remove("/home/we/box.conf")
 box.load()
 box.set_part("box", "445566")
@@ -140,6 +156,7 @@ check(ok == true and box.state.colours.box == "000000", "black is accepted")
 -- ---- box.conf: round trip, the other keys kept, unknown keys, damaged values ----
 os.remove("/home/we/box.conf")
 box.load()
+box.set_style("pixel")
 box.select_look("COLOUR")
 box.set_show_buttons(false)
 local saved = slurp("/home/we/box.conf")
@@ -208,7 +225,7 @@ reset()
 local ok2, why2 = box.save_look("Barn door")
 check(ok2 == true, "save: ok (" .. tostring(why2) .. ")")
 local text = slurp("/home/we/box-presets/barn-door.box")
-check(text == "verdandi-box=1\nname=Barn door\nstyle=pixel\nbox=2B6F73\nkeys=E8A317\nencoders=E9DFC8\nbuttons=1D4A4D\nfont=F7F0DE\n", "the file is exactly the documented format: " .. tostring(text))
+check(text == "verdandi-box=1\nname=Barn door\nbox=2B6F73\nkeys=E8A317\nencoders=E9DFC8\nbuttons=1D4A4D\nfont=F7F0DE\n", "the file is exactly the documented format (colours only, no style): " .. tostring(text))
 check(box.state.preset == "Barn door" and box.label() == "Barn door", "after saving the new look is the one in use")
 check(slurp("/home/we/box.conf"):find("preset=Barn door", 1, true), "and box.conf says so")
 check(not exists("/home/we/box-presets/barn-door.box.tmp"), "no temporary file is left")
@@ -231,13 +248,27 @@ check(#box.look_list() == 5, "still one look of his")
 box.select_look("DARK")
 check(box.state.colours.box == "2C2E33", "DARK chosen")
 box.select_look("barn DOOR")
-check(box.state.preset == "barn DOOR" and box.state.colours.keys == "112233" and box.state.style == "pixel", "his look: style and colours restored")
--- a look with style aluminium
+check(box.state.preset == "barn DOOR" and box.state.colours.keys == "112233", "his look: the colours restored")
+-- loading a saved look never switches the style, whichever style it was saved in
 box.set_style("aluminium")
 box.save_look("Silver one")
+box.set_style("pixel")
 box.select_look("DARK")
 box.select_look("Silver one")
-check(box.state.style == "aluminium", "a saved look remembers the aluminium style")
+check(box.state.style == "pixel", "a look saved in aluminium, loaded in pixel: the style stays pixel")
+check(not slurp("/home/we/box-presets/silver-one.box"):find("style", 1, true), "a saved look has no style line")
+put("/home/we/box-presets/older.box", "verdandi-box=1\nname=Older\nstyle=aluminium\nbox=010203\nkeys=040506\nencoders=070809\nbuttons=0A0B0C\nfont=0D0E0F\n")
+box.reload_looks()
+check(box.look_by_name("Older") and box.look_by_name("Older").colours.box == "010203", "a look file from the first version (with style=) is still read")
+box.set_style("pixel")
+box.select_look("Older")
+check(box.state.style == "pixel", "its style line is ignored")
+put("/home/we/box-presets/older2.box", "verdandi-box=1\nname=Older2\nstyle=round\nbox=010203\nkeys=040506\nencoders=070809\nbuttons=0A0B0C\nfont=0D0E0F\n")
+box.reload_looks()
+check(box.look_by_name("Older2") ~= nil, "even an unknown style value no longer matters")
+os.remove("/home/we/box-presets/older.box")
+os.remove("/home/we/box-presets/older2.box")
+box.reload_looks()
 
 -- built-in protection
 reset()
@@ -264,13 +295,12 @@ check(box.state.preset == "CUSTOM" and box.label() == "CUSTOM", "the colours sta
 check(not box.delete_look("barn DOOR"), "deleting it again is refused")
 
 -- damaged and foreign files: ignored with one log line each, never an error
-local good = "verdandi-box=1\nname=%s\nstyle=pixel\nbox=112233\nkeys=445566\nencoders=778899\nbuttons=AABBCC\nfont=DDEEFF\n"
+local good = "verdandi-box=1\nname=%s\nbox=112233\nkeys=445566\nencoders=778899\nbuttons=AABBCC\nfont=DDEEFF\n"
 put("/home/we/box-presets/binary.box", string.char(0, 1, 2, 255, 254) .. "garbage")
 put("/home/we/box-presets/big.box", string.format(good, "big") .. string.rep("# padding\n", 400))
 put("/home/we/box-presets/wrongfirst.box", "hello\n" .. string.format(good, "wrongfirst"):gsub("^verdandi%-box=1\n", ""))
 put("/home/we/box-presets/newer.box", string.format(good, "newer"):gsub("verdandi%-box=1", "verdandi-box=2"))
 put("/home/we/box-presets/badcolour.box", string.format(good, "badcolour"):gsub("keys=445566", "keys=red"))
-put("/home/we/box-presets/badstyle.box", string.format(good, "badstyle"):gsub("style=pixel", "style=round"))
 put("/home/we/box-presets/mismatch.box", string.format(good, "something else"))
 put("/home/we/box-presets/pathy.box", string.format(good, "../evil"))
 put("/home/we/box-presets/nocolour.box", "verdandi-box=1\nname=nocolour\nstyle=pixel\nbox=112233\n")
@@ -284,10 +314,10 @@ check(okc, "reading damaged files does not raise an error")
 local names = {}
 for _, l in ipairs(box.look_list()) do names[l.name] = true end
 check(names["fine"] and names["extra"], "valid files are in the list (an unknown key is ignored)")
-for _, n in ipairs({"binary", "big", "wrongfirst", "newer", "badcolour", "badstyle", "something else", "../evil", "nocolour", "empty", "notbox"}) do
+for _, n in ipairs({"binary", "big", "wrongfirst", "newer", "badcolour", "something else", "../evil", "nocolour", "empty", "notbox"}) do
   check(not names[n], "'" .. n .. "' is not in the list")
 end
-for _, f in ipairs({"binary.box", "big.box", "wrongfirst.box", "newer.box", "badcolour.box", "badstyle.box", "mismatch.box", "pathy.box", "nocolour.box", "empty.box"}) do
+for _, f in ipairs({"binary.box", "big.box", "wrongfirst.box", "newer.box", "badcolour.box", "mismatch.box", "pathy.box", "nocolour.box", "empty.box"}) do
   check(logged_has(f), "a log line names " .. f)
 end
 check(not logged_has("notbox.txt"), "a file that is not .box is not even looked at")
@@ -320,7 +350,7 @@ for _, l in ipairs(box.look_list()) do order[#order + 1] = l.name end
 check(table.concat(order, ",") == "DARK,LIGHT,COLOUR,MAC,alpha,Zed", "built-in first, then his own sorted by name: " .. table.concat(order, ","))
 box.select_look("DARK")
 box.step_preset(1)
-check(box.state.preset == "LIGHT", "E3 steps to the next look")
+check(box.state.preset == "LIGHT" and box.state.style == "pixel", "E3 steps to the next look (the style is not touched)")
 box.step_preset(10)
 check(box.state.preset == "Zed", "stepping stops at the end")
 box.step_preset(-1)

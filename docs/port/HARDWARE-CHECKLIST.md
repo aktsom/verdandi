@@ -266,3 +266,8 @@ The tests run under Xvfb with no window manager (stacking order and keyboard foc
 - [ ] **Ctrl+M** mutes and unmutes (the menu item "Mute output  Ctrl+M" shows the tick), with the row hidden a small MUTE button shows while muted and clicking it unmutes; from the screen window too. Play sound while you do it: the output really goes silent and comes back.
 - [ ] `verdandi scan-fkeys` on your real `~/Verdandi/dust/code`: the Ctrl+M lines (it could only be checked on a copy of your script list here).
 
+
+## Box styles: fixes after the first test
+- [ ] SYSTEM > BOX or UI, a colour row, K3: type more than 6 digits: the seventh is refused with "6 digits max", no text piles up, the lines stay clean. Finish with Enter, Esc, OK, K2, also after a too-long entry: the page keeps its keys every time (if it ever sticks, note the keys pressed and send `logs/norns.log`).
+- [ ] PRESET changes only the colours, STYLE only the style (try DARK on aluminium, then STYLE pixel: the colours stay).
+- [ ] Drag a window corner in the pixel style and in aluminium: smooth, no ghost frames, and the crisp picture returns about a fifth of a second after you stop. Not measured here: Muffin's live resize on a real display.

@@ -100,8 +100,16 @@ local function list_move(d)
 end
 
 -- ---- text entries ----
+-- after the text entry the page must have its keys again. the entry gives back what it found; if the menu was changed while it was open it may not (docs/port/box-style-plan.md), so check
+local function reclaim()
+  if norns.menu.status() and norns.menu.get_key() ~= m.key then
+    norns.menu.set(m.enc, m.key, m.redraw, m.refresh)
+  end
+end
+
 local function hex_done(row)
   return function(text)
+    reclaim()
     if text ~= nil then
       local ok, why = box.set_part(PARTS[row], text)
       if not ok then m.msg = "bad hex: " .. why
@@ -112,6 +120,7 @@ local function hex_done(row)
 end
 
 local function name_done(text)
+  reclaim()
   if text ~= nil then
     local ok, why, existing = box.save_look(text)
     if ok then
@@ -125,6 +134,13 @@ local function name_done(text)
   end
   clamp_rows()
   _menu.redraw()
+end
+
+-- the entry for a name takes only what a name may hold, up to 18 characters
+local function name_accept(text)
+  if #text > box.MAX_NAME then return false, box.MAX_NAME .. " characters max" end
+  if text:find("[^%w _%.%-]") then return false, "letters, digits, - _ . only" end
+  return true
 end
 
 local function name_hint(text)
@@ -177,9 +193,9 @@ m.key = function(n, z)
   elseif row == "PRESET" then
     open_list()
   elseif PARTS[row] then
-    textentry.enter(hex_done(row), "#" .. box.state.colours[PARTS[row]], "HEX COLOUR (3 or 6 digits):", box.hex_hint)
+    textentry.enter(hex_done(row), "#" .. box.state.colours[PARTS[row]], "HEX (3 or 6 digits):", box.hex_hint, {accept = box.hex_accept, replace = true})
   elseif row == "SAVE" then
-    textentry.enter(name_done, "", "NAME FOR THIS LOOK:", name_hint)
+    textentry.enter(name_done, "", "NAME FOR THIS LOOK:", name_hint, {accept = name_accept})
   elseif row == "DELETE" then
     local l = in_use_look()
     if l and not l.builtin then

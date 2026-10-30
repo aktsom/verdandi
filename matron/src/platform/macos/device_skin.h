@@ -111,6 +111,8 @@ extern void skin_set_look(int style, const char *box, const char *keys, const ch
 extern int skin_look_style(void);
 // the page buttons shown or hidden (the right-click item): hidden, they are not drawn and have no hit area, except the MUTE chip while muted (skin_note_muted: draw_controls does it by itself)
 extern void skin_set_buttons_shown(int shown);
+// while the window is being resized the screen picture and the pixel box are placed with the cheap filter; set it false when the size settles and draw once more (the quality frame)
+extern void skin_set_fast(int fast);
 extern int skin_buttons_shown(void);
 extern void skin_note_muted(int muted);
 // the bezel (the recess the screen sits in) under device pixel x/y: where the placeholder is

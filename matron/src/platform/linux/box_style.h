@@ -47,6 +47,9 @@ extern void box_style_render_controls(uint32_t *px, const skin_state_t *st, int 
 extern void box_style_draw_static(cairo_t *cr, const skin_geom_t *g);
 extern void box_style_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st, int buttons_shown);
 
+// while the window is being resized: placing the block images is cheap (no enlarging, no filter); false again when the size settles, then the next frame is the quality one
+extern void box_style_set_fast(int fast);
+
 // the pixel font: width in blocks of a text (the font of the screen, norns.ttf at 8 px, or the built-in 3 x 5 font), which font is in use ("norns.ttf" or "builtin")
 extern int box_style_text_width(const char *text);
 extern const char *box_style_font_name(void);

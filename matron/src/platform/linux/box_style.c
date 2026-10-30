@@ -70,6 +70,41 @@ int box_style_control_rect(int control, double *x0, double *y0, double *x1, doub
     return 0;
 }
 
+// ---------------------------------------------------------------- caches (docs/port/box-style-plan.md, "Scaling the window")
+// the block images do not depend on the window size: the static one only on the colours, the controls one only on the state. they are drawn once and kept; resizing the window only places them (and the
+// enlarged copies that the in-between sizes need are kept too). measured before: 86 ms for the box and 63 ms for the controls per frame at the sizes of a drag, now only the placing
+#define MAX_M 8
+static uint32_t *blk_static = NULL, *blk_ctl = NULL;
+static int static_ok = 0, ctl_ok = 0;
+static cairo_surface_t *big_static[MAX_M + 1], *big_ctl[MAX_M + 1];
+static int fast_mode = 0; // while the window is being resized: placing is cheap (no enlarging, no filter); the quality frame follows when the size settles
+
+typedef struct {
+    int key_down[3], enc_ticks[3], hover, page, grid_open, arc_open, keys_open, input, button_down, recording, out_muted, shown;
+    char toast[160];
+} ctl_key_t;
+static ctl_key_t ctl_key;
+
+static void drop_big(cairo_surface_t **set) {
+    for (int i = 0; i <= MAX_M; i++) {
+        if (set[i] != NULL) {
+            cairo_surface_destroy(set[i]);
+            set[i] = NULL;
+        }
+    }
+}
+
+static void invalidate_all(void) {
+    static_ok = 0;
+    ctl_ok = 0;
+    drop_big(big_static);
+    drop_big(big_ctl);
+}
+
+void box_style_set_fast(int fast) {
+    fast_mode = fast != 0;
+}
+
 // ---------------------------------------------------------------- the palette in use
 typedef struct {
     box_rgb_t base, dark, darker, light;
@@ -100,6 +135,7 @@ void box_style_set_colours(const box_rgb_t colours[BOX_PARTS]) {
         sh[i].light = box_light(colours[i]);
     }
     colours_set = 1;
+    invalidate_all();
 }
 
 box_rgb_t box_style_surround(void) {
@@ -192,6 +228,8 @@ static char font_name[16] = "builtin";
 static char font_override[512];
 
 void box_style_set_font(const char *path_or_builtin) {
+    ctl_ok = 0;
+    drop_big(big_ctl);
     if (ft_face != NULL) {
         FT_Done_Face(ft_face);
         ft_face = NULL;
@@ -435,7 +473,8 @@ void box_style_render_controls(uint32_t *px, const skin_state_t *st, int buttons
 }
 
 // ---------------------------------------------------------------- placing an image in the window (the screen's rule: whole multiples where the size allows, else slightly soft)
-static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px) {
+// big: the cache of the enlarged copies of this layer (by the whole multiple m)
+static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px, cairo_surface_t **big) {
     cairo_surface_t *img = cairo_image_surface_create_for_data((unsigned char *)px, CAIRO_FORMAT_ARGB32, BS_W, BS_H, BS_W * 4);
     double k = BS_BLOCK * g->s;
     long r = lround(k);
@@ -450,30 +489,87 @@ static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px) {
         cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_NONE);
         cairo_rectangle(cr, 0, 0, BS_W, BS_H);
         cairo_fill(cr);
+    } else if (fast_mode) {
+        // while the size is changing: the block image straight onto the window with the cheap filter (some blocks a device pixel wider); the quality frame follows when the size settles
+        cairo_translate(cr, g->ox - BS_MARGIN * BS_BLOCK * g->s, g->oy - BS_MARGIN * BS_BLOCK * g->s);
+        cairo_scale(cr, k, k);
+        cairo_set_source_surface(cr, img, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_FAST);
+        cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_NONE);
+        cairo_rectangle(cr, 0, 0, BS_W, BS_H);
+        cairo_fill(cr);
     } else {
-        // in between: enlarge to a whole multiple with nearest neighbour (no blur inside a block), then scale down with the best filter
+        // in between: enlarge to a whole multiple with nearest neighbour (no blur inside a block), then scale down with the best filter. the enlarged copy is kept
         int m = (int)ceil(k);
         if (m < 1) {
             m = 1;
         }
-        cairo_surface_t *big = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, BS_W * m, BS_H * m);
-        cairo_t *bc = cairo_create(big);
-        cairo_scale(bc, m, m);
-        cairo_set_source_surface(bc, img, 0, 0);
-        cairo_pattern_set_filter(cairo_get_source(bc), CAIRO_FILTER_NEAREST);
-        cairo_paint(bc);
-        cairo_destroy(bc);
+        if (m > MAX_M) {
+            m = MAX_M;
+        }
+        if (big[m] == NULL) {
+            big[m] = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, BS_W * m, BS_H * m);
+            cairo_t *bc = cairo_create(big[m]);
+            cairo_scale(bc, m, m);
+            cairo_set_source_surface(bc, img, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(bc), CAIRO_FILTER_NEAREST);
+            cairo_paint(bc);
+            cairo_destroy(bc);
+        }
         cairo_translate(cr, g->ox - BS_MARGIN * BS_BLOCK * g->s, g->oy - BS_MARGIN * BS_BLOCK * g->s);
         cairo_scale(cr, k / m, k / m);
-        cairo_set_source_surface(cr, big, 0, 0);
+        cairo_set_source_surface(cr, big[m], 0, 0);
         cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
         cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_NONE);
         cairo_rectangle(cr, 0, 0, BS_W * m, BS_H * m);
         cairo_fill(cr);
-        cairo_surface_destroy(big);
     }
     cairo_restore(cr);
     cairo_surface_destroy(img);
+}
+
+static void ensure_static(void) {
+    ensure_colours();
+    if (blk_static == NULL) {
+        blk_static = (uint32_t *)malloc(sizeof(uint32_t) * BS_W * BS_H);
+    }
+    if (blk_static != NULL && !static_ok) {
+        box_style_render_static(blk_static);
+        static_ok = 1;
+        drop_big(big_static);
+    }
+}
+
+static void ensure_controls(const skin_state_t *st, int buttons_shown) {
+    ensure_colours();
+    ctl_key_t k;
+    memset(&k, 0, sizeof k);
+    for (int i = 0; i < 3; i++) {
+        k.key_down[i] = st->key_down[i] != 0;
+        k.enc_ticks[i] = ((st->enc_ticks[i] % 36) + 36) % 36;
+    }
+    k.hover = st->hover;
+    k.page = st->page;
+    k.grid_open = st->grid_open;
+    k.arc_open = st->arc_open;
+    k.keys_open = st->keys_open;
+    k.input = st->input;
+    k.button_down = st->button_down;
+    k.recording = st->recording;
+    k.out_muted = st->out_muted;
+    k.shown = buttons_shown != 0;
+    if (st->toast != NULL) {
+        snprintf(k.toast, sizeof k.toast, "%s", st->toast);
+    }
+    if (blk_ctl == NULL) {
+        blk_ctl = (uint32_t *)malloc(sizeof(uint32_t) * BS_W * BS_H);
+    }
+    if (blk_ctl != NULL && (!ctl_ok || memcmp(&k, &ctl_key, sizeof k) != 0)) {
+        box_style_render_controls(blk_ctl, st, buttons_shown);
+        ctl_key = k;
+        ctl_ok = 1;
+        drop_big(big_ctl);
+    }
 }
 
 void box_style_draw_static(cairo_t *cr, const skin_geom_t *g) {
@@ -483,23 +579,17 @@ void box_style_draw_static(cairo_t *cr, const skin_geom_t *g) {
     cairo_set_source_rgb(cr, s.r / 255.0, s.g / 255.0, s.b / 255.0);
     cairo_paint(cr);
     cairo_restore(cr);
-    uint32_t *px = (uint32_t *)malloc(sizeof(uint32_t) * BS_W * BS_H);
-    if (px == NULL) {
-        return;
+    ensure_static();
+    if (blk_static != NULL) {
+        place(cr, g, blk_static, big_static);
     }
-    box_style_render_static(px);
-    place(cr, g, px);
-    free(px);
 }
 
 void box_style_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state_t *st, int buttons_shown) {
-    uint32_t *px = (uint32_t *)malloc(sizeof(uint32_t) * BS_W * BS_H);
-    if (px == NULL) {
-        return;
+    ensure_controls(st, buttons_shown);
+    if (blk_ctl != NULL) {
+        place(cr, g, blk_ctl, big_ctl);
     }
-    box_style_render_controls(px, st, buttons_shown);
-    place(cr, g, px);
-    free(px);
 }
 
 // ---------------------------------------------------------------- hit-testing

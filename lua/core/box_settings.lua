@@ -6,11 +6,11 @@
 --   show_buttons=1    1 (default) or 0: the right-click item "Show the page buttons", applied at once
 -- unknown keys are ignored with a log line (and kept when the file is written again), missing keys take their defaults, a damaged value falls back to its own default with a log line.
 -- one call, _norns.box_look(style, box, keys, encoders, buttons, font, show_buttons), tells the window; it exists on the Linux desktop only, elsewhere nothing here applies or writes anything.
--- a look = the style and the five colours. four are built in (DARK LIGHT COLOUR MAC: the same table as matron/src/platform/linux/box_palette.c, a test compares them); the owner's own are one
--- small file each in <norns home>/box-presets/ (<slug>.box), so that a look can be copied to another computer:
+-- a look = the five colours, nothing else: choosing one never changes the style, and STYLE never changes the colours (docs/port/box-style-plan.md, after the owner's test). four are built in (DARK
+-- LIGHT COLOUR MAC: the same table as matron/src/platform/linux/box_palette.c, a test compares them); the owner's own are one small file each in <norns home>/box-presets/ (<slug>.box), so that a
+-- look can be copied to another computer (a file made by the first version has a style= line: it is read and ignored):
 --   verdandi-box=1
 --   name=Barn door
---   style=pixel
 --   box=2C2E33
 --   keys=444853
 --   encoders=5D6270
@@ -33,7 +33,7 @@ M.LOW_CONTRAST = 2.5
 
 -- the built-in looks (box, keys, encoders, buttons, font): see matron/src/platform/linux/box_palette.c
 local function look(name, box, keys, encoders, buttons, font)
-  return {name = name, builtin = true, style = "pixel", colours = {box = box, keys = keys, encoders = encoders, buttons = buttons, font = font}}
+  return {name = name, builtin = true, colours = {box = box, keys = keys, encoders = encoders, buttons = buttons, font = font}}
 end
 M.BUILTIN = {
   look("DARK", "2C2E33", "444853", "5D6270", "3A3D45", "E4E6EA"),
@@ -80,8 +80,16 @@ end
 function M.hex_hint(text)
   local t = tostring(text or ""):match("^%s*(.-)%s*$")
   if t == "" or t == "#" then return "" end
-  local r, msg = M.parse_hex(t)
-  return r and "" or msg
+  local r = M.parse_hex(t)
+  return r and "" or "need 3 or 6 digits"
+end
+
+--- the text entry's limit for a hex code: an optional #, then at most 6 hex digits, nothing else. true, or false and a short hint
+function M.hex_accept(text)
+  local digits = tostring(text or ""):match("^#?(%x*)$")
+  if digits == nil then return false, "0-9 and a-f only" end
+  if #digits > 6 then return false, "6 digits max" end
+  return true
 end
 
 local function channel(v)
@@ -141,7 +149,6 @@ local function read_look_file(path, file)
   for line in text:gmatch("[^\r\n]+") do
     local k, v = line:match("^([%w_]+)=(.*)$")
     if k == "name" then l.name = v
-    elseif k == "style" then l.style = v
     elseif k then
       for _, part in ipairs(M.PARTS) do
         if k == part then l.colours[part] = v end
@@ -152,7 +159,6 @@ local function read_look_file(path, file)
   l.name, why = M.validate_name(l.name)
   if l.name == nil then return nil, "name: " .. tostring(why) end
   if M.slug(l.name) .. ".box" ~= file then return nil, "the name '" .. l.name .. "' does not match the file name" end
-  if l.style ~= "aluminium" and l.style ~= "pixel" then return nil, "style '" .. tostring(l.style) .. "' is not aluminium or pixel" end
   for _, part in ipairs(M.PARTS) do
     local hex = l.colours[part] and M.hex(l.colours[part])
     if hex == nil then return nil, part .. " is not a colour (" .. tostring(l.colours[part]) .. ")" end
@@ -210,7 +216,7 @@ end
 local function same_as(l)
   if l == nil then return false end
   local st = M.state
-  -- the colours only: the style is chosen with STYLE, and the default (aluminium with the Mac look's colours) is just MAC
+  -- the colours only: the style is chosen with STYLE and is not part of a look
   for _, part in ipairs(M.PARTS) do
     if st.colours[part] ~= l.colours[part] then return false end
   end
@@ -340,23 +346,19 @@ function M.set_part(part, text)
   return true
 end
 
---- the look by name: its style and its five colours (a pixel look switches to pixel, a saved aluminium look to aluminium)
+--- the look by name: its five colours. the style stays as it is
 function M.select_look(name)
   local l = M.look_by_name(name)
   if l == nil then return false, "no such look" end
-  M.state.style = l.style
   M.state.colours = copy_colours(l.colours)
   M.state.preset = l.name
   changed()
   return true
 end
 
---- STYLE: the shape language only. the first time pixel is chosen while the colours are still the untouched defaults (the Mac look), the dark look is taken, because dark matt is the pixel default
+--- STYLE: the shape language only, the colours stay
 function M.set_style(style)
   if style ~= "aluminium" and style ~= "pixel" then return false end
-  if style == "pixel" and M.state.style ~= "pixel" and M.state.preset == "MAC" and not M.is_modified() then
-    return M.select_look("DARK")
-  end
   M.state.style = style
   changed()
   return true
@@ -379,7 +381,7 @@ function M.set_show_buttons(on)
 end
 
 -- ---------------------------------------------------------------- his own looks
---- save the colours and the style as a look: true, or false and why. a name that exists asks first: false, "exists", the name; overwrite = true writes it
+--- save the five colours as a look (not the style): true, or false and why. a name that exists asks first: false, "exists", the name; overwrite = true writes it
 function M.save_look(name, overwrite)
   local n, why = M.validate_name(name)
   if n == nil then return false, why end
@@ -393,7 +395,7 @@ function M.save_look(name, overwrite)
   local f = io.open(tmp, "w")
   if f == nil then return false, "cannot write " .. file end
   local st = M.state
-  f:write("verdandi-box=1\n", "name=" .. n .. "\n", "style=" .. st.style .. "\n")
+  f:write("verdandi-box=1\n", "name=" .. n .. "\n")
   for _, part in ipairs(M.PARTS) do f:write(part .. "=" .. st.colours[part] .. "\n") end
   f:close()
   if not os.rename(tmp, file) then return false, "cannot write " .. file end

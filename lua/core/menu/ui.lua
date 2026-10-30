@@ -31,12 +31,14 @@ m.key = function(n, z)
   elseif n == 3 and ROWS[m.pos] == "HEX" then
     local textentry = require 'textentry'
     m.msg = nil
-    textentry.enter(m.hex_done, ui.state.custom and ("#" .. ui.state.custom) or "", "HEX COLOUR (3 or 6 digits):", ui.hex_hint)
+    textentry.enter(m.hex_done, ui.state.custom and ("#" .. ui.state.custom) or "", "HEX (3 or 6 digits):", ui.hex_hint, {accept = ui.hex_accept, replace = true})
   end
 end
 
 -- the text entry is done: text is nil on cancel
 m.hex_done = function(text)
+  -- after the text entry the page must have its keys again (see core/menu/box.lua)
+  if norns.menu.status() and norns.menu.get_key() ~= m.key then norns.menu.set(m.enc, m.key, m.redraw, m.refresh) end
   if text ~= nil then
     local ok, why = ui.set_custom(text)
     m.msg = (not ok) and ("bad hex: " .. why) or nil

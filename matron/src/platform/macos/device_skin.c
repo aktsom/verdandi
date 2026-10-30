@@ -110,6 +110,13 @@ void skin_set_look(int style, const char *box, const char *keys, const char *enc
     box_style_set_colours(look_col);
 }
 
+// while the window is being resized (docs/port/box-style-plan.md): the screen picture and the pixel box are placed with the cheap filter; the quality frame follows when the size settles
+static int look_fast = 0;
+void skin_set_fast(int fast) {
+    look_fast = fast != 0;
+    box_style_set_fast(fast);
+}
+
 void skin_set_buttons_shown(int shown) {
     look_shown = shown != 0;
 }
@@ -857,6 +864,16 @@ void skin_draw_oled(cairo_t *cr, const skin_geom_t *g, cairo_surface_t *oled) {
         cairo_scale(cr, g->oled_px, g->oled_px);
         cairo_set_source_surface(cr, oled, 0, 0);
         cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+        cairo_rectangle(cr, 0, 0, 128, 64);
+        cairo_fill(cr);
+        cairo_restore(cr);
+    } else if (look_fast) {
+        // the window is being resized: the picture straight onto the window with the cheap filter (some screen pixels a device pixel wider); the quality frame follows when the size settles
+        cairo_save(cr);
+        cairo_translate(cr, g->oled_x, g->oled_y);
+        cairo_scale(cr, (double)g->oled_w / 128, (double)g->oled_h / 64);
+        cairo_set_source_surface(cr, oled, 0, 0);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_FAST);
         cairo_rectangle(cr, 0, 0, 128, 64);
         cairo_fill(cr);
         cairo_restore(cr);

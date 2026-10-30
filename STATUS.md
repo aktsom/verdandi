@@ -224,6 +224,10 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 
 `docs/port/packaging.md` (+ `docs/port/packaging/` with the scripts and the last output): recommendation **`.deb` first** (Ubuntu 24.04 / Mint 22), bundled SuperCollider 3.14.1 **without Qt**, program read-only under `/opt/verdandi`, home in a user folder, AppImage possibly later, Flatpak not recommended. Run here: read-only program tree boots; Qt-less SuperCollider built from source boots norns (closure 18 MB vs 238 MB); an experimental `.deb` installs in a clean Ubuntu 24.04 and boots headless. Found: SuperCollider's data path is compiled in (not relocatable); the bundled SuperCollider must not be called `sc/` (norns' own folder). Not tested: AppImage, Flatpak, the laptop. `CLAUDE.md` now says Linux VST3 first, then Windows. GATE B is open in `DECISIONS.md`.
 
+## Fixes after the owner's test of the box styles (0.1~git20261030.3318.5f4909cb)
+- Hex entry pile-up fixed (6 digits max, hint on its own line, clean redraw; names 18 characters); BOX stuck navigation: causes found by test fixed (double enter, stale redraw, handlers reclaimed), the owner's exact stuck state not reproduced; style and look independent (looks = five colours); window scaling: pixel box layers cached, quick drawing while dragging, resize events coalesced, settle redraw, ghost frames fixed. Details and measurements in `docs/port/box-style-plan.md` section 8. New tests: `textentry_test.lua`, `box_frame_test.sh`.
+- Not measured: the owner's display and Muffin live resize (HARDWARE-CHECKLIST).
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.

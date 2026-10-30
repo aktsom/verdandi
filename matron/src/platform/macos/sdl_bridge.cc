@@ -314,6 +314,34 @@ static void draw_oled(cairo_t *cr) {
 }
 
 // full: the whole device; otherwise only the oled
+#ifdef NORNS_LINUX_DESKTOP
+// while the window is being dragged to a new size the box is drawn the quick way; a timer
+// brings the crisp picture back when the size has been still for a moment
+static bool resize_fast = false;
+static unsigned resize_stamp = 0;
+#define RESIZE_SETTLE_MS 180
+
+static Uint32 resize_timer_cb(Uint32 interval, void *param) {
+    (void)interval;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 5;
+    ev.user.data1 = param;
+    SDL_PushEvent(&ev);
+    return 0;
+}
+
+static void resize_begin(void) {
+    if (!resize_fast) {
+        resize_fast = true;
+        skin_set_fast(1);
+    }
+    resize_stamp++;
+    SDL_AddTimer(RESIZE_SETTLE_MS, resize_timer_cb, (void *)(uintptr_t)resize_stamp);
+}
+#endif
+
 static void redraw(bool full) {
     if (the_window == NULL) {
         return;
@@ -324,8 +352,15 @@ static void redraw(bool full) {
     }
 #endif
     SDL_Surface *dst = SDL_GetWindowSurface(the_window);
-    if (dst == NULL || !ensure_layers(dst->w, dst->h)) {
+    if (dst == NULL) {
         return;
+    }
+    bool rebuilt = canvas == NULL || geom.w != dst->w || geom.h != dst->h;
+    if (!ensure_layers(dst->w, dst->h)) {
+        return;
+    }
+    if (rebuilt) {
+        full = true; // fresh layers are empty: a partial blit would show them (ghost frames)
     }
     // the in-window menu (linux) is over the oled too
     if (shell_menu_is_open()) {
@@ -2892,6 +2927,14 @@ void sdl_bridge_run(void) {
                     redraw(false);
                     screen_refresh();
                 }
+            } else if (ev.user.code == 5) {
+                // the window stopped changing size: the crisp picture
+                if ((unsigned)(uintptr_t)ev.user.data1 == resize_stamp && resize_fast) {
+                    resize_fast = false;
+                    skin_set_fast(0);
+                    free_layers();
+                    redraw(true);
+                }
             } else if (ev.user.code == 4) {
                 // SYSTEM > BOX: a new look for the box (sdl_bridge_set_box_look): the layers are made again
                 box_look_msg_t *m = (box_look_msg_t *)ev.user.data1;
@@ -3030,6 +3073,18 @@ void sdl_bridge_run(void) {
                 SCREEN_SAVE();
                 event_post(event_data_new(EVENT_QUIT));
             } else if (repaint) {
+#ifdef NORNS_LINUX_DESKTOP
+                if (e == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    resize_begin();
+                    // a newer size is queued: only the latest is drawn
+                    SDL_PumpEvents();
+                    SDL_Event nx;
+                    if (SDL_PeepEvents(&nx, 1, SDL_PEEKEVENT, SDL_WINDOWEVENT, SDL_WINDOWEVENT) == 1 &&
+                        nx.window.windowID == id && nx.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                        break;
+                    }
+                }
+#endif
                 redraw(true);
             } else if (e == SDL_WINDOWEVENT_LEAVE && held_key == 0 && drag_enc == 0) {
                 set_hover(SKIN_NONE);

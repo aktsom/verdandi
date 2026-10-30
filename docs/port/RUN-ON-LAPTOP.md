@@ -316,7 +316,7 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - [ ] Look in `~/Verdandi/logs`: a second start must not have made a new `norns.1.log` (it used to rotate the running instance's logs).
 
 ## The look of the box (docs/port/box-style-plan.md)
-- **SYSTEM > BOX** (HOME > SYSTEM, below UI): STYLE (aluminium is the default; pixel is the new one), PRESET (DARK, LIGHT, COLOUR, MAC, then your own marked with `*`), the five colours BOX, KEYS, ENCODERS, BUTTONS, FONT (each a hex code; the same text entry as UI's HEX), SAVE and, for one of your own looks, DELETE. The colours work for **both** styles: in aluminium they tint the brushed metal.
+- **SYSTEM > BOX** (HOME > SYSTEM, below UI): STYLE (aluminium is the default; pixel is the new one; it changes only the style), PRESET (DARK, LIGHT, COLOUR, MAC, then your own marked with `*`; a look is the five colours and never changes the style), the five colours BOX, KEYS, ENCODERS, BUTTONS, FONT (each a hex code; the same text entry as UI's HEX), SAVE and, for one of your own looks, DELETE. The colours work for **both** styles: in aluminium they tint the brushed metal.
 - **Show the page buttons** in the right-click menu hides the row above the device (both styles); F1-F4, F5, F6-F8 keep working; "Open maiden" and "Open the manual" are menu items now; **Ctrl+M** mutes (a small MUTE button stays while muted).
 - Your own looks are files: `~/Verdandi/box-presets/<name>.box` (copy one to another computer and it appears in the list). The settings are `~/Verdandi/box.conf`. `verdandi scan-fkeys` also reports scripts that test `keyboard.ctrl()` and name the letter M (what Ctrl+M would take from them).
 

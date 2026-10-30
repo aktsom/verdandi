@@ -120,6 +120,7 @@ python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
 run "c:ui_look (grey correction, tint, brightness: equal to the Python reference at 89600 values; black stays black, white stays white; the gif palette)" "$T/ulk" "$T/ui-dump.txt"
 run "lua:file dialog setting (off by default, ticked, unticked at once, saved, damaged value, result and cancel, macOS unchanged)" lua5.3 linux/tests/file_dialog_setting_test.lua
 run "lua:box settings and looks (hex, box.conf, built-in and own looks, files, names, both styles take colours)" lua5.3 linux/tests/box_settings_test.lua
+run "lua:text entry (6-digit hex limit and hint, clean redraw, every way of closing hands the page back, double enter, long names; device path unchanged)" env NORNS_PLATFORM=1 lua5.3 linux/tests/textentry_test.lua
 run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
@@ -133,6 +134,7 @@ run "sc:scan-sc-paths (scripts whose sc files name the virtual home)" linux/test
 run "sc:launcher's sclang_conf.yaml (both Linux folders, the switches, an older conf written again with .old kept)" linux/tests/sc_conf_test.sh
 run "sc:SynthDef compatibility (mx_malone builds on 3.14, scoped by name, nothing leaks; 3.13.0 and 3.14.1)" linux/tests/sc_synthdef_compat_test.sh
 run "sc:the real nb_mxsynths mod in a headless norns on 3.14.1 (mx_malone builds, all 11 voices exist, the mod's files unchanged)" linux/tests/nb_mxsynths_test.sh
+run "box:frame time while resizing (dragged drawing under budget; final image equals a cold direct draw; aluminium, tinted, pixel)" linux/tests/box_frame_test.sh
 run "box:C side (palette, pixel style, hidden row, fonts, sizes; the aluminium style byte for byte; the Mac build)" linux/tests/box_c_test.sh
 run "shell:stderr of a command is not part of what a script reads (sidecar_shell, desktop vs device build)" linux/tests/sidecar_stderr_test.sh
 run "shell:commands with the virtual home from scripts (os.capture, popen, execute, system_cmd, spaces, look-alikes, a download sequence, mx.samples)" linux/tests/script_shell_test.sh

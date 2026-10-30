@@ -43,8 +43,16 @@ end
 function M.hex_hint(text)
   local t = tostring(text or ""):match("^%s*(.-)%s*$")
   if t == "" or t == "#" then return "" end
-  local r, msg = M.parse_hex(t)
-  return r and "" or msg
+  local r = M.parse_hex(t)
+  return r and "" or "need 3 or 6 digits"
+end
+
+--- the text entry's limit for a hex code: an optional #, then at most 6 hex digits, nothing else. true, or false and a short hint
+function M.hex_accept(text)
+  local digits = tostring(text or ""):match("^#?(%x*)$")
+  if digits == nil then return false, "0-9 and a-f only" end
+  if #digits > 6 then return false, "6 digits max" end
+  return true
 end
 
 function M.format_brightness(b) return string.format("%.1f", tenths(b)) end
