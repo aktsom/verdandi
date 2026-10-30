@@ -1,0 +1,121 @@
+# Colour picker for the hex rows, and two renames (PLAN ONLY: nothing is built)
+
+Linux desktop build only. Nothing here touches `macos/` (read only), the device behaviour, or the Mac build. Pictures: section 2.9 (two, a stand-in panel over the real box).
+
+## 0. Renames (visible names only)
+
+**What changes:** the SYSTEM page **UI** is called **SCREEN** and the page **BOX** is called **THEME** in the SYSTEM list, in the page's own title/hints and messages, in the in-window text, the manual, `RUN-ON-LAPTOP.md`, `HARDWARE-CHECKLIST.md` and the tests that look for the names.
+
+- **Where the names are** (grep at the time of writing): `lua/core/menu/system.lua` (list `"UI >", "BOX >"`, comment), `lua/core/menu/ui.lua` and `box.lua` (header comments, messages such as "bad hex"), `lua/core/menu.lua` (page registration), `matron/src/platform/macos/sdl_bridge.cc` and `weaver.cc` (comments only), `linux/manual/manual.html` (sections on SYSTEM > UI / BOX, the file table), `docs/port/RUN-ON-LAPTOP.md`, `HARDWARE-CHECKLIST.md`, and the tests `box_page_test.lua` (lines about the SYSTEM list and pages), `ui_settings_test.lua` (`"UI >"` in the list, the device list check), `ui_keys_test.lua`, `textentry_test.lua` (comments), `make_box_real_pictures.sh`. The right-click menu has no item with either name (checked: nothing to change there; to be re-checked by a test that greps the menu strings).
+- **Internal page ids stay `UI` and `BOX`** (`_menu.set_page("BOX")`, `m["UI"]`): a script or a probe that opens them keeps working. The build also registers the aliases `SCREEN` and `THEME` for the same modules, so both spellings open the page. The list in `system.lua` keeps an id per row, only the text changes (`"SCREEN >"`, `"THEME >"`).
+- **The older plans keep the old names** (`box-style-plan.md`, `ui-plan.md`, ...): they are history. Each gets one line at the top: "the page is called THEME (was BOX)" / "SCREEN (was UI)".
+- **Device list unchanged**: on the device `SYSTEM` is as before (the rows exist on the desktop only).
+- **Tests first:** the list strings and the manual's headings are tested before the rename (they fail), then renamed.
+
+**Files stay as they are: `ui.conf`, `box.conf`, `box-presets/*.box`.** What a file rename would involve (not done): new names `screen.conf`, `theme.conf`, `theme-presets/*.theme`; `ui_settings.lua` and `box_settings.lua` read the new name first and fall back to the old; the first start after the update copies (never moves) the old file to the new name when the new one is absent, and the presets folder file by file, the old ones stay for a downgrade; writes go to the new names only; CLEAN UP, the tidy/flatten script, `norns.sh`, the package scripts, the manual's file table and about 10 tests name these files and would change; two copies would exist until the owner deletes the old (a CLEAN UP line could offer it). I recommend **not** doing it: the cost is real, the gain is a name nobody sees.
+
+## 1. How it works now
+
+**The hex rows.** THEME (`lua/core/menu/box.lua`): BOX, KEYS, ENCODERS, BUTTONS, FONT; SCREEN (`menu/ui.lua`): the HEX row (the custom screen colour). K3 on such a row calls `textentry.enter(done, "#RRGGBB", "HEX (3 or 6 digits):", hint, {accept = hex_accept, replace = true})`. The entry (`lua/lib/textentry.lua`) borrows the menu's handlers through `norns.menu.set` and the keyboard through `lib/textentry_kbd` (`code`, `char`); while those hooks are set `keyboard.hardware()` returns false, so letters and digits reach the entry. Enter and Esc act on the release (`keyboard.state` is set after the callback). On finish the page takes its handlers back (`reclaim()`). The value goes through `box.set_part(part, text)` or `ui.set_custom(text)`, which store, **apply** (`_norns.box_look(...)`, `_norns.ui_look(...)`: a user event to the SDL bridge: the box layers are made again, the screen tables rebuilt) and **save** (`box.conf`, `ui.conf`) at once.
+
+**Keys in the menu** (`lua/core/keyboard.lua`, `menu.lua`, `window_keys.c`): the launcher sets `NORNS_HARDWARE_KEYS=1`; then `1 2 3` are K1-K3, `Enter`/`Space` K3, `Esc`/`Backspace` K2, `Q W / A S / Z X` are E1-E3 (Shift = 5 steps). In the menu the arrows are `UP/DOWN` = E2, `LEFT/RIGHT` = K2/K3 (back / enter), `-`/`=` = E3, PageUp/Down = E2 x6, unless the page defines `m.keycode` (it then gets every key and wins). `F1-F4` are global. Releases of hardware keys arrive as `key(n, 0)`; `-`/`=` releases arrive as delta 0, repeats as 2 (the bug of KNOWN-ISSUES 16: a release must never count as a step). In the window layer (`window_keys.c`) **Alt/Option** held makes the control keys hardware keys and **Alt+Esc** toggles norns mode; the arrows with Alt become E2/E3 (+ Shift x5). The mouse: the wheel over a knob is that encoder, elsewhere the nearest one (`handle_wheel`); a click on K1-K3 is a key.
+
+**Where a panel would be drawn.** `redraw(true)` in `sdl_bridge.cc` paints the static layer, the controls, the screen picture and then `shell_menu_draw` (the in-window menu, `desktop_shell_linux.cc`, Linux only) on the canvas, so a panel is one more Linux-only layer after the screen, drawn every full frame (not cached in the static layer: it changes with every key). Look changes already arrive as user events (code 3 screen, 4 box). The box redraw while a look changes uses the layers' caches and the quick path of the resize fix (`skin_set_fast`, `box-style-plan.md` section 8).
+
+## 2. Design
+
+### 2.1 The picker is a menu page, not a second text entry
+A new page module `lua/core/menu/picker.lua`, registered as page `PICKER` on the desktop only (`NORNS_PLATFORM`). Reasons: a page gets `init`, `key`, `enc`, `redraw` **and `keycode`/`keychar`** from `_menu.set_page` with no hooks; the keyboard routing stays the normal menu one (no `te_kbd_cb`, so no `hardware()` switch-off and no key-up problem of the entry). The page that opens it is remembered (`return_page`); the pages' `init` (which resets the selected row) skips the reset when they are re-entered from the picker (`picker.returning`), so the row selection and scroll stay. Opening: `picker.open{part = ..., label = "BOX", value = "2C2E33" | nil, preview = f(hex), ok = f(hex), cancel = f(), return_page = "BOX"}`; the pages do not know about HSB.
+
+### 2.2 The colour model
+HSB (= HSV): hue 0-360 degrees, saturation 0-100, brightness 0-100. Stored as floats; shown rounded. **Conversion lives in one place, Lua** (`lua/core/colour.lua`, no hardware dependence): `hex_to_hsb`, `hsb_to_hex`, round-trips exactly for every 6-digit code (hex -> floats -> hex is the identity because the picker keeps the exact floats, not rounded ones). The C side does **no** conversion: Lua hands it the strips' stops as hex codes (hue strip: 7 stops at 0, 60, ..., 360 degrees, which is exact because HSV is piecewise linear in RGB; saturation strip: 2 stops; brightness strip: 2 stops).
+
+**The strips show what you would get along them with the other two values**, with one exception, below: hue strip = rainbow at the current S and B; saturation strip = from the grey of the current B to the full colour at the current H and B; brightness strip = from black to the colour at the current H and S.
+**Degenerate strips and the floor.** At S = 0 the hue strip would be flat grey, at B = 0 everything is black, so the hue could not be chosen by eye. The strips are drawn with the floor S >= 25 and B >= 25 (the stops are computed with `max(S, 25)` / `max(B, 25)`); the swatch and the hex show the real colour. One line in the manual says so. (Decision 3: drop the floor and draw the true flat strips.)
+
+**Greys, black, white, and the hue marker.** The picker's state is (H, S, B), not the hex. The hue is **kept** whatever S and B do: S = 0 (grey/white) or B = 0 (black) leave the hue marker where it was, so raising S again continues at the same hue and nothing jumps. When the picker **opens** on a grey, white or black code the hue is undefined; it takes the last hue held by any picker in this session, else the middle (180). The S and B markers sit where the code is (grey: S 0, B = the grey level). A hue strip for a grey code still shows the (floored) rainbow with the marker at the kept hue.
+
+### 2.3 The three strips as three values
+Rows HUE, SATURATION, BRIGHTNESS; the selected row is the current one (like AUDIO/UI pages: E2 selects, E3 changes). **Steps** (decision 2): base step 5 degrees for hue, 5 for S and B (72 / 20 / 20 presses edge to edge); **Shift = x5** (the rule of every other value: Shift is 5 steps) so 25 / 25 / 25; **Ctrl = fine**, 1 / 1 / 1. Clamped at both ends (hue 0-360: both ends show the same red; no wrap, like params). `Home` = minimum, `End` = maximum of the strip. The mouse wheel over a strip: one notch = a base step (Shift x5, Ctrl fine), over the panel but not on a strip: the selected strip.
+Moving one strip **never changes the other two** (no snapping to the step grid of an untouched strip; the moved strip moves by exactly its step from where it is).
+
+### 2.4 Keys (every key checked against the routing of section 1)
+| key | does | why this key |
+|---|---|---|
+| `UP` / `DOWN` | select the strip (E2) | the menu's own binding; the page's `keycode` keeps it |
+| `LEFT` / `RIGHT` | value down / up by the step | overrides the default K2/K3 emulation only on this page; a press (1) and a repeat (2) are one step each, a release (0) **does nothing** |
+| `-` / `=`, `E3` keys (`Z`/`X`) | value down / up (E3) | the menu's own `-`/`=` -> `penc(3, delta)`; delta 0 (release) ignored, delta 2 (repeat) is two steps as everywhere; `Z/X` already carry Shift x5 in `hardware()`, so `enc` does **not** multiply again |
+| `Shift` + a step key | x5 | existing rule (`keyboard.shift()` is read when the key arrives; the state is set after the callback, so a held Shift counts, pressing Shift alone does nothing) |
+| `Ctrl` + a step key | fine step (1) | not used by `window_keys`; **not Alt**: Alt/Option makes the control keys hardware keys and Alt+Esc toggles norns mode, so Alt would clash |
+| `Enter`, `Space`, `3` (K3) | **OK**: keep the colour, close | acts on the **press**: the release arrives at the page that was reopened, whose handlers ignore z = 0 (no double action: tested) |
+| `Esc`, `Backspace`, `2` (K2) | **cancel**: restore the colour from before, close | same, on the press |
+| `C` (char) | **centre**: all three markers to the middle, preview follows | not a hardware key; `keychar` goes to `_menu.keychar` -> the page |
+| `H` (char) or a click on the hex code | open the existing text entry on the current code; the strips follow what is typed (an invalid entry changes nothing) | `1 2 3` are K1-K3, so a digit cannot start typing; `H` is free |
+| `R` (char) | back to the colour the picker opened with, picker stays open | optional |
+| `F1`-`F4` | unchanged (they leave the page: counts as cancel, the colour is restored) | global |
+Not used by the picker: `Alt`, `Q W A S` (E1/E2 as everywhere), `Ctrl+M`.
+**The key-up problem** met before is avoided by three rules: acts only on press (or repeat for steps), never on a release; the picker opens on K3's press and ignores that key's own release (z = 0 never does anything on this page); steps use the delta as given by the routing and never add a modifier multiplier to a delta that already has one.
+
+### 2.5 Live preview, OK, cancel
+While open, **every change applies at once** to what is being edited, without saving: THEME parts call a new `box.preview_part(part, hex)` (applies `_norns.box_look`, changes no stored state, writes no file); SCREEN calls `ui.preview_custom(hex)` (applies `_norns.ui_look` with the custom colour). **OK** calls the page's normal `set_part` / `set_custom` (store, apply, **save**; the "low contrast" message of FONT/BUTTONS shows on the page). **Cancel** (K2, Esc, F1-F4, a page change under it, norns menu closed, a script load) re-applies the colour from before and writes nothing. The saved file is not touched until OK, so a crash while the picker is open loses nothing. Opening applies nothing (**the opening state** below). The preview rate is limited: key repeat gives at most one event per frame and the bridge keeps only the newest (as the resize fix); the box redraw runs in the quick mode (`skin_set_fast`) while changes keep coming and the crisp picture follows after about 180 ms of quiet (pixel style: about 4 ms per quick frame, 140 ms for the crisp one: measured in `box-style-plan.md` section 8).
+
+### 2.6 Opening state and the centre key
+- **A valid colour** (3 or 6 digits): H, S, B are computed from it as exact floats; the markers sit there; **nothing is applied until a strip moves**.
+- **No valid colour** (an empty or damaged value; the SCREEN HEX row before a custom colour exists): the markers start at the middle: **hue 180 (the middle of the rainbow, cyan), saturation 50, brightness 50 = `#408080`**. The hex line reads `#408080` dimmed with "not set" until a strip is moved or `C` is pressed; the thing being edited keeps what it has until then.
+- **Centre key `C`**: sets H 180, S 50, B 50 in one press and previews it. (The page also shows it on the screen hint: `C centre`.)
+
+### 2.7 Where it is drawn: a panel in the main window, and what the norns screen shows
+**Panel** (Linux only, `matron/src/platform/linux/picker_skin.c/.h`, called from `redraw(true)` after the screen picture, state set by one `_norns.picker(...)` user event like `box_look`): a card **760 x 196 layout units** at box position (40, 84): between the page buttons (y 30-74) and the screen's bezel (top at y 300.7), from the bezel's left edge to the right edge of the encoders' column. It hides the K1/E1 area while open (they stay usable by keyboard). Inside (units, origin at the card's corner): title `COLOUR: BOX` (8, 8); three strip rows at y 44, 84, 124, each **strip 465 x 22** at x 84 with its name (HUE, SAT, BRI) at x 18 and its number at the strip's right end; right column x 600-742: the **result swatch** 142 x 60 at y 40, the hex code below it, and `was #RRGGBB` (the colour before; dim); the key hint line at y 168. Strips have a hit area 12 units taller than drawn. The selected strip has a heavy frame and its name bright; markers are a vertical bar with small triangles (aluminium) or a block marker (pixel).
+**Scaling:** all in layout units times `skin_geom.s` like the box, so it follows the window; hit-testing converts the pointer with the same geometry on every event (nothing cached), so it is right after any resize. In the quick resize mode the panel is just rectangles and gradients: cheap. Minimum text size 9 device pixels (the strips' numbers vanish below the smallest window size, the hex stays).
+**Strip drawing:** aluminium: a cairo linear gradient from the stops (smooth), a thin dark inner edge; pixel: **8-unit blocks** (58 blocks), each block flat in the colour at its centre, hard edges, the same pixel font as the pixel style. The panel takes its face from the BUTTONS colour and its text from FONT of the current look (stand-in pictures use fixed colours).
+**The norns screen while open** shows the same state in text (works on the detached screen window and without the panel): `HUE 214`, `SATURATION 64`, `BRIGHTNESS 66`, `HEX #3B6EA8`, the selected row bright, a hint `E2 strip  E3 change  K3 ok  K2 cancel` (the pictures show it). Because the screen is grey-only, the colour is on the panel, and the screen picture itself is tinted by the live SCREEN preview.
+**Closing from the keyboard:** `Enter` keeps, `Esc` cancels (and K3/K2, `Space`, `Backspace`). **With the screen in its own window:** the panel stays in the main window; the picker is fully usable from the keys with the screen window alone.
+
+### 2.8 Mouse
+Click on a strip: the value jumps to that point (hue 0-360, S and B 0-100 on the whole number, continuous while the button is held; capture the mouse during the drag as the fader code does); the strip becomes the selected row; the preview follows. Click on the hex code: the text entry. Click on the swatch: nothing. Click outside the panel: nothing (the box's own controls still work). Wheel: section 2.3. The pointer's position -> strip and 0..1 position is pure C math in `picker_skin.c` (`picker_hit`), tested without SDL; Lua turns the position into the value and owns all state, so there is one source of truth.
+
+### 2.9 Pictures
+1. `colour-picker-previews/picker-pixel-dark.png`: **the panel open over the box in the pixel style, DARK look**: look at the three strips (each shows the colours along it with the other two values, the blocky pixel look) and the markers sitting at the colour #3B6EA8 that the swatch and the hex show; below, the norns screen with the matching text rows.
+2. `colour-picker-previews/picker-aluminium.png`: **the same in the aluminium look**: smooth gradients, the heavy frame on the selected strip (SAT) and the number to the right of each strip.
+Box, buttons, keys, encoders and bezel are the real code's output; **the panel and the norns screen text are stand-ins** (the panel does not exist yet). Maker: `make_picker_pictures.py`.
+
+### 2.10 Optional: recent colours
+A fourth row `RECENT`: eight swatches under the strips (the last eight distinct colours kept with OK, newest first, one list shared by both pages, stored in `recent-colours.txt` in the norns home, 8 lines of `RRGGBB`). The row is one value like the others: `LEFT/RIGHT` moves over the swatches and previews that colour, the strips follow it; `OK` keeps whatever is shown. Hidden when the list is empty. Not part of the first build (step 4 below); the strips and the hex do not depend on it.
+
+### 2.11 A colour wheel was considered and rejected
+A wheel is one control with two values (hue and saturation) and needs pointing; the menu's idea is one value per row that the keyboard or an encoder changes. Three strips are three rows like the params, so the same keys, steps and modifiers work everywhere.
+
+## 3. Tests to write first
+Lua (`NORNS_PLATFORM=1`, fake `_norns`, real `keyboard` module and menu bindings like `ui_keys_test.lua`), C (no SDL), shell:
+1. **Conversion** (`colour_test.lua`): hex -> HSB -> hex identity for all 6-digit codes in a C-speed loop (16.7M in the C check or a fixed 1M sample plus every grey, every primary and secondary, black, white, 100k random); 3-digit codes expand; HSB -> hex -> HSB within rounding; **greys, black, white keep the hue** (S 0 then S raised: same hue, no jump); the strips' stops: the hue stops at 0, 60, ..., 360 equal `hsb_to_hex`; the floor stops at S/B < 25; the middle is `#408080`.
+2. **Steps and keys** (`picker_keys_test.lua`): UP/DOWN select; LEFT/RIGHT and `-`/`=` step 5 / 5 / 5; Shift x5; Ctrl 1; releases (value 0) do nothing; repeats (2); Home/End; clamping at both ends; moving one strip leaves the other two **bit-identical**; the shift multiplier is not applied twice on `Z/X`; Alt is not used (Alt+Esc still toggles norns mode).
+3. **No key clash:** every key of the table through the real `keyboard.process`: K2/K3 emulations are not triggered by LEFT/RIGHT on this page; F1-F4 close as cancel; `C`, `H`, `R` reach the page; with the text entry open the picker gets nothing; after OK/cancel the pages have their keys and the K3 release does not reopen the picker (the key-up case).
+4. **Click mapping** (`picker_skin_test.c`): pointer -> strip and 0..1 at 3 window sizes and at a resize (same units give the same strip), the 12-unit padding, the edges (first and last pixel = min and max), the hex code, outside = nothing.
+5. **Live preview / OK / cancel:** each change calls `preview` once with the right hex and writes **no file**; OK writes the file once with that value and keeps the preset logic of `set_part`; cancel (K2, Esc, F1, page change under it, menu closed) restores the old colour and no file changed; a crash simulated while open leaves the file as it was.
+6. **Opening:** on an existing valid code nothing is applied (the preview is never called) and the markers equal its H, S, B; on an empty or damaged value the markers are 180 / 50 / 50, the hex reads dimmed, the target keeps its colour until a strip moves; `C` sets the middle and previews; the SCREEN page with no custom colour opens at the middle.
+7. **Text entry from the picker:** `H` opens it on the current code; a valid entry moves the strips and previews; an invalid or too long one changes nothing (the existing `hex_accept`); Esc in the entry returns to the picker with its keys (`reclaim` rule).
+8. **From each hex row:** THEME BOX, KEYS, ENCODERS, BUTTONS, FONT and SCREEN HEX open the picker with the right label and target; K3 on other rows is unchanged; after closing, the row selection and scroll are what they were.
+9. **Renames:** the SYSTEM list has `SCREEN >` and `THEME >` (and the device list is unchanged); `set_page("UI")`, `("BOX")`, `("SCREEN")`, `("THEME")` all open the pages; the files are still `ui.conf`, `box.conf`, `box-presets/`; the manual has the new headings and no `SYSTEM > UI` / `SYSTEM > BOX`; the old names appear only in history documents.
+10. **Mac unchanged:** `box_c_test.sh`'s guard check extended with the new identifiers (`picker_skin`, `_norns.picker`, `skin_set_picker`...): all new lines in shared files are inside `NORNS_LINUX_DESKTOP`; `device_skin.c` compiles without it and `macos/tests/device_skin_test.c` passes; `git diff -- macos/` is empty.
+11. **Frame time** (extends `box_frame_test.sh`): drawing the panel adds less than 2 ms per frame at 1600 wide; the live preview in quick mode stays under the existing budget.
+
+## 4. Build order (after approval)
+0. The renames (small, own commit, tests first). 1. `colour.lua` + its test. 2. The picker page, keys, preview/OK/cancel, text entry, the norns screen rows (no panel yet: usable from the keyboard and the screen). 3. The panel (`picker_skin.c`), the bridge hooks, hit-testing, wheel, click, frame test. 4. The optional recent row. Each step committed and the full `run_all.sh` before the next.
+
+## 5. Risks
+- **Live box preview cost** in the pixel style (the crisp redraw is 140 ms): handled by the quick mode and coalescing, measured only on Xvfb; the owner's display is unmeasured.
+- **Keys:** left/right now change values on this page while they are K2/K3 elsewhere (the page says so on the screen hint); `Ctrl` combinations may be taken by a window manager (Cinnamon uses Ctrl+Alt+arrows, not Ctrl+arrows; to be checked on the laptop); Alt is deliberately unused.
+- **A page, not a modal:** other pages' `init` must not reset their row on return (small change in `box.lua` and `ui.lua`); if a page is forgotten the row jumps to the top (tested for both).
+- **The floor on degenerate strips** differs from "exactly the colours you would get"; only where a strip would be flat.
+- **SCREEN preview** goes through `ui_look_normalise` (very dark colours are raised), so the shown hex and the displayed colour can differ slightly for darks; same as typing it today.
+- **The panel hides K1/E1** while open; the picture shows where.
+- **Not testable here:** the real window feel, Muffin, the laptop keyboard (Ctrl/Shift combinations), mouse capture on the real window manager; added to the hardware checklist when built.
+
+## 6. Decisions for the owner (my recommendation first)
+1. Panel in the main window **plus** the text rows on the norns screen (recommended), or panel only.
+2. Steps 5 / 5 / 5, Shift x5, Ctrl fine (recommended), or finer base steps (2 / 2 / 2).
+3. Floor of 25 on degenerate strips (recommended), or the true flat strips.
+4. Hue clamps at the ends (recommended, like params), or wraps around.
+5. `H` opens the text entry; `C` centres; `R` resets (recommended), or other letters.
+6. Recent colours row: later, as step 4 (recommended), now, or never.
+7. Renames: page ids stay `UI`/`BOX` with the aliases `SCREEN`/`THEME` (recommended); the files keep their names (recommended).
