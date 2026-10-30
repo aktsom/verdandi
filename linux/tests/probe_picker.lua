@@ -10,7 +10,7 @@ page = require "core/menu/box"
 box = require "core/box_settings"
 pk = require "core/menu/picker"
 col = require "core/colour"
-page.pos = 4
+page.pos = 5
 _menu.redraw()
 #sleep 1
 #shot @home/pk-before.png
