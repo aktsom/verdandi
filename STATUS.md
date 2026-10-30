@@ -229,6 +229,12 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 - Not measured: the owner's display and Muffin live resize (HARDWARE-CHECKLIST).
 - Full `run_all.sh` from a clean environment (`env -i`, nothing else running, no test file edited during the run): 105 PASS, 0 known failures, 0 unexpected failures; the opt-in clean-root package build was skipped.
 
+## THEME page navigation bug (installed 0.1~git20261030.3320.148910a2) and the network page without iw
+- **Cause found** (`docs/port/KNOWN-ISSUES.md` 17): the THEME page's key handler changed state without redrawing. K3 (RIGHT arrow, Enter, Space) on PRESET opened the list but the screen kept the rows, so up/down moved an invisible list; STYLE by K3, the list's K2/K3 and the confirm questions had the same gap. No Lua error, so the log was silent. Fixed on THEME and SCREEN: every key press and encoder turn ends with a redraw; handler errors are caught and logged (`THEME page: ...` / `SCREEN page: ...`) and leave the page whole; selection clamps (rows that vanished, list position) are logged.
+- **Tests:** `linux/tests/menu_stress_test.lua` (random events through the real keyboard module, text entry and menu bindings, invariants after every event; fails on the old pages after one event, with the shortest sequence printed; `trace` shows the owner's sequence), `wifi_iw_test.lua`. The network page shows `SIGNAL: n/a (iw missing)` and does not run `iw` when it is not installed (computers only).
+- Full `run_all.sh` from a clean environment (`env -i`, no test file edited during the run): 107 PASS, 0 known failures, 0 unexpected failures.
+- Not verified here: the owner's real keyboard on the laptop (HARDWARE-CHECKLIST has the two steps).
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.
