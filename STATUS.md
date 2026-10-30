@@ -274,6 +274,12 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 - **Prototype changed:** a **Windows spike W0 first** (no norns: two output buses, a sidechain input, a helper with its own window and a text box, two instances, signed installer, tested in the owner's Live), then P0a-d with two instances, buses and a device-lease spike. Effort figures are guesses.
 - **Not verified:** everything in Ableton, the Windows first run, the owner's grids with serialosc, which Fireface models support what.
 
+## Windows standalone plan (`docs/port/windows-plan.md`, plan only, no product code)
+- **Written:** summary, audio path with Ableton owning the Fireface, tempo/transport, SuperCollider on Windows, grids/devices, code assumptions and replacements, build/packaging, owner's test loop with milestones M0 to M7 (guess 17 to 31 weeks), risks, decisions; two pictures in `docs/port/windows-plan/`. PLAN.md Phase 6 updated; Phases 7 and 8 (VST3) parked/dropped by the owner's decision.
+- **Recommended:** no JACK; PortAudio (ASIO/WASAPI) + in-process scsynth (`scpump.dll`); default route = RME multi-client ASIO plus a TotalMix FX return into an Ableton track, fallbacks WDM/WASAPI and a hardware loop; Link first, MIDI clock fallback; direct COM for grids; MSYS2 + MSVC built in GitHub Actions; per-user installer, unsigned.
+- **Decisions needed from the owner:** toolchain and engine design; ASIO SDK licence for a GPL-3.0 app; check whether the Fireface UC's TotalMix FX offers a Loopback option; the 2023-24 grid's USB device name; installer and data location; enable Actions on the fork; bundle busybox/curl.
+- **Not verified:** everything on Windows, Ableton, the Fireface, the grids, the SuperCollider patch. Nothing was built.
+
 ## Next
 - The owner: run the laptop steps in `docs/port/RUN-ON-LAPTOP.md` (untested on a real desktop), review `HARDWARE-CHECKLIST.md` (sections after Phase 1, 2 step 4, 2 step 5, clock) and the macOS
   re-verification list at the end of `docs/port/phase-2.md`.

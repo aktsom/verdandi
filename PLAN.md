@@ -51,13 +51,13 @@ Goal: real grids and arcs through **serialosc**, and a **virtual grid/arc that w
 - Keep macOS behavior unchanged unless the owner decides at Gate F to move it.
 
 ## Phase 6: Windows standalone (`windows-port` branch, after gate C)
-- Extend `INVENTORY.md` with Windows specifics.
-- **GATE D**: JACK2 bundle with ASIO/WASAPI vs another audio path. The owner uses an RME Fireface (ASIO) so ASIO must work.
-- MIDI (WinMM/WinRT or RtMidi), HID/gamepads, serial for grid/arc/crow (check libmonome Windows support; patch or add backend), virtual grid replacement for the pty trick (from Phase 5.5), GNU tools bundle, symlink-free dust import (copy), installer.
-- SYS input via WASAPI loopback (per-process where available).
-- Cross-compile or build in a Windows VM; anything not testable goes to the hardware checklist.
+Plan: `docs/port/windows-plan.md` (plan only, no code yet). Owner decision: **no VST3 plug-in**; a Windows standalone that does everything the Linux version does, working next to Ableton Live and an RME Fireface (ASIO), with Ableton's tempo and transport driving norns.
+- **GATE D, resolved toward (owner to confirm in `DECISIONS.md`)**: no JACK. One audio callback (PortAudio, ASIO and WASAPI) pumps crone and an in-process SuperCollider 3.14.1 (`scpump.dll`, MSVC build with an external-audio-driver patch); JACK2 for Windows stays the fallback if the patch fails at M0b.
+- Clock: Ableton Link first, MIDI clock over loopMIDI as fallback. Devices: direct COM monitor for both grids (serialosc optional), RtMidi, SDL.
+- Build: MSYS2 UCRT64 (norns) plus MSVC (SuperCollider) in GitHub Actions `windows-latest`; Inno Setup per-user installer; no signing yet.
+- Milestones: M0 toolchain and headless boot, M1 audio out and audio doctor, M2 window and keyboard, M3 grids and MIDI, M4 Ableton (return route, Link), M5 maiden/scripts/mods, M6 installer and clean layout, M7 polish. Anything not testable here goes to the hardware checklist.
 
-## Phase 7: Linux VST3 (the first plug-in; tested in Reaper on the owner's Linux Mint laptop, PipeWire)
+## Phase 7: Linux VST3 [PARKED by owner decision; reference only: docs/port/plugin-feasibility.md] (the first plug-in; tested in Reaper on the owner's Linux Mint laptop, PipeWire)
 Decided by the owner (after `docs/port/multi-instance.md`): the first plug-in is a **Linux VST3**; Windows follows later and reuses what it teaches. **One plug-in instance at a time, with a clear message** (option D); option A (one norns per instance with a supervisor) stays a documented future option and is not planned.
 Approach note: `docs/port/linux-vst3.md` (written before any plug-in code). Work in this order; each step has headless tests unless marked "owner":
 - **7.1 Protocol and bridge core (no plug-in yet).** A new, versioned bridge protocol in a shared header (not `macos/auv3/bridge_protocol.h`, which stays as it is): hello with an **instance id**, a version field, a settable bridge port (default 10200, announced in a runtime file), audio, MIDI, a **transport message** (tempo, PPQ position, play state), heartbeat, status, bye, and the **one-instance guard** (busy reply with a readable message). A Linux bridge (a JACK client next to norns, like `auv3_bridge`) and a fake plug-in client for tests.
@@ -69,7 +69,7 @@ Approach note: `docs/port/linux-vst3.md` (written before any plug-in code). Work
 - **GATE E (open)**: framework choice and the open decisions of `docs/port/linux-vst3.md` section 13 (recommendation there: the VST3 SDK directly, MIT). Question in `DECISIONS.md`.
 - Keep macOS and the AUv3 unchanged. The two-instance problem of the AUv3 is written down in `KNOWN-ISSUES.md` item 12.
 
-## Phase 8: Windows VST3 (after Phase 6 and Phase 7)
+## Phase 8: Windows VST3 [DROPPED by owner decision] (after Phase 6 and Phase 7)
 - Reuse the protocol, the bridge logic and the plug-in code of Phase 7; what changes is the norns-side delivery (JACK MIDI becomes the internal pipe device of the keys type), the audio path (JACK for Windows or the Windows standalone's audio path from Gate D), process start and the bundle layout.
 - Windows-specific checks as in Phase 6 (ASIO, the owner uses an RME Fireface); tests that cannot run here go to the hardware checklist.
 - The same one-instance guard and message.
