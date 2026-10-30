@@ -39,6 +39,7 @@ local function world()
   local w = {frame = {}, shown = {}, errors = {}, logs = {}}
   screen = setmetatable({}, {__index = function() return function() end end})
   screen.clear = function() w.frame = {} end
+  screen.level = function(l) w.frame[#w.frame + 1] = "V" .. tostring(l) end
   screen.text = function(s) w.frame[#w.frame + 1] = "L:" .. tostring(s) end
   screen.text_right = function(s) w.frame[#w.frame + 1] = "R:" .. tostring(s) end
   screen.text_extents = function(s) return #tostring(s) * 5 end
@@ -246,6 +247,37 @@ local function report(events, f, label)
   fails_total = fails_total + 1
 end
 
+-- what every control does while the hex entry is open (printed with "entry"; the checks below assert it)
+local function open_entry(w)
+  _menu.set_page("BOX")
+  w.pages.BOX.pos = 3
+  tap(w, "RIGHT") -- K3 on the BOX colour row
+  assert(w.textentry.active, "the hex entry did not open")
+end
+local function te_state(w) local t = w.textentry; return string.format("pos=%s row=%s delok=%s txt=%s active=%s", tostring(t.pos), tostring(t.row), tostring(t.delok), tostring(t.txt), tostring(t.active)) end
+if arg and arg[1] == "entry" then
+  for _, name in ipairs({"UP", "DOWN", "LEFT", "RIGHT", "EQUAL", "MINUS", "Q", "W", "A", "S", "Z", "X", "1", "2", "3", "PAGEUP", "PAGEDOWN", "TAB"}) do
+    local w = world()
+    open_entry(w)
+    local a = te_state(w)
+    local fb = frame_text(w.shown)
+    send(w, name, 1)
+    local b = te_state(w)
+    local drawn = frame_text(w.shown) ~= fb
+    send(w, name, 2); send(w, name, 2)
+    send(w, name, 0)
+    print(string.format("%-9s before: %s\n%-9s press : %s  (screen changed: %s)\n%-9s after 2 repeats + release: %s", name, a, "", b, tostring(drawn), "", te_state(w)))
+  end
+  for _, e in ipairs({{2, 1}, {2, -1}, {3, 1}, {3, -1}}) do
+    local w = world()
+    open_entry(w)
+    local a = te_state(w)
+    _norns.enc(e[1], e[2])
+    print(string.format("enc %d %+d  before: %s\n          after : %s", e[1], e[2], a, te_state(w)))
+  end
+  os.exit(0)
+end
+
 if TRACE then
   -- the owner's sequence: open THEME, select PRESET, RIGHT (K3) several times, value keys, then up / down
   local seq = {{k = "tap", name = "DOWN"}, {k = "tap", name = "RIGHT"}, {k = "tap", name = "DOWN"}, {k = "tap", name = "DOWN"}, {k = "tap", name = "LEFT"}, {k = "tap", name = "EQUAL"}, {k = "tap", name = "UP"}}
@@ -271,6 +303,89 @@ for _, name in ipairs({"RIGHT", "ENTER", "SPACE", "3"}) do
   local f2 = run(seq)
   if f2 then report(seq, f2, "PRESET opened with " .. name) end
 end
+-- the text entry's controls on a computer, as on the hardware (lua/lib/textentry.lua): the encoders' keyboard equivalents move through the entry, K2 / K3 as upstream, value keys step with repeat,
+-- typing still works. while an entry is open: LEFT / RIGHT = E2 (the character, or DEL / OK), UP / DOWN = E3 (the character row / the DEL OK row), - and = (the value keys) step E2 when the
+-- character would be refused by the entry (a hex entry refuses both), a release (delta 0) never steps, Shift = 5 steps. every one of them is drawn at once
+do
+  local function ST(w) local t = w.textentry; return {pos = t.pos, row = t.row, delok = t.delok, txt = t.txt, active = t.active} end
+  local function expect(w, what, want, got) 
+    for k, v in pairs(want) do
+      if got[k] ~= v then fails_total = fails_total + 1 print("FAIL entry: " .. what .. ": " .. k .. " is " .. tostring(got[k]) .. ", expected " .. tostring(v)) return end
+    end
+  end
+  local function drawn(w, f) local b = frame_text(w.shown) f() return frame_text(w.shown) ~= b end
+  local w = world()
+  open_entry(w)
+  local s0 = ST(w)                                 -- a hex entry with a default opens on the DEL / OK row: row 1, OK, position 28
+  expect(w, "opens on the OK row", {row = 1, delok = 1, pos = 28}, s0)
+  local ch = drawn(w, function() send(w, "UP", 1) end); send(w, "UP", 0)
+  expect(w, "UP is E3 -: the character row", {row = 0, pos = 28, txt = s0.txt}, ST(w)); if not ch then fails_total = fails_total + 1 print("FAIL entry: UP is not drawn") end
+  ch = drawn(w, function() send(w, "RIGHT", 1) end); send(w, "RIGHT", 0)
+  expect(w, "RIGHT is E2 +: the next character, the release changes nothing", {pos = 29, txt = s0.txt}, ST(w)); if not ch then fails_total = fails_total + 1 print("FAIL entry: RIGHT is not drawn") end
+  send(w, "RIGHT", 2); send(w, "RIGHT", 2); send(w, "RIGHT", 0)
+  expect(w, "holding RIGHT: one step per repeat", {pos = 31}, ST(w))
+  send(w, "LEFT", 1); send(w, "LEFT", 0)
+  expect(w, "LEFT is E2 -", {pos = 30}, ST(w))
+  w.keyboard.process(1, w.codes["LEFTSHIFT"], 1); send(w, "RIGHT", 1); send(w, "RIGHT", 0); w.keyboard.process(1, w.codes["LEFTSHIFT"], 0)
+  expect(w, "Shift + RIGHT is 5 steps", {pos = 35}, ST(w))
+  send(w, "EQUAL", 1); send(w, "EQUAL", 0)
+  expect(w, "the value key = steps E2 + by one and is not typed", {pos = 36, txt = s0.txt}, ST(w))
+  send(w, "EQUAL", 2); send(w, "EQUAL", 0)
+  expect(w, "a repeat of the value key is two steps, as on the other pages; the release none", {pos = 38}, ST(w))
+  send(w, "MINUS", 1); send(w, "MINUS", 0)
+  expect(w, "the value key - steps E2 -", {pos = 37, txt = s0.txt}, ST(w))
+  -- K3 on the character row adds the selected character (upstream), through the window's key route (_norns.key)
+  w.textentry.fresh = false
+  w.textentry.txt = "#"
+  w.textentry.pos = string.byte("4") - 5 - 32
+  _norns.key(3, 1); _norns.key(3, 0)
+  expect(w, "K3 on the character row adds the selected character", {txt = "#4", row = 0}, ST(w))
+  -- DOWN is E3 +: the DEL OK row, LEFT / RIGHT choose DEL or OK, K3 on DEL removes, K3 on OK closes (upstream: on the release)
+  send(w, "DOWN", 1); send(w, "DOWN", 0)
+  expect(w, "DOWN is E3 +: the DEL OK row", {row = 1}, ST(w))
+  send(w, "LEFT", 1); send(w, "LEFT", 0)
+  expect(w, "LEFT on the DEL OK row chooses DEL", {delok = 0}, ST(w))
+  _norns.key(3, 1); _norns.key(3, 0)
+  expect(w, "K3 on DEL removes the last character", {txt = "#"}, ST(w))
+  send(w, "RIGHT", 1); send(w, "RIGHT", 0)
+  expect(w, "RIGHT chooses OK", {delok = 1}, ST(w))
+  _norns.key(3, 1); _norns.key(3, 0)
+  if w.textentry.active then fails_total = fails_total + 1 print("FAIL entry: K3 on OK does not close the entry") end
+  if invariants(w) then fails_total = fails_total + 1 print("FAIL entry: after K3 on OK: " .. invariants(w)) end
+  -- K2 cancels (on the release, as upstream); the page has its keys again
+  open_entry(w)
+  _norns.key(2, 1)
+  if not w.textentry.active then fails_total = fails_total + 1 print("FAIL entry: K2 pressed already closes the entry (upstream closes on the release)") end
+  _norns.key(2, 0)
+  if w.textentry.active then fails_total = fails_total + 1 print("FAIL entry: K2 released does not cancel the entry") end
+  if invariants(w) then fails_total = fails_total + 1 print("FAIL entry: after K2: " .. invariants(w)) end
+  -- typing still works: digits and a-f, Enter accepts; the hint line and the 6 digit limit stay
+  open_entry(w)
+  for _, k in ipairs({"1", "A", "B", "2", "3", "4", "5"}) do tap(w, k) end
+  expect(w, "typing a 7th digit is refused: 6 digits stay", {txt = "1ab234"}, ST(w))
+  -- a name entry types '-' (accepted there) and steps on '=' (refused there); an entry without an accept function types both as before
+  local function name_entry()
+    local w2 = world()
+    _menu.set_page("BOX")
+    w2.pages.BOX.pos = 8 -- SAVE
+    tap(w2, "RIGHT")
+    assert(w2.textentry.active, "the name entry did not open")
+    return w2
+  end
+  local w2 = name_entry()
+  tap(w2, "A"); tap(w2, "MINUS")
+  expect(w2, "a name entry types the - it accepts", {txt = "a-"}, ST(w2))
+  local p0 = w2.textentry.pos
+  tap(w2, "EQUAL")
+  expect(w2, "a name entry steps on the = it refuses", {txt = "a-"}, ST(w2))
+  if w2.textentry.pos == p0 then fails_total = fails_total + 1 print("FAIL entry: = did not step in the name entry") end
+  local w3 = world()
+  w3.textentry.enter(function() end, "", "TEXT:")
+  tap(w3, "MINUS"); tap(w3, "EQUAL")
+  expect(w3, "an entry without an accept function types both as before", {txt = "-="}, ST(w3))
+  tap(w3, "ESC")
+end
+
 -- a handler that raises an error: one line in the log, the page is whole afterwards (rows mode, its own handlers), the next key works
 do
   local w = world()

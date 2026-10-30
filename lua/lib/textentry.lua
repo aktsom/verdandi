@@ -36,7 +36,42 @@ local function add_char(a)
   return true
 end
 
+-- computers: the keyboard equivalents of the hardware controls while an entry is open (the keys are the entry's, so the menu's own bindings and the hardware keys are off):
+-- LEFT / RIGHT are E2 (the character, or DEL / OK), UP / DOWN are E3 (the character row, the DEL OK row), PAGEUP / PAGEDOWN five steps of E2, and the value keys (- and =, the two keys
+-- right of 0) step E2 when the character they would type is refused by the entry (a hex entry refuses both; a name entry types - and steps on =; an entry without an accept function types both
+-- as before). Shift makes E2 five steps. a press and a repeat act, a release (delta 0) never does. every control ends in te.enc, which redraws
+local nav = {LEFT = {2, -1}, RIGHT = {2, 1}, UP = {3, -1}, DOWN = {3, 1}, PAGEUP = {2, -5}, PAGEDOWN = {2, 5}}
+local value_keys = {MINUS = -1, EQUAL = 1}
+
+local function navigate(c, value)
+  if not desktop or not te.active or value == 0 then
+    return false
+  end
+  local n = nav[c]
+  if n then
+    local d = n[2]
+    if n[1] == 2 and keyboard.shift() and math.abs(d) == 1 then d = d * 5 end
+    te.enc(n[1], d)
+    return true
+  end
+  local v = value_keys[c]
+  if v and te.accept then
+    local a = keyboard.code_to_char(c)
+    local base = te.fresh and "" or te.txt
+    if a ~= nil and te.accept(base .. a) then
+      return false -- the entry takes this character: typing wins
+    end
+    te.skip_char = a ~= nil
+    te.enc(2, v * value) -- a repeat (2) is two steps, as on the other pages
+    return true
+  end
+  return false
+end
+
 local function keycode(c,value)
+  if navigate(c, value) then
+    return
+  end
   if keyboard.state.ESC then
     te.txt = nil
     te.exit()
@@ -55,6 +90,10 @@ local function keycode(c,value)
 end
 
 local function keychar(a)
+  if desktop and te.skip_char then
+    te.skip_char = false -- this character was a value key: it has stepped the selection already
+    return
+  end
   te.row = 0
   te.pos = string.byte(a) - 5 - 32
   if desktop then
@@ -86,6 +125,7 @@ te.enter = function(callback, default, heading, check, opts)
   te.check = check
   te.warn = nil
   te.pending = false
+  te.skip_char = false
   te_kbd_cb.code = keycode
   te_kbd_cb.char = keychar
 

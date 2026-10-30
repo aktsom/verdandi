@@ -251,5 +251,11 @@ check(te.active == false and te_kbd.code == nil, "closed after the menu mode cha
 local src = assert(real_open("lua/lib/textentry.lua")):read("a")
 check(src:find('os.getenv("NORNS_PLATFORM")', 1, true) ~= nil, "the new behaviour is behind the computer check (NORNS_PLATFORM)")
 os.execute("rm -rf '" .. tmp .. "'")
+-- the keyboard equivalents of the hardware controls (arrows, value keys) are behind NORNS_PLATFORM: the device's entry is upstream's
+do
+  local src = io.open("lua/lib/textentry.lua"):read("a")
+  check(src:find("if not desktop or not te.active or value == 0 then", 1, true) ~= nil, "the entry's navigation keys do nothing unless desktop")
+  check(src:find("if desktop and te.skip_char then", 1, true) ~= nil, "the value-key character skip is behind desktop")
+end
 if fails > 0 then print("textentry_test: " .. fails .. " failed") os.exit(1) end
 print("textentry_test: all passed")
