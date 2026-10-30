@@ -732,6 +732,41 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$PH"
     }
     picker_scenario
+    # the pixel looks in the real window (docs/port/retro-look-plan.md): from box.conf, switched live from the THEME page's PIXEL LOOK row, each look is another picture, saved, remembered after a restart, and the
+    # colour picker changes a colour live in a retro look
+    retro_scenario() {
+        RH="$(mktemp -d)"
+        ln -s "$REPO" "$RH/norns"
+        mkdir -p "$RH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$RH/dust/code/probe/"
+        printf 'style=pixel\npixel_look=retro\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$RH/box.conf"
+        RLOG1="$T/retro1.log"; RLOG2="$T/retro2.log"
+        NORNS_HOME="$RH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_retro.lua" "$RLOG1" > /dev/null 2>&1
+        cp "$RH/probe.marks" "$RH/marks1" 2> /dev/null
+        NORNS_HOME="$RH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_retro_restart.lua" "$RLOG2" > /dev/null 2>&1
+        rpx() { convert "$RH/$1" -format "%[hex:u.p{$2,$3}]" info:; }
+        rdiff() { [ "$(compare -metric AE "$RH/$1" "$RH/$2" null: 2>&1 | cut -d' ' -f1)" != 0 ]; }
+        retro_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            local live
+            live="$(sed -n 's/^PROBE picker live[[:space:]]\([0-9A-F]*\).*/\1/p' "$RLOG1" | tail -1)"
+            chk "the probe ran" 'grep -q "PROBE before restart" "$RLOG1"'
+            chk "box.conf pixel_look=retro is read at start" 'grep -q "PROBE start look.retro" "$RLOG1"'
+            chk "E3 on PIXEL LOOK: pixel, 8-bit, 16-bit in turn (live)" 'grep -q "PROBE look after E3 left.pixel" "$RLOG1" && grep -q "PROBE look after E3 right x2.8-bit" "$RLOG1" && grep -q "PROBE look after E3 right.16-bit" "$RLOG1"'
+            chk "every look is another picture (6 pairs)" 'rdiff rt-pixel.png rt-retro.png && rdiff rt-pixel.png rt-8bit.png && rdiff rt-pixel.png rt-16bit.png && rdiff rt-retro.png rt-8bit.png && rdiff rt-retro.png rt-16bit.png && rdiff rt-8bit.png rt-16bit.png'
+            chk "PIXEL in the window: the box face is the BOX colour and a key is the KEYS colour" '[ "$(rpx rt-pixel.png 676 300)" = 2C2E33 ] && [ "$(rpx rt-pixel.png 260 273)" = 444853 ]'
+            chk "the retro looks keep the colours: the key is the KEYS colour" '[ "$(rpx rt-retro.png 260 273)" = 444853 ] && [ "$(rpx rt-8bit.png 260 273)" = 444853 ]'
+            chk "the choice is saved in box.conf" '[ "$(sed -n "s/^saved_16bit=//p" "$RH/marks1" | tail -1)" = yes ]'
+            chk "a look with the COLOUR colours: the key is the COLOUR keys colour in RETRO" '[ "$(rpx rt-retro-colour.png 260 273)" = F2B63D ]'
+            chk "the picker changes the key live in RETRO ($live) and the look stays retro" '[ -n "$live" ] && [ "$(rpx rt-picker-live.png 260 273)" = "$live" ] && grep -q "PROBE picker live.*retro" "$RLOG1"'
+            chk "after a restart the look is remembered (8-bit) and drawn" 'grep -q "PROBE restart look.8-bit" "$RLOG2" && rdiff rt-restart.png rt-retro-colour.png'
+            return $bad
+        }
+        run "window:pixel looks (PIXEL RETRO 8-BIT 16-BIT from box.conf and the THEME row, live, saved, the colours and the picker work with them, remembered after a restart)" retro_ok
+        rm -rf "$RH"
+    }
+    retro_scenario
     # the detachable screen window (docs/port/detach-plan.md), under Xvfb with no window manager: F9, the menu item and the placeholder, the picture crisp at
     # whole scales and inside a block when in between, the keyboard from the screen window, the shortcuts, F11, F10, close, the saved state, a damaged state file
     detach_scenario() {

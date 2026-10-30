@@ -26,6 +26,19 @@ extern "C" {
 #define BS_W (SKIN_W / BS_BLOCK + 2 * BS_MARGIN)
 #define BS_H (SKIN_H / BS_BLOCK + 2 * BS_MARGIN)
 
+// the pixel looks (docs/port/retro-look-plan.md): PIXEL is the look above and never changes. RETRO and 8-BIT draw on a 4 unit block (the box is 632 units tall), 16-BIT on a 3 unit block; all three
+// draw into an image of 2 unit cells (16-BIT: 1 unit cells) so that the labels can stay in 2 unit pixels. the layers, the caches, the placing and the hit tests follow the look
+enum { BOX_LOOK_PIXEL = 0, BOX_LOOK_RETRO, BOX_LOOK_8BIT, BOX_LOOK_16BIT, BOX_LOOKS };
+extern void box_style_set_variant(int variant);
+extern int box_style_variant(void);
+// the block image of the look in use: its size in cells, the layout units of a cell and of a block, the box's size in layout units
+extern void box_style_image_size(int *w, int *h);
+extern int box_style_cell_units(void);
+extern int box_style_block_units(void);
+extern void box_style_box_units(int *w, int *h);
+// for tests: bit 1 no speckle, 2 no grille, 4 no dithered band on the box face (what the render leaves out is the only difference)
+extern void box_style_set_debug(unsigned mask);
+
 // the five colours (box, keys, encoders, buttons, font)
 extern void box_style_set_colours(const box_rgb_t colours[BOX_PARTS]);
 

@@ -90,6 +90,53 @@ int main(void) {
     for (int l = 0; l < box_builtin_look_count; l++) {
         CHECK(box_builtin_looks[l].style == 1, "%s is a pixel look", box_builtin_looks[l].name);
     }
+    // the seven shade ramp of the retro looks (docs/port/retro-look-plan.md section 3): s1, s2, s4, s5 are today's darker, dark, base, light; s0 and s3 and s6 are new
+    {
+        box_rgb_t bases[8] = {{0x2C, 0x2E, 0x33}, {0xD8, 0xD5, 0xCE}, {0x2B, 0x6F, 0x73}, {0xD1, 0xD4, 0xD8}, {0x80, 0x80, 0x80}, {0xFF, 0x00, 0x00}, {0, 0, 0}, {255, 255, 255}};
+        for (int i = 0; i < 8; i++) {
+            box_rgb_t r[BOX_RAMP];
+            box_ramp(bases[i], r);
+            box_rgb_t d = box_dark(bases[i]), dd = box_darker(bases[i]), l = box_light(bases[i]);
+            CHECK(pack(r[1]) == pack(dd) && pack(r[2]) == pack(d) && pack(r[4]) == pack(bases[i]) && pack(r[5]) == pack(l), "the four old shades are unchanged in the ramp of %06X", pack(bases[i]));
+            double prev = -1;
+            for (int k = 0; k < BOX_RAMP; k++) {
+                double y = 0.299 * r[k].r + 0.587 * r[k].g + 0.114 * r[k].b;
+                CHECK(y >= prev - 1e-9, "ramp of %06X is not monotonic at %d", pack(bases[i]), k);
+                prev = y;
+            }
+            if (i < 5) {
+                for (int k = 1; k < BOX_RAMP; k++) {
+                    int dr = abs(r[k].r - r[k - 1].r) + abs(r[k].g - r[k - 1].g) + abs(r[k].b - r[k - 1].b);
+                    CHECK(dr >= 4, "ramp of %06X: steps %d and %d are only %d apart", pack(bases[i]), k - 1, k, dr);
+                }
+            }
+        }
+        box_rgb_t black = {0, 0, 0}, wh = {255, 255, 255}, rb[BOX_RAMP], rw[BOX_RAMP];
+        box_ramp(black, rb);
+        box_ramp(wh, rw);
+        CHECK(pack(rb[0]) == 0 && pack(rb[4]) == 0 && rb[6].r > 100, "a black base: the shadows stay black, the highlight is lifted");
+        CHECK(rw[6].r == 255 && rw[0].r < 80, "a white base: the highlight is white, the deepest shade is dark");
+    }
+    // the ordered dither: a pure function of the block (x, y) and the share t; the same answer every time, a 4 x 4 Bayer matrix for mode 1, a checkerboard for mode 2
+    {
+        static const int bayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                CHECK(box_dither_pick(x, y, 0.0, BOX_DITHER_BAYER) == 0 && box_dither_pick(x, y, 1.0, BOX_DITHER_BAYER) == 1, "bayer: t 0 never, t 1 always (%d,%d)", x, y);
+                for (int q = 1; q < 16; q++) {
+                    double t = (q + 0.01) / 16.0;
+                    int want = (bayer[y % 4][x % 4] + 0.5) / 16.0 < t;
+                    CHECK(box_dither_pick(x, y, t, BOX_DITHER_BAYER) == want, "bayer (%d,%d) t=%g", x, y, t);
+                }
+                CHECK(box_dither_pick(x, y, 0.5, BOX_DITHER_BAYER) == box_dither_pick(x + 4, y + 4, 0.5, BOX_DITHER_BAYER), "the pattern repeats every 4 blocks");
+                CHECK(box_dither_pick(x, y, 0.5, BOX_DITHER_CHECKER) == (((x + y) % 2) == 0), "checker at 0.5: every second block");
+                CHECK(box_dither_pick(x, y, 0.0, BOX_DITHER_CHECKER) == 0 && box_dither_pick(x, y, 1.0, BOX_DITHER_CHECKER) == 1, "checker: 0 never, 1 always");
+            }
+        }
+        int ones = 0;
+        for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) ones += box_dither_pick(x, y, 0.5, BOX_DITHER_BAYER);
+        CHECK(ones == 8, "bayer at half is half of the blocks (%d)", ones);
+    }
     if (failures == 0) {
         printf("box_palette_test: all passed\n");
     }

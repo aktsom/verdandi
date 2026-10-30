@@ -102,7 +102,7 @@ local function fresh_box()
   page.init()
   norns.menu.set(page.enc, page.key, page.redraw, nil)
   current_page = page
-  page.pos = 4 -- KEYS
+  page.pos = 5 -- KEYS
   page.redraw()
 end
 
@@ -214,9 +214,9 @@ for cname, close in pairs(closers) do
     check(owner_is(picker), label .. ": the picker owns the keys and encoders again")
     close_picker()
     check(owner_is(page), label .. ": the page owns the keys and encoders again")
-    page.pos = 4
+    page.pos = 5
     page.enc(2, 1)
-    check(page.pos == 5, label .. ": E2 moves (pos " .. page.pos .. ")")
+    check(page.pos == 6, label .. ": E2 moves (pos " .. page.pos .. ")")
     page.enc(2, -1)
     page.enc(3, 1)
     page.redraw()
@@ -267,7 +267,7 @@ check(owner_is(picker) and te.active == false, "closing it gives the keys back t
 close_picker()
 check(owner_is(page), "the picker gives them to the page")
 page.enc(2, 1)
-check(page.pos == 5, "and the page navigates")
+check(page.pos == 6, "and the page navigates")
 -- closed twice: harmless
 te.exit()
 check(owner_is(page), "exit() when nothing is open changes nothing")

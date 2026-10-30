@@ -26,6 +26,8 @@ M.log = function(s) print("box.conf: " .. s) end
 
 M.PARTS = {"box", "keys", "encoders", "buttons", "font"}
 M.STYLES = {"aluminium", "pixel"}
+-- the looks of the pixel style (docs/port/retro-look-plan.md): PIXEL is the look of the box styles step and stays as it is; the others are the retro looks. the C side numbers them 0 to 3
+M.PIXEL_LOOKS = {"pixel", "retro", "8-bit", "16-bit"}
 M.MAX_LOOKS = 64   -- of his own
 M.MAX_NAME = 18
 M.MAX_FILE = 2048  -- bytes
@@ -51,7 +53,7 @@ local function copy_colours(c)
 end
 
 local function defaults()
-  return {style = "aluminium", preset = "MAC", colours = copy_colours(DEFAULT.colours), show_buttons = true, extra = {}}
+  return {style = "aluminium", pixel_look = "pixel", preset = "MAC", colours = copy_colours(DEFAULT.colours), show_buttons = true, extra = {}}
 end
 M.state = defaults()
 M.own = {}
@@ -237,6 +239,20 @@ function M.label()
 end
 
 -- ---------------------------------------------------------------- the file and the window
+--- the pixel look from a file value: pixel, retro, 8-bit (8bit), 16-bit (16bit), any case; nil if it is none of them
+local function parse_pixel_look(text)
+  local t = tostring(text):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  if t == "8bit" then t = "8-bit" elseif t == "16bit" then t = "16-bit" end
+  for _, n in ipairs(M.PIXEL_LOOKS) do if n == t then return n end end
+  return nil
+end
+
+local function pixel_look_index(name)
+  for i, n in ipairs(M.PIXEL_LOOKS) do if n == name then return i - 1 end end
+  return 0
+end
+M.pixel_look_index = pixel_look_index
+
 local function parse_style(text)
   text = tostring(text):lower()
   if text == "aluminium" or text == "aluminum" or text == "pixel" then return text == "aluminum" and "aluminium" or text end
@@ -258,6 +274,9 @@ function M.load()
     if k == "style" then
       local s = parse_style(v)
       if s then st.style = s else M.log(string.format("style='%s' is not aluminium or pixel, using aluminium", v)) end
+    elseif k == "pixel_look" then
+      local l = parse_pixel_look(v)
+      if l then st.pixel_look = l else M.log(string.format("pixel_look='%s' is not pixel, retro, 8-bit or 16-bit, using pixel", v)) end
     elseif k == "preset" then
       if v ~= "" then st.preset = v else M.log("preset= is empty, using MAC") end
     elseif k == "show_buttons" then
@@ -301,6 +320,7 @@ function M.save()
   end
   local st = M.state
   f:write("style=" .. st.style .. "\n")
+  f:write("pixel_look=" .. st.pixel_look .. "\n")
   f:write("preset=" .. st.preset .. "\n")
   for _, part in ipairs(M.PARTS) do f:write(part .. "=" .. st.colours[part] .. "\n") end
   f:write("show_buttons=" .. (st.show_buttons and "1" or "0") .. "\n")
@@ -313,7 +333,7 @@ end
 function M.apply()
   if _norns == nil or _norns.box_look == nil then return end
   local c = M.state.colours
-  _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0)
+  _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0, pixel_look_index(M.state.pixel_look))
 end
 
 --- the colour picker: show one colour on the window without storing or saving anything (the state and the file stay as they are); restore with M.apply()
@@ -324,7 +344,7 @@ function M.preview_part(part, text)
   local c = {}
   for k, v in pairs(M.state.colours) do c[k] = v end
   c[part] = hex
-  _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0)
+  _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0, pixel_look_index(M.state.pixel_look))
   return true
 end
 
@@ -374,6 +394,24 @@ function M.set_style(style)
   M.state.style = style
   changed()
   return true
+end
+
+--- PIXEL LOOK: pixel, retro, 8-bit or 16-bit; only the look of the pixel style, the colours and the preset stay
+function M.set_pixel_look(name)
+  local l = parse_pixel_look(name)
+  if l == nil then return false end
+  M.state.pixel_look = l
+  changed()
+  return true
+end
+
+--- E3 on PIXEL LOOK: the next or the previous one (0 = nothing; stops at both ends)
+function M.step_pixel_look(d)
+  d = math.floor((d or 0) + 0.5)
+  if d == 0 then return end
+  local i = pixel_look_index(M.state.pixel_look) + 1
+  i = math.max(1, math.min(#M.PIXEL_LOOKS, i + d))
+  M.set_pixel_look(M.PIXEL_LOOKS[i])
 end
 
 --- E3 on PRESET: the next or the previous look in the list (0 = nothing)

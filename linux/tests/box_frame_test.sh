@@ -13,7 +13,7 @@ CF="$(pkg-config --cflags cairo freetype2)"; LF="$(pkg-config --libs cairo freet
 SK=matron/src/platform/macos; LN=matron/src/platform/linux
 cc -std=gnu11 -O2 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_frame_bench.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/bench" $LF -lm 2> "$T/cc.log" || { echo "  FAIL  box_frame_bench does not build"; cat "$T/cc.log"; exit 1; }
 FAIL=0
-for m in alu tint pixel; do
+for m in alu tint pixel retro 8bit 16bit; do
     for flag in --fast ""; do
         # the slow (settled, one-by-one crisp) sequence has no time budget here, only the final-image check
         if [ -n "$flag" ]; then B="${BENCH_BUDGET_MS:-250}"; else B=100000; fi

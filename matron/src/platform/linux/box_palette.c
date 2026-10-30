@@ -75,6 +75,37 @@ box_rgb_t box_light(box_rgb_t c) {
     return o;
 }
 
+void box_ramp(box_rgb_t c, box_rgb_t out[BOX_RAMP]) {
+    box_rgb_t s0 = {clamp8(c.r * 0.22), clamp8(c.g * 0.22), clamp8(c.b * 0.22)};
+    box_rgb_t s3 = {clamp8(c.r * 0.80), clamp8(c.g * 0.80), clamp8(c.b * 0.80)};
+    box_rgb_t s6 = {clamp8(c.r + (255 - c.r) * 0.60), clamp8(c.g + (255 - c.g) * 0.60), clamp8(c.b + (255 - c.b) * 0.60)};
+    out[0] = s0;
+    out[1] = box_darker(c);
+    out[2] = box_dark(c);
+    out[3] = s3;
+    out[4] = c;
+    out[5] = box_light(c);
+    out[6] = s6;
+}
+
+int box_dither_pick(int x, int y, double t, int mode) {
+    static const int bayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+    if (t <= 0) {
+        return 0;
+    }
+    if (t >= 1) {
+        return 1;
+    }
+    if (mode == BOX_DITHER_CHECKER) {
+        if (t > 0.75) {
+            return 1;
+        }
+        return (((x + y) % 2 + 2) % 2 == 0) && t > 0.25;
+    }
+    int bx = ((x % 4) + 4) % 4, by = ((y % 4) + 4) % 4;
+    return (bayer[by][bx] + 0.5) / 16.0 < t;
+}
+
 static double luma(double r, double g, double b) {
     return 0.299 * r + 0.587 * g + 0.114 * b;
 }

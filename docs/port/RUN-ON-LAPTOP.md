@@ -315,6 +315,12 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - [ ] Quit Verdandi with `kill -9 $(pgrep -x norns)` and start it again: it starts normally.
 - [ ] Look in `~/Verdandi/logs`: a second start must not have made a new `norns.1.log` (it used to rotate the running instance's logs).
 
+## The pixel looks: PIXEL, RETRO, 8-BIT, 16-BIT (docs/port/retro-look-plan.md)
+- [ ] SYSTEM > THEME > STYLE pixel, then the row **PIXEL LOOK**: E3 (or K3) goes PIXEL, RETRO, 8-BIT, 16-BIT; the window changes at once and the choice is remembered after a restart. With STYLE aluminium the row is dim and says it needs STYLE PIXEL.
+- [ ] PIXEL must look exactly as before (compare with an earlier screenshot).
+- [ ] Look at each variant with each of the four looks (PRESET DARK, LIGHT, COLOUR, MAC) and with the colour picker (change a colour live in each variant).
+- [ ] Judge on your display, over a longer sitting: eye strain (the dither band and speckle of RETRO, the dither shading of 16-BIT), the button text next to the chunky blocks (it stays small), whether the buttons' narrower gaps (RETRO/8-BIT: 4 units, 16-BIT: 3) look cramped, crispness when you drag the window (the quick drawing while dragging, the crisp picture a moment after).
+
 ## The colour picker (docs/port/colour-picker-plan.md)
 - [ ] THEME > a colour row (or SCREEN > HEX), K3: the norns screen shows HUE, SATURATION, BRIGHTNESS and HEX; the box (keys, encoders, buttons, font; or the screen) changes live as you move a row; K3 keeps and saves, K2 gives the old colour back (try it, and check the box goes back).
 - [ ] Keyboard: UP/DOWN choose the row, LEFT/RIGHT and the keys right of 0 change it (hold: it repeats; let go: it stops), Shift is bigger, Ctrl is finer, C centres, H types a code, R resets, F1 cancels.

@@ -75,6 +75,17 @@ int main(int argc, char **argv) {
         return 2;
     }
     const char *dir = argv[1];
+#ifdef HAVE_LOOK
+    // DUMP_PIXEL=1: the pixel style with the DARK look (docs/port/retro-look-plan.md: PIXEL stays byte for byte, linux/tests/box_pixel_golden.txt); DUMP_VARIANT=n (when the build has box_style_set_variant): another pixel look
+    if (getenv("DUMP_PIXEL") != NULL) {
+        skin_set_look(SKIN_STYLE_PIXEL, "2c2e33", "444853", "5d6270", "3a3d45", "e4e6ea");
+#ifdef HAVE_VARIANT
+        if (getenv("DUMP_VARIANT") != NULL) {
+            skin_set_pixel_look(atoi(getenv("DUMP_VARIANT")));
+        }
+#endif
+    }
+#endif
     static const int sizes[][2] = {{992, 662}, {600, 400}, {1488, 993}, {1200, 662}};
     static const struct {
         const char *name;

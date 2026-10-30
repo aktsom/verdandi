@@ -3754,10 +3754,11 @@ int _ui_file_dialog(lua_State *l) {
  * @tparam string buttons
  * @tparam string font
  * @tparam number show_buttons 1: the row of page buttons is shown, 0: hidden
+ * @tparam number pixel_look the look of the pixel style: 0 pixel, 1 retro, 2 8-bit, 3 16-bit (default 0)
  */
 int _box_look(lua_State *l) {
     sdl_bridge_set_box_look((int)luaL_checkinteger(l, 1), luaL_checkstring(l, 2), luaL_checkstring(l, 3), luaL_checkstring(l, 4), luaL_checkstring(l, 5),
-                            luaL_checkstring(l, 6), (int)luaL_optinteger(l, 7, 1));
+                            luaL_checkstring(l, 6), (int)luaL_optinteger(l, 7, 1), (int)luaL_optinteger(l, 8, 0));
     return 0;
 }
 

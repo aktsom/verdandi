@@ -19,6 +19,11 @@ int main(int argc, char **argv) {
         c[i] = strcmp(argv[3 + i], "-") == 0 ? NULL : argv[3 + i];
     }
     skin_set_look(getenv("RENDER_STYLE") != NULL && strcmp(getenv("RENDER_STYLE"), "pixel") == 0 ? SKIN_STYLE_PIXEL : SKIN_STYLE_ALUMINIUM, c[0], c[1], c[2], c[3], c[4]);
+#ifdef HAVE_VARIANT
+    if (getenv("RENDER_VARIANT") != NULL) {
+        skin_set_pixel_look(atoi(getenv("RENDER_VARIANT"))); // docs/port/retro-look-plan.md: 0 PIXEL, 1 RETRO, 2 8-BIT, 3 16-BIT
+    }
+#endif
     cairo_surface_t *src = cairo_image_surface_create_from_png(argv[2]);
     if (cairo_surface_status(src) != CAIRO_STATUS_SUCCESS) {
         fprintf(stderr, "oled png\n");

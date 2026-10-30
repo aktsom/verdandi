@@ -162,6 +162,7 @@ local function invariants(w)
     if pg.mode ~= "rows" and pg.mode ~= "list" and pg.mode ~= "confirm" then return "modal: unknown mode " .. tostring(pg.mode) end
     if (pg.mode == "confirm") ~= (pg.confirm ~= nil) then return "modal: the confirm flag and the mode disagree" end
     local rows = pg.rows()
+    if rows[1] ~= "STYLE" or rows[2] ~= "PIXEL LOOK" then return "rows: STYLE and PIXEL LOOK are not the first two rows" end
     if pg.mode == "rows" and not (pg.pos >= 1 and pg.pos <= #rows) then return "selection: row " .. pg.pos .. " of " .. #rows end
     if pg.mode == "rows" and not (pg.top >= 1 and pg.top <= math.max(1, #rows)) then return "selection: top " .. pg.top end
     local l = w.box.look_by_name(w.box.state.preset)
@@ -183,6 +184,12 @@ local function invariants(w)
   if w.textentry.active then
     local t = w.textentry
     if not (type(t.pos) == "number" and (t.row == 0 or t.row == 1) and (t.delok == 0 or t.delok == 1) and type(t.txt) == "string") then return "selection: the text entry's state is out of range" end
+  end
+  local lb0 = w.box_calls[#w.box_calls]
+  if lb0 then
+    local idx = 0
+    for i, n in ipairs(w.box.PIXEL_LOOKS) do if n == w.box.state.pixel_look then idx = i - 1 end end
+    if lb0[8] ~= idx then return "preview: the window has pixel look " .. tostring(lb0[8]) .. " but the stored one is " .. idx end
   end
   -- what the window shows is what is stored, except while the picker is open (a preview): and while it is open no file is written
   if p ~= "PICKER" then
@@ -295,7 +302,7 @@ do
   local function last(w) return w.box_calls[#w.box_calls] end
   local function open_box(w, pos)
     _menu.set_page("BOX")
-    w.pages.BOX.pos = pos or 3
+    w.pages.BOX.pos = pos or 4
     w.pages.BOX.redraw()
     tap(w, "RIGHT")
   end
@@ -342,7 +349,7 @@ do
   tap(w, "UP")
   local shown_hex = require('core/colour').value_hex(pk.val)
   tap(w, "ENTER")
-  is(_menu.page == "BOX" and w.pages.BOX.pos == 3, "K3 keeps the colour and the THEME page comes back on the same row")
+  is(_menu.page == "BOX" and w.pages.BOX.pos == 4, "K3 keeps the colour and the THEME page comes back on the same row")
   is(w.box.state.colours.box == shown_hex, "the colour is stored")
   is(slurp("/home/we/box.conf"):find("box=" .. shown_hex, 1, true) ~= nil, "and written")
   is(last(w)[2] == shown_hex, "the box has it")
@@ -350,7 +357,7 @@ do
   for _, how in ipairs({"2", "ESC", "F1"}) do
     local w2 = world()
     local c0 = slurp("/home/we/box.conf")
-    open_box(w2, 4) -- KEYS
+    open_box(w2, 5) -- KEYS
     for _ = 1, 3 do tap(w2, "EQUAL") end
     local lk = last(w2)
     is(lk and lk[3] ~= "444853", how .. ": the keys show the new colour while the picker is open")
@@ -431,7 +438,7 @@ do
   -- Ctrl+C / Ctrl+V on a THEME hex row: copy, and paste keeps the colour at once; other rows and other Ctrl keys are the menu's own
   local w5 = world()
   _menu.set_page("BOX")
-  w5.pages.BOX.pos = 4
+  w5.pages.BOX.pos = 5
   ctrlkey(w5, "C")
   is(w5.clip == "#" .. w5.box.state.colours.keys, "Ctrl+C on a colour row copies its code")
   ctrlkey(w5, "V") answer("#E8A317", "ok")
@@ -448,17 +455,55 @@ do
   -- Ctrl+C and Ctrl+V with no clipboard binding: a message, no error
   local w6 = world()
   _norns.clipboard_set, _norns.clipboard_request = nil, nil
-  _menu.set_page("BOX") w6.pages.BOX.pos = 4
+  _menu.set_page("BOX") w6.pages.BOX.pos = 5
   ctrlkey(w6, "C")
   is(w6.pages.BOX.msg == "no clipboard", "without the window's binding Ctrl+C says so")
   ctrlkey(w6, "V")
   is(w6.pages.BOX.msg == "no clipboard", "and so does Ctrl+V")
 end
 
+-- ---------------------------------------------------------------- the PIXEL LOOK row through the real keyboard and menu bindings
+do
+  local function F(what) fails_total = fails_total + 1 print("FAIL pixel look row: " .. what) end
+  local function is(c, what) if not c then F(what) end end
+  local w = world()
+  _menu.set_page("BOX")
+  local pg = w.pages.BOX
+  pg.pos = 2
+  local n = #w.box_calls
+  tap(w, "EQUAL")
+  is(w.box.state.pixel_look == "pixel" and #w.box_calls == n, "inactive while the style is aluminium: = does nothing")
+  w.box.set_style("pixel")
+  local f0 = frame_text(w.shown)
+  tap(w, "EQUAL")
+  is(w.box.state.pixel_look == "retro", "= steps to RETRO")
+  is(frame_text(w.shown) ~= f0, "and the screen shows it at once (the handler ends with a redraw)")
+  is(w.box_calls[#w.box_calls][8] == 1, "the window is told")
+  send(w, "EQUAL", 0)
+  is(w.box.state.pixel_look == "retro", "a release changes nothing")
+  send(w, "EQUAL", 1) send(w, "EQUAL", 2) send(w, "EQUAL", 0)
+  is(w.box.state.pixel_look == "16-bit", "a press and a repeat: two more steps (8-BIT, 16-BIT)")
+  tap(w, "MINUS") tap(w, "MINUS") tap(w, "MINUS")
+  is(w.box.state.pixel_look == "pixel", "- steps back")
+  tap(w, "RIGHT")
+  is(w.box.state.pixel_look == "retro", "RIGHT (K3) steps and redraws")
+  w.box.set_pixel_look("16-bit")
+  tap(w, "RIGHT")
+  is(w.box.state.pixel_look == "pixel", "K3 goes round from 16-BIT to PIXEL")
+  -- the live colour preview carries the pixel look
+  w.box.set_pixel_look("8-bit")
+  pg.pos = 5
+  tap(w, "RIGHT")
+  tap(w, "EQUAL")
+  is(w.box_calls[#w.box_calls][8] == 2, "a colour change in the picker keeps the 8-bit look")
+  tap(w, "2")
+  is(w.box_calls[#w.box_calls][8] == 2 and w.box.state.pixel_look == "8-bit", "and so does cancelling it")
+end
+
 -- what every control does while the hex entry is open (printed with "entry"; the checks below assert it)
 local function open_entry(w)
   _menu.set_page("BOX")
-  w.pages.BOX.pos = 3
+  w.pages.BOX.pos = 4
   tap(w, "RIGHT") -- K3 on the BOX colour row: the colour picker
   assert(_menu.page == "PICKER", "the picker did not open")
   tap(w, "H") -- H in the picker: the hex entry
@@ -577,7 +622,7 @@ do
   local function name_entry()
     local w2 = world()
     _menu.set_page("BOX")
-    w2.pages.BOX.pos = 8 -- SAVE
+    w2.pages.BOX.pos = 9 -- SAVE
     tap(w2, "RIGHT")
     assert(w2.textentry.active, "the name entry did not open")
     return w2
@@ -601,7 +646,7 @@ do
   local w = world()
   _menu.set_page("BOX")
   for _, name in ipairs({"set_style", "step_preset"}) do
-    local row = name == "set_style" and 1 or 2
+    local row = name == "set_style" and 1 or 3
     local orig = w.box[name]
     w.box[name] = function() error("boom " .. name) end
     w.pages.BOX.pos = row
@@ -614,18 +659,18 @@ do
     local msg = invariants(w)
     if msg then fails_total = fails_total + 1 print("FAIL the page is not whole after a handler error (" .. name .. "): " .. msg) end
     apply(w, {k = "tap", name = "DOWN"})
-    if w.pages.BOX.pos ~= math.min(row + 1, 8) then fails_total = fails_total + 1 print("FAIL DOWN does not work after a handler error (" .. name .. ")") end
+    if w.pages.BOX.pos ~= math.min(row + 1, 9) then fails_total = fails_total + 1 print("FAIL DOWN does not work after a handler error (" .. name .. ")") end
   end
   -- a selection that is out of range is clamped with one log line, and not logged when it is in range or when scrolling past the end
   local pg = w.pages.BOX
-  pg.mode, pg.pos = "rows", 9
+  pg.mode, pg.pos = "rows", 10
   printed = {}
   pg.redraw()
   local clamped = false
-  for _, l in ipairs(printed) do if l:find("selection 9 clamped to", 1, true) then clamped = true end end
-  if not clamped or pg.pos ~= 8 then fails_total = fails_total + 1 print("FAIL an out of range selection is not clamped and logged") end
+  for _, l in ipairs(printed) do if l:find("selection 10 clamped to", 1, true) then clamped = true end end
+  if not clamped or pg.pos ~= 9 then fails_total = fails_total + 1 print("FAIL an out of range selection is not clamped and logged") end
   printed = {}
-  pg.pos = 8
+  pg.pos = 9
   for _ = 1, 3 do apply(w, {k = "tap", name = "DOWN"}) end
   for _, l in ipairs(printed) do if l:find("clamped", 1, true) then fails_total = fails_total + 1 print("FAIL scrolling past the last row is logged as a clamp") break end end
 end

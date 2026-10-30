@@ -117,6 +117,10 @@ void skin_set_fast(int fast) {
     box_style_set_fast(fast);
 }
 
+void skin_set_pixel_look(int look) {
+    box_style_set_variant(look);
+}
+
 void skin_set_buttons_shown(int shown) {
     look_shown = shown != 0;
 }

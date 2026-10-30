@@ -1,6 +1,6 @@
 -- SYSTEM > BOX (computers only, see core/menu/system.lua): the look of the box. docs/port/box-style-plan.md 2.6, 2.7. the values live in core/box_settings.lua (file: box.conf in the norns
 -- home, and one small file per saved look in box-presets/); every change is applied and saved at once.
---   rows: STYLE, PRESET, BOX, KEYS, ENCODERS, BUTTONS, FONT, SAVE, and DELETE only while one of his own looks is in use
+--   rows: STYLE, PIXEL LOOK (PIXEL, RETRO, 8-BIT, 16-BIT: only while STYLE is pixel; docs/port/retro-look-plan.md), PRESET, BOX, KEYS, ENCODERS, BUTTONS, FONT, SAVE, and DELETE only while one of his own looks is in use
 --   E2 row, E3 value (STYLE: aluminium or pixel; PRESET: the next or previous look), K3: PRESET opens the list, a colour opens the text entry (the same as UI's HEX row), SAVE asks for a name,
 --   DELETE asks once. K2 goes back (out of the list or the question, else to SYSTEM)
 
@@ -21,7 +21,7 @@ end
 
 --- the rows of the page, in order (DELETE only for one of his own looks)
 function m.rows()
-  local r = {"STYLE", "PRESET", "BOX", "KEYS", "ENCODERS", "BUTTONS", "FONT", "SAVE"}
+  local r = {"STYLE", "PIXEL LOOK", "PRESET", "BOX", "KEYS", "ENCODERS", "BUTTONS", "FONT", "SAVE"}
   local l = in_use_look()
   if l ~= nil and not l.builtin then r[#r + 1] = "DELETE" end
   return r
@@ -47,6 +47,7 @@ end
 local function value_text(row)
   local st = box.state
   if row == "STYLE" then return st.style:upper()
+  elseif row == "PIXEL LOOK" then return st.pixel_look:upper()
   elseif row == "PRESET" then return preset_text()
   elseif row == "SAVE" then return "name..."
   elseif row == "DELETE" then local l = in_use_look() return l and ("* " .. l.name) or ""
@@ -217,6 +218,14 @@ local function key_raw(n, z)
   local textentry = require 'textentry'
   if row == "STYLE" then
     box.set_style(box.state.style == "pixel" and "aluminium" or "pixel")
+  elseif row == "PIXEL LOOK" then
+    if box.state.style ~= "pixel" then
+      m.msg = "needs STYLE PIXEL"
+    else
+      -- K3 steps to the next look and goes round from the last to the first
+      local i = box.pixel_look_index(box.state.pixel_look) + 1
+      box.set_pixel_look(box.PIXEL_LOOKS[i % #box.PIXEL_LOOKS + 1])
+    end
   elseif row == "PRESET" then
     open_list()
   elseif PARTS[row] then
@@ -248,6 +257,10 @@ local function enc_raw(n, delta)
     local row = m.rows()[m.pos]
     if row == "STYLE" then
       if delta > 0 then box.set_style("pixel") elseif delta < 0 then box.set_style("aluminium") end
+    elseif row == "PIXEL LOOK" then
+      if delta ~= 0 then
+        if box.state.style ~= "pixel" then m.msg = "needs STYLE PIXEL" else box.step_pixel_look(delta) end
+      end
     elseif row == "PRESET" then
       box.step_preset(delta)
     end
@@ -329,6 +342,7 @@ local function redraw_raw()
       screen.move(0, y)
       screen.text(row)
       screen.move(124, y)
+      if row == "PIXEL LOOK" and box.state.style ~= "pixel" then screen.level(2) end -- not active: the style is aluminium
       screen.text_right(value_text(row))
     end
   end

@@ -16,6 +16,7 @@ os.rename = function(a, b) return real_rename(map(a), map(b)) end
 
 local fails = 0
 local function check(ok, what) if not ok then fails = fails + 1; print("FAIL " .. what) end end
+local function write(p, text) local h = real_open(map(p), "w"); h:write(text); h:close() end
 local function slurp(p) local h = real_open(map(p)); if not h then return nil end local c = h:read("a"); h:close(); return c end
 local function put(p, text) local h = real_open(map(p), "w"); h:write(text); h:close() end
 local function exists(p) local h = real_open(map(p)); if h then h:close() return true end return false end
@@ -365,6 +366,70 @@ box.delete_look("Zed")
 box.state.preset = "CUSTOM"
 box.step_preset(1)
 check(box.state.preset == "DARK", "from CUSTOM a step starts at the first look")
+
+-- ---- PIXEL LOOK (docs/port/retro-look-plan.md): PIXEL, RETRO, 8-BIT, 16-BIT; independent of the colours, the presets and the style; box.conf pixel_look=; default pixel; a damaged value falls back with a log line
+reset()
+os.remove("/home/we/box.conf")
+box.load()
+check(box.state.pixel_look == "pixel" and box.PIXEL_LOOKS[1] == "pixel" and box.PIXEL_LOOKS[2] == "retro" and box.PIXEL_LOOKS[3] == "8-bit" and box.PIXEL_LOOKS[4] == "16-bit", "the pixel looks are pixel, retro, 8-bit, 16-bit; the default is pixel")
+box.apply()
+check(last[8] == 0, "apply sends the pixel look as the 8th number: 0 for pixel (" .. tostring(last[8]) .. ")")
+reset()
+check(box.set_pixel_look("retro") == true and box.state.pixel_look == "retro" and last[8] == 1, "retro is 1")
+check(slurp("/home/we/box.conf"):find("pixel_look=retro", 1, true) ~= nil, "saved in box.conf")
+box.set_pixel_look("8-bit"); check(last[8] == 2 and box.state.pixel_look == "8-bit", "8-bit is 2")
+box.set_pixel_look("16-bit"); check(last[8] == 3 and box.state.pixel_look == "16-bit", "16-bit is 3")
+check(box.set_pixel_look("neon") == false and box.state.pixel_look == "16-bit", "an unknown look is refused and the old one stays")
+-- independent of the colours, the preset and the style
+box.select_look("COLOUR")
+check(box.state.pixel_look == "16-bit", "choosing a look (colours) does not change the pixel look")
+local c0, p0 = box.state.colours.box, box.state.preset
+box.set_pixel_look("pixel")
+check(box.state.colours.box == c0 and box.state.preset == p0 and box.state.style == "aluminium" or box.state.style == "pixel", "the pixel look changes no colour, no preset")
+box.set_style("aluminium"); box.set_style("pixel")
+check(box.state.pixel_look == "pixel", "STYLE does not change the pixel look")
+box.set_part("box", "123456")
+box.step_pixel_look(1)
+check(box.state.pixel_look == "retro" and box.state.colours.box == "123456" and box.state.preset == "COLOUR~" or box.label():find("COLOUR", 1, true), "a step goes to the next look; the colours stay")
+box.step_pixel_look(10); check(box.state.pixel_look == "16-bit", "stepping stops at the end")
+box.step_pixel_look(-10); check(box.state.pixel_look == "pixel", "and at the start")
+box.step_pixel_look(0); check(box.state.pixel_look == "pixel", "0 changes nothing")
+-- a saved look has no pixel look in it; the live preview of a colour carries it
+box.set_pixel_look("8-bit")
+box.save_look("Mine")
+check(not slurp("/home/we/box-presets/mine.box"):find("pixel", 1, true), "a saved look holds colours only: no pixel look")
+reset()
+box.preview_part("keys", "FF0000")
+check(last and last[3] == "FF0000" and last[8] == 2, "a live preview carries the pixel look too (8-bit = 2)")
+-- the file: read, damaged, unknown
+reset()
+write("/home/we/box.conf", "style=pixel\npixel_look=retro\n")
+box.load()
+check(box.state.pixel_look == "retro" and #logged == 0, "box.conf with pixel_look=retro is read")
+reset()
+write("/home/we/box.conf", "style=pixel\npixel_look=neon\n")
+box.load()
+check(box.state.pixel_look == "pixel", "a damaged value falls back to pixel")
+local said = false
+for _, l in ipairs(logged) do if l:find("pixel_look", 1, true) and l:find("neon", 1, true) then said = true end end
+check(said, "with a log line naming the value")
+reset()
+write("/home/we/box.conf", "style=pixel\npixel_look=\n")
+box.load()
+check(box.state.pixel_look == "pixel" and #logged >= 1, "an empty value falls back too")
+write("/home/we/box.conf", "style=pixel\npixel_look=RETRO\n")
+box.load()
+check(box.state.pixel_look == "retro", "upper case is accepted")
+write("/home/we/box.conf", "style=pixel\npixel_look=8bit\n")
+box.load()
+check(box.state.pixel_look == "8-bit", "8bit is accepted as 8-bit")
+-- an old file without the key: pixel
+write("/home/we/box.conf", "style=pixel\npreset=DARK\nbox=2C2E33\n")
+box.load()
+check(box.state.pixel_look == "pixel", "an old file without pixel_look is pixel")
+box.set_pixel_look("retro")
+box.load()
+check(box.state.pixel_look == "retro", "saved and read again")
 
 -- the window's checkbox: the C call, saved
 reset()

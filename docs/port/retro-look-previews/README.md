@@ -2,6 +2,6 @@
 
 | file | what it is |
 |---|---|
-| `retro-today-vs-recommended.png` | left: **today's pixel style, drawn by the real code** (`../box-style-previews/render_look.c` with `box_style.c`, RENDER_STYLE=pixel); right: **the recommended retro look, a STAND-IN** (Pillow, `make_retro_pictures.py`: same layout table and five colours, the shade ramp of the plan, 4-unit blocks). DARK look |
-| `retro-alternatives.png` | left: alternative A "chunky 8-bit" (stand-in, DARK); right: alternative B "dithered 16-bit" (stand-in, 3-unit blocks, COLOUR look) |
-| `make_retro_pictures.py` | makes both (Pillow, cairo, freetype; builds `render_look` itself). The norns screen text is a stand-in too |
+| `retro-four-looks.png` | **captures of the real window** (headless: Xvfb, dummy jackd; `linux/tests/probe_retro.lua`): PIXEL, RETRO, 8-BIT and 16-BIT in the DARK look, the THEME page on its PIXEL LOOK row on the norns screen |
+| `retro-colour.png` | a capture of the real window: RETRO in the COLOUR look |
+| `retro-today-vs-recommended.png`, `retro-alternatives.png`, `make_retro_pictures.py` | the plan's pictures: today's pixel style by the real code, the retro looks as **stand-ins** (Pillow); the product code was written afterwards and differs in details (the plan, section 10) |

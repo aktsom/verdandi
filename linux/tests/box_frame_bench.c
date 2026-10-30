@@ -3,7 +3,7 @@
  * does after a resize: (A) make the layers for the new size: a static layer with the box (skin_draw_static), (B) paint it on the canvas, (C) the controls (skin_draw_controls), (D) the screen picture
  * (skin_draw_oled: a whole multiple of 128 x 64 when the size allows, else the filtered in-between), (E) hand the canvas to the window (SDL_BlitSurface and SDL_UpdateWindowSurfaceRects, when there is a display;
  * under Xvfb this is the X server's copy, not a real screen). plus (F) a frame that only changes the screen picture (what every refresh of a script does).
- *   box_frame_bench MODE [--check]      MODE: alu | tint | pixel (the look), env BENCH_ORIG=1 when built against the old device_skin.c that has no skin_set_look
+ *   box_frame_bench MODE [--check]      MODE: alu | tint | pixel | retro | 8bit | 16bit (the look), env BENCH_ORIG=1 when built against the old device_skin.c that has no skin_set_look
  * without --check it prints the table; with --check it also compares the final image after the whole sequence with a direct draw at the final size (a cache must never show an old size) and
  * exits 1 over the time budget (BENCH_BUDGET_MS per frame, default 250: generous, a headless machine and a loaded test run are slow) or on a difference
  */
@@ -84,7 +84,12 @@ static void compose(frame_t *f, const skin_state_t *st, cairo_surface_t *oled, d
 
 static void apply_look(const char *mode) {
 #ifndef BENCH_ORIG
-    if (strcmp(mode, "pixel") == 0) {
+    skin_set_pixel_look(0);
+    if (strcmp(mode, "retro") == 0 || strcmp(mode, "8bit") == 0 || strcmp(mode, "16bit") == 0) {
+        // the retro looks of the pixel style (docs/port/retro-look-plan.md)
+        skin_set_look(SKIN_STYLE_PIXEL, "2c2e33", "444853", "5d6270", "3a3d45", "e4e6ea");
+        skin_set_pixel_look(strcmp(mode, "retro") == 0 ? 1 : strcmp(mode, "8bit") == 0 ? 2 : 3);
+    } else if (strcmp(mode, "pixel") == 0) {
         skin_set_look(SKIN_STYLE_PIXEL, "2c2e33", "444853", "5d6270", "3a3d45", "e4e6ea");
     } else if (strcmp(mode, "tint") == 0) {
         skin_set_look(SKIN_STYLE_ALUMINIUM, "3b6ea8", "e8a317", NULL, NULL, NULL);

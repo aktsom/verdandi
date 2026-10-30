@@ -30,7 +30,8 @@ screen.text_right = function(s) lines[#lines + 1] = {s = s, y = cur_y, level = c
 screen.text_extents = function(s) return #s * 5 end
 screen.update = function() calls = calls + 1 end
 local pushed = {}
-_menu = {redraw = function() end, set_page = function(p) pushed[#pushed + 1] = p end}
+local redraws = 0
+_menu = {redraw = function() redraws = redraws + 1 end, set_page = function(p) pushed[#pushed + 1] = p end}
 norns = {none = function() end}
 norns.menu = {status = function() return true end, get_key = function() return norns.menu.key end, set = function(e, k) norns.menu.key = k end}
 util = {
@@ -66,7 +67,7 @@ local function press(n) page.key(n, 1); page.key(n, 0); page.redraw() end
 
 -- ---- the rows ----
 start()
-check(row_names() == "STYLE,PRESET,BOX,KEYS,ENCODERS,BUTTONS,FONT,SAVE", "the rows: " .. row_names())
+check(row_names() == "STYLE,PIXEL LOOK,PRESET,BOX,KEYS,ENCODERS,BUTTONS,FONT,SAVE", "the rows: " .. row_names())
 check(shown("STYLE") and shown("ALUMINIUM"), "STYLE shows ALUMINIUM by default")
 check(shown("PRESET") and shown("MAC"), "PRESET shows the default look MAC")
 check(shown("#D1D4D8"), "BOX shows its hex")
@@ -77,11 +78,14 @@ check(shown("E2 row") ~= nil, "the hint line")
 check(shown("STYLE").level == 15 and shown("PRESET").level < 15, "the chosen row is the bright one")
 page.enc(2, 1)
 page.redraw()
-check(shown("PRESET").level == 15, "E2 moves to PRESET")
+check(shown("PIXEL LOOK").level == 15, "E2 moves to PIXEL LOOK")
+page.enc(2, 1)
+page.redraw()
+check(shown("PRESET").level == 15, "E2 moves on to PRESET")
 page.enc(2, -5)
 check(page.pos == 1, "E2 stops at the top")
 page.enc(2, 50)
-check(page.pos == 8, "E2 stops at the bottom: SAVE")
+check(page.pos == 9, "E2 stops at the bottom: SAVE")
 page.redraw()
 check(shown("SAVE") and not shown("STYLE"), "the list scrolls with the cursor: SAVE is on the screen, STYLE is not")
 
@@ -131,6 +135,57 @@ check(shown("* Sunday").level == 15, "E2 moves down to the last look (the separa
 press(3)
 check(page.mode == "rows" and box.state.preset == "Sunday", "K3 uses the look and returns to the rows")
 check(shown("* Sunday") ~= nil, "the PRESET row says * Sunday for his own look")
+
+-- ---- the PIXEL LOOK row (docs/port/retro-look-plan.md): below STYLE, only active when STYLE is pixel, E3 and K3 step PIXEL, RETRO, 8-BIT, 16-BIT, independent of PRESET and the colours ----
+start()
+check(row_names():find("^STYLE,PIXEL LOOK,PRESET,BOX,KEYS,ENCODERS,BUTTONS,FONT,SAVE") ~= nil, "the rows: STYLE, then PIXEL LOOK, then PRESET (" .. row_names() .. ")")
+box.set_style("aluminium")
+goto_row("PIXEL LOOK")
+page.redraw()
+local pl = shown("PIXEL LOOK")
+check(pl and pl.level == 15 and shown("PIXEL") ~= nil, "the row is shown with its value when the style is aluminium")
+local lvl = nil
+for _, l in ipairs(lines) do if l.s == "PIXEL" and l.right then lvl = l.level end end
+check(lvl ~= nil, "its value is on the right")
+page.enc(3, 1)
+check(box.state.pixel_look == "pixel", "E3 on PIXEL LOOK does nothing while STYLE is aluminium")
+press(3)
+check(box.state.pixel_look == "pixel", "K3 on it does nothing either")
+page.redraw()
+check(shown("STYLE PIXEL") ~= nil or shown("needs STYLE PIXEL") ~= nil or (page.msg or ""):find("STYLE") ~= nil, "and the page says why (needs STYLE PIXEL)")
+box.set_style("pixel")
+goto_row("PIXEL LOOK")
+local n0 = redraws
+page.enc(3, 1)
+check(box.state.pixel_look == "retro" and redraws > n0, "E3 right: RETRO, and the page was redrawn by the handler")
+check(sent and sent[8] == 1, "the window is told: 1")
+page.redraw()
+check(shown("RETRO") ~= nil, "the row says RETRO")
+page.enc(3, 1) page.redraw()
+check(box.state.pixel_look == "8-bit" and shown("8-BIT") ~= nil, "next: 8-BIT")
+page.enc(3, 1) page.redraw()
+check(box.state.pixel_look == "16-bit" and shown("16-BIT") ~= nil, "next: 16-BIT")
+page.enc(3, 1)
+check(box.state.pixel_look == "16-bit", "stops at the end")
+page.enc(3, -1) page.enc(3, -1) page.enc(3, -1) page.redraw()
+check(box.state.pixel_look == "pixel" and shown("PIXEL") ~= nil, "and back to PIXEL")
+page.enc(3, 0)
+check(box.state.pixel_look == "pixel", "a delta of 0 changes nothing")
+press(3)
+check(box.state.pixel_look == "retro", "K3 steps to the next look (and wraps from 16-BIT to PIXEL)")
+box.set_pixel_look("16-bit")
+press(3)
+check(box.state.pixel_look == "pixel", "K3 on 16-BIT goes round to PIXEL")
+-- independent of the preset and the colours
+box.select_look("COLOUR")
+box.set_pixel_look("retro")
+check(box.state.preset == "COLOUR" and box.state.colours.box == "2B6F73", "choosing RETRO changes neither the PRESET nor the colours")
+goto_row("PRESET")
+page.enc(3, 1)
+check(box.state.pixel_look == "retro", "changing the PRESET does not change the pixel look")
+-- the rows still scroll and every row is reachable: the new row makes it one longer
+start()
+check(#page.rows() == 9, "nine rows with no own look in use")
 
 -- ---- hex rows: K3 opens the colour picker (the text entry is reached from inside it: core/menu/picker.lua, linux/tests/picker_test.lua) ----
 start()

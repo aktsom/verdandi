@@ -12,6 +12,15 @@
 
 #include "box_style.h"
 
+// the pixel look in use (docs/port/retro-look-plan.md) and the size of its block image: PIXEL, RETRO and 8-BIT draw into 2 unit cells (496 x 331), 16-BIT into 1 unit cells (992 x 662)
+static int variant = BOX_LOOK_PIXEL;
+static int img_w = BS_W, img_h = BS_H, cell_u = BS_BLOCK;
+static unsigned dbg_mask = 0;
+#define IMG_MAX_CELLS (992 * 662)
+static int v_control_rect(int control, double *x0, double *y0, double *x1, double *y1);
+static int v_hit(const skin_geom_t *g, double x, double y, int buttons_shown, int muted);
+static int v_nearest_enc(const skin_geom_t *g, double x, double y);
+
 // ---------------------------------------------------------------- the layout table (layout units; docs/port/box-style-plan.md 2.2)
 typedef struct {
     int id;
@@ -50,6 +59,9 @@ static const struct {
 #define NBUTTONS ((int)(sizeof buttons / sizeof buttons[0]))
 
 int box_style_control_rect(int control, double *x0, double *y0, double *x1, double *y1) {
+    if (variant != BOX_LOOK_PIXEL) {
+        return v_control_rect(control, x0, y0, x1, y1);
+    }
     for (int i = 0; i < NCTL; i++) {
         if (ctls[i].id == control) {
             *x0 = ctls[i].cx - ctls[i].hw;
@@ -149,8 +161,8 @@ static uint32_t argb(box_rgb_t c) {
 
 // ---------------------------------------------------------------- pixels
 static void put(uint32_t *px, int x, int y, uint32_t c) {
-    if (x >= 0 && y >= 0 && x < BS_W && y < BS_H) {
-        px[y * BS_W + x] = c;
+    if (x >= 0 && y >= 0 && x < img_w && y < img_h) {
+        px[y * img_w + x] = c;
     }
 }
 
@@ -362,7 +374,7 @@ static void label_in(uint32_t *px, int x, int y, int w, int h, const char *text,
 // ---------------------------------------------------------------- the layers
 static int bx(double units) { return BS_MARGIN + (int)floor(units / BS_BLOCK + 0.5); }
 
-void box_style_render_static(uint32_t *px) {
+static void render_static_pixel(uint32_t *px) {
     ensure_colours();
     const shades_t *b = &sh[BOX_PART_BOX];
     fill_rect(px, 0, 0, BS_W, BS_H, argb(b->darker));
@@ -454,7 +466,7 @@ static void draw_encoder(uint32_t *px, const ctl_t *c, int ticks, int hover) {
     disc(px, cx + cos(a) * (r - 9), cy + sin(a) * (r - 9), 2.2, argb(e->dark), 0, 0);
 }
 
-void box_style_render_controls(uint32_t *px, const skin_state_t *st, int buttons_shown) {
+static void render_controls_pixel(uint32_t *px, const skin_state_t *st, int buttons_shown) {
     ensure_colours();
     memset(px, 0, sizeof(uint32_t) * BS_W * BS_H);
     for (int i = 0; i < NBUTTONS; i++) {
@@ -472,31 +484,92 @@ void box_style_render_controls(uint32_t *px, const skin_state_t *st, int buttons
     }
 }
 
+#include "box_style_retro.inc"
+
+// the layers of the look in use
+void box_style_render_static(uint32_t *px) {
+    if (variant == BOX_LOOK_PIXEL) {
+        render_static_pixel(px);
+    } else {
+        render_static_retro(px);
+    }
+}
+
+void box_style_render_controls(uint32_t *px, const skin_state_t *st, int buttons_shown) {
+    if (variant == BOX_LOOK_PIXEL) {
+        render_controls_pixel(px, st, buttons_shown);
+    } else {
+        render_controls_retro(px, st, buttons_shown);
+    }
+}
+
+void box_style_set_variant(int v) {
+    if (v < 0 || v >= BOX_LOOKS) {
+        v = BOX_LOOK_PIXEL;
+    }
+    if (v == variant) {
+        return;
+    }
+    variant = v;
+    cell_u = v == BOX_LOOK_16BIT ? 1 : BS_BLOCK;
+    img_w = 992 / cell_u;
+    img_h = 662 / cell_u;
+    invalidate_all();
+}
+
+int box_style_variant(void) { return variant; }
+
+void box_style_image_size(int *w, int *h) {
+    *w = img_w;
+    *h = img_h;
+}
+
+int box_style_cell_units(void) { return cell_u; }
+
+int box_style_block_units(void) { return variant == BOX_LOOK_PIXEL ? BS_BLOCK : VB; }
+
+void box_style_box_units(int *w, int *h) {
+    if (variant == BOX_LOOK_PIXEL) {
+        *w = SKIN_W;
+        *h = SKIN_H;
+    } else {
+        *w = vbox_w() * VB;
+        *h = vbox_h() * VB;
+    }
+}
+
+void box_style_set_debug(unsigned mask) {
+    if (mask != dbg_mask) {
+        dbg_mask = mask;
+        invalidate_all();
+    }
+}
+
 // ---------------------------------------------------------------- placing an image in the window (the screen's rule: whole multiples where the size allows, else slightly soft)
 // big: the cache of the enlarged copies of this layer (by the whole multiple m)
 static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px, cairo_surface_t **big) {
-    cairo_surface_t *img = cairo_image_surface_create_for_data((unsigned char *)px, CAIRO_FORMAT_ARGB32, BS_W, BS_H, BS_W * 4);
-    double k = BS_BLOCK * g->s;
+    cairo_surface_t *img = cairo_image_surface_create_for_data((unsigned char *)px, CAIRO_FORMAT_ARGB32, img_w, img_h, img_w * 4);
+    double k = cell_u * g->s;
     long r = lround(k);
     cairo_save(cr);
     if (r >= 1 && fabs(k - r) <= 0.01) {
         // crisp: a whole number of device pixels per block, centred on the box
         double cx = g->ox + SKIN_W / 2.0 * g->s, cy = g->oy + SKIN_H / 2.0 * g->s;
-        cairo_translate(cr, floor(cx - BS_W * r / 2.0 + 0.5), floor(cy - BS_H * r / 2.0 + 0.5));
+        cairo_translate(cr, floor(cx - img_w * r / 2.0 + 0.5), floor(cy - img_h * r / 2.0 + 0.5));
         cairo_scale(cr, (double)r, (double)r);
         cairo_set_source_surface(cr, img, 0, 0);
         cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
         cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_NONE);
-        cairo_rectangle(cr, 0, 0, BS_W, BS_H);
+        cairo_rectangle(cr, 0, 0, img_w, img_h);
         cairo_fill(cr);
     } else if (fast_mode) {
         // while the size is changing: the block image straight onto the window with the cheap filter (some blocks a device pixel wider); the quality frame follows when the size settles
-        cairo_translate(cr, g->ox - BS_MARGIN * BS_BLOCK * g->s, g->oy - BS_MARGIN * BS_BLOCK * g->s);
+        cairo_translate(cr, g->ox - 16 * g->s, g->oy - 16 * g->s);
         cairo_scale(cr, k, k);
         cairo_set_source_surface(cr, img, 0, 0);
         cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_FAST);
         cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_NONE);
-        cairo_rectangle(cr, 0, 0, BS_W, BS_H);
+        cairo_rectangle(cr, 0, 0, img_w, img_h);
         cairo_fill(cr);
     } else {
         // in between: enlarge to a whole multiple with nearest neighbour (no blur inside a block), then scale down with the best filter. the enlarged copy is kept
@@ -507,8 +580,11 @@ static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px, cairo_surface
         if (m > MAX_M) {
             m = MAX_M;
         }
+        if (cell_u == 1 && m > 4) {
+            m = 4; // 16-BIT's image has 4 times the cells: its enlarged copies are kept small
+        }
         if (big[m] == NULL) {
-            big[m] = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, BS_W * m, BS_H * m);
+            big[m] = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, img_w * m, img_h * m);
             cairo_t *bc = cairo_create(big[m]);
             cairo_scale(bc, m, m);
             cairo_set_source_surface(bc, img, 0, 0);
@@ -516,12 +592,12 @@ static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px, cairo_surface
             cairo_paint(bc);
             cairo_destroy(bc);
         }
-        cairo_translate(cr, g->ox - BS_MARGIN * BS_BLOCK * g->s, g->oy - BS_MARGIN * BS_BLOCK * g->s);
+        cairo_translate(cr, g->ox - 16 * g->s, g->oy - 16 * g->s);
         cairo_scale(cr, k / m, k / m);
         cairo_set_source_surface(cr, big[m], 0, 0);
         cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
         cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_NONE);
-        cairo_rectangle(cr, 0, 0, BS_W * m, BS_H * m);
+        cairo_rectangle(cr, 0, 0, img_w * m, img_h * m);
         cairo_fill(cr);
     }
     cairo_restore(cr);
@@ -531,7 +607,7 @@ static void place(cairo_t *cr, const skin_geom_t *g, uint32_t *px, cairo_surface
 static void ensure_static(void) {
     ensure_colours();
     if (blk_static == NULL) {
-        blk_static = (uint32_t *)malloc(sizeof(uint32_t) * BS_W * BS_H);
+        blk_static = (uint32_t *)malloc(sizeof(uint32_t) * IMG_MAX_CELLS);
     }
     if (blk_static != NULL && !static_ok) {
         box_style_render_static(blk_static);
@@ -562,7 +638,7 @@ static void ensure_controls(const skin_state_t *st, int buttons_shown) {
         snprintf(k.toast, sizeof k.toast, "%s", st->toast);
     }
     if (blk_ctl == NULL) {
-        blk_ctl = (uint32_t *)malloc(sizeof(uint32_t) * BS_W * BS_H);
+        blk_ctl = (uint32_t *)malloc(sizeof(uint32_t) * IMG_MAX_CELLS);
     }
     if (blk_ctl != NULL && (!ctl_ok || memcmp(&k, &ctl_key, sizeof k) != 0)) {
         box_style_render_controls(blk_ctl, st, buttons_shown);
@@ -594,6 +670,9 @@ void box_style_draw_controls(cairo_t *cr, const skin_geom_t *g, const skin_state
 
 // ---------------------------------------------------------------- hit-testing
 int box_style_hit(const skin_geom_t *g, double x, double y, int buttons_shown, int muted) {
+    if (variant != BOX_LOOK_PIXEL) {
+        return v_hit(g, x, y, buttons_shown, muted);
+    }
     double px = (x - g->ox) / g->s, py = (y - g->oy) / g->s;
     for (int i = 0; i < NBUTTONS; i++) {
         int id = SKIN_PAGE1 + i;
@@ -623,6 +702,9 @@ int box_style_hit(const skin_geom_t *g, double x, double y, int buttons_shown, i
 }
 
 int box_style_nearest_enc(const skin_geom_t *g, double x, double y) {
+    if (variant != BOX_LOOK_PIXEL) {
+        return v_nearest_enc(g, x, y);
+    }
     double px = (x - g->ox) / g->s, py = (y - g->oy) / g->s;
     int best = 0;
     for (int i = 1; i < 3; i++) {

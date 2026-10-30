@@ -109,6 +109,8 @@ extern double skin_fader_value(const skin_geom_t *g, double y);
 enum { SKIN_STYLE_ALUMINIUM = 0, SKIN_STYLE_PIXEL = 1 };
 extern void skin_set_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font);
 extern int skin_look_style(void);
+// the pixel look of the pixel style (docs/port/retro-look-plan.md): 0 PIXEL, 1 RETRO, 2 8-BIT, 3 16-BIT; PIXEL is the look of the box styles step and never changes. the colours work with every look
+extern void skin_set_pixel_look(int look);
 // the page buttons shown or hidden (the right-click item): hidden, they are not drawn and have no hit area, except the MUTE chip while muted (skin_note_muted: draw_controls does it by itself)
 extern void skin_set_buttons_shown(int shown);
 // while the window is being resized the screen picture and the pixel box are placed with the cheap filter; set it false when the size settles and draw once more (the quality frame)

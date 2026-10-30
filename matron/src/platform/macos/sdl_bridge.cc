@@ -613,11 +613,11 @@ void sdl_bridge_set_file_dialog(int on) {
 
 // any thread: the look of the box. one event (code 4) carries it to the main thread
 typedef struct {
-    int style, show;
+    int style, show, look;
     char col[5][12];
 } box_look_msg_t;
 
-void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font, int show_buttons) {
+void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font, int show_buttons, int pixel_look) {
     box_look_msg_t *m = (box_look_msg_t *)calloc(1, sizeof *m);
     if (m == NULL) {
         return;
@@ -625,6 +625,7 @@ void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const
     const char *in[5] = {box, keys, encoders, buttons, font};
     m->style = style;
     m->show = show_buttons;
+    m->look = pixel_look;
     for (int i = 0; i < 5; i++) {
         snprintf(m->col[i], sizeof m->col[i], "%s", in[i] != NULL ? in[i] : "");
     }
@@ -2980,6 +2981,7 @@ void sdl_bridge_run(void) {
                 // SYSTEM > BOX: a new look for the box (sdl_bridge_set_box_look): the layers are made again
                 box_look_msg_t *m = (box_look_msg_t *)ev.user.data1;
                 skin_set_look(m->style, m->col[0], m->col[1], m->col[2], m->col[3], m->col[4]);
+                skin_set_pixel_look(m->look);
                 skin_set_buttons_shown(m->show);
                 shell_set_buttons_shown(m->show);
                 free(m);

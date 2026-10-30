@@ -31,6 +31,30 @@ if [ -x "$T/dump" ]; then
     if (cd "$T/new" && sha256sum -c --quiet "$REPO/linux/tests/box_aluminium_golden.txt" > "$T/sha.out" 2>&1); then ok "aluminium, default colours: all $n renders are byte for byte the old ones"; else bad "aluminium renders differ from the golden hashes"; head -5 "$T/sha.out"; fi
 fi
 
+# PIXEL stays exactly as it is (docs/port/retro-look-plan.md): the same 24 renders (6 states at 4 window sizes, the DARK look) as the code before the retro looks, with the pixel look set to 0 and not set, and the
+# same hit map; then the retro looks: sizes, layout, hit areas, outlines, decorations, determinism, the four built-in looks, the caches (box_retro_test.c)
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_LOOK -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/dumpp" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump (pixel) does not build"; cat "$T/cc.log"; }
+if [ -x "$T/dumpp" ]; then
+    for vv in unset 0; do
+        mkdir -p "$T/pix-$vv"
+        if [ $vv = unset ]; then DUMP_PIXEL=1 "$T/dumpp" "$T/pix-$vv"; else DUMP_PIXEL=1 DUMP_VARIANT=0 "$T/dumpp" "$T/pix-$vv"; fi
+        n=$(wc -l < linux/tests/box_pixel_golden.txt)
+        if (cd "$T/pix-$vv" && sha256sum -c --quiet "$REPO/linux/tests/box_pixel_golden.txt" > "$T/sha.out" 2>&1); then ok "PIXEL (pixel look $vv): all $n renders are byte for byte the ones of the code before the retro looks"; else bad "PIXEL renders differ from the golden hashes ($vv)"; head -5 "$T/sha.out"; fi
+    done
+fi
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_hit_dump.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/hitd" $LF -lm 2> "$T/cc.log" || { bad "box_hit_dump does not build"; cat "$T/cc.log"; }
+if [ -x "$T/hitd" ]; then
+    for vv in "" 0; do
+        got=$("$T/hitd" $vv | sha256sum | cut -d' ' -f1)
+        [ "$got" = "$(cat linux/tests/box_pixel_hits_golden.txt)" ] && ok "PIXEL hit areas are unchanged (a point every 4 units, row shown and hidden; look ${vv:-unset})" || bad "PIXEL hit areas changed"
+    done
+    [ "$("$T/hitd" 1 | sha256sum | cut -d' ' -f1)" != "$(cat linux/tests/box_pixel_hits_golden.txt)" ] && ok "RETRO's hit areas are its own (snapped to its block grid)" || bad "RETRO's hit map is PIXEL's"
+fi
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_retro_test.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/brt" $LF -lm 2> "$T/cc.log" || { bad "box_retro_test does not build"; cat "$T/cc.log"; }
+if [ -x "$T/brt" ]; then
+    "$T/brt" > "$T/brt.out" 2>&1 && ok "retro looks: $(tail -n 1 "$T/brt.out")" || { bad "box_retro_test"; head -20 "$T/brt.out"; }
+fi
+
 # the Mac build and the Mac layout
 cc -std=gnu11 -Wall -Wextra -I $SK $CF -c $SK/device_skin.c -o "$T/mac.o" 2> "$T/cc.log" && ok "device_skin.c compiles without NORNS_LINUX_DESKTOP (the Mac build)" || { bad "Mac build of device_skin.c"; cat "$T/cc.log"; }
 cc -std=gnu11 -Wall -Wextra -I $SK $CF macos/tests/device_skin_test.c $SK/device_skin.c $SK/vgrid_skin.c $SK/varc_skin.c $SK/vkeys_skin.c -o "$T/mac_ds" $LF -lm 2> "$T/cc.log" || { bad "the Mac skin test does not build"; head -5 "$T/cc.log"; }
@@ -48,7 +72,7 @@ for f in ("matron/src/platform/macos/device_skin.c", "matron/src/platform/macos/
         elif s.startswith("#if"): depth_stack.append("?")
         elif s.startswith("#else") and depth_stack: depth_stack[-1] = {"L": "M", "M": "L"}.get(depth_stack[-1], "?")
         elif s.startswith("#endif") and depth_stack: depth_stack.pop()
-        if re.search(r"\b(skin_set_look|skin_set_fast|look_fast|skin_set_buttons_shown|look_style|look_shown|look_muted|part_tinted|look_col|box_style_|box_tint_stop|BOX_PART_)", line) and "stopt(" not in line:
+        if re.search(r"\b(skin_set_look|skin_set_pixel_look|skin_set_fast|look_fast|skin_set_buttons_shown|look_style|look_shown|look_muted|part_tinted|look_col|box_style_|box_tint_stop|BOX_PART_)", line) and "stopt(" not in line:
             if "L" not in depth_stack and not s.startswith(("//", "*", "/*")):
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY

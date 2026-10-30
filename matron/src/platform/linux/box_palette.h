@@ -33,6 +33,16 @@ extern box_rgb_t box_dark(box_rgb_t c);
 extern box_rgb_t box_darker(box_rgb_t c);
 extern box_rgb_t box_light(box_rgb_t c);
 
+// the retro looks' ramp of seven shades of one colour (docs/port/retro-look-plan.md section 3): s0 x0.22 (deepest: outlines, the hard shadow), s1 = box_darker, s2 = box_dark, s3 x0.80, s4 = the
+// colour itself, s5 = box_light, s6 = +60 percent of the way to white (highlights). s1, s2, s4, s5 are exactly the four shades of the PIXEL look
+#define BOX_RAMP 7
+extern void box_ramp(box_rgb_t c, box_rgb_t out[BOX_RAMP]);
+
+// the ordered dither: 1 when block (x, y) takes the second colour of a blend whose share of it is t (0 to 1); a pure function of x, y and t. mode BAYER: a 4 x 4 Bayer matrix; CHECKER: every second block
+// (t above a quarter) and everywhere at t above three quarters
+enum { BOX_DITHER_NONE = 0, BOX_DITHER_BAYER = 1, BOX_DITHER_CHECKER = 2 };
+extern int box_dither_pick(int x, int y, double t, int mode);
+
 // the aluminium tint: stop is a colour of the original drawing (0xRRGGBB), part says which default it belongs to, colour is the user's. lighter than the part's default: the same share of
 // the way to white; darker: the same share of the colour
 extern box_rgb_t box_tint_stop(unsigned stop, int part, box_rgb_t colour);
