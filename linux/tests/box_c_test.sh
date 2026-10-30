@@ -77,7 +77,7 @@ for f in ("matron/src/platform/macos/device_skin.c", "matron/src/platform/macos/
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY
 # the clipboard and picker additions to the shared window and Lua binding files are all inside NORNS_LINUX_DESKTOP blocks
-python3 - "$REPO" << 'PY' && ok "the clipboard additions to sdl_bridge.cc/.h and weaver.cc are all inside NORNS_LINUX_DESKTOP blocks" || bad "a clipboard line of a shared file is outside NORNS_LINUX_DESKTOP"
+python3 - "$REPO" << 'PY' && ok "the clipboard and MIDI MAP additions to sdl_bridge.cc/.h and weaver.cc are all inside NORNS_LINUX_DESKTOP blocks" || bad "a clipboard line of a shared file is outside NORNS_LINUX_DESKTOP"
 import re, sys
 for f in ("matron/src/platform/macos/sdl_bridge.cc", "matron/src/platform/macos/sdl_bridge.h", "matron/src/weaver.cc"):
     stack = []
@@ -88,9 +88,14 @@ for f in ("matron/src/platform/macos/sdl_bridge.cc", "matron/src/platform/macos/
         elif s.startswith("#if"): stack.append("?")
         elif s.startswith("#else") and stack: stack[-1] = {"L": "M", "M": "L"}.get(stack[-1], "?")
         elif s.startswith("#endif") and stack: stack.pop()
-        if re.search(r"clipboard|clip_text|clip_classify|CLIP_MAX|clip_status|sdl_bridge_toast|_toast\(lua_State", line) and not s.startswith(("//", "*", "/*")):
+        if re.search(r"clipboard|clip_text|clip_classify|CLIP_MAX|clip_status|sdl_bridge_toast|_toast\(lua_State|midimap|MIDIMAP", line) and not s.startswith(("//", "*", "/*")):
             if "L" not in stack:
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY
+# MIDI MAP (docs/port/midi-map-plan.md): nothing under macos/ was changed by it (the shared files are matron/src/platform/macos/, which are the Linux window's too), and the layer is not loaded without the platform switch
+if git rev-parse --verify -q c6f62ff > /dev/null 2>&1; then
+    git diff --quiet c6f62ff -- macos/ 2> /dev/null && ok "macos/ is unchanged by the MIDI MAP work (since c6f62ff)" || bad "a file under macos/ changed"
+fi
+[ "$(NORNS_PLATFORM= lua5.3 -e 'package.path="lua/?.lua;lua/core/?.lua;lua/lib/?.lua;"..package.path; os.getenv = function(k) if k == "NORNS_PLATFORM" then return nil end return nil end; print(require("core/midimap").enabled)' 2> /dev/null)" = false ] && ok "without NORNS_PLATFORM the MIDI MAP layer is not enabled (nothing acts, nothing is written)" || bad "the MIDI MAP layer is enabled without NORNS_PLATFORM"
 [ $FAIL = 0 ] && echo "box_c_test: all passed"
 exit $FAIL

@@ -34,7 +34,7 @@ end
 -- a fresh world: new modules, new state, an own look or two on disk
 local W
 local function world()
-  os.execute("rm -rf '" .. tmp .. "'/box.conf '" .. tmp .. "'/ui.conf '" .. tmp .. "'/box-presets")
+  os.execute("rm -rf '" .. tmp .. "'/box.conf '" .. tmp .. "'/ui.conf '" .. tmp .. "'/box-presets '" .. tmp .. "'/midimap.conf '" .. tmp .. "'/midimap-presets")
   for _, k in ipairs({"core/keyboard", "lib/textentry_kbd", "textentry", "lib/textentry", "core/box_settings", "core/ui_settings", "box_settings", "ui_settings", "keyboard", "core/menu/picker", "core/clipboard", "core/colour"}) do package.loaded[k] = nil end
   local w = {frame = {}, shown = {}, errors = {}, logs = {}}
   screen = setmetatable({}, {__index = function() return function() end end})
@@ -52,6 +52,7 @@ local function world()
   _norns = {box_look = function(...) w.box_calls[#w.box_calls + 1] = {...} end, ui_look = function(...) w.ui_calls[#w.ui_calls + 1] = {...} end, show_control = function() end,
     toast = function(t) w.toasts[#w.toasts + 1] = t end,
     clipboard_set = function(t) w.clip = t end, clipboard_request = function() w.clip_asked = w.clip_asked + 1 end,
+    midimap_arm = function(a) w.armed = a end, midimap_show = function(st) w.ring = st end,
     key = function(n, z) if n ~= 1 then _menu.key(n, z) end end, enc = function(n, d) if n ~= 1 then _menu.penc(n, d) end end}
   write("/home/we/keyboard.layout", "us\n")
   _path = {keyboard_layout = "/home/we/keyboard.layout"}
@@ -82,6 +83,25 @@ local function world()
   w.pages = {SYSTEM = {init = function() end, deinit = function() end, key = function() end, enc = function() end, redraw = function() screen.clear() screen.text("SYSTEM") screen.update() end},
     BOX = dofile("lua/core/menu/box.lua"), UI = dofile("lua/core/menu/ui.lua"), PICKER = require 'core/menu/picker'}
   w.pages.BOX.msg_log = nil
+  -- the MIDI MAP page (docs/port/midi-map-plan.md): the real layer, settings and page; the devices are plain tables, the window's calls are recorded
+  for _, k in ipairs({"core/midimap", "core/midimap_settings", "core/midimap_value", "core/pmap"}) do package.loaded[k] = nil end
+  w.armed, w.ring, w.T = 0, 0, 1000
+  params = {lookup = {}, lookup_param = function(self, id) return {name = id} end}
+  midi = {devices = {}, vports = {}}
+  for i = 1, 16 do midi.vports[i] = {name = "none"} end
+  w.devs = {{id = 1, name = "mio", port = 1}, {id = 2, name = "iii grid", port = 2}, {id = 3, name = "Push 2", port = 3}, {id = 4, name = "Verdandi JACK in", port = 4}}
+  for _, d in ipairs(w.devs) do midi.devices[d.id] = d; midi.vports[d.port].name = d.name end
+  w.pmap = require 'core/pmap'
+  norns.pmap, norns.state = w.pmap, {shortname = "stress"}
+  w.mm_set = require 'core/midimap_settings'
+  w.mm_set.log = function(s) w.logs[#w.logs + 1] = s end
+  w.mm = require 'core/midimap'
+  w.mm.log = function(s) w.logs[#w.logs + 1] = s end
+  w.mm.clock = function() return w.T end
+  norns.midimap = w.mm
+  w.mm.load()
+  w.mm.install()
+  w.pages.MIDIMAP = dofile("lua/core/menu/midimap.lua")
   _menu.set_page = function(p)
     w.pages[_menu.page].deinit()
     _menu.page = p
@@ -118,11 +138,24 @@ local function apply(w, e)
     local answers = {{"#3B6EA8", "ok"}, {"336699\n", "ok"}, {"3b6", "ok"}, {"hello world", "ok"}, {"", "empty"}, {"", "long"}, {"", "binary"}, {"#12", "ok"}, {"#000000", "ok"}, {"#FFFFFF", "ok"}, {"#808080", "ok"}}
     local a = answers[e.i]
     _norns.clipboard_text(a[1], a[2])
+  elseif e.k == "midi" then
+    w.mm.event(w.devs[e.dev], e.b) -- (midi.lua calls it under pcall; here an error is a finding)
+  elseif e.k == "click" then
+    if w.armed == 1 then _norns.midimap_pick(e.id:sub(1, 1), e.id:sub(2)) end -- the window only reports a click while a pick is armed
+  elseif e.k == "tick" then
+    w.T = w.T + e.dt
+    w.mm.tick()
   elseif e.k == "page" then
     if w.textentry.active then return end -- the menu does not change pages under an open entry (its keys are the entry's)
+    local from = _menu.page
     _menu.set_page(e.p)
+    if from == "MIDIMAP" and e.p ~= "MIDIMAP" then w.left_midimap = true end
   elseif e.k == "ext" then
-    if e.what == "drop" then os.remove("/home/we/box-presets/alpha.box") w.box.reload_looks()
+    if e.what == "pmap" then w.pmap.clear() w.pmap.new("p") w.pmap.assign("p", e.dev, 1, e.cc)
+    elseif e.what == "unpmap" then w.pmap.clear()
+    elseif e.what == "unplug" then local d = w.devs[e.dev] midi.devices[d.id] = nil w.mm.device_removed(d)
+    elseif e.what == "plug" then local d = w.devs[e.dev] midi.devices[d.id] = d
+    elseif e.what == "drop" then os.remove("/home/we/box-presets/alpha.box") w.box.reload_looks()
     elseif e.what == "add" then own_look("Gamma", "336699", "996633") w.box.reload_looks() end
     _menu.redraw() -- the change comes from outside the page; whatever triggers the next redraw finds the page in range
   end
@@ -134,7 +167,10 @@ local function fmt(e)
   elseif e.k == "ctrl" then return "ctrl+" .. e.name
   elseif e.k == "clip" then return "clipboard answer " .. e.i
   elseif e.k == "page" then return "page " .. e.p
-  elseif e.k == "ext" then return "ext " .. e.what end
+  elseif e.k == "midi" then return "midi dev" .. e.dev .. " " .. table.concat(e.b, ",")
+  elseif e.k == "click" then return "click " .. e.id
+  elseif e.k == "tick" then return "tick +" .. e.dt
+  elseif e.k == "ext" then return "ext " .. e.what .. (e.dev and (" dev" .. e.dev) or "") .. (e.cc and (" cc" .. e.cc) or "") end
   return e.k .. " " .. e.name
 end
 
@@ -142,7 +178,8 @@ local function state_of(w)
   local p, pg = _menu.page, w.pages[_menu.page]
   local s = p
   if p == "BOX" then s = s .. string.format(" mode=%s pos=%s top=%s lpos=%s rows=%d", pg.mode, pg.pos, pg.top, pg.lpos, #pg.rows())
-  elseif p == "UI" then s = s .. " pos=" .. tostring(pg.pos) end
+  elseif p == "UI" then s = s .. " pos=" .. tostring(pg.pos)
+  elseif p == "MIDIMAP" then s = s .. string.format(" mode=%s pos=%s dpos=%s ctl=%s learn=%s target=%s armed=%s", pg.mode, pg.pos, pg.dpos, tostring(pg.ctl), w.mm.learn.state, tostring(w.mm.learn.target), tostring(w.armed)) end
   return s .. " entry=" .. tostring(w.textentry.active)
 end
 
@@ -177,6 +214,19 @@ local function invariants(w)
     end
   elseif p == "UI" then
     if not (pg.pos >= 1 and pg.pos <= 4) then return "selection: UI row " .. tostring(pg.pos) end
+  elseif p == "MIDIMAP" then
+    if pg.mode ~= "rows" and pg.mode ~= "detail" and pg.mode ~= "confirm" then return "modal: unknown mode " .. tostring(pg.mode) end
+    if (pg.mode == "confirm") ~= (pg.confirm ~= nil) then return "modal: the confirm flag and the mode disagree" end
+    local rows = pg.rows()
+    if rows[1] ~= "PRESET" or rows[2] ~= "LEARN" then return "rows: PRESET and LEARN are not the first two rows" end
+    local pr = w.mm_set.preset_by_name(w.mm_set.state.preset)
+    if (rows[#rows] == "DELETE") ~= (pr ~= nil and not pr.builtin) then return "rows: DELETE does not match the preset in use (" .. tostring(w.mm_set.state.preset) .. ")" end
+    if pg.mode ~= "detail" and not (pg.pos >= 1 and pg.pos <= #rows) then return "selection: row " .. pg.pos .. " of " .. #rows end
+    if pg.mode == "detail" then
+      if pg.ctl == nil or w.mm_set.state.ctl[pg.ctl] == nil then return "modal: a view without a control" end
+      local dr = pg.drows()
+      if not (pg.dpos >= 1 and pg.dpos <= #dr) then return "selection: view row " .. pg.dpos .. " of " .. #dr end
+    end
   elseif p == "PICKER" then
     if pg.active ~= true then return "modal: the picker is the page but not active" end
     if not (pg.row >= 1 and pg.row <= 4) then return "selection: picker row " .. tostring(pg.row) end
@@ -191,6 +241,27 @@ local function invariants(w)
     local idx = 0
     for i, n in ipairs(w.box.PIXEL_LOOKS) do if n == w.box.state.pixel_look then idx = i - 1 end end
     if lb0[8] ~= idx then return "preview: the window has pixel look " .. tostring(lb0[8]) .. " but the stored one is " .. idx end
+  end
+  -- MIDI MAP: the window is armed exactly while a pick or a listen is open, the ring is off exactly when no learn is open, a learn does not outlive the page, no mapping is written while a learn waits,
+  -- and leaving the page releases every key the layer holds
+  do
+    local L = w.mm.learn
+    local waiting = L.state == "pick" or L.state == "listen"
+    if not (L.state == "idle" or waiting or L.state == "confirm") then return "learn: unknown state " .. tostring(L.state) end
+    if (w.armed == 1) ~= waiting then return "learn: the window is " .. (w.armed == 1 and "armed" or "not armed") .. " but the learn state is " .. L.state end
+    if (w.ring == 0) ~= (L.state == "idle") then return "learn: the ring is " .. tostring(w.ring) .. " but the learn state is " .. L.state end
+    if p ~= "MIDIMAP" and L.state ~= "idle" then return "learn: a learn is open on another page (" .. p .. ")" end
+    if (L.state == "listen" or L.state == "confirm") and (L.target == nil or w.mm_set.state.ctl[L.target] == nil) then return "learn: listening without a target" end
+    local h = io.open(map("/home/we/midimap.conf"), "r")
+    local conf = h and h:read("a") or ""
+    if h then h:close() end
+    if waiting then
+      if w.learn_conf == nil then w.learn_conf = conf elseif w.learn_conf ~= conf then return "learn: the mapping file changed while a learn was waiting" end
+    else w.learn_conf = nil end
+    if w.left_midimap then
+      w.left_midimap = nil
+      if #w.mm.held() ~= 0 then return "learn: a key is held down after the page was left" end
+    end
   end
   -- what the window shows is what is stored, except while the picker is open (a preview): and while it is open no file is written
   if p ~= "PICKER" then
@@ -238,7 +309,7 @@ local function run(events, trace)
     local msg = not ok and ("error: " .. tostring(err)) or invariants(w)
     if not msg and i % 25 == 0 then
       local w2msg = escape_check(w)
-      if w2msg then msg = w2msg else _menu.set_page((i // 25) % 2 == 0 and "BOX" or "UI") end
+      if w2msg then msg = w2msg else _menu.set_page(({"BOX", "UI", "MIDIMAP"})[(i // 25) % 3 + 1]) end
     end
     if trace then lines[#lines + 1] = string.format("%3d %-22s -> %s", i, fmt(e), state_of(w) .. (msg and ("   <-- " .. msg) or "")) end
     if msg then return {index = i, message = msg, trace = lines} end
@@ -250,17 +321,33 @@ end
 local KEYS = {"UP", "DOWN", "LEFT", "RIGHT", "EQUAL", "MINUS", "ENTER", "ESC", "BACKSPACE", "SPACE", "1", "2", "3", "Q", "W", "A", "S", "Z", "X", "PAGEUP", "PAGEDOWN",
   "4", "5", "6", "7", "8", "9", "0", "B", "C", "D", "E", "F", "H", "RIGHT", "RIGHT", "DOWN", "UP", "3", "2", "R", "HOME", "END", "H", "C"}
 local function pick(t) return t[math.random(#t)] end
+local CCS = {10, 16, 17, 18, 64, 71, 72, 73, 85, 102, 103, 104}
+local VALS = {0, 1, 2, 3, 63, 64, 65, 100, 126, 127}
+local function gen_midi()
+  local r = math.random(100)
+  if r <= 55 then
+    local ch = math.random(3) - 1
+    local kind = math.random(10)
+    if kind <= 7 then return {k = "midi", dev = math.random(4), b = {0xB0 + ch, pick(CCS), pick(VALS)}} end
+    if kind == 8 then return {k = "midi", dev = math.random(4), b = {0x90 + ch, pick({36, 37, 60}), pick({0, 1, 100, 127})}} end
+    if kind == 9 then return {k = "midi", dev = math.random(4), b = {0x80 + ch, pick({36, 37, 60}), 0}} end
+    return {k = "midi", dev = math.random(4), b = pick({{0xF8}, {0xFE}, {0xE0, 1, 2}, {0xB0}, {0xC0, 5}})}
+  elseif r <= 70 then return {k = "click", id = pick({"e1", "e2", "e3", "k1", "k2", "k3"})}
+  elseif r <= 85 then return {k = "tick", dt = pick({0.1, 1, 2, 4, 16})}
+  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug"}), dev = math.random(4), cc = pick(CCS)} end
+end
 local function gen(n)
   local ev = {}
   for i = 1, n do
     local r = math.random(100)
-    if r <= 52 then ev[i] = {k = "tap", name = pick(KEYS), rep = math.random(4) == 1 and math.random(3) or 0}
+    if math.random(100) <= 30 then ev[i] = gen_midi()
+    elseif r <= 52 then ev[i] = {k = "tap", name = pick(KEYS), rep = math.random(4) == 1 and math.random(3) or 0}
     elseif r <= 60 then ev[i] = {k = "press", name = pick(KEYS)}
     elseif r <= 68 then ev[i] = {k = "release", name = pick(KEYS)}
     elseif r <= 76 then ev[i] = {k = "ctrl", name = pick({"C", "V", "V", "C", "O", "M", "Q"})}
     elseif r <= 80 then ev[i] = {k = "clip", i = math.random(11)}
     elseif r <= 90 then ev[i] = {k = "enc", n = math.random(2, 3), d = pick({-5, -2, -1, 0, 1, 1, 2, 5})}
-    elseif r <= 96 then ev[i] = {k = "page", p = pick({"BOX", "UI", "SYSTEM", "BOX"})}
+    elseif r <= 96 then ev[i] = {k = "page", p = pick({"BOX", "UI", "SYSTEM", "BOX", "MIDIMAP", "MIDIMAP", "MIDIMAP"})}
     else ev[i] = {k = "ext", what = pick({"drop", "add"})} end
   end
   return ev
@@ -590,8 +677,8 @@ do
   is(pk.val.v > vc, "the encoder E3 on HEX steps the brightness too")
   -- the SYSTEM list through the real page: MODS is directly below AUDIO, the other pages keep their order
   local sys = dofile("lua/core/menu/system.lua")
-  is(table.concat(sys.pages, ",") == "DEVICES,AUDIO,MODS,UI,BOX,CLEANUP,RESET,RESTART", "SYSTEM's pages: " .. table.concat(sys.pages, ","))
-  is(table.concat(sys.list, "|") == "DEVICES > |AUDIO >|MODS >|SCREEN >|THEME >|CLEAN UP >|RESET|RESTART", "SYSTEM's list: " .. table.concat(sys.list, "|"))
+  is(table.concat(sys.pages, ",") == "DEVICES,AUDIO,MODS,UI,BOX,MIDIMAP,CLEANUP,RESET,RESTART", "SYSTEM's pages: " .. table.concat(sys.pages, ","))
+  is(table.concat(sys.list, "|") == "DEVICES > |AUDIO >|MODS >|SCREEN >|THEME >|MIDI MAP >|CLEAN UP >|RESET|RESTART", "SYSTEM's list: " .. table.concat(sys.list, "|"))
   local opened
   _menu.set_page = function(p) opened = p end
   sys.pos = 3

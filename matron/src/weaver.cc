@@ -369,6 +369,8 @@ static int _box_look(lua_State *l);
 static int _clipboard_set(lua_State *l);
 static int _clipboard_request(lua_State *l);
 static int _toast(lua_State *l);
+static int _midimap_arm(lua_State *l);
+static int _midimap_show(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -733,6 +735,8 @@ void w_init(void) {
     lua_register_norns("clipboard_set", &_clipboard_set);
     lua_register_norns("clipboard_request", &_clipboard_request);
     lua_register_norns("toast", &_toast);
+    lua_register_norns("midimap_arm", &_midimap_arm);
+    lua_register_norns("midimap_show", &_midimap_show);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3781,6 +3785,27 @@ int _clipboard_set(lua_State *l) {
  */
 int _toast(lua_State *l) {
     sdl_bridge_toast(luaL_checkstring(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: MIDI MAP learn (docs/port/midi-map-plan.md): 1 while a pick or a listen is open, the window then reports a click on E1-E3 / K1-K3 as _norns.midimap_pick(kind, n) instead of pressing or turning
+ * @function midimap_arm
+ * @tparam integer armed 0 or 1
+ */
+int _midimap_arm(lua_State *l) {
+    sdl_bridge_midimap_arm((int)luaL_checkinteger(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: MIDI MAP learn: how the window lights the controls: state 0 off, 1 pick (the six in turn), 2 listen (the control blinks)
+ * @function midimap_show
+ * @tparam integer state 0-2
+ * @tparam integer control 1-3 = K1-K3, 4-6 = E1-E3 (0 for none)
+ */
+int _midimap_show(lua_State *l) {
+    sdl_bridge_midimap_show((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2));
     return 0;
 }
 

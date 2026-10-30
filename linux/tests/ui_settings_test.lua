@@ -303,7 +303,7 @@ local function system_with(platform)
   return table.concat(m.pages, ","), table.concat(m.list, "|")
 end
 local pages = system_with("linux")
-check(pages == "DEVICES,AUDIO,MODS,UI,BOX,CLEANUP,RESET,RESTART", "SYSTEM on a computer keeps the page ids: " .. pages)
+check(pages == "DEVICES,AUDIO,MODS,UI,BOX,MIDIMAP,CLEANUP,RESET,RESTART", "SYSTEM on a computer keeps the page ids: " .. pages)
 local _, list = system_with("linux")
 check(list:find("SCREEN >", 1, true) ~= nil and not list:find("UI >", 1, true), "the list shows 'SCREEN >' (the visible name of the page UI)")
 pages = system_with(nil)

@@ -710,6 +710,11 @@ _menu.rebuild_params = function()
   end
 end
 
+-- Linux desktop: the MIDI MAP layer (core/midimap.lua) stands back while this page is learning a CC (docs/port/midi-map-plan.md 2.2)
+if os.getenv("NORNS_PLATFORM") ~= nil then
+  norns.pmap.learning = function() return m.midilearn == true end
+end
+
 norns.menu_midi_event = function(data, dev)
   local ch = data[1] - 175
   local cc = data[2]

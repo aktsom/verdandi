@@ -16,13 +16,13 @@ end
 local c = system_with("linux")
 check(table.concat(c.list, "|"):find("SCREEN >", 1, true) and table.concat(c.list, "|"):find("THEME >", 1, true), "the computer's SYSTEM list says SCREEN and THEME")
 check(not table.concat(c.list, "|"):find("UI >", 1, true) and not table.concat(c.list, "|"):find("BOX >", 1, true), "and no longer UI or BOX")
-check(table.concat(c.pages, ",") == "DEVICES,AUDIO,MODS,UI,BOX,CLEANUP,RESET,RESTART", "the page ids are the old ones")
+check(table.concat(c.pages, ",") == "DEVICES,AUDIO,MODS,UI,BOX,MIDIMAP,CLEANUP,RESET,RESTART", "the page ids are the old ones")
 local d = system_with(nil)
 check(table.concat(d.pages, ",") == "DEVICES,WIFI,MODS,SETTINGS,RESTART,UPDATE", "the device's SYSTEM page is as before")
 -- the order: SCREEN then THEME, in the list and the ids
 check(c.list[4] == "SCREEN >" and c.list[5] == "THEME >" and c.pages[4] == "UI" and c.pages[5] == "BOX", "THEME is below SCREEN and they match their pages")
 check(c.list[3] == "MODS >" and c.pages[3] == "MODS", "MODS is directly below AUDIO")
-check(table.concat(c.list, "|") == "DEVICES > |AUDIO >|MODS >|SCREEN >|THEME >|CLEAN UP >|RESET|RESTART", "the list: " .. table.concat(c.list, "|"))
+check(table.concat(c.list, "|") == "DEVICES > |AUDIO >|MODS >|SCREEN >|THEME >|MIDI MAP >|CLEAN UP >|RESET|RESTART", "the list: " .. table.concat(c.list, "|"))
 
 local menu = slurp("lua/core/menu.lua")
 check(menu:find('m["SCREEN"] = m["UI"]', 1, true) and menu:find('m["THEME"] = m["BOX"]', 1, true), "the ids SCREEN and THEME open the same pages")

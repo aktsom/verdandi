@@ -2,7 +2,7 @@
 
 Linux desktop build only. Everything proposed here lives behind `NORNS_PLATFORM` (Lua) and `NORNS_LINUX_DESKTOP` (C), `macos/` was only read, and **nothing was built or changed in the product**. Each claim says whether it was **read** in this repository, **found on the web** (links at the end), **my knowledge** (not checked here) or an **estimate**.
 
-One picture: `midi-map-previews/midi-map-learn-standin.png`. **It is a stand-in:** the page does not exist, so a throw-away function (`midi-map-previews/standin_draw.lua`) draws what this plan proposes with the **real screen API, the real font and the real window and box** (headless: Xvfb, dummy jackd, `linux/tests/norns_probe.sh`). The rows, wording and the learn banner are the proposal, not code that will be shipped.
+Pictures: `midi-map-previews/midi-map-learn-standin.png` (the stand-in drawn before the page existed) and, after the build, `midi-map-previews/midimap-learn-real.png` (a capture of the real window, section 9). **It is a stand-in:** the page does not exist, so a throw-away function (`midi-map-previews/standin_draw.lua`) draws what this plan proposes with the **real screen API, the real font and the real window and box** (headless: Xvfb, dummy jackd, `linux/tests/norns_probe.sh`). The rows, wording and the learn banner are the proposal, not code that will be shipped.
 
 ![MIDI MAP page with learn active (stand-in)](midi-map-previews/midi-map-learn-standin.png)
 
@@ -299,3 +299,40 @@ New: `lua/core/midimap.lua`, `lua/core/midimap_value.lua` (the pure functions), 
 
 - [rtpmidid: RTP-MIDI daemon for Linux, exposes network devices as ALSA sequencer ports](https://lists.linuxaudio.org/hyperkitty/list/linux-audio-announce@lists.linuxaudio.org/thread/FQGGY7X7RLQEU6B7IVPEESBVFCJ7UI2U) (release announcement; also the openSUSE package description: [build.opensuse.org/package/show/home:edogawa/rtpmidid](https://build.opensuse.org/package/show/home:edogawa/rtpmidid))
 - Push 2 interface document (not read, linked from a forum): [Ableton/push-interface, `AbletonPush2MIDIDisplayInterface.asc`](https://github.com/Ableton/push-interface/blob/master/doc/AbletonPush2MIDIDisplayInterface.asc#Encoders); forum-level reports on Push encoders and User mode: [forum.ableton.com](https://forum.ableton.com/viewtopic.php?p=1721273), [forum.ableton.com](https://forum.ableton.com/viewtopic.php?p=1741546), [community.vcvrack.com](https://community.vcvrack.com/t/encoders-on-push-2-sending-gate-and-pitch/20225/4) (anecdotal: CC 71 on encoder 1, values 1 and 127 for left and right in one report)
+
+## 9. What was built, and where it differs from the plan above
+
+**Built** (all on the Linux desktop build; `macos/` untouched; the shared files are guarded by `NORNS_LINUX_DESKTOP` in C and `NORNS_PLATFORM` in Lua):
+
+| piece | file |
+|---|---|
+| value functions (absolute, three relative formats, suggestion, keys, device names) | `lua/core/midimap_value.lua` |
+| settings, `midimap.conf`, presets (built-in and own) | `lua/core/midimap_settings.lua` |
+| the layer (the tap, the clash rule, learn) | `lua/core/midimap.lua`, called at the end of `_norns.midi.event` in `lua/core/midi.lua` as `norns.midimap.event` (under `pcall`) |
+| the page SYSTEM > MIDI MAP (below THEME, page id `MIDIMAP`) | `lua/core/menu/midimap.lua`, `lua/core/menu/system.lua`, `lua/core/menu.lua` |
+| the params MAP accessor | `norns.pmap.learning` in `lua/core/menu/params.lua` (the layer stands down while the params page learns) |
+| the window | `sdl_bridge.cc/.h` (pick branch in `handle_button`, the lit controls), `weaver.cc` (`_norns.midimap_arm`, `_norns.midimap_show`) |
+| CLEAN UP keeps the files | `linux/tidy.sh`, `lua/core/menu/cleanup.lua` |
+| manual, RUN-ON-LAPTOP, hardware checklist | `linux/manual/manual.html`, `docs/port/RUN-ON-LAPTOP.md`, `docs/port/HARDWARE-CHECKLIST.md` |
+
+**Tests** (written first and seen to fail, then the code): `midimap_value_test.lua`, `midimap_settings_test.lua`, `midimap_layer_test.lua` (through the real `midi.lua` and `pmap.lua`), `midimap_page_test.lua`, `midimap_hit_test.c`, the real-window scenario `midimap_scenario` (`probe_midimap.lua`, with `midimap_send.c`, a JACK client that plays the controller into `Verdandi:midi_in`), the page in `menu_stress_test.lua` (MIDI messages, window clicks, time-outs, plugging and params-map changes mixed into the random keys; the invariants of 2.6 plus: the window is armed exactly while a pick or a listen waits, the ring is off exactly when no learn is open, a learn does not outlive the page, no mapping is written while a learn waits, leaving the page releases held keys; a deliberately broken disarm was caught at seed 1), the Mac checks in `box_c_test.sh` (every new line of the shared files inside `NORNS_LINUX_DESKTOP`, `macos/` unchanged, the layer disabled without `NORNS_PLATFORM`), and `tidy_test.sh` (the new files are never touched).
+
+**Where it differs from the plan above:**
+1. The layer is `norns.midimap` (not a global `midimap`), so the hook line reads `if norns.midimap then ... end`.
+2. **Owner decisions applied:** `ANY` never takes the **iii grid** (`iii`, `iii grid`, an iii arc) or the **keys window** (a name allows them; `core/midimap_value.lua` `is_non_controller`); learn ignores them too. The mio is matched by name as in 2.1a (one port: `mio`), and `mio` as a stored name also means `mio 1`, `mio 2`. The DEVICE row offers an `(ALL PORTS)` entry only when two or more ports share a base name (so `Push 2` alone is never split).
+3. **The encoder steps are not raw.** `_norns.enc` is `norns.encoders.process_with_accel` (`lua/core/encoders.lua`): the steps pass through the script's own encoder sensitivity (`norns.enc.sens`, 2 by default in a script) and acceleration (a burst closer than 30 ms is multiplied up to 6 times). That is how the mouse and the computer keyboard behave too, so MIDI MAP is consistent with them; "one step per two CC values" is what the layer sends, not what a script receives. The manual and the checklist say so. (The scenario saw one `enc` for three messages: the carry in the encoder processing.)
+4. **Learn records the number only.** The device stays ANY and the channel any, as in 2.5; a re-learn of a control that had a named device puts it back to ANY. The row shows `CC71 REL 2S`; the device and channel are in the control's view.
+5. **The lit controls instead of a ring.** The window lights the controls with the look every style already uses for a hovered key or knob (so it works in aluminium, PIXEL, RETRO, 8-BIT and 16-BIT without touching their drawing code): PICK lights the six in turn (every 0.3 s), LISTEN blinks the target. The real capture shows LISTEN; the controls' hit areas were checked to be the same with the row shown or hidden, muted or not, in every style (`midimap_hit_test.c`).
+6. **Clicks while armed:** a click on one of the six picks it; a click anywhere else ends a PICK but not a LISTEN (a stray click does not lose a learn about to finish). LISTEN started from a control's view arms the window too, so a click re-picks.
+7. **Cancel:** `K2`, `Esc` and `2` (the computer keyboard's K2); F1 is not special-cased (it leaves the page like on every page, which ends the learn).
+8. **Format suggestion, as built** (`V.suggest`, at least 4 messages; the first six of the learned CC are looked at): all values 1-16 and 112-127 with both present = REL 2S; 1-16 and 65-80 with both present = REL SIGN; 48-80 on both sides of 64 and never 64 itself = REL OFS; 4 or more distinct steps of at most 8 in one direction, outside the 48-80 band = ABS; one direction only says "TURN IT BOTH WAYS", anything else "NOT SURE: SET THE MODE". The format stays what it was (ABS by default) until the suggestion exists.
+9. **Page:** PRESET browses with `E3` and `K3` applies (no list overlay); the unverified Push 2 preset says `UNVERIFIED: USE LEARN` on the page when the PRESET row is selected, and shows `(UNVERIFIED)` in its label; ON CLASH shows `PARAMS MAP` or `BOTH`; the clash mark is `!` on the row and `E1 CC71: PARAMS MAP WINS` in the hint line (the toast has the long sentence).
+10. **Built-in presets:** NONE, PUSH 2 (UNVERIFIED) and GENERIC REL 2S (CC 16-18 relative; keys CC 64-66).
+11. The clash check at script load is registered on `hook.script_post_init` (it runs after the script's `init`; `pmap.read()` has normally run by then because `engine.load` is asynchronous). The per-message rule does not depend on it.
+12. No `midimap.conf` write happens while a learn waits (tested), and a learn writes once at the assignment and once when the suggestion is applied.
+
+**Test run:** `linux/tests/run_all.sh` from a clean environment (`env -i HOME=$HOME PATH=$PATH`): 119 passed, 0 failed (4 Lua tests, the C hit test and the real-window scenario for MIDI MAP among them); the first run had one failure, the scenario's own end marker printed after the quit, fixed in the probe.
+
+![MIDI MAP learn (real capture)](midi-map-previews/midimap-learn-real.png)
+
+**Not verified here (hardware):** the Push 2 numbers and format, the mio (how many ports, the channel through it), the network link, the feel of the defaults, the iii grid next to a mapping, K1 with a script running: all in `HARDWARE-CHECKLIST.md`, "MIDI MAP". The macOS build was not rebuilt (the shared C files were only read by the Mac build through `#ifdef`s; `box_c_test.sh` checks that every added line is inside `NORNS_LINUX_DESKTOP`).

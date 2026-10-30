@@ -6,10 +6,10 @@ local m = {
 
 -- on a computer (NORNS_PLATFORM set by the launcher) the OS owns wifi, updates and the
 -- password, there is no battery and the display settings drive the oled chip: of
--- SETTINGS only RESET is left, so it moves up here. AUDIO picks the audio device, SCREEN the look of the screen (brightness, colour, contrast; page id UI), THEME the look of the box (style, five colours, saved looks; page id BOX), CLEAN UP what Verdandi keeps in the home (logs, disabled/, cache)
+-- SETTINGS only RESET is left, so it moves up here. AUDIO picks the audio device, SCREEN the look of the screen (brightness, colour, contrast; page id UI), THEME the look of the box (style, five colours, saved looks; page id BOX), MIDI MAP the MIDI controls of E1-E3 and K1-K3 (docs/port/midi-map-plan.md; page id MIDIMAP), CLEAN UP what Verdandi keeps in the home (logs, disabled/, cache)
 if os.getenv("NORNS_PLATFORM") ~= nil then
-  m.list = {"DEVICES > ", "AUDIO >", "MODS >", "SCREEN >", "THEME >", "CLEAN UP >", "RESET", "RESTART"}
-  m.pages = {"DEVICES", "AUDIO", "MODS", "UI", "BOX", "CLEANUP", "RESET", "RESTART"}
+  m.list = {"DEVICES > ", "AUDIO >", "MODS >", "SCREEN >", "THEME >", "MIDI MAP >", "CLEAN UP >", "RESET", "RESTART"}
+  m.pages = {"DEVICES", "AUDIO", "MODS", "UI", "BOX", "MIDIMAP", "CLEANUP", "RESET", "RESTART"}
 end
 
 m.key = function(n,z)

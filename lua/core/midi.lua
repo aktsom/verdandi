@@ -448,6 +448,7 @@ end
 -- remove a device.
 _norns.midi.remove = function(id)
   if Midi.devices[id] then
+    if norns.midimap then pcall(norns.midimap.device_removed, Midi.devices[id]) end -- Linux desktop: a held MIDI MAP key is released
     Midi.remove(Midi.devices[id])
     if Midi.devices[id].remove then
       Midi.devices[id].remove()
@@ -472,6 +473,12 @@ _norns.midi.event = function(id, data)
       end
       -- hack = send all midi to menu for param-cc-map
       norns.menu_midi_event(data, d.port)
+    end
+
+    -- Linux desktop: MIDI MAP (docs/port/midi-map-plan.md). a tap after everything above: it removes nothing, scripts and the params MAP have had the message
+    if norns.midimap then
+      local ok, err = pcall(norns.midimap.event, d, data)
+      if not ok then print("midimap: " .. tostring(err)) end
     end
   else
     error('no entry for midi '..id)

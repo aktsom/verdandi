@@ -333,3 +333,15 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - **Show the page buttons** in the right-click menu hides the row above the device (both styles); F1-F4, F5, F6-F8 keep working; "Open maiden" and "Open the manual" are menu items now; **Ctrl+M** mutes (a small MUTE button stays while muted).
 - Your own looks are files: `~/Verdandi/box-presets/<name>.box` (copy one to another computer and it appears in the list). The settings are `~/Verdandi/box.conf`. `verdandi scan-fkeys` also reports scripts that test `keyboard.ctrl()` and name the letter M (what Ctrl+M would take from them).
 
+
+## MIDI MAP: MIDI controls for the keys and encoders (docs/port/midi-map-plan.md)
+
+SYSTEM > MIDI MAP (below THEME) lets a MIDI controller turn E1-E3 and press K1-K3 of the norns screen. The manual has the full description (the MIDI section, "SYSTEM > MIDI MAP"); the short version for your set-up (a Windows computer with an Ableton Push 2, sending through the USB MIDI interface "mio"):
+
+1. Plug the mio in. Start norns and look at SYSTEM > DEVICES > MIDI, or at `norns.log` for `adding midi device mio`.
+2. SYSTEM > MIDI MAP. Either apply PRESET > PUSH 2 (**unverified**: the numbers are from memory and were not tried on a Push 2), or learn each control: choose LEARN, press K3, **click** E1, E2, E3, K1, K2 or K3 in the window (it only chooses; nothing is turned or pressed), then move the knob or press the button on the Push. For a knob turn it both ways so that norns can suggest the format (the Push's endless encoders are expected to be REL 2S; check the MODE row).
+3. To bind a control to the mio only (so that a second controller or the iii grid never interferes), open the control (K3 on its row), choose DEVICE and pick `mio` (it means every port of the interface). The name stays valid across restarts and re-plugging.
+4. Scripts are not changed: they still receive every MIDI message. If a script's own params MAP uses the same CC, the params MAP gets it and the page says so (`!`).
+5. The files are `~/verdandi-home/midimap.conf` and `midimap-presets/`; clean up never touches them.
+
+Network (RTP-MIDI) controllers arrive through JACK MIDI (`Verdandi:midi_in`, "Verdandi JACK in", all sources one device): use ANY. What to check on your hardware is in `HARDWARE-CHECKLIST.md`, section "MIDI MAP".

@@ -183,6 +183,13 @@ enum {
 static SDL_Window *the_window = NULL;
 static skin_state_t skin = {};
 #ifdef NORNS_LINUX_DESKTOP
+// MIDI MAP (docs/port/midi-map-plan.md): armed while a pick or a listen is open (a click on E1-E3 / K1-K3 is then reported to lua, not pressed or turned); the state lights the controls: 1 = pick, the six in turn,
+// 2 = listen, the control being learned blinks. main thread only (events from lua come through handle_show)
+static int midimap_armed = 0, midimap_state = 0, midimap_control = 0;
+static unsigned midimap_phase = 0;
+static volatile unsigned midimap_gen = 0;
+#endif
+#ifdef NORNS_LINUX_DESKTOP
 // what a click on the placeholder (the dark panel where the screen was while it is in its own window) answers: not a control of the box, only a click target
 static const int HIT_PLACEHOLDER = 99;
 #endif
@@ -374,7 +381,22 @@ static void redraw(bool full) {
     if (full) {
         cairo_set_source_surface(cr, static_layer, 0, 0);
         cairo_paint(cr);
+#ifdef NORNS_LINUX_DESKTOP
+        if (midimap_state != 0) {
+            // the learn lights a control the way the pointer does (every style draws a hovered key or knob lighter)
+            skin_state_t lit = skin;
+            if (midimap_state == 1) {
+                lit.hover = 1 + (int)(midimap_phase % 6);
+            } else if ((midimap_phase & 1) == 0) {
+                lit.hover = midimap_control;
+            }
+            skin_draw_controls(cr, &geom, &lit);
+        } else {
+            skin_draw_controls(cr, &geom, &skin);
+        }
+#else
         skin_draw_controls(cr, &geom, &skin);
+#endif
         draw_oled(cr);
         shell_menu_draw(cr, dst->w, dst->h);
         r = {0, 0, dst->w, dst->h};
@@ -658,6 +680,16 @@ void sdl_bridge_clipboard_set(const char *text) {
 void sdl_bridge_toast(const char *text) {
     post_toast(text != NULL ? text : "");
 }
+
+#ifdef NORNS_LINUX_DESKTOP
+void sdl_bridge_midimap_arm(int armed) {
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_MIDIMAP_ARM, armed != 0, 0);
+}
+
+void sdl_bridge_midimap_show(int state, int control) {
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_MIDIMAP_RING, state, control);
+}
+#endif
 
 void sdl_bridge_clipboard_request(void) {
     SDL_Event ev;
@@ -2536,6 +2568,19 @@ static void handle_button(const SDL_MouseButtonEvent *b) {
         }
         int c = SKIN_HIT(px, py);
         int ox, oy;
+#ifdef NORNS_LINUX_DESKTOP
+        if (midimap_armed) {
+            // MIDI MAP learn: a click on one of the six controls picks it (nothing is pressed or turned); a click anywhere else tells lua, which ends a pick
+            if (c >= SKIN_K1 && c <= SKIN_K3) {
+                call_lua("midimap_pick", {"k", std::to_string(c - SKIN_K1 + 1)});
+            } else if (c >= SKIN_E1 && c <= SKIN_E3) {
+                call_lua("midimap_pick", {"e", std::to_string(c - SKIN_E1 + 1)});
+            } else {
+                call_lua("midimap_pick", {"x", "0"});
+            }
+            return;
+        }
+#endif
 #ifndef NORNS_LINUX_DESKTOP
         if (c == SKIN_FADER) {
             if (b->clicks >= 2) {
@@ -2708,7 +2753,47 @@ static void handle_key(const SDL_KeyboardEvent *k) {
 }
 
 // a key/enc event reached norns: move the control on screen
+#ifdef NORNS_LINUX_DESKTOP
+static Uint32 midimap_phase_cb(Uint32 interval, void *gen) {
+    if ((unsigned)(uintptr_t)gen != midimap_gen) {
+        return 0;
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = show_event_type;
+    ev.user.code = SDL_BRIDGE_SHOW_MIDIMAP_PHASE;
+    ev.user.data1 = (void *)(intptr_t)0;
+    ev.user.data2 = (void *)(uintptr_t)gen;
+    SDL_PushEvent(&ev);
+    return interval;
+}
+#endif
+
 static void handle_show(int kind, int n, int value) {
+#ifdef NORNS_LINUX_DESKTOP
+    if (kind == SDL_BRIDGE_SHOW_MIDIMAP_ARM) {
+        midimap_armed = n != 0;
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_MIDIMAP_RING) {
+        midimap_state = (n >= 0 && n <= 2) ? n : 0;
+        midimap_control = (value >= SKIN_K1 && value <= SKIN_E3) ? value : 0;
+        midimap_phase = 0;
+        midimap_gen++;
+        if (midimap_state != 0) {
+            SDL_AddTimer(300, midimap_phase_cb, (void *)(uintptr_t)midimap_gen);
+        }
+        redraw(true);
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_MIDIMAP_PHASE) {
+        if ((unsigned)value == midimap_gen && midimap_state != 0) {
+            midimap_phase++;
+            redraw(true);
+        }
+        return;
+    }
+#endif
     if (kind == SDL_BRIDGE_SHOW_MIC) {
         shell_set_input(n);
         if (skin.input != n) {

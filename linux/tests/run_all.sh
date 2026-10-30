@@ -131,6 +131,13 @@ run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAV
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
+run "lua:MIDI MAP value functions (absolute steps, baseline, jump 40, pause 1.5 s, the three relative formats value by value, sensitivity and carry, the format suggestion, keys by CC and note, device name matching: mio and its ports, Push 2, iii grid)" lua5.3 linux/tests/midimap_value_test.lua
+run "lua:MIDI MAP settings and presets (midimap.conf defaults, round trip, every damaged value, unknown keys kept, preset files, built-in PUSH 2 marked unverified, atomic save)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_settings_test.lua
+run "lua:MIDI MAP layer and learn (through the real midi.lua and pmap: device and channel filters, ANY skips the iii grid and the keys window, the params MAP wins a clash, scripts get every message, held keys released, every way out of a learn)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_layer_test.lua
+run "lua:MIDI MAP page (rows and wording, views, preset row, device list with the mio, visible learn state, every handler redraws, SYSTEM list below THEME)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_page_test.lua
+SKM=matron/src/platform/macos; LNM=matron/src/platform/linux
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/midimap_hit_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/box_palette.c -o "$T/mmhit" $(pkg-config --libs cairo freetype2) -lm 2> "$T/mmhit.err" || cat "$T/mmhit.err"
+run "c:MIDI MAP hit test (K1-K3 and E1-E3 are hit alike in every style and pixel look, row shown or hidden, muted or not, three sizes)" "$T/mmhit"
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
@@ -739,6 +746,43 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$PH"
     }
     picker_scenario
+    # MIDI MAP in the real window (docs/port/midi-map-plan.md): a pick is armed from the page, a click on E2 picks it (and does not turn it), a controller playing into Verdandi:midi_in through JACK MIDI is learned,
+    # then it drives E2 for the script, which also receives every message, and a CC key presses K2
+    midimap_scenario() {
+        if ! cc -std=gnu11 "$REPO/linux/tests/midimap_send.c" -o "$T/midimap_send" $(pkg-config --cflags --libs jack) 2> /dev/null; then
+            echo "SKIP  window:MIDI MAP (the JACK sender did not build)"
+            return
+        fi
+        MH="$(mktemp -d)"
+        ln -s "$REPO" "$MH/norns"
+        mkdir -p "$MH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$MH/dust/code/probe/"
+        printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$MH/box.conf"
+        MLOG="$T/midimap.log"
+        MMS="$T/midimap_send" NORNS_HOME="$MH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_midimap.lua" "$MLOG" > /dev/null 2>&1
+        mmpx() { convert "$MH/$1" -format "%[hex:u.p{$2,$3}]" info:; }
+        midimap_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE midimap done" "$MLOG"'
+            chk "K3 on LEARN arms a pick" 'grep -q "PROBE learn state.pick" "$MLOG"'
+            chk "a click on E2 in the window picks it (LISTEN, target e2) and does not turn it" 'grep -q "PROBE picked.listen.e2" "$MLOG" && ! grep -q "PROBE enc.2" <(sed -n "1,/PROBE picked/p" "$MLOG")'
+            chk "the controller playing through JACK MIDI is learned: CC 71, two's complement, ANY device" 'grep -q "PROBE learned.idle.cc.71.rel2c.ANY" "$MLOG"'
+            chk "the script received every message while it was learned and mapped" '[ "$(grep -c "PROBE script.cc.71" "$MLOG")" -ge 9 ] && grep -q "PROBE script.cc.9.5" "$MLOG"'
+            chk "a mapped CC turns E2 for the script (E2 up)" 'grep -q "PROBE enc.2.1" "$MLOG"'
+            chk "an unmapped CC (9) did nothing to the encoders" '! grep -q "PROBE enc.[13]" "$MLOG"'
+            chk "a CC key presses and releases K2 for the script" 'grep -q "PROBE key.2.1" "$MLOG" && grep -q "PROBE key.2.0" "$MLOG"'
+            chk "midimap.conf has the mapping" 'grep -q "^e2.num=71" "$MH/midimap.after" && grep -q "^e2.mode=rel2c" "$MH/midimap.after" && grep -q "^k2.num=85" "$MH/midimap.after"'
+            chk "the pick is visible: the banner (white) and the window toast differ from the idle page" '[ "$(mmpx mm-listen.png 710 425)" = FFFFFF ] && [ "$(mmpx mm-idle.png 710 425)" != FFFFFF ]'
+            return $bad
+        }
+        run "window:MIDI MAP (pick armed from the page, a click on E2 picks it, learned from JACK MIDI, drives E2 and K2 for the script that also sees every message)" midimap_ok
+        mkdir -p "${SHOT_DIR:-/dev/null}" 2> /dev/null
+        cp "$MH/mm-listen.png" "${SHOT_DIR:-/dev/null}/midimap-learn.png" 2> /dev/null
+        cp "$MH/mm-listen.png" "$T/midimap-learn-full.png" 2> /dev/null
+        rm -rf "$MH"
+    }
+    midimap_scenario
     # the pixel looks in the real window (docs/port/retro-look-plan.md): from box.conf, switched live from the THEME page's PIXEL LOOK row, each look is another picture, saved, remembered after a restart, and the
     # colour picker changes a colour live in a retro look
     retro_scenario() {

@@ -29,6 +29,11 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ENC 2
 #define SDL_BRIDGE_SHOW_PAGE 3 // n = menu page 1-4, 0 = script
 #define SDL_BRIDGE_SHOW_MIC 4  // n = what the input hears: SKIN_INPUT_* (0 off, 1 mic, 2 system, 3 app)
+#ifdef NORNS_LINUX_DESKTOP
+#define SDL_BRIDGE_SHOW_MIDIMAP_ARM 6   // MIDI MAP: n = 1 while a pick or a listen is open
+#define SDL_BRIDGE_SHOW_MIDIMAP_RING 7  // n = 0 off, 1 pick (the six controls in turn), 2 listen; value = the control (SKIN_K1..SKIN_E3)
+#define SDL_BRIDGE_SHOW_MIDIMAP_PHASE 8 // the blink (internal)
+#endif
 #define SDL_BRIDGE_SHOW_OUT 5  // n = the output level's place on its scale x 1000, value = muted
 extern void sdl_bridge_show_control(int kind, int n, int value);
 
@@ -68,6 +73,10 @@ extern void sdl_bridge_clipboard_set(const char *text);
 extern void sdl_bridge_clipboard_request(void);
 // any thread, does not block: a short message on the box (the toast beside E1), for a few seconds
 extern void sdl_bridge_toast(const char *text);
+// any thread, does not block: MIDI MAP (docs/port/midi-map-plan.md). arm: 1 while a pick or a listen is open (a click on E1-E3 / K1-K3 is reported to lua as _norns.midimap_pick("e" or "k", n), "x" for a click elsewhere, instead of pressing
+// or turning); show: the window lights the controls: state 0 off, 1 pick, 2 listen the control (SKIN_K1..SKIN_E3 = 1..6)
+extern void sdl_bridge_midimap_arm(int armed);
+extern void sdl_bridge_midimap_show(int state, int control);
 #endif
 
 #ifdef __cplusplus

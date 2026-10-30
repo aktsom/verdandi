@@ -699,11 +699,16 @@ if os.getenv("NORNS_PLATFORM") ~= nil then
   m["BOX"] = require 'core/menu/box' -- shown as THEME: the look of the box (docs/port/box-style-plan.md)
   m["SCREEN"] = m["UI"]
   m["THEME"] = m["BOX"]
+  m["MIDIMAP"] = require 'core/menu/midimap' -- MIDI control of E1-E3 and K1-K3 (docs/port/midi-map-plan.md)
   m["PICKER"] = require 'core/menu/picker' -- the colour picker, opened by K3 on a hex row (docs/port/colour-picker-plan.md)
   require 'core/clipboard' -- the window's answer to Ctrl+V (_norns.clipboard_text)
   m["CLEANUP"] = require 'core/menu/cleanup' -- docs/port/clean-layout.md
   require('core/ui_settings').load_and_apply() -- ui.conf, once at start (does nothing without _norns.ui_look)
   require('core/box_settings').load_and_apply() -- box.conf, once at start (does nothing without _norns.box_look)
+  -- the MIDI MAP layer (a tap in midi.lua's event function, after the scripts and the params MAP), its settings (midimap.conf) and the window's pick callback
+  norns.midimap = require 'core/midimap'
+  norns.midimap.load()
+  norns.midimap.install()
 end
 m["UPDATE"] = require 'core/menu/update'
 m["SLEEP"] = require 'core/menu/sleep'
