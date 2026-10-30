@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define MENU_MAX 32
+#define MENU_MAX 40 // 28 items were possible before the box styles (docs/port/box-style-plan.md added 5)
 
 typedef struct {
     int id;          // what the shell does with it (SHELL_MENU_*), 0 for a separator

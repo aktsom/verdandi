@@ -365,6 +365,7 @@ static int _monitor_out(lua_State *l);
 static int _audio_status(lua_State *l);
 static int _ui_look(lua_State *l);
 static int _ui_file_dialog(lua_State *l);
+static int _box_look(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -725,6 +726,7 @@ void w_init(void) {
     lua_register_norns("audio_status", &_audio_status);
     lua_register_norns("ui_look", &_ui_look);
     lua_register_norns("ui_file_dialog", &_ui_file_dialog);
+    lua_register_norns("box_look", &_box_look);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3735,6 +3737,23 @@ int _ui_look(lua_State *l) {
  */
 int _ui_file_dialog(lua_State *l) {
     sdl_bridge_set_file_dialog(lua_toboolean(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: the look of the box (SYSTEM > BOX, docs/port/box-style-plan.md)
+ * @function box_look
+ * @tparam number style 0 aluminium, 1 pixel
+ * @tparam string box colour as RRGGBB
+ * @tparam string keys
+ * @tparam string encoders
+ * @tparam string buttons
+ * @tparam string font
+ * @tparam number show_buttons 1: the row of page buttons is shown, 0: hidden
+ */
+int _box_look(lua_State *l) {
+    sdl_bridge_set_box_look((int)luaL_checkinteger(l, 1), luaL_checkstring(l, 2), luaL_checkstring(l, 3), luaL_checkstring(l, 4), luaL_checkstring(l, 5),
+                            luaL_checkstring(l, 6), (int)luaL_optinteger(l, 7, 1));
     return 0;
 }
 

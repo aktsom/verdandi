@@ -15,7 +15,7 @@ NEW = {
 }
 BTNX = [36, 112, 188, 264, 359.3333, 435.3333, 511.3333, 587.3333, 682.6667, 758.6667, 854]
 NAMES = ["MIX", "TAPE", "HOME", "PARAMS", "MIC", "GRID", "ARC", "KEYS", "MAIDEN", "MANUAL", "MUTE"]
-for n, x in zip(NAMES, BTNX): NEW[n] = (x + 35, 36 + 14, 35, 14, "r")
+for n, x in zip(NAMES, BTNX): NEW[n] = (x + 35, 36 + 20, 35, 20, "r")  # 70 x 40 units: the owner chose 40 (answer 4)
 def rect(v): cx, cy, hw, hh, _ = v; return (cx - hw, cy - hh, cx + hw, cy + hh)
 def gap(a, b):
     dx = max(a[0] - b[2], b[0] - a[2], 0); dy = max(a[1] - b[3], b[1] - a[3], 0); return math.hypot(dx, dy)
@@ -44,7 +44,7 @@ for a, b in itertools.combinations(names, 2):
 chk(worst >= 4, "no two controls closer than 4 units (the closest pair is %.1f; the hit areas are 2 units bigger on every side, so 0 overlap)" % worst)
 for a, b in [("K2", "K3"), ("E2", "E3"), ("K1", "E1")]: print("      %s - %s: %.1f units apart" % (a, b, gap(rect(NEW[a]), rect(NEW[b]))))
 for a in ["K1", "E1"]: chk(rect(NEW[a])[3] < BEZEL[1] - 20, "%s above the bezel with %.1f units to spare" % (a, BEZEL[1] - rect(NEW[a])[3]))
-chk(all(rect(NEW[k])[1] > 36 + 28 + 20 for k in ["K1", "E1", "E2", "E3"]), "keys and encoders start more than 20 units under the button row (bottom 64)")
+chk(all(rect(NEW[k])[1] > 36 + 28 + 20 for k in ["K1", "E1", "E2", "E3"]), "keys and encoders start more than 20 units under the button row (bottom 76)")
 toast = (300, 175 - 18, 865, 175 + 18)  # the toast pill (device_skin.c draw_toast): right edge SKIN_W - 95, centre y 175, at most 565 wide
 for k in ["E1", "E2", "E3", "K1"]: chk(gap(rect(NEW[k]), toast) >= 4, "the toast pill (up to x 300..865, y 157..193) is clear of %s (%.1f)" % (k, gap(rect(NEW[k]), toast)))
 chk(all(abs(v - round(v / 2) * 2) < 1e-9 for k in NEW if k not in NAMES for v in rect(NEW[k])), "keys and encoders sit on the 2 unit block grid")

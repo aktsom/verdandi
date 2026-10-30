@@ -257,3 +257,12 @@ The tests run under Xvfb with no window manager (stacking order and keyboard foc
 - [ ] **Scripts that list folders** (nice-tapes, pitfalls, nornsfetch ...) show nothing odd where a folder is missing.
 - [ ] **Optional, for a possible later mode:** `sysctl kernel.apparmor_restrict_unprivileged_userns` and `unshare -rm true; echo $?` (tells whether a mount namespace for scripts' commands would be allowed on your machine; nothing uses it now).
 
+## The look of the box (docs/port/box-style-plan.md): what only your desktop can show
+- [ ] **STYLE PIXEL with the DARK look** on your display at your usual window size: are the blocks crisp (at 100 and 150 percent of the starting size they are whole pixels), slightly soft in between, and does the matt dark look read well in a dim room? Say what you would change in the three built-in looks or the MAC look (the Mac box's colours in the pixel style).
+- [ ] **The keys (112 units, 1.4 times the encoders) and the 40 unit buttons with the screen's font**: big enough, labels readable (PARAMS, MANUAL, MAIDEN are the tight ones), the lit buttons (colours swapped) clear. If `resources/norns.ttf` were missing the labels fall back to a built-in small font: that is only seen in a broken install.
+- [ ] **Colours in the aluminium style**: BOX, KEYS, ENCODERS, BUTTONS, FONT with hex codes you like: does the brushed metal still look like metal (a dark grey, a blue, a warm colour were fine in the pictures)? A part left at its default is as before.
+- [ ] **Your own looks**: SAVE a look under a name, see it in the PRESET list after the built-in ones with a `*`, restart, it is still the look in use; save the same name again: it asks OVERWRITE; DELETE asks once and the colours stay; the built-in looks have no DELETE row. Copy `~/Verdandi/box-presets/<name>.box` to another computer (if you have one): it appears there.
+- [ ] **Show the page buttons**: untick it: the row is gone, the box and window do not change size, F1-F4 still open the pages; "Open maiden" and "Open the manual" work from the menu; restart: still hidden.
+- [ ] **Ctrl+M** mutes and unmutes (the menu item "Mute output  Ctrl+M" shows the tick), with the row hidden a small MUTE button shows while muted and clicking it unmutes; from the screen window too. Play sound while you do it: the output really goes silent and comes back.
+- [ ] `verdandi scan-fkeys` on your real `~/Verdandi/dust/code`: the Ctrl+M lines (it could only be checked on a copy of your script list here).
+

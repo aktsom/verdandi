@@ -1,9 +1,9 @@
 # Box style plan, step 5: a pixel-art box, five colours, saved looks, a hideable top row (PLAN ONLY)
 
 Nothing in the product was changed for this note. Everything is for the Linux desktop build (`NORNS_LINUX_DESKTOP`); the Mac and the device are not touched, `macos/` was only read.
-What the pictures are: **the aluminium window is drawn by the real skin code; the pixel windows and the BOX page on their screens are a stand-in** written for this plan (the planned layout table, shapes and
-palette formula; `box-style-previews/make_box_pictures.py`), because none of it exists yet. The screens are set in `resources/norns.ttf` at 8 px, the norns screen's own font, with the levels the real pages use.
-The layout numbers were checked by a script (`box-style-previews/check_layout.py`, output `layout-check.txt`: 0 failed checks).
+**Status: BUILT** (section 7 says what was built and where it differs from the plan; the plan below is kept as it was written, with the owner's answers in section 5). The two pictures of section 4 were first
+stand-ins made before any code existed; **they are now captures of the real window of the real norns** (`box-style-previews/make_box_real_pictures.sh`: headless norns, the real SYSTEM > BOX page, the real
+pixel style and the real aluminium style). The layout numbers are checked by a script (`box-style-previews/check_layout.py`, output `layout-check.txt`: 0 failed checks).
 
 ## 0. Summary, and what needs the owner's word
 
@@ -220,14 +220,14 @@ All in the existing style (`linux/tests/*`, registered in `run_all.sh`; C tests 
 
 ## 4. The pictures
 
-Both are made by `box-style-previews/make_box_pictures.py` (stand-in for the pixel parts, see the top).
+Both are captures of the real window (`box-style-previews/make_box_real_pictures.sh`; in the first version of this plan they were stand-ins).
 
-1. `box-style-previews/box-style-dark-vs-aluminium.png`: **left, today's aluminium window (the real skin code); right, the pixel style in the dark matt default.** Look at: the keys (now big rounded squares, 1.4 times the encoders), the flat matt surfaces with hard edges, and the labels in the screen's own pixel font; both screens show the BOX page (STYLE and the PRESET row), the right one with PRESET selected.
+1. `box-style-previews/box-style-dark-vs-aluminium.png`: **left, today's aluminium window; right, the pixel style in the dark matt default (real window, real BOX page).** Look at: the keys (now big rounded squares, 1.4 times the encoders), the flat matt surfaces with hard edges, and the labels in the screen's own pixel font; both screens show the BOX page (STYLE and the PRESET row), the right one with PRESET selected; the three keys are one colour.
    ![dark pixel box next to the aluminium one](box-style-previews/box-style-dark-vs-aluminium.png)
-2. `box-style-previews/box-style-light-and-colour.png`: **the pixel style in the LIGHT set (left, with the PRESET list: built-in looks, then `- MY PRESETS -` and his own with a `*`, a scroll bar and "in use") and in the COLOUR set (right, the end of the BOX page: SAVE selected, DELETE showing an own look).** Look at: how the formula gives edges and shadows for light and coloured sets alike, a pressed key (K3 right), the inverted lit buttons (KEYS left; MIC and MUTE right) and the list markers.
+2. `box-style-previews/box-style-light-and-colour.png`: **the pixel style in the LIGHT set (left, with the PRESET list: built-in looks, then `- MY PRESETS -` and his own with a `*`, a scroll bar and "in use") and in the COLOUR set (right, the end of the BOX page: SAVE selected, DELETE showing an own look).** Look at: how the formula gives edges and shadows for light and coloured sets alike, the inverted lit buttons (the page shown and MIC), and the list markers. (In the first, stand-in version of this picture K3 was a different colour: that was the *pressed* state of the stand-in, not a mistake; all keys are one colour unless one is pressed, and a test checks it.)
    ![light and coloured pixel boxes](box-style-previews/box-style-light-and-colour.png)
 
-## 5. Questions for the owner
+## 5. Questions for the owner (answered: see the end of this section)
 
 1. **The font:** `norns.ttf` as proposed (matches the screen; its licence stays an open item), or the built-in 5 x 7 font (no dependency) from the start?
 2. **The mute key:** Ctrl+M, or Ctrl+Shift+M?
@@ -239,11 +239,22 @@ Both are made by `box-style-previews/make_box_pictures.py` (stand-in for the pix
 
 ## 6. Stage 1 of the colour work: how the brushed aluminium takes a tint (decided after section 5)
 
-The owner decided (answer 6, option A): **the five colours work for both styles**; the STYLE row picks the shape language, the colour rows colour whichever style is selected; a built-in or saved look sets the colours and its style (pixel looks switch to pixel); one changed colour does not change the style.
+(The section below is the stage-1 note: how the brushed finish is computed, what the tint does, and its verdict.)
 
-**How the brushed finish is computed (`device_skin.c`, `draw_box`):** a vertical linear gradient from `dfe1e4` (top) to `c4c7cb` (bottom), then, clipped to the box, one streak per device pixel row: a deterministic random alpha of up to 0.07 in white (or 0.6 of that in black), then the edge stroke (white 0.9 at the top, 0.15 in the middle, black 0.35 at the bottom). The streaks and the edge are white and black *translucent*, so they do not depend on the colour of the box; only the two gradient stops do. The same holds for every other metal part: gradient stops (key wells, washers, knob sides and faces, key caps, button wells and faces) plus translucent white and black highlights.
+## 7. What was built, and where it differs from the plan
 
-**The tint (`box_palette.c: box_tint_stop`):** each gradient stop of a part is remapped onto the user's colour so that the *lightness structure* stays: a stop lighter than the part's default colour goes the same share of the way to white; a darker one is the same share of the user's colour. A part whose colour is its default is not remapped at all (the original code path runs), so the aluminium style with the default colours is byte for byte unchanged (`box_c_test.sh`: 24 renders at 4 window sizes against hashes made from the previous source). Parts: BOX = the box and the rings of the key wells and button wells; KEYS = the key caps; ENCODERS = washers and knobs; BUTTONS = the button faces; FONT = the unlit label colour (a lit label takes the same colour when FONT is changed).
+**Built, with tests written first for everything except the C drawing (written right after the first working render; the Lua, the page, the menu items and the scenario were tests first):**
+`matron/src/platform/linux/box_palette.[ch]` (hex, the shade formula, the aluminium tint, contrast, the four built-in looks), `box_style.[ch]` + `box_style_font.inc` (the pixel style: layout table, 496 x 331 block image, shapes, the font, placing, hit tests), small guarded hooks in `device_skin.[ch]` (`skin_set_look`, `skin_set_buttons_shown`, the tinted gradient stops, the hidden row), `lua/core/box_settings.lua` + `lua/core/menu/box.lua` (the page, `box.conf`, `box-presets/`), `_norns.box_look` (`weaver.cc`, `sdl_bridge.cc`), the right-click items, **Ctrl+M**, the MUTE chip and its toast, `verdandi scan-fkeys` for Ctrl+M, the manual, `tidy` (box.conf and box-presets are never moved).
+Tests: `box_palette_test.c`, `box_style_test.c`, `box_c_test.sh` (also: the aluminium style with default colours byte for byte the old renders, 24 of them; the Mac build and the Mac skin test), `box_settings_test.lua`, `box_page_test.lua`, `box_menu_test.sh`, `scan_fkeys_test.sh`, `tidy_test.sh`, and the window scenario `box_scenario` in `run_all.sh` (real window under Xvfb).
 
-**What it looks like (real drawing code, `render_look.c`):** `box-style-previews/tint-aluminium-four.png` (the current grey, a dark grey, a blue and a warm colour next to the pixel dark look, which is the stand-in) and `tint-aluminium-contrast.png` (the same with contrasting key and button colours). Look at: the brushed streaks and the light-to-dark gradient survive every tint, and the keys and buttons stay legible in contrasting colours. I also tried near-black, white, red and yellow boxes: near-black keeps a visible gradient (the lighter stops climb about 30 levels), white stays white at the top with a soft grey bottom, saturated colours do not turn muddy. **Verdict: acceptable for ordinary colours; went straight on to stage 2.** Known limits: a near-black box makes the bezel's black lip hard to see; a white box loses the top highlight (it is already white); the screen text stand-in in the pictures is the same on every window.
+**Differences from the plan (and why):**
+- **The built-in fallback font is 3 x 5, not 5 x 7.** With the buttons at 70 units, "PARAMS" in a 5 x 7 font is 35 blocks wide and the button's usable width is 31; a 3 x 5 font gives 23. It is drawn for this project (`box_style_font.inc`), used when `norns.ttf` is missing and for a label that does not fit.
+- **Buttons are 70 x 40** (the owner's answer 4), not 28; the layout checks were run again (0 failed). **Colours** and the other numbers of section 2.2 are as planned.
+- **"Changed since" (`NAME~`) compares the colours only**, not the style: the default state (aluminium with the Mac look's colours) is just `MAC`, and STYLE is a choice of its own. The defaults in `box.conf` are the MAC colours; the first time PIXEL is chosen with the colours untouched the DARK look is taken (as planned, now tested).
+- **The five colours work for the aluminium style** (answer 6, option A, section 6): one colour changes only that part's gradients; a part at its default is the original code, so the default aluminium window is byte for byte unchanged.
+- **Crisp rule for the block image uses a tolerance of 0.01** of a whole number of device pixels per block (the screen's is 0.02), so that the box and the screen stay within about a pixel of each other at any size.
+- **The hint lines are shorter** (the real screen is narrower than my stand-in: "E2 pick K3 use *=yours").
+- **MENU_MAX is 40** (33 items are possible), the menu has the new items as planned.
+- **The pixel style draws its own toast pill** (button colours, same place); MIC shows OFF, MIC, SYS or APP as before. The screen placeholder (detached screen) is the aluminium one in both styles, as planned for the first version.
+- **Not built:** the pixel-font placeholder sentence, Ctrl+Shift+M as an alternative (Ctrl+M was chosen), a configurable font. **Not tested here:** the laptop (HARDWARE-CHECKLIST: the look on a real display, soft sizes, Ctrl+M with real sound), the installed `.deb` (the package copies `lua/`, `resources/` and the build; `norns.ttf` is found as the screen finds it), Wayland.
 

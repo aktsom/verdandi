@@ -573,6 +573,33 @@ void sdl_bridge_set_file_dialog(int on) {
     shell_set_file_dialog(on);
 }
 
+// any thread: the look of the box. one event (code 4) carries it to the main thread
+typedef struct {
+    int style, show;
+    char col[5][12];
+} box_look_msg_t;
+
+void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font, int show_buttons) {
+    box_look_msg_t *m = (box_look_msg_t *)calloc(1, sizeof *m);
+    if (m == NULL) {
+        return;
+    }
+    const char *in[5] = {box, keys, encoders, buttons, font};
+    m->style = style;
+    m->show = show_buttons;
+    for (int i = 0; i < 5; i++) {
+        snprintf(m->col[i], sizeof m->col[i], "%s", in[i] != NULL ? in[i] : "");
+    }
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = toast_event_type;
+    ev.user.code = 4;
+    ev.user.data1 = m;
+    if (SDL_PushEvent(&ev) < 1) {
+        free(m);
+    }
+}
+
 void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma) {
     double *v = (double *)malloc(5 * sizeof(double));
     if (v == NULL) {
@@ -2111,6 +2138,11 @@ static void show_in_finder(const std::string &dir) {
     shell_open_url(dir.c_str());
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+static void open_maiden(void);
+static void post_window_button(int n);
+#endif
+
 static void menu_item(int id) {
     switch (id) {
     case SHELL_MENU_DUST:
@@ -2147,6 +2179,21 @@ static void menu_item(int id) {
     case SHELL_MENU_FILE_DIALOG:
         // the menu flipped its tick: lua decides, saves it in ui.conf (core/ui_settings.lua)
         call_lua("ui_file_dialog_changed", {shell_get_file_dialog() ? "1" : "0"});
+        break;
+    case SHELL_MENU_SHOW_BUTTONS:
+        // the menu flipped its tick: the row is hidden or shown now, lua saves it in box.conf (core/box_settings.lua)
+        skin_set_buttons_shown(shell_get_buttons_shown());
+        redraw(true);
+        call_lua("box_buttons_changed", {shell_get_buttons_shown() ? "1" : "0"});
+        break;
+    case SHELL_MENU_MUTE:
+        call_lua("output_mute", {}); // the same as the MUTE button; the state comes back through SDL_BRIDGE_SHOW_OUT
+        break;
+    case SHELL_MENU_MAIDEN:
+        open_maiden();
+        break;
+    case SHELL_MENU_MANUAL:
+        post_window_button(5);
         break;
 #endif
 #endif
@@ -2607,6 +2654,13 @@ static void handle_show(int kind, int n, int value) {
         // while the mouse holds the fader it is where the mouse is
         if (!drag_fader) {
             skin.out_level = n / 1000.0;
+#ifdef NORNS_LINUX_DESKTOP
+            // muting with the row of buttons hidden would be silent: say so, and the menu's tick follows
+            if (value != 0 && !skin.out_muted && !skin_buttons_shown()) {
+                show_toast("Output muted (Ctrl+M)");
+            }
+            shell_set_muted(value != 0);
+#endif
             skin.out_muted = value != 0;
             redraw(true);
         }
@@ -2838,6 +2892,15 @@ void sdl_bridge_run(void) {
                     redraw(false);
                     screen_refresh();
                 }
+            } else if (ev.user.code == 4) {
+                // SYSTEM > BOX: a new look for the box (sdl_bridge_set_box_look): the layers are made again
+                box_look_msg_t *m = (box_look_msg_t *)ev.user.data1;
+                skin_set_look(m->style, m->col[0], m->col[1], m->col[2], m->col[3], m->col[4]);
+                skin_set_buttons_shown(m->show);
+                shell_set_buttons_shown(m->show);
+                free(m);
+                free_layers();
+                redraw(true);
 #endif
             } else if (ev.user.code == 2) {
                 char *text = (char *)ev.user.data1;

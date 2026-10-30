@@ -79,6 +79,10 @@ enum {
     SHELL_MENU_QUIT,
     SHELL_MENU_SCREEN,      // toggle: the screen in its own window (the bridge does it; the shell only shows the tick)
     SHELL_MENU_FILE_DIALOG, // toggle: a script's file chooser also opens the system's file dialog (saved by lua, ui.conf file_dialog)
+    SHELL_MENU_SHOW_BUTTONS, // toggle: the row of page buttons is drawn (saved by lua, box.conf show_buttons; docs/port/box-style-plan.md)
+    SHELL_MENU_MUTE,         // Ctrl+M too: the output off and back (the bridge calls lua's output_mute; the shell only shows the tick)
+    SHELL_MENU_MAIDEN,       // the menu twins of the MAIDEN and MANUAL buttons, for when the row is hidden
+    SHELL_MENU_MANUAL,
     SHELL_MENU_INPUT_APP = 40, // + n: the n-th application of the list
 };
 
@@ -105,6 +109,9 @@ extern void shell_choose_file_close(void);
 extern void shell_set_file_dialog(int on); // any thread: lua says what ui.conf holds (the tick in the menu)
 extern int shell_get_file_dialog(void);
 extern void shell_set_screen_out(int on); // main thread: the screen is in its own window (the tick of "Screen in its own window")
+extern void shell_set_buttons_shown(int on); // main thread: the tick of "Show the page buttons"
+extern int shell_get_buttons_shown(void);
+extern void shell_set_muted(int on); // main thread: the tick of "Mute output"
 extern void shell_hid_keyboard_event(uint16_t usage, int value);
 
 // the in-window menu (there is no menu bar). the window gives it the events of the norns window

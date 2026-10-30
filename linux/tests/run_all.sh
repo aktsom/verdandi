@@ -79,7 +79,7 @@ cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_geom_test.c ma
     && run "c:screen_window_geom (whole scales crisp, in between by the two-step rule, centred, never cut off)" "$T/swg"
 cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_conf_test.c matron/src/platform/linux/screen_window_conf.c -o "$T/swc" \
     && run "c:screen_window_conf (state file: defaults, damaged values with log lines, round trip, atomic write)" "$T/swc"
-run "scan-fkeys:which scripts name F9, F11, F12 (reads only)" linux/tests/scan_fkeys_test.sh
+run "scan-fkeys:which scripts name F9, F11, F12, and read Ctrl+M (reads only)" linux/tests/scan_fkeys_test.sh
 run "launcher:a second start asks the running Verdandi to raise its window; no answer or no window: one sentence; nothing of its data touched; a crash leaves no lock" linux/tests/second_start_test.sh
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
@@ -119,6 +119,9 @@ cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -
 python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
 run "c:ui_look (grey correction, tint, brightness: equal to the Python reference at 89600 values; black stays black, white stays white; the gif palette)" "$T/ulk" "$T/ui-dump.txt"
 run "lua:file dialog setting (off by default, ticked, unticked at once, saved, damaged value, result and cancel, macOS unchanged)" lua5.3 linux/tests/file_dialog_setting_test.lua
+run "lua:box settings and looks (hex, box.conf, built-in and own looks, files, names, both styles take colours)" lua5.3 linux/tests/box_settings_test.lua
+run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
+run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
 D="$(mktemp -d)"
@@ -644,6 +647,47 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$DI"
     }
     dialog_scenario
+    # the box styles in the real window (docs/port/box-style-plan.md): the pixel style from box.conf, "Show the page buttons" in the menu (saved, the row gone and not clickable, the page keys
+    # still work), Ctrl+M mutes with the row hidden (the MUTE chip shows, the output level goes to -inf and back), the colours tint the aluminium style, and after a restart the look is still there
+    box_scenario() {
+        BH="$(mktemp -d)"
+        ln -s "$REPO" "$BH/norns"
+        mkdir -p "$BH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$BH/dust/code/probe/"
+        printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$BH/box.conf"
+        BLOG1="$T/box1.log"; BLOG2="$T/box2.log"
+        NORNS_HOME="$BH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_box.lua" "$BLOG1" > /dev/null 2>&1
+        cp "$BH/box.conf" "$T/box-after.conf" 2> /dev/null
+        NORNS_HOME="$BH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_box_restart.lua" "$BLOG2" > /dev/null 2>&1
+        mark() { sed -n "s/^$1=//p" "$BH/probe.marks" 2> /dev/null | tail -1; }
+        # the window is centred on Xvfb's 1280 x 800 screen: a layout point (u, v) is the screen pixel (160 + u, 85 + v)
+        px() { convert "$BH/$1" -format "%[hex:u.p{$2,$3}]" info:; }
+        box_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE box done" "$BLOG1" && grep -q "PROBE box restart done" "$BLOG2"'
+            chk "pixel style from box.conf: the box face is the BOX colour" '[ "$(px pix-shown.png 676 300)" = 2C2E33 ]'
+            chk "pixel style: a button face is the BUTTONS colour (MIX), the shown row" '[ "$(px pix-shown.png 202 125)" = 3A3D45 ]'
+            chk "pixel style: the window is not the aluminium one (the surround is the darker shade of the box)" '[ "$(px pix-shown.png 150 90)" != "" ]'
+            chk "the menu item saves show_buttons=0" '[ "$(mark saved_hidden)" = yes ]'
+            chk "hidden row: no button pixels where MIX and MUTE were" '[ "$(px pix-hidden.png 202 125)" = 2C2E33 ] && [ "$(px pix-hidden.png 1020 125)" = 2C2E33 ]'
+            chk "hidden row: a click where MIX was opens nothing" 'grep -q "PROBE click on the hidden MIX, menu mode.false" "$BLOG1"'
+            chk "hidden row: F1 still opens a page" 'grep -q "PROBE F1 with the row hidden, menu mode.true" "$BLOG1"'
+            chk "F5 leaves the menu again" 'grep -q "PROBE F5 back, menu mode.false" "$BLOG1"'
+            chk "Ctrl+M mutes with the row hidden (the output level is -inf)" 'grep -q "PROBE output level muted.-inf" "$BLOG1"'
+            chk "the MUTE chip is drawn while muted although the row is hidden" '[ "$(px pix-muted.png 1020 125)" = E4E6EA ] && [ "$(px pix-muted.png 202 125)" = 2C2E33 ]'
+            chk "Ctrl+M again unmutes (the level is back) and the chip goes" 'grep -q "PROBE output level unmuted.0.0" "$BLOG1" && [ "$(px pix-unmuted.png 1020 125)" = 2C2E33 ]'
+            chk "the colours tint the aluminium style: a blue box" '[ "$(px alu-blue.png 676 300)" = 678FB9 ]'
+            chk "box.conf: aluminium, 3B6EA8, the look is DARK~" 'grep -q "PROBE box.conf.aluminium.3B6EA8.DARK.DARK~" "$BLOG1"'
+            chk "box.conf has the style, the colour and the hidden row" 'grep -q "^style=aluminium" "$T/box-after.conf" && grep -q "^box=3B6EA8" "$T/box-after.conf" && grep -q "^show_buttons=0" "$T/box-after.conf"'
+            chk "after a restart: the style, the colour and the label are remembered" 'grep -q "PROBE restart.aluminium.3B6EA8.DARK.false" "$BLOG2"'
+            chk "after a restart: the blue box is drawn and the row is still hidden" '[ "$(px restart.png 676 300)" = 678FB9 ]'
+            return $bad
+        }
+        run "window:box styles (pixel from box.conf, hide the row from the menu, Ctrl+M with the row hidden, tinted aluminium, remembered after a restart)" box_ok
+        rm -rf "$BH"
+    }
+    box_scenario
     # the detachable screen window (docs/port/detach-plan.md), under Xvfb with no window manager: F9, the menu item and the placeholder, the picture crisp at
     # whole scales and inside a block when in between, the keyboard from the screen window, the shortcuts, F11, F10, close, the saved state, a damaged state file
     detach_scenario() {

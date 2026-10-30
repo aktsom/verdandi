@@ -60,6 +60,8 @@ extern void sdl_bridge_set_warning(const char *text);
 extern void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double gamma);
 // any thread, does not block: the tick of "Open the file dialog when a script loads a file" in the window's menu (lua reads ui.conf and says what it holds)
 extern void sdl_bridge_set_file_dialog(int on);
+// any thread, does not block: the look of the box (SYSTEM > BOX, docs/port/box-style-plan.md): style 0 aluminium / 1 pixel, the five colours as "RRGGBB", and whether the page buttons are shown
+extern void sdl_bridge_set_box_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font, int show_buttons);
 #endif
 
 #ifdef __cplusplus

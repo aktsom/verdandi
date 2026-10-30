@@ -18,19 +18,37 @@ function keyboard.code(c, v)
 end
 L
 echo 'print("no keys here")' > "$D/three/three.lua"
+mkdir -p "$D/four" "$D/five"
+cat > "$D/four/four.lua" <<'L'
+function keyboard.code(c, v)
+  if keyboard.ctrl() and c == "M" and v == 1 then save() end
+end
+L
+cat > "$D/five/five.lua" <<'L'
+function keyboard.code(c, v)
+  if keyboard.ctrl() and c == 'S' then save() end
+end
+L
 echo 'F12 in a text file "F12"' > "$D/three/notes.txt"
 before="$(cd "$T" && find . -type f -exec md5sum {} + | sort)"
 OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
 has() { printf '%s\n' "$OUT" | grep -qF -- "$1"; }
-has "3 .lua files, 2 of them set keyboard.code" && ok "counts the scripts and the keyboard readers" || bad "counts: $OUT"
+has "5 .lua files, 4 of them set keyboard.code" && ok "counts the scripts and the keyboard readers" || bad "counts: $OUT"
 has "F9: 1 script file(s) name it" && has "one/one.lua:1:" && ok "F9 found, with the file and line" || bad "F9"
 has "F11: 1 script file(s) name it" && has "two/two.lua:2:" && ok "F11 found, with the file and line (single quotes)" || bad "F11"
 has "F12: no script names it" && ok "F12: none (a .txt file does not count)" || bad "F12"
 has "RESULT some scripts name those keys" && ok "the result sentence says what is given up" || bad "result"
+# Ctrl+M (mute, docs/port/box-style-plan.md): scripts that test keyboard.ctrl() and name the letter M
+has "Ctrl+M: 2 script file(s) test keyboard.ctrl(); 1 of them name the letter M:" && has "four/four.lua:2:" && ok "Ctrl+M: found, with the file and line; five.lua tests ctrl but not M" || bad "Ctrl+M: $OUT"
+has "RESULT Ctrl+M (mute) may be read by the script(s) above" && ok "the Ctrl+M result sentence" || bad "Ctrl+M result"
 [ "$(cd "$T" && find . -type f -exec md5sum {} + | sort)" = "$before" ] && ok "nothing was changed" || bad "files changed"
 rm -f "$D/one/one.lua" "$D/two/two.lua"
 OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
 has "RESULT none of your scripts name F9, F11 or F12" && ok "no script: nothing is given up" || bad "empty result: $OUT"
+has "Ctrl+M: 2 script file(s) test keyboard.ctrl(); 1 of them name the letter M:" && ok "Ctrl+M still reported" || bad "Ctrl+M still"
+rm -f "$D/four/four.lua"
+OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
+has "Ctrl+M: 1 script file(s) test keyboard.ctrl(); none of them name the letter M" && has "RESULT no script combines keyboard.ctrl with the letter M: Ctrl+M (mute) takes nothing" && ok "no script names M with ctrl: Ctrl+M takes nothing from anyone" || bad "Ctrl+M none: $OUT"
 "$REPO/linux/scan-fkeys.sh" "$T/missing" > /dev/null 2>&1 && bad "a missing folder is an error" || ok "a missing folder is an error"
 [ $FAIL = 0 ] && echo "scan_fkeys_test: all passed"
 exit $FAIL

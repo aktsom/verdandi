@@ -1,6 +1,6 @@
 /*
- * render_look.c: the aluminium window as the real skin code draws it (device_skin.c with NORNS_LINUX_DESKTOP) with a look set through skin_set_look. the oled image is a 128 x 64 png.
- *   render_look OUT.png OLED.png BOX KEYS ENCODERS BUTTONS FONT [key_down(1-3) muted]   ("-" = that part's default)
+ * render_look.c: the aluminium window as the real skin code draws it (device_skin.c and box_style.c with NORNS_LINUX_DESKTOP) with a look set through skin_set_look. the oled image is a 128 x 64 png.
+ *   [RENDER_STYLE=pixel] render_look OUT.png OLED.png BOX KEYS ENCODERS BUTTONS FONT [key_down(1-3) muted]   ("-" = that part's default; RENDER_STYLE=pixel draws the pixel style)
  */
 #include <cairo.h>
 #include <stdio.h>
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 5; i++) {
         c[i] = strcmp(argv[3 + i], "-") == 0 ? NULL : argv[3 + i];
     }
-    skin_set_look(SKIN_STYLE_ALUMINIUM, c[0], c[1], c[2], c[3], c[4]);
+    skin_set_look(getenv("RENDER_STYLE") != NULL && strcmp(getenv("RENDER_STYLE"), "pixel") == 0 ? SKIN_STYLE_PIXEL : SKIN_STYLE_ALUMINIUM, c[0], c[1], c[2], c[3], c[4]);
     cairo_surface_t *src = cairo_image_surface_create_from_png(argv[2]);
     if (cairo_surface_status(src) != CAIRO_STATUS_SUCCESS) {
         fprintf(stderr, "oled png\n");
