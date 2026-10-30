@@ -129,8 +129,8 @@ run "c:clipboard classifier and the real SDL clipboard round trip (valid, empty,
 run "lua:renames (SCREEN and THEME in the list, the manual and RUN-ON-LAPTOP.md; ids, aliases and files unchanged; the device list as before)" env NORNS_PLATFORM=linux lua5.3 linux/tests/rename_test.lua
 run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
-run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
-run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
+run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
+run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
@@ -713,7 +713,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             local live kept
             live="$(sed -n 's/^PROBE picker live[[:space:]]//p' "$PLOG" | tail -1)"
             kept="$(sed -n 's/^PROBE picker keep[[:space:]]//p' "$PLOG" | tail -1)"
-            chk "the probe ran" 'grep -q "PROBE picker done" "$PLOG"'
+            chk "the probe ran" 'grep -q "PROBE picker kept" "$PLOG"'
             chk "K3 on the KEYS row opens the picker" 'grep -q "PROBE picker open.true.PICKER" "$PLOG"'
             chk "the key (K1, layout 100 188) is the KEYS colour before" '[ "$(ppx pk-before.png 260 273)" = 444853 ]'
             chk "opening the picker changes nothing: the key is still 444853 and no file was written" '[ "$(ppx pk-open.png 260 273)" = 444853 ] && [ "$(pmark conf_same_open)" = yes ]'
