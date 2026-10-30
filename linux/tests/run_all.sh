@@ -621,9 +621,9 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         cp "$DH/ui.conf" "$T/dialog-ui.conf" 2> /dev/null
         PATH="$DH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$DH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_file_dialog_restart.lua" "$DLOG2" > /dev/null 2>&1
         mark() { sed -n "s/^$1=//p" "$DH/probe.marks" 2> /dev/null | tail -1; }
-        # the menu row of the new item (x 300..600, y 338..364) in the three menu pictures
-        row() { convert "$DH/$1" -crop 300x26+300+338 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
-        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,338 600,364" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        # the menu row of the new item (x 300..600, y 225..251) in the three menu pictures
+        row() { convert "$DH/$1" -crop 300x26+300+225 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,225 600,251" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
         dialog_ok() {
             local bad=0
             chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$DH/probe.marks" 2> /dev/null))"; bad=1; }; }

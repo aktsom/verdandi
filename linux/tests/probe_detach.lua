@@ -14,11 +14,11 @@ norns.script.load("code/probe/window_probe.lua")
 # a GIF of the docked screen: Record GIF in the right-click menu (the 8th row), 1.5 seconds, stop
 #xdo mousemove 300 300 click 3
 #sleep 0.6
-#xdo mousemove 340 473 click 1
+#xdo mousemove 340 386 click 1
 #sleep 1.8
 #xdo mousemove 300 300 click 3
 #sleep 0.6
-#xdo mousemove 340 473 click 1
+#xdo mousemove 340 386 click 1
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" newgif "$NORNS_HOME/gif-docked.gif"
 # 1. F9 in the box: the screen is detached
@@ -72,11 +72,11 @@ _norns.grid_window("keys")
 #xdo search --name ^Verdandi.Linux$ windowraise windowfocus
 #xdo mousemove 300 300 click 3
 #sleep 0.6
-#xdo mousemove 340 473 click 1
+#xdo mousemove 340 386 click 1
 #sleep 1.8
 #xdo mousemove 300 300 click 3
 #sleep 0.6
-#xdo mousemove 340 473 click 1
+#xdo mousemove 340 386 click 1
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" newgif "$NORNS_HOME/gif-detached.gif"
 #sleep 4
@@ -135,7 +135,7 @@ _norns.grid_window("keys")
 #xdo search --name ^Verdandi.Linux$ windowfocus
 #xdo mousemove 300 300 click 3
 #sleep 0.6
-#xdo mousemove 340 586 click 1
+#xdo mousemove 340 499 click 1
 #sleep 1.5
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" count windows_after_menu '^Verdandi.screen$'
 #xdo search --name ^Verdandi.Linux$ windowfocus
