@@ -593,8 +593,9 @@ eq(mm.learn.target, "params", "walk: PARAMS next")
 for i = 1, 10 do mm.walk_skip() end
 eq(mm.learn.state, "listen", "walk: still listening at the last"); eq(mm.learn.target, "screenshot", "walk: the last is SCREENSHOT"); eq(mm.walk_index(), 14, "walk: 14 of 14")
 mm.walk_skip(); eq(mm.learn.state, "idle", "walk: ends after the last"); eq(mm.walk_index(), nil, "walk: no index after the end")
+eq(mm.learn.msg, "DONE: 1 ASSIGNED, 13 SKIPPED", "walk: the end says how many were assigned and skipped")
 -- the walk ends like a learn: cancel, time-out, leaving, a device that goes
-asetup(); mm.walk_start(); mm.cancel(); eq(mm.learn.state, "idle", "walk: cancel ends it"); eq(mm.walk_index(), nil, "walk: and the index is gone")
+asetup(); mm.walk_start(); mm.walk_skip(); mm.walk_skip(); mm.cancel(); eq(mm.learn.state, "idle", "walk: cancel ends it"); eq(mm.walk_index(), nil, "walk: and the index is gone"); eq(mm.learn.msg, "STOPPED AT 3 OF 14", "walk: cancel says where it stopped")
 asetup(); mm.walk_start(); T = T + 16; mm.tick(); eq(mm.learn.state, "idle", "walk: the time-out ends it")
 asetup(); mm.walk_start(); note_on(2, 1, 42, 100); T = T + 10; mm.tick(); note_on(2, 1, 43, 100); T = T + 10; mm.tick()
 eq(mm.learn.state, "listen", "walk: every assignment restarts the time-out")
@@ -603,6 +604,10 @@ mm.leave(); eq(mm.walk_index(), nil, "walk: leaving the page ends it")
 asetup(function() S.assign_action("keys", "note", 50) end)
 mm.walk_start(); note_on(2, 1, 50, 100); eq(mm.learn.state, "ask", "walk: a note that another action has asks"); mm.answer(true)
 eq(S.state.actions.mix.num, 50, "walk: yes assigns it"); eq(S.state.actions.keys.type, "none", "walk: and clears the other"); eq(mm.learn.state, "listen", "walk: and goes on"); eq(mm.learn.target, "tape", "walk: with the next action")
+-- no to the question skips that action and goes on (it does not stop the walk)
+asetup(function() S.assign_action("keys", "note", 50) end)
+mm.walk_start(); note_on(2, 1, 50, 100); eq(mm.learn.state, "ask", "walk: asks again"); mm.answer(false)
+eq(mm.learn.state, "listen", "walk: no skips this action and goes on"); eq(mm.learn.target, "tape", "walk: with the next one"); eq(S.state.actions.keys.num, 50, "walk: and the other action keeps its note"); eq(S.state.actions.mix.type, "none", "walk: the skipped one stays empty")
 mm.cancel_quiet()
 
 -- clear

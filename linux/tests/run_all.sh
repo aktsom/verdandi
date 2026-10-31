@@ -79,7 +79,7 @@ cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_geom_test.c ma
     && run "c:screen_window_geom (whole scales crisp, in between by the two-step rule, centred, never cut off)" "$T/swg"
 cc $CFLAGS -I matron/src/platform/linux linux/tests/screen_window_conf_test.c matron/src/platform/linux/screen_window_conf.c -o "$T/swc" \
     && run "c:screen_window_conf (state file: defaults, damaged values with log lines, round trip, atomic write)" "$T/swc"
-run "scan-fkeys:which scripts name F9, F11, F12, and read Ctrl+M (reads only)" linux/tests/scan_fkeys_test.sh
+run "scan-fkeys:which scripts name F9, F11, F12, and read Ctrl+M or Ctrl+Shift+M (reads only)" linux/tests/scan_fkeys_test.sh
 run "launcher:a second start asks the running Verdandi to raise its window; no answer or no window: one sentence; nothing of its data touched; a crash leaves no lock" linux/tests/second_start_test.sh
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
@@ -144,6 +144,8 @@ cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layo
 run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux $(pkg-config --cflags sdl2) linux/tests/arc_keys_c_test.c matron/src/platform/linux/arc_keys.c -o "$T/akc" 2> "$T/akc.err" || cat "$T/akc.err"
 run "c:arc keys of the arc window (eight keys and no others, 16 ticks, Shift 4, ramp only if asked, a key up is nothing)" "$T/akc"
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/window_actions_test.c $LNM/window_actions.c -o "$T/wat" 2> "$T/wat.err" || cat "$T/wat.err"
+run "c:window actions (the 14 names are lua's, in order; each is a control of the window, fullscreen or screenshot; unknown, empty, wrong-case names find nothing; the messages)" "$T/wat" lua/core/midimap_settings.lua
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
@@ -789,6 +791,62 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$MH"
     }
     midimap_scenario
+    # the MIDI actions in the real window (docs/port/midi-actions-plan.md): pads of a controller through JACK MIDI do what the buttons do (the mouse and the MIDI path give the same result: the TAPE page, MUTE, the keys
+    # window; also with the row of buttons hidden), the screenshot is a file, fullscreen needs the detached screen, detach docks and undocks, the master switch OFF stops the actions but not E2 and K2, Ctrl+Shift+M works from the
+    # norns window and the screen window, the menu item (17th, F10 and Return) ticks and unticks and is saved, and after a restart the menu and the actions follow the saved switch
+    actions_scenario() {
+        if [ ! -x "$T/midimap_send" ] && ! cc -std=gnu11 "$REPO/linux/tests/midimap_send.c" -o "$T/midimap_send" $(pkg-config --cflags --libs jack) 2> /dev/null; then
+            echo "SKIP  window:MIDI actions (the JACK sender did not build)"
+            return
+        fi
+        AH="$(mktemp -d)"
+        ln -s "$REPO" "$AH/norns"
+        mkdir -p "$AH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$AH/dust/code/probe/"
+        printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$AH/box.conf"
+        ALOG="$T/actions1.log"
+        ALOG2="$T/actions2.log"
+        MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions.lua" "$ALOG" > /dev/null 2>&1
+        cp "$AH/midimap.conf" "$T/actions-midimap.conf" 2> /dev/null
+        MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions_restart.lua" "$ALOG2" > /dev/null 2>&1
+        amark() { sed -n "s/^$1=//p" "$AH/probe.marks" 2> /dev/null | tail -1; }
+        alg() { grep -a -- "PROBE $2" "$1" | tail -1 | sed "s/.*PROBE $2[[:space:]]*//; s/[[:space:]][[:space:]]*/ /g"; }
+        apic() { convert "$AH/$1" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        actions_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$AH/probe.marks" 2> /dev/null | cut -c1-600))"; bad=1; }; }
+            chk "the probes ran" 'grep -aq "PROBE actions done" "$ALOG" && grep -aq "PROBE actions restart done" "$ALOG2"'
+            chk "the actions were set and the switch started ON" '[ "$(alg "$ALOG" start)" = "true 8" ]'
+            chk "TAPE: the MIDI note and the mouse give the same state (the menu open on the TAPE page)" '[ -n "$(alg "$ALOG" "mouse tape")" ] && [ "$(alg "$ALOG" "mouse tape")" = "$(alg "$ALOG" "midi tape")" ] && alg "$ALOG" "midi tape" | grep -q "true.TAPE"'
+            chk "MUTE: the MIDI note and the mouse give the same level, muted then unmuted" '[ "$(alg "$ALOG" "mouse mute1")" = "$(alg "$ALOG" "midi mute1")" ] && [ "$(alg "$ALOG" "mouse mute2")" = "$(alg "$ALOG" "midi mute2")" ] && [ "$(alg "$ALOG" "mouse mute1")" != "$(alg "$ALOG" "mouse mute2")" ]'
+            chk "the keys window: the mouse and the MIDI note open it (1) and close it (0) alike" '[ "$(amark km1)" = 1 ] && [ "$(amark km2)" = 0 ] && [ "$(amark kd1)" = 1 ] && [ "$(amark kd2)" = 0 ]'
+            chk "the row of buttons hidden: MUTE by MIDI still works, with the same levels" '[ "$(alg "$ALOG" "hidden mute1")" = "$(alg "$ALOG" "mouse mute1")" ] && [ "$(alg "$ALOG" "hidden mute2")" = "$(alg "$ALOG" "mouse mute2")" ]'
+            chk "the screenshot action makes one file" '[ "$(amark shots_after)" = "$(( $(amark shots_before) + 1 ))" ]'
+            chk "fullscreen with the screen docked: no screen window appears and norns lives" '[ "$(amark docked_screens)" = 0 ] && [ "$(amark docked_alive)" = yes ]'
+            chk "the switch OFF: no mapped action fires (not MUTE, not TAPE) ..." '[ "$(alg "$ALOG" "off mute" | cut -d" " -f1)" = "$(alg "$ALOG" "mouse mute2")" ] && alg "$ALOG" "off mute" | grep -q "false\."'
+            chk "... while E2 and K2 mappings keep working" 'grep -aq "PROBE enc.2.1" "$ALOG" && grep -aq "PROBE key.2.1" "$ALOG" && grep -aq "PROBE key.2.0" "$ALOG"'
+            chk "Ctrl+Shift+M in the norns window turns it on and saves actions=1" '[ "$(alg "$ALOG" "shortcut norns")" = true ] && [ "$(amark conf_shortcut_on)" = yes ]'
+            chk "then the pad mutes and unmutes again" '[ "$(alg "$ALOG" "on mute")" = "$(alg "$ALOG" "mouse mute1")" ] && [ "$(alg "$ALOG" "on unmute")" = "$(alg "$ALOG" "mouse mute2")" ]'
+            chk "detach by MIDI opens the screen window (1)" '[ "$(amark detached_screens)" = 1 ]'
+            chk "fullscreen by MIDI: the saved state says fullscreen=1, again fullscreen=0" '[[ "$(amark conf_fs_on)" == *fullscreen=1* && "$(amark conf_fs_off)" == *fullscreen=0* ]]'
+            chk "Ctrl+Shift+M in the screen window turns it off and on" '[ "$(alg "$ALOG" "shortcut screen off")" = false ] && [ "$(alg "$ALOG" "shortcut screen on")" = true ]'
+            chk "detach by MIDI again docks the screen (0)" '[ "$(amark redocked_screens)" = 0 ]'
+            chk "the menu item: Return unticks it, the switch is off and midimap.conf says actions=0" '[ "$(alg "$ALOG" "menu off")" = false ] && [ "$(amark conf_menu_off)" = yes ] && grep -q "^actions=0" "$T/actions-midimap.conf"'
+            chk "the tick is seen: the menu picture differs between ON and OFF" '[ "$(apic menu-on.png)" != "$(apic menu-off.png)" ]'
+            chk "after a restart the switch is off and the actions are still set" '[ "$(alg "$ALOG2" "restart state")" = "false 38" ]'
+            chk "after a restart the menu shows the tick OFF without a click (same picture as OFF)" '[ "$(apic menu-restart.png)" = "$(apic menu-off.png)" ]'
+            chk "after a restart the pad does nothing while OFF" '[ "$(alg "$ALOG2" "restart pad")" = "$(alg "$ALOG" "mouse mute2")" ]'
+            chk "the menu item turns it on again and the pad mutes" '[ "$(alg "$ALOG2" "restart menu on")" = true ] && [ "$(alg "$ALOG2" "restart pad on")" = "$(alg "$ALOG" "mouse mute1")" ]'
+            chk "the capture of the ACTIONS list exists" '[ -s "$AH/actions-list.png" ]'
+            return $bad
+        }
+        run "window:MIDI actions (pads do what the buttons do: same effect as the mouse, hidden row, screenshot, fullscreen, detach, master switch by page, shortcut and menu tick, saved and restored)" actions_ok
+        mkdir -p "${SHOT_DIR:-/dev/null}" 2> /dev/null
+        cp "$AH/actions-list.png" "${SHOT_DIR:-/dev/null}/actions-list-real.png" 2> /dev/null
+        cp "$AH/actions-list.png" "$T/actions-list-full.png" 2> /dev/null
+        rm -rf "$AH"
+    }
+    actions_scenario
     # the virtual grid (F6), keys (F7) and arc (F8) windows: the norns window keeps its size and position while they open and close again and again, from the norns window and from their own window, also with the detached
     # screen window open; each closes with the key that opens it (F7 did not close the keys window: its key events never reached norns)
     window_toggle_scenario() {

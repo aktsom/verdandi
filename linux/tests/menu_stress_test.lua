@@ -183,7 +183,8 @@ local function apply(w, e)
     local pg = w.pages.MIDIMAP
     if pg.mode == "rows" and not w.textentry.active and w.mm.learn.state == "idle" then
       pg.pos = 13; pg.redraw(); tap(w, "RIGHT")
-      pg.apos = e.n; pg.redraw(); tap(w, "RIGHT")
+      pg.apos = e.n; pg.redraw()
+      if e.view then _norns.enc(3, 1) else tap(w, "RIGHT") end -- E3 right opens an action's view, K3 learns it / starts ASSIGN ALL / asks CLEAR ALL
     end
   elseif e.k == "tick" then
     w.T = w.T + e.dt
@@ -226,7 +227,7 @@ local function fmt(e)
   elseif e.k == "page" then return "page " .. e.p
   elseif e.k == "midi" then return "midi dev" .. e.dev .. " " .. table.concat(e.b, ",")
   elseif e.k == "click" then return "click " .. e.id
-  elseif e.k == "nav" then return "nav actions row " .. e.n
+  elseif e.k == "nav" then return "nav actions row " .. e.n .. (e.view and " view" or " K3")
   elseif e.k == "tick" then return "tick +" .. e.dt
   elseif e.k == "ext" then return "ext " .. e.what .. (e.dev and (" dev" .. e.dev) or "") .. (e.cc and (" cc" .. e.cc) or "") end
   return e.k .. " " .. e.name
@@ -424,7 +425,7 @@ local function gen(n)
   local ev = {}
   for i = 1, n do
     local r = math.random(100)
-    if math.random(100) <= 4 then ev[i] = {k = "nav", n = pick({1, 1, 2, 3, 5, 16})}
+    if math.random(100) <= 4 then ev[i] = {k = "nav", n = pick({1, 1, 2, 3, 5, 16}), view = math.random(2) == 1}
     elseif math.random(100) <= 30 then ev[i] = gen_midi()
     elseif r <= 52 then ev[i] = {k = "tap", name = pick(KEYS), rep = math.random(4) == 1 and math.random(3) or 0}
     elseif r <= 60 then ev[i] = {k = "press", name = pick(KEYS)}

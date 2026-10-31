@@ -339,3 +339,19 @@ Everything in the tests ran headless: a JACK client played the controller (`midi
 ## The tape page K3 and handler errors (KNOWN-ISSUES 26)
 - [ ] TAPE page, REC side (E2), **K3**: the "tape filename" entry opens with the next free four-digit number, also with files like `0.50 take.wav` in `dust/audio/tape`; recording starts and stops.
 - [ ] If any menu key ever fails again, the device window shows `ERROR key: <file>:<line>: <message>` for about 8 seconds and `logs/norns.log` has `menu key handler error: ...`: send me that line.
+
+## MIDI actions (docs/port/midi-actions-plan.md): what only your Beatstep Pro and desktop can show
+
+The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master switch (page, menu tick, Ctrl+Shift+M) and the saved values are tested headless (`run_all.sh`, `actions_scenario`). These need your hardware:
+
+- [ ] **The pads' notes and channel** in the mode you use: ASSIGN ALL, hit a pad for each of the 14. Which note numbers and channel did the Pro send (the list shows `NOTE 36` ...)? Do the pads send a **note on with a velocity above 0 every time**, also for a light tap? (A velocity-0 note on is a release and never acts.) Does a pad send two note ons for one hit? (The guard is 0.25 s; if yours bounces longer, tell me.)
+- [ ] **Release:** hold a pad down and let go: nothing happens on the release, for every action (note off, or a note on with velocity 0, or nothing). Hold a pad: MUTE toggles once, not repeatedly.
+- [ ] **Pads in CC mode** (if the Pro can send CC from pads): K3 on an action and hit a pad: a CC is learned as an *encoder step*; for a pad that sends 127/0 open the action (E3 right), set KIND = CC BUTTON and a THRESHOLD, and check the press fires once and the release does nothing.
+- [ ] **An encoder as a trigger:** learn an action with an encoder; turn it slowly (one click, wait: fires each time), quickly (one fire per burst, not one per click), the other way (nothing). Is 0.3 s of quiet the right length for your hand?
+- [ ] **The same pads and your scripts:** a script that plays notes from the same pads: do the actions fire while you play? (Set the actions' CHANNEL, or use pads the script does not read.) The script still receives every note: check.
+- [ ] **Hitting the wrong pad:** with the suggested arrangement (plan, section 6), can you reach the pads you want without hitting MUTE / DETACH / SCREENSHOT? Use ACTIONS > CLEAR or the master switch for a gig.
+- [ ] **The feel of the 150 ms button press** (only with the row of buttons shown) and the silence with the row hidden.
+- [ ] **FULLSCREEN and DETACH on your desktop** (Linux Mint, your window manager): DETACH opens the screen window; FULLSCREEN makes it fullscreen and back; docked, FULLSCREEN says *FULLSCREEN: DETACH THE SCREEN FIRST (F9)*. (The tests run without a window manager and check the saved state only.)
+- [ ] **Ctrl+Shift+M** from the norns window and from the detached screen window on your keyboard layout: the box says *MIDI actions on/off*, the tick in the right-click menu (F10) and the MIDI ACTIONS row agree. `verdandi scan-fkeys` on your real `dust/code`: do any of your scripts name Ctrl+Shift+M? If one does, tell me and I propose another key.
+- [ ] **A restart** with the switch OFF: the menu tick is off and the pads do nothing until you switch it on again.
+

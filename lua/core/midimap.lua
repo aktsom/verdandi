@@ -342,6 +342,7 @@ end
 --- cancel (a time-out, the K2 key, leaving): nothing changes, the window is released
 function M.cancel(msg)
   if M.learn.state == "idle" then return end
+  if walk and msg == nil then msg = "STOPPED AT " .. walk.i .. " OF " .. #S.ACTION_IDS end -- (ASSIGN ALL stopped by K2)
   end_learn()
   M.learn.msg = msg or "LEARN STOPPED"
   notify()
@@ -411,18 +412,20 @@ end
 
 --- ASSIGN ALL: the actions one after the other in list order. a message sets the one asked for and goes on, SKIP goes on and keeps what the action has
 function M.walk_start()
-  walk = {i = 1}
+  walk = {i = 1, done = 0, skipped = 0}
   M.start_listen_action(S.ACTION_IDS[1])
   if M.learn.state ~= "listen" then walk = nil end
 end
 function M.walk_index() return walk and walk.i or nil end
 --- on to the next action of the walk (msg: what to say about the one before), or the end
-local function walk_advance(msg)
+local function walk_advance(msg, assigned)
   local L = M.learn
+  if assigned then walk.done = walk.done + 1 else walk.skipped = walk.skipped + 1 end
   walk.i = walk.i + 1
   if walk.i > #S.ACTION_IDS then
+    local done, skipped = walk.done, walk.skipped
     end_learn()
-    L.msg = "ASSIGN ALL DONE"
+    L.msg = string.format("DONE: %d ASSIGNED, %d SKIPPED", done, skipped)
     notify()
     return
   end
@@ -490,7 +493,7 @@ local function finish_action(id, type_, num, first)
   local text = id:upper() .. " = " .. (type_ == "note" and "NOTE " or "CC ") .. num
   if not ok then text = id:upper() .. ": NOT SET" end
   if walk then
-    walk_advance(text)
+    walk_advance(text, ok)
   else
     end_learn()
     L.msg = text
@@ -518,6 +521,10 @@ function M.answer(yes)
   if L.state ~= "ask" or L.ask == nil then return end
   local a = L.ask
   if not yes then
+    if walk and is_action(a.id) then
+      walk_advance(a.id:upper() .. " SKIPPED", false) -- no to the question in ASSIGN ALL: this action is skipped, the walk goes on
+      return
+    end
     M.cancel("LEARN STOPPED")
     return
   end
@@ -602,7 +609,7 @@ function M.tick()
   local L = M.learn
   local now = M.clock()
   if (L.state == "pick" or L.state == "listen" or L.state == "ask") and now > L.deadline then
-    M.cancel("LEARN STOPPED")
+    M.cancel()
   elseif L.state == "confirm" and now - L.last > M.CONFIRM_SILENCE then
     M.finish_confirm()
   elseif L.state ~= "idle" then
@@ -628,7 +635,7 @@ function M.device_removed(d)
       send_key(number_of(id), 0)
     end
   end
-  if M.learn.state ~= "idle" then M.cancel("LEARN STOPPED") end
+  if M.learn.state ~= "idle" then M.cancel() end
 end
 
 function M.clear(id)

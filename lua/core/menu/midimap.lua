@@ -49,9 +49,9 @@ end
 --- the rows of the view of the action in `m.act`
 function m.adrows()
   local a = S.state.actions[m.act or "mix"]
-  local r = {"LEARN", "TYPE", "NUMBER", "DEVICE", "CHANNEL"}
+  local r = {"LEARN", "KIND", "NUMBER", "DEVICE", "CHANNEL"}
   if a.type == "ccbutton" then r[#r + 1] = "THRESHOLD"
-  elseif a.type == "step" then r[#r + 1] = "MODE"; r[#r + 1] = "DIRECTION" end
+  elseif a.type == "step" then r[#r + 1] = "FORMAT"; r[#r + 1] = "DIRECTION" end
   r[#r + 1] = "CLEAR"
   return r
 end
@@ -126,7 +126,7 @@ local function ctl_text(id, clash)
   return t
 end
 
-local TYPE_NAMES = {none = "NONE", note = "NOTE", ccbutton = "CC BUTTON", step = "CC STEP"}
+local TYPE_NAMES = {none = "NONE", note = "NOTE", ccbutton = "CC BUTTON", step = "ENCODER STEP"}
 local SHORT_MODE = {rel2c = "2S", relsm = "SIGN", relob = "OFS"}
 
 local function action_text(id)
@@ -153,7 +153,7 @@ local function row_text(row, clash)
   elseif row == "LEARN" then return "CLICK A CONTROL"
   elseif row == "ON CLASH" then return S.state.on_clash == "both" and "BOTH" or "PARAMS MAP"
   elseif row == "WATCH" then return "WHAT DOES IT SEND?"
-  elseif row == "ACTIONS" then local n = S.count_actions() return n == 0 and "NONE SET" or (n .. " SET")
+  elseif row == "ACTIONS" then return S.count_actions() .. " OF " .. #S.ACTION_IDS
   elseif row == "MIDI ACTIONS" then return S.state.actions_on and "ON" or "OFF"
   elseif row == "ARC KEYS" then return S.state.arc_keys and "ON" or "OFF"
   elseif row == "SAVE AS" then return "NAME..."
@@ -187,7 +187,7 @@ local function adetail_text(row)
   local id = m.act
   local a = S.state.actions[id]
   if row == "LEARN" then return "K3"
-  elseif row == "TYPE" then return TYPE_NAMES[a.type]
+  elseif row == "KIND" then return TYPE_NAMES[a.type]
   elseif row == "NUMBER" then
     if a.num == nil then return "-" end
     return (a.type == "note" and "NOTE " or "CC ") .. a.num
@@ -196,7 +196,7 @@ local function adetail_text(row)
     return list[device_index(list, a)].label
   elseif row == "CHANNEL" then return a.ch == 0 and "ANY" or tostring(a.ch)
   elseif row == "THRESHOLD" then return ">" .. a.threshold
-  elseif row == "MODE" then return mm.MODE_NAMES[a.mode]
+  elseif row == "FORMAT" then return mm.MODE_NAMES[a.mode]
   elseif row == "DIRECTION" then return a.dir:upper()
   end
   return ""
@@ -434,9 +434,7 @@ local function key_actions(n)
     m.mode = "confirm"
     m.confirm = {kind = "clear_actions", back = "actions", text = "CLEAR ALL ACTIONS?"}
   else
-    m.act = row:lower()
-    m.mode = "aview"
-    m.dpos, m.dtop = 1, 1
+    mm.start_listen_action(row:lower()) -- K3 on an action learns it (E3 right opens its view, E3 left clears it)
   end
 end
 
@@ -569,7 +567,7 @@ local function enc_aview(n, delta)
   end
   if n ~= 3 or delta == 0 then return end
   local row = m.adrows()[m.dpos]
-  if row == "TYPE" then
+  if row == "KIND" then
     local t = step_in(S.ACTION_KINDS, a.type, delta)
     if t == a.type then return end
     if t == "none" then S.clear_action(id)
@@ -585,7 +583,7 @@ local function enc_aview(n, delta)
     S.set_action(id, "ch", math.max(0, math.min(16, a.ch + delta)))
   elseif row == "THRESHOLD" then
     S.set_action(id, "threshold", math.max(0, math.min(126, a.threshold + delta)))
-  elseif row == "MODE" then
+  elseif row == "FORMAT" then
     local mode = step_in(S.REL_MODES, a.mode, delta)
     if mode ~= a.mode then S.set_action(id, "mode", mode) end
   elseif row == "DIRECTION" then
@@ -602,7 +600,22 @@ local function enc_raw(n, delta)
   if m.mode == "detail" then enc_detail(n, delta) return end
   if m.mode == "aview" then enc_aview(n, delta) return end
   if m.mode == "actions" then
-    if n == 2 then m.apos = m.apos + delta; clamp_actions() end
+    if n == 2 then
+      m.apos = m.apos + delta
+      clamp_actions()
+    elseif n == 3 and delta ~= 0 then
+      local row = m.arows()[m.apos]
+      if row ~= "ASSIGN ALL" and row ~= "CLEAR ALL" then
+        local id = row:lower()
+        if delta > 0 then
+          m.act, m.mode = id, "aview"
+          m.dpos, m.dtop = 1, 1
+        elseif S.state.actions[id].type ~= "none" then
+          mm.clear(id)
+          m.msg = row .. " CLEARED"
+        end
+      end
+    end
     return
   end
   if n == 2 then
@@ -825,7 +838,7 @@ local function redraw_raw()
     scrollbar(m.atop, #rows)
     local sel = rows[m.apos] and rows[m.apos]:lower()
     if sel and overlap[sel] and L.state == "idle" then hint(string.format("ALSO %s", overlap[sel]:upper()))
-    else hint("E2 row  K3") end
+    else hint("K3 LEARN  E3 < CLEAR  VIEW >") end
   elseif m.mode == "aview" then
     clamp_detail()
     screen.text(m.act:upper() .. " ACTION")

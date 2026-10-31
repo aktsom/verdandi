@@ -79,3 +79,6 @@ Plan: `docs/port/midi-map-plan.md` (no code yet; one stand-in picture). A tap in
 
 ## Phase 10: the virtual arc from MIDI and the keyboard (Linux desktop; BUILT, see `docs/port/arc-plan.md` section 9)
 Plan: `docs/port/arc-plan.md` (no code yet; one stand-in picture): A1 to A4 in MIDI MAP (learn by clicking the ring, GAIN, ACCEL, calibration), the keys 5/6 T/Y G/H B/N, the Beatstep Pro split and a WATCH view. Starts only when the owner says so (decisions in section 8 of the plan).
+
+## Phase 11: MIDI actions, the buttons of the window from a MIDI controller (Linux desktop; BUILT, see `docs/port/midi-actions-plan.md` section 9)
+Plan and what was built: `docs/port/midi-actions-plan.md`. 14 actions (MIX TAPE HOME PARAMS INPUT GRID ARC KEYS MAIDEN MANUAL MUTE DETACH FULLSCREEN SCREENSHOT) on a note, a CC button or an encoder step, learned in MIDI MAP > ACTIONS (also ASSIGN ALL); `_norns.window_action` runs the same `button_action` as the mouse; a master switch as a page row, a ticked menu item and Ctrl+Shift+M, saved in `midimap.conf`. Needs the owner's Beatstep Pro for the pads (`HARDWARE-CHECKLIST.md`).
