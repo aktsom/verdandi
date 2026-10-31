@@ -145,6 +145,7 @@ _menu.set_mode(false)
 #xdo key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 #sleep 0.5
 #shot @home/menu-on.png
+#sh "$DC" geom win1 '^Verdandi.Linux$'
 #xdo key Return
 #sleep 4.5
 print("PROBE menu off", S.state.actions_on)

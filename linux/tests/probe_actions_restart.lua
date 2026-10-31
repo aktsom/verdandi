@@ -12,6 +12,7 @@ print("PROBE restart state", S.state.actions_on, S.state.actions.mute.num)
 #xdo key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 #sleep 0.5
 #shot @home/menu-restart.png
+#sh "$DC" geom win2 '^Verdandi.Linux$'
 #xdo key Escape
 #sleep 0.5
 #sh "$MMS" 90:26:64 80:26:00 > "$MARKS.r1" 2>&1

@@ -813,6 +813,14 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         amark() { sed -n "s/^$1=//p" "$AH/probe.marks" 2> /dev/null | tail -1; }
         alg() { grep -a -- "PROBE $2" "$1" | tail -1 | sed "s/.*PROBE $2[[:space:]]*//; s/[[:space:]][[:space:]]*/ /g"; }
         apic() { convert "$AH/$1" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        # the tick of the menu item: where the ON and OFF pictures differ (a small region), in the picture of the restart moved by how far the window moved (it does not start where it was)
+        tickreg() { compare -metric AE "$AH/menu-on.png" "$AH/menu-off.png" -compose src "$AH/tick-diff.png" > /dev/null 2>&1; convert "$AH/tick-diff.png" -format "%@" info: 2> /dev/null; }
+        pcrop() { # file dx dy
+            local g w h x y; g="$(tickreg)"; w="${g%%x*}"; h="${g#*x}"; h="${h%%+*}"; x="${g#*+}"; x="${x%%+*}"; y="${g##*+}"
+            convert "$AH/$1" -crop "${w}x${h}+$((x + $2))+$((y + $3))" +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1
+        }
+        wpos() { local g; g="$(amark "$1")"; g="${g#*+}"; echo "${g%%+*} ${g##*+}"; } # win geometry mark -> X Y
+        restart_dx() { local a b; a="$(wpos win1)"; b="$(wpos win2)"; echo $(( ${b% *} - ${a% *} )) $(( ${b#* } - ${a#* } )); }
         actions_ok() {
             local bad=0
             chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$AH/probe.marks" 2> /dev/null | cut -c1-600))"; bad=1; }; }
@@ -835,7 +843,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "the menu item: Return unticks it, the switch is off and midimap.conf says actions=0" '[ "$(alg "$ALOG" "menu off")" = false ] && [ "$(amark conf_menu_off)" = yes ] && grep -q "^actions=0" "$T/actions-midimap.conf"'
             chk "the tick is seen: the menu picture differs between ON and OFF" '[ "$(apic menu-on.png)" != "$(apic menu-off.png)" ]'
             chk "after a restart the switch is off and the actions are still set" '[ "$(alg "$ALOG2" "restart state")" = "false 38" ]'
-            chk "after a restart the menu shows the tick OFF without a click (same picture as OFF)" '[ "$(apic menu-restart.png)" = "$(apic menu-off.png)" ]'
+            chk "after a restart the menu shows the tick OFF without a click (the item's tick region looks as in the OFF picture, not as in the ON picture)" 'read dx dy <<< "$(restart_dx)"; [ "$(pcrop menu-restart.png $dx $dy)" = "$(pcrop menu-off.png 0 0)" ] && [ "$(pcrop menu-restart.png $dx $dy)" != "$(pcrop menu-on.png 0 0)" ]'
             chk "after a restart the pad does nothing while OFF" '[ "$(alg "$ALOG2" "restart pad")" = "$(alg "$ALOG" "mouse mute2")" ]'
             chk "the menu item turns it on again and the pad mutes" '[ "$(alg "$ALOG2" "restart menu on")" = true ] && [ "$(alg "$ALOG2" "restart pad on")" = "$(alg "$ALOG" "mouse mute1")" ]'
             chk "the capture of the ACTIONS list exists" '[ -s "$AH/actions-list.png" ]'
