@@ -9,7 +9,7 @@ local S = require 'core/midimap_settings'
 local mm = require 'core/midimap'
 local V = require 'core/midimap_value'
 
-local m = {pos = 1, top = 1, mode = "rows", dpos = 1, dtop = 1, ctl = nil, msg = nil, confirm = nil, browse = nil}
+local m = {pos = 1, top = 1, mode = "rows", dpos = 1, dtop = 1, apos = 1, atop = 1, act = nil, ctl = nil, msg = nil, confirm = nil, browse = nil}
 
 local VISIBLE = 5
 local CTLS = {"e1", "e2", "e3", "k1", "k2", "k3"}
@@ -20,7 +20,7 @@ local function is_knob(id) return id:sub(1, 1) ~= "k" end
 
 --- the rows of the page, in order (DELETE only for one of his own presets)
 function m.rows()
-  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "WATCH", "ON CLASH", "ARC KEYS", "SAVE AS"}
+  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "ACTIONS", "WATCH", "ON CLASH", "ARC KEYS", "MIDI ACTIONS", "SAVE AS"}
   local p = S.preset_by_name(S.state.preset)
   if p ~= nil and not p.builtin then r[#r + 1] = "DELETE" end
   return r
@@ -34,6 +34,24 @@ function m.drows()
   if is_arc(id) then return {"LEARN", "NUMBER", "DEVICE", "CHANNEL", "MODE", "GAIN", "ACCEL", "ONE TURN", "CLEAR"} end
   local r = {"LEARN", "TYPE", "NUMBER", "DEVICE", "CHANNEL"}
   if c.type == "cc" then r[#r + 1] = "THRESHOLD" end
+  r[#r + 1] = "CLEAR"
+  return r
+end
+
+--- the rows of the actions list: ASSIGN ALL, the 14 actions, CLEAR ALL
+function m.arows()
+  local r = {"ASSIGN ALL"}
+  for _, id in ipairs(S.ACTION_IDS) do r[#r + 1] = id:upper() end
+  r[#r + 1] = "CLEAR ALL"
+  return r
+end
+
+--- the rows of the view of the action in `m.act`
+function m.adrows()
+  local a = S.state.actions[m.act or "mix"]
+  local r = {"LEARN", "TYPE", "NUMBER", "DEVICE", "CHANNEL"}
+  if a.type == "ccbutton" then r[#r + 1] = "THRESHOLD"
+  elseif a.type == "step" then r[#r + 1] = "MODE"; r[#r + 1] = "DIRECTION" end
   r[#r + 1] = "CLEAR"
   return r
 end
@@ -69,8 +87,7 @@ function m.device_choices()
   end
   table.sort(list, function(a, b) return a.value:lower() < b.value:lower() end)
   table.insert(list, 1, {value = "ANY", label = "ANY"})
-  local id = m.ctl
-  local c = id and S.state.ctl[id]
+  local c = (m.mode == "aview" and m.act) and S.state.actions[m.act] or (m.ctl and S.state.ctl[m.ctl])
   if c and c.dev ~= "ANY" then
     local have = false
     for _, e in ipairs(list) do if V.norm_name(e.value) == V.norm_name(c.dev) then have = true end end
@@ -109,6 +126,20 @@ local function ctl_text(id, clash)
   return t
 end
 
+local TYPE_NAMES = {none = "NONE", note = "NOTE", ccbutton = "CC BUTTON", step = "CC STEP"}
+local SHORT_MODE = {rel2c = "2S", relsm = "SIGN", relob = "OFS"}
+
+local function action_text(id)
+  local a = S.state.actions[id]
+  if a.type == "none" or a.num == nil then return "-----" end
+  local t
+  if a.type == "note" then t = "NOTE " .. a.num
+  elseif a.type == "ccbutton" then t = "CC" .. a.num .. " >" .. a.threshold
+  else t = "CC" .. a.num .. " " .. a.dir:upper() .. " " .. SHORT_MODE[a.mode] end
+  if overlap[id] then t = t .. " !" end
+  return t
+end
+
 local function preset_text()
   local name = m.browse or S.state.preset
   local p = S.preset_by_name(name)
@@ -122,6 +153,8 @@ local function row_text(row, clash)
   elseif row == "LEARN" then return "CLICK A CONTROL"
   elseif row == "ON CLASH" then return S.state.on_clash == "both" and "BOTH" or "PARAMS MAP"
   elseif row == "WATCH" then return "WHAT DOES IT SEND?"
+  elseif row == "ACTIONS" then local n = S.count_actions() return n == 0 and "NONE SET" or (n .. " SET")
+  elseif row == "MIDI ACTIONS" then return S.state.actions_on and "ON" or "OFF"
   elseif row == "ARC KEYS" then return S.state.arc_keys and "ON" or "OFF"
   elseif row == "SAVE AS" then return "NAME..."
   elseif row == "DELETE" then local p = S.preset_by_name(S.state.preset) return p and ("* " .. p.name) or ""
@@ -150,6 +183,25 @@ local function detail_text(row)
   return ""
 end
 
+local function adetail_text(row)
+  local id = m.act
+  local a = S.state.actions[id]
+  if row == "LEARN" then return "K3"
+  elseif row == "TYPE" then return TYPE_NAMES[a.type]
+  elseif row == "NUMBER" then
+    if a.num == nil then return "-" end
+    return (a.type == "note" and "NOTE " or "CC ") .. a.num
+  elseif row == "DEVICE" then
+    local list = m.device_choices()
+    return list[device_index(list, a)].label
+  elseif row == "CHANNEL" then return a.ch == 0 and "ANY" or tostring(a.ch)
+  elseif row == "THRESHOLD" then return ">" .. a.threshold
+  elseif row == "MODE" then return mm.MODE_NAMES[a.mode]
+  elseif row == "DIRECTION" then return a.dir:upper()
+  end
+  return ""
+end
+
 -- ---------------------------------------------------------------- selection
 local function clamp_rows()
   local n = #m.rows()
@@ -159,8 +211,16 @@ local function clamp_rows()
   m.top = math.max(1, math.min(m.top, math.max(1, n - VISIBLE + 1)))
 end
 
+local function clamp_actions()
+  local n = #m.arows()
+  m.apos = math.max(1, math.min(n, m.apos))
+  if m.apos < m.atop then m.atop = m.apos end
+  if m.apos > m.atop + VISIBLE - 1 then m.atop = m.apos - VISIBLE + 1 end
+  m.atop = math.max(1, math.min(m.atop, math.max(1, n - VISIBLE + 1)))
+end
+
 local function clamp_detail()
-  local n = #m.drows()
+  local n = #(m.mode == "aview" and m.adrows() or m.drows())
   m.dpos = math.max(1, math.min(n, m.dpos))
   if m.dpos < m.dtop then m.dtop = m.dpos end
   if m.dpos > m.dtop + VISIBLE - 1 then m.dtop = m.dpos - VISIBLE + 1 end
@@ -245,6 +305,28 @@ local function number_done(text)
   _menu.redraw()
 end
 
+local function anumber_done(text)
+  reclaim()
+  if text ~= nil then
+    local n = tonumber(text)
+    local a = S.state.actions[m.act]
+    if n == nil or n ~= math.floor(n) or n < 0 or n > 127 then
+      m.msg = "0 TO 127"
+    else
+      local type_ = a.type == "note" and "note" or "cc"
+      local other = mm.find_overlap(m.act, type_, n, a.dev, a.ch)
+      if other then
+        m.mode = "confirm"
+        m.confirm = {kind = "amove", id = m.act, other = other, num = n, back = "aview",
+          text = string.format("%s %d IS %s. MOVE IT?", type_ == "note" and "NOTE" or "CC", n, other:upper())}
+      elseif not S.set_action(m.act, "num", n) then
+        m.msg = "0 TO 127"
+      end
+    end
+  end
+  _menu.redraw()
+end
+
 local function number_accept(text)
   if not text:find("^%d*$") then return false, "digits only" end
   if #text > 3 then return false, "0 to 127" end
@@ -290,6 +372,11 @@ local function key_rows(n)
     S.set_clash(S.state.on_clash == "params" and "both" or "params")
   elseif row == "ARC KEYS" then
     S.set_arc_keys(not S.state.arc_keys)
+  elseif row == "MIDI ACTIONS" then
+    mm.set_actions(not S.state.actions_on)
+  elseif row == "ACTIONS" then
+    m.mode = "actions"
+    m.apos, m.atop = 1, 1
   elseif row == "WATCH" then
     mm.watch_start()
     m.mode = "watch"
@@ -333,12 +420,56 @@ local function key_detail(n)
   end
 end
 
+local function key_actions(n)
+  if n == 2 then
+    m.mode = "rows"
+    clamp_rows()
+    return
+  end
+  if n ~= 3 then return end
+  local row = m.arows()[m.apos]
+  if row == "ASSIGN ALL" then
+    mm.walk_start()
+  elseif row == "CLEAR ALL" then
+    m.mode = "confirm"
+    m.confirm = {kind = "clear_actions", back = "actions", text = "CLEAR ALL ACTIONS?"}
+  else
+    m.act = row:lower()
+    m.mode = "aview"
+    m.dpos, m.dtop = 1, 1
+  end
+end
+
+local function key_aview(n)
+  if n == 2 then
+    m.mode = "actions"
+    clamp_actions()
+    return
+  end
+  if n ~= 3 then return end
+  local row = m.adrows()[m.dpos]
+  local a = S.state.actions[m.act]
+  if row == "LEARN" then
+    mm.start_listen(m.act)
+  elseif row == "NUMBER" then
+    require('textentry').enter(anumber_done, a.num and tostring(a.num) or "", "NUMBER 0-127:", number_hint, {accept = number_accept})
+  elseif row == "CLEAR" then
+    mm.clear(m.act)
+    m.msg = m.act:upper() .. " CLEARED"
+  elseif row == "DEVICE" then
+    local list = m.device_choices()
+    local i = device_index(list, a) % #list + 1
+    S.set_action(m.act, "dev", list[i].value)
+  end
+end
+
 local function key_raw(n, z)
   if z ~= 1 then return end
   if learning() then
     if mm.learn.state == "ask" then
       if n == 3 then mm.answer(true) elseif n == 2 then mm.answer(false) end
     elseif n == 2 then mm.cancel()
+    elseif n == 3 and mm.learn.state == "listen" and mm.walk_index() then mm.walk_skip()
     elseif n == 3 and mm.learn.state == "confirm" then mm.finish_confirm() end
     return
   end
@@ -372,6 +503,13 @@ local function key_raw(n, z)
         mm.clear(c.other)
         S.set(c.id, "num", c.num)
         m.msg = c.id:upper() .. " = CC " .. c.num
+      elseif c.kind == "amove" then
+        mm.clear(c.other)
+        S.set_action(c.id, "num", c.num)
+        m.msg = c.id:upper() .. " = " .. c.num
+      elseif c.kind == "clear_actions" then
+        S.clear_all_actions()
+        m.msg = "ACTIONS CLEARED"
       end
     end
     m.mode, m.confirm = (m.confirm and m.confirm.back) or "rows", nil
@@ -379,6 +517,8 @@ local function key_raw(n, z)
     return
   end
   if m.mode == "detail" then key_detail(n) clamp_detail() return end
+  if m.mode == "actions" then key_actions(n) clamp_actions() return end
+  if m.mode == "aview" then key_aview(n) clamp_detail() return end
   key_rows(n)
   clamp_rows()
 end
@@ -419,12 +559,52 @@ local function enc_detail(n, delta)
   end
 end
 
+local function enc_aview(n, delta)
+  local id = m.act
+  local a = S.state.actions[id]
+  if n == 2 then
+    m.dpos = m.dpos + delta
+    clamp_detail()
+    return
+  end
+  if n ~= 3 or delta == 0 then return end
+  local row = m.adrows()[m.dpos]
+  if row == "TYPE" then
+    local t = step_in(S.ACTION_KINDS, a.type, delta)
+    if t == a.type then return end
+    if t == "none" then S.clear_action(id)
+    elseif a.num == nil then m.msg = "SET THE NUMBER FIRST"
+    else S.set_action(id, "type", t) end
+  elseif row == "NUMBER" then
+    S.set_action(id, "num", math.max(0, math.min(127, (a.num or -1) + delta)))
+  elseif row == "DEVICE" then
+    local list = m.device_choices()
+    local i = math.max(1, math.min(#list, device_index(list, a) + delta))
+    S.set_action(id, "dev", list[i].value)
+  elseif row == "CHANNEL" then
+    S.set_action(id, "ch", math.max(0, math.min(16, a.ch + delta)))
+  elseif row == "THRESHOLD" then
+    S.set_action(id, "threshold", math.max(0, math.min(126, a.threshold + delta)))
+  elseif row == "MODE" then
+    local mode = step_in(S.REL_MODES, a.mode, delta)
+    if mode ~= a.mode then S.set_action(id, "mode", mode) end
+  elseif row == "DIRECTION" then
+    local d = step_in({"up", "down"}, a.dir, delta)
+    if d ~= a.dir then S.set_action(id, "dir", d) end
+  end
+end
+
 local function enc_raw(n, delta)
   if learning() then return end
   m.msg = nil
   mm.learn.msg, mm.learn.warn, mm.learn.warn_short = nil, nil, nil
   if m.mode == "confirm" or m.mode == "watch" or m.mode == "turn" then return end
   if m.mode == "detail" then enc_detail(n, delta) return end
+  if m.mode == "aview" then enc_aview(n, delta) return end
+  if m.mode == "actions" then
+    if n == 2 then m.apos = m.apos + delta; clamp_actions() end
+    return
+  end
   if n == 2 then
     m.pos = m.pos + delta
     clamp_rows()
@@ -440,6 +620,8 @@ local function enc_raw(n, delta)
       S.set_clash(delta > 0 and "both" or "params")
     elseif row == "ARC KEYS" then
       S.set_arc_keys(delta > 0)
+    elseif row == "MIDI ACTIONS" then
+      mm.set_actions(delta > 0)
     end
   end
 end
@@ -462,14 +644,18 @@ local function banner()
   screen.fill()
   screen.level(0)
   screen.move(99, 8)
-  screen.text_center(L.state == "pick" and "CLICK ONE" or ("LEARN " .. L.target:upper()))
+  local text
+  if L.state == "pick" then text = "CLICK ONE"
+  elseif mm.walk_index() then text = "ASSIGN " .. mm.walk_index() .. "/" .. #S.ACTION_IDS
+  else text = "LEARN " .. L.target:upper() end
+  screen.text_center(text)
 end
 
 local function hint(default)
   local L = mm.learn
   local text, level = default, 2
   if L.state ~= "idle" then
-    text, level = L.msg or "K2 CANCEL", 15
+    text, level = L.msg or (mm.walk_index() and "K3 SKIP  K2 STOP" or "K2 CANCEL"), 15
     local left = mm.seconds_left()
     if left > 0 then
       screen.level(3)
@@ -618,7 +804,44 @@ local function redraw_raw()
   local L = mm.learn
   screen.level(15)
   screen.move(0, 8)
-  if m.mode == "detail" then
+  if m.mode == "actions" then
+    if mm.walk_index() then m.apos = mm.walk_index() + 1 end
+    clamp_actions()
+    screen.text("ACTIONS")
+    banner()
+    local rows = m.arows()
+    for i = 1, VISIBLE do
+      local row = rows[m.atop + i - 1]
+      if row then
+        local target = L.state ~= "idle" and L.target ~= nil and row == L.target:upper()
+        local value
+        if target then value = L.state == "ask" and "" or "PRESS A BUTTON"
+        elseif row == "ASSIGN ALL" then value = "ONE BY ONE"
+        elseif row == "CLEAR ALL" then value = S.count_actions() .. " SET"
+        else value = action_text(row:lower()) end
+        draw_row(i, 10 + 9 * i, row, value, m.atop + i - 1 == m.apos, target)
+      end
+    end
+    scrollbar(m.atop, #rows)
+    local sel = rows[m.apos] and rows[m.apos]:lower()
+    if sel and overlap[sel] and L.state == "idle" then hint(string.format("ALSO %s", overlap[sel]:upper()))
+    else hint("E2 row  K3") end
+  elseif m.mode == "aview" then
+    clamp_detail()
+    screen.text(m.act:upper() .. " ACTION")
+    banner()
+    local rows = m.adrows()
+    for i = 1, VISIBLE do
+      local row = rows[m.dtop + i - 1]
+      if row then
+        local target = L.state ~= "idle" and row == "LEARN" and L.target == m.act
+        local value = target and "PRESS A BUTTON" or adetail_text(row)
+        draw_row(i, 10 + 9 * i, row, value, m.dtop + i - 1 == m.dpos, target)
+      end
+    end
+    scrollbar(m.dtop, #rows)
+    hint("E2 row  E3 change  K3")
+  elseif m.mode == "detail" then
     clamp_detail()
     screen.text(m.ctl:upper() .. " MIDI")
     banner()
@@ -664,6 +887,7 @@ end
 local function recover(what, err)
   dbg(what .. " raised an error: " .. tostring(err))
   m.mode, m.confirm = "rows", nil
+  m.msg = "ERROR, SEE THE LOG"
   pcall(clamp_rows)
   reclaim()
 end
