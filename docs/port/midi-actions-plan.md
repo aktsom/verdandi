@@ -57,7 +57,7 @@ Facts that matter for the design:
 
 Rows of MIDI MAP now: PRESET, LEARN, E1-E3, K1-K3, A1-A4, **ACTIONS**, WATCH, ON CLASH, ARC KEYS, SAVE AS (DELETE). `ACTIONS` shows how many are assigned (`5 OF 14`). K3 opens the list.
 
-**The list** (first picture): header `ACTIONS` and the group in view; rows: `ASSIGN ALL`, then PAGES (MIX, TAPE, HOME, PARAMS, INPUT, GRID, ARC, KEYS, MAIDEN, MANUAL), then UTILITY (MUTE, DETACH, FULLSCREEN, SCREENSHOT), then `CLEAR ALL`, then a dim line `QUIT IS NOT MAPPABLE`. Group names are separators, not selectable. Each action row shows `NOTE 36`, `CC76 UP`, `CC76 DN` or `-----`, with `!` when the CC is in the script's params MAP (as the other rows) or when another control answers to the same message (the help line says which, as `CC72 ALSO A1` does today). The master switch `ACTIONS ON/OFF` is the first thing on the list's help line area? **No:** to keep the list short it is one more row of the page itself, after ARC KEYS (`ACTIONS`' own on/off is only for emergencies: a lock).
+**The list** (first picture): header `ACTIONS` and the group in view; rows: `ASSIGN ALL`, then PAGES (MIX, TAPE, HOME, PARAMS, INPUT, GRID, ARC, KEYS, MAIDEN, MANUAL), then UTILITY (MUTE, DETACH, FULLSCREEN, SCREENSHOT), then `CLEAR ALL`, then a dim line `QUIT IS NOT MAPPABLE`. Group names are separators, not selectable. Each action row shows `NOTE 36`, `CC76 UP`, `CC76 DN` or `-----`, with `!` when the CC is in the script's params MAP (as the other rows) or when another control answers to the same message (the help line says which, as `CC72 ALSO A1` does today). The master switch `ACTIONS ON/OFF` is not on the list (to keep it short): it is one more row of the page itself, after ARC KEYS, meant for emergencies (a lock for a performance).
 
 | key | on an action row | on ASSIGN ALL | on CLEAR ALL |
 |---|---|---|---|
@@ -116,7 +116,7 @@ act.tape.type=ccbutton  act.tape.num=20  act.tape.threshold=63
 | the params MAP uses the same CC | the params MAP wins, the action is skipped, the page warns |
 | the pads send CC instead of notes in some modes of the unit | CC BUTTON is supported (an edge at a threshold); learn tells which came |
 | an encoder burst triggers an action many times | one trigger per burst (0.3 s quiet), plus the guard |
-| the top row hidden hides the feedback | the 150 ms flash is drawn on the hidden button's place? **No:** the buttons are not drawn when the row is hidden, so there is no flash; MUTE shows its chip and toast as today; for the others the page changes or the window opens, which is the feedback |
+| the top row hidden hides the feedback | the buttons are not drawn when the row is hidden, so there is no flash; MUTE shows its chip and toast as today; for the others the page changes or a window opens, which is the feedback |
 | the MIDI action path differs from the mouse path | one function (`button_action`) for both; the C test and the Xvfb comparison |
 | FULLSCREEN needs the screen window | a plain message, no automatic detach |
 | a damaged `midimap.conf` | defaults with a log line, never an error |
@@ -130,9 +130,8 @@ I do not have the unit and could not find its pad numbering or default notes in 
 |---|---|---|---|---|---|---|---|---|
 | **upper row** | MIX | TAPE | HOME | PARAMS | INPUT | GRID | ARC | KEYS |
 | **lower row** | MAIDEN | MANUAL | - | - | - | SCREENSHOT | FULLSCREEN | **MUTE** (far corner) |
-| | | | | | | | **DETACH** goes on a pad you do not play, e.g. lower row 3 | |
 
-Use ASSIGN ALL and press the pads in this order (the walkthrough follows the order of the list: MIX, TAPE, HOME, PARAMS, INPUT, GRID, ARC, KEYS, MAIDEN, MANUAL, MUTE, DETACH, FULLSCREEN, SCREENSHOT), then rearrange with the list. If your pads send on a channel your scripts use for notes, set the actions' CHANNEL. The sixteen encoders: three keep E1-E3, four are A1-A4, the rest are free.
+**DETACH** goes on a pad you do not play (for example lower row, pad 3). Use ASSIGN ALL and press the pads in this order (the walkthrough follows the order of the list: MIX, TAPE, HOME, PARAMS, INPUT, GRID, ARC, KEYS, MAIDEN, MANUAL, MUTE, DETACH, FULLSCREEN, SCREENSHOT), then rearrange with the list. If your pads send on a channel your scripts use for notes, set the actions' CHANNEL. The sixteen encoders: three keep E1-E3, four are A1-A4, the rest are free.
 
 ## 7. What needs the real hardware
 
