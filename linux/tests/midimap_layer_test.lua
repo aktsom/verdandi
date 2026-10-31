@@ -459,6 +459,159 @@ ARC_OPEN = true
 -- the layer is inert without the platform switch
 check(mm.enabled == true, "enabled on the desktop build")
 
+-- ================================================================ MIDI actions (docs/port/midi-actions-plan.md)
+local menu_tick = nil
+_norns.window_action = function(name) out[#out + 1] = "wa:" .. name end
+_norns.midi_actions_menu = function(on) menu_tick = on; out[#out + 1] = "menu:" .. tostring(on) end
+mm.install()
+local function wa() local r = {} for _, o in ipairs(out) do if o:match("^wa:") then r[#r + 1] = o end end return table.concat(r, " ") end
+local function asetup(fn) setup(function() S.clear_all_actions(); S.set_actions_on(true); if fn then fn() end end) end
+local redraws = 0
+mm.on_change = function() redraws = redraws + 1 end
+
+-- note actions: a note on with velocity presses, nothing else does
+asetup(function() S.assign_action("mix", "note", 36) end)
+note_on(2, 1, 36, 100); eq(wa(), "wa:mix", "action note: a note on fires the action")
+check(redraws > 0, "action fires end with a redraw of the page")
+reset_out(); note_off(2, 1, 36); note_on(2, 1, 36, 0); eq(wa(), "", "action note: note off and velocity 0 never act")
+reset_out(); T = T + 0.1; note_on(2, 1, 36, 100); eq(wa(), "", "action note: the guard blocks a second press 0.1 s later")
+reset_out(); T = T + 0.2; note_on(2, 1, 36, 100); eq(wa(), "wa:mix", "action note: and lets one through after 0.25 s")
+reset_out(); note_on(2, 1, 37, 100); eq(wa(), "", "action note: another note is nothing")
+reset_out(); cc(2, 1, 36, 127); eq(wa(), "", "action note: a CC of the same number is not a note")
+-- the keys window and the iii grid are not controllers
+reset_out(); T = T + 1; note_on(4, 1, 36, 100); note_on(3, 1, 36, 100); eq(wa(), "", "action note: ANY ignores the keys window and the iii grid")
+-- the action does not take the key's message away from a key, and a note action does not touch the screen
+reset_out(); T = T + 1; note_on(2, 1, 36, 100); eq(acts(), "", "action note: no key or encoder moves")
+
+-- CC button
+asetup(function() S.assign_action("tape", "ccbutton", 20) end)
+cc(2, 1, 20, 127); eq(wa(), "wa:tape", "cc button: a press fires")
+reset_out(); T = T + 1; cc(2, 1, 20, 127); eq(wa(), "", "cc button: held high, no second press")
+reset_out(); T = T + 1; cc(2, 1, 20, 0); eq(wa(), "", "cc button: the release never acts")
+reset_out(); T = T + 1; cc(2, 1, 20, 100); eq(wa(), "wa:tape", "cc button: pressed again")
+
+-- encoder step as a trigger
+asetup(function() S.assign_action("home", "step", 30, {mode = "relob", dir = "up"}) end)
+cc(2, 1, 30, 65); eq(wa(), "wa:home", "step: a click up fires")
+reset_out(); T = T + 0.05; cc(2, 1, 30, 66); eq(wa(), "", "step: the rest of the burst does not fire again")
+reset_out(); T = T + 1; cc(2, 1, 30, 63); cc(2, 1, 30, 64); eq(wa(), "", "step: down and delta 0 never fire")
+reset_out(); T = T + 1; cc(2, 1, 30, 65); eq(wa(), "wa:home", "step: the next burst fires")
+asetup(function() S.assign_action("params", "step", 31, {mode = "rel2c", dir = "down"}) end)
+cc(2, 1, 31, 1); eq(wa(), "", "step down: a click up is nothing"); T = T + 1; cc(2, 1, 31, 127); eq(wa(), "wa:params", "step down: a click down fires")
+
+-- master switch off: no action fires, the controls keep working
+asetup(function() S.assign_action("mix", "note", 36); S.set("e1", "num", 10); S.set("e1", "mode", "rel2c"); S.set("k1", "type", "note"); S.set("k1", "num", 60) end)
+mm.set_actions(false)
+eq(S.state.actions_on, false, "master: set off"); eq(menu_tick, false, "master: the window menu is told")
+reset_out(); T = T + 1; note_on(2, 1, 36, 100); cc(2, 1, 10, 1); note_on(2, 1, 60, 100)
+eq(wa(), "", "master off: no action fires"); eq(acts(), "enc:1:1 key:1:1", "master off: E1 and K1 mappings keep working")
+mm.set_actions(true); reset_out(); T = T + 1; note_on(2, 1, 36, 100); eq(wa(), "wa:mix", "master on: the action fires again")
+-- the window menu and Ctrl+Shift+M reach it through one callback; the file keeps it; a restart shows the tick
+_norns.midi_actions_changed(false)
+eq(S.state.actions_on, false, "master: the menu / shortcut callback turns it off"); eq(menu_tick, false, "master: and the callback does not need a second tick push")
+S.load(); eq(S.state.actions_on, false, "master: saved, loaded off")
+menu_tick = nil; mm.load(); eq(menu_tick, false, "master: after a restart the menu is given the saved state")
+_norns.midi_actions_changed(true); S.load(); eq(S.state.actions_on, true, "master: on again, saved"); mm.load(); eq(menu_tick, true, "master: the tick after a restart is on")
+-- bad argument from C is ignored
+_norns.midi_actions_changed(nil); eq(S.state.actions_on, true, "master: a nil callback changes nothing")
+
+-- a text entry open: nothing fires
+asetup(function() S.assign_action("mix", "note", 36) end)
+package.loaded['textentry'] = {active = true}
+note_on(2, 1, 36, 100); eq(wa(), "", "text entry open: no action fires")
+package.loaded['textentry'] = nil
+
+-- errors are visible
+asetup(function() S.assign_action("mix", "note", 36) end)
+_norns.window_action = function() error("boom") end
+note_on(2, 1, 36, 100)
+check(logged("boom"), "an error in the action call is logged")
+check(table.concat(out, " "):find("toast:ACTION", 1, true) ~= nil, "and said on the screen")
+_norns.window_action = nil
+reset_out(); T = T + 1; note_on(2, 1, 36, 100)
+check(table.concat(out, " "):find("toast:", 1, true) ~= nil, "a build without the call says so, no crash")
+_norns.window_action = function(name) out[#out + 1] = "wa:" .. name end
+
+-- the params MAP wins a CC both want
+asetup(function() S.assign_action("tape", "ccbutton", 20) end)
+pmap.rev = {} ; pmap.rev[midi.devices[2].port or 0] = pmap.rev[midi.devices[2].port or 0] or {}
+pmap.rev[midi.devices[2].port or 0][1] = {[20] = "x"}
+reset_out(); cc(2, 1, 20, 127); eq(wa(), "", "the params MAP wins a CC an action also wants")
+pmap.rev = nil
+
+-- the scripts still get every message (a tap)
+asetup(function() S.assign_action("mix", "note", 36) end)
+local got = 0
+midi.devices[2].event = function() got = got + 1 end
+note_on(2, 1, 36, 100); eq(got, 1, "the script receives the mapped note too")
+midi.devices[2].event = nil
+
+-- overlaps with controls and other actions
+asetup(function() S.assign_action("mix", "note", 36); S.set("k1", "type", "note"); S.set("k1", "num", 36) end)
+local ov = mm.overlaps(); eq(ov.mix, "k1", "overlap: an action and a key share a note"); eq(ov.k1, "mix", "overlap: both directions")
+asetup(function() S.assign_action("mix", "note", 36); S.assign_action("tape", "note", 36) end)
+ov = mm.overlaps(); eq(ov.mix, "tape", "overlap: two actions on one note")
+
+-- learn: a note
+asetup(); mm.start_listen("tape")
+eq(mm.learn.state, "listen", "action learn: listening"); eq(mm.learn.target, "tape", "action learn: the target is the action")
+note_on(2, 1, 40, 100)
+eq(S.state.actions.tape.type, "note", "action learn: a note is taken"); eq(S.state.actions.tape.num, 40, "action learn: the note number"); eq(mm.learn.state, "idle", "action learn: done")
+check(mm.learn.msg and mm.learn.msg:find("TAPE", 1, true), "action learn: says what was set")
+-- learn: a note off and velocity 0 do nothing
+asetup(); mm.start_listen("tape"); note_off(2, 1, 40); note_on(2, 1, 40, 0); eq(mm.learn.state, "listen", "action learn: a release is not a press")
+-- learn: a CC makes a step in the last relative format
+asetup(function() S.set("e1", "num", 5); S.set("e1", "mode", "rel2c") end); mm.load()
+mm.start_listen("home"); cc(2, 1, 50, 1)
+eq(S.state.actions.home.type, "step", "action learn: a CC makes an encoder step"); eq(S.state.actions.home.mode, "rel2c", "action learn: with the format of the last encoder mapping"); eq(S.state.actions.home.dir, "up", "action learn: direction of the first click")
+mm.start_listen("home"); cc(2, 1, 51, 127); eq(S.state.actions.home.dir, "down", "action learn: a click down makes a down step")
+asetup(); mm.load(); mm.start_listen("home"); cc(2, 1, 52, 65)
+eq(S.state.actions.home.mode, "relob", "action learn: without any encoder mapping the format is REL OFS")
+-- learn: ignores the keys window
+asetup(); mm.start_listen("mix"); note_on(4, 1, 40, 100); eq(mm.learn.state, "listen", "action learn: the keys window is no controller")
+-- learn: a clash with a key asks, yes moves it
+asetup(function() S.set("k1", "type", "note"); S.set("k1", "num", 40) end)
+mm.start_listen("mix"); note_on(2, 1, 40, 100); eq(mm.learn.state, "ask", "action learn: a note a key has asks first")
+mm.answer(true); eq(S.state.ctl.k1.type, "none", "action learn: yes clears the key"); eq(S.state.actions.mix.num, 40, "action learn: and the action has it")
+asetup(function() S.assign_action("mix", "note", 40) end)
+mm.start_listen("k1"); note_on(2, 1, 40, 100); eq(mm.learn.state, "ask", "key learn: a note an action has asks first")
+mm.answer(true); eq(S.state.actions.mix.type, "none", "key learn: yes clears the action"); eq(S.state.ctl.k1.num, 40, "key learn: and the key has it")
+asetup(function() S.assign_action("mix", "note", 40) end)
+mm.start_listen("k1"); note_on(2, 1, 40, 100); mm.answer(false); eq(S.state.actions.mix.num, 40, "key learn: no leaves the action")
+
+-- the walk: ASSIGN ALL in list order, skipping keeps what is there
+asetup(function() S.assign_action("home", "note", 99) end)
+mm.walk_start()
+eq(mm.learn.state, "listen", "walk: listening"); eq(mm.learn.target, "mix", "walk: the first action is MIX"); eq(mm.walk_index(), 1, "walk: index 1")
+note_on(2, 1, 41, 100); eq(S.state.actions.mix.num, 41, "walk: assigned"); eq(mm.learn.target, "tape", "walk: on to TAPE"); eq(mm.walk_index(), 2, "walk: index 2")
+mm.walk_skip(); eq(mm.learn.target, "home", "walk: skipped TAPE, on to HOME"); eq(S.state.actions.tape.type, "none", "walk: skipped one stays empty")
+mm.walk_skip(); eq(S.state.actions.home.num, 99, "walk: skipping keeps an existing assignment")
+eq(mm.learn.target, "params", "walk: PARAMS next")
+for i = 1, 10 do mm.walk_skip() end
+eq(mm.learn.state, "listen", "walk: still listening at the last"); eq(mm.learn.target, "screenshot", "walk: the last is SCREENSHOT"); eq(mm.walk_index(), 14, "walk: 14 of 14")
+mm.walk_skip(); eq(mm.learn.state, "idle", "walk: ends after the last"); eq(mm.walk_index(), nil, "walk: no index after the end")
+-- the walk ends like a learn: cancel, time-out, leaving, a device that goes
+asetup(); mm.walk_start(); mm.cancel(); eq(mm.learn.state, "idle", "walk: cancel ends it"); eq(mm.walk_index(), nil, "walk: and the index is gone")
+asetup(); mm.walk_start(); T = T + 16; mm.tick(); eq(mm.learn.state, "idle", "walk: the time-out ends it")
+asetup(); mm.walk_start(); note_on(2, 1, 42, 100); T = T + 10; mm.tick(); note_on(2, 1, 43, 100); T = T + 10; mm.tick()
+eq(mm.learn.state, "listen", "walk: every assignment restarts the time-out")
+mm.leave(); eq(mm.walk_index(), nil, "walk: leaving the page ends it")
+-- a walk onto an assigned note asks
+asetup(function() S.assign_action("keys", "note", 50) end)
+mm.walk_start(); note_on(2, 1, 50, 100); eq(mm.learn.state, "ask", "walk: a note that another action has asks"); mm.answer(true)
+eq(S.state.actions.mix.num, 50, "walk: yes assigns it"); eq(S.state.actions.keys.type, "none", "walk: and clears the other"); eq(mm.learn.state, "listen", "walk: and goes on"); eq(mm.learn.target, "tape", "walk: with the next action")
+mm.cancel_quiet()
+
+-- clear
+asetup(function() S.assign_action("mix", "note", 36) end)
+mm.clear("mix"); eq(S.state.actions.mix.type, "none", "clear works for an action id")
+
+-- leaving the page loses nothing on the actions; release_all never touches them
+asetup(function() S.assign_action("mix", "note", 36) end); mm.leave(); eq(S.state.actions.mix.num, 36, "leave keeps the action")
+-- the layer still fires while the page is not open (actions are global)
+reset_out(); T = T + 1; note_on(2, 1, 36, 100); eq(wa(), "wa:mix", "actions work without the MIDI MAP page open")
+mm.on_change = nil
+
 if fails == 0 then real_print("midimap layer: all passed") end
 os.execute("rm -rf '" .. tmp .. "'")
 os.exit(fails == 0 and 0 or 1)

@@ -24,14 +24,22 @@ M.on_change = nil -- the page's redraw: called when something the page shows cha
 M.log = function(s) print("midimap: " .. s) end
 
 local rt = {}     -- per control: {abs, rel, key, src, dev}
+local art = {}    -- per action: {key, trig} (docs/port/midi-actions-plan.md)
+local guard = V.guard_new()
+local walk = nil  -- {i = n} while ASSIGN ALL goes through the actions
 local seen_version
+
+local ACTION_SET = {}
+for _, id in ipairs(S.ACTION_IDS) do ACTION_SET[id] = true end
+local function is_action(id) return ACTION_SET[id] == true end
+M.is_action = is_action
 
 local function is_enc(id) return id:sub(1, 1) == "e" end
 local function is_arc(id) return id:sub(1, 1) == "a" end
 local function is_knob(id) return id:sub(1, 1) ~= "k" end -- a norns encoder or an arc encoder: takes a CC, not a note
 local function number_of(id) return tonumber(id:sub(2)) end
 --- the id the window uses for a control (device_skin.h: K1-K3 are 1-3, E1-E3 are 4-6; the arc's encoders 1-4 are 7-10)
-local function skin_id(id) return (is_enc(id) and 3 or is_arc(id) and 6 or 0) + number_of(id) end
+local function skin_id(id) if ACTION_SET[id] then return 0 end return (is_enc(id) and 3 or is_arc(id) and 6 or 0) + number_of(id) end
 
 local function state_of(id)
   local r = rt[id]
@@ -80,6 +88,7 @@ function M.held()
 end
 
 local function reset_states()
+  for _, a in pairs(art) do V.key_reset(a.key); V.trig_reset(a.trig) end
   for _, id in ipairs(M.ALL_IDS) do
     local r = rt[id]
     if r then
@@ -93,9 +102,14 @@ local function push_arc_config()
   if _norns.arc_keys_config then _norns.arc_keys_config(S.state.arc_keys_accel and 1 or 0) end
 end
 
+local function push_menu()
+  if _norns.midi_actions_menu then _norns.midi_actions_menu(S.state.actions_on == true) end
+end
+
 local function sync()
   if seen_version ~= S.version then
     push_arc_config()
+    push_menu()
     M.release_all()
     reset_states()
     seen_version = S.version
@@ -110,7 +124,18 @@ function M.load()
   M.guess = {}
   seen_version = S.version
   push_arc_config()
+  push_menu()
 end
+
+--- the master switch of the actions (the page row): saved at once, the window menu's tick follows
+function M.set_actions(on)
+  if type(on) ~= "boolean" then return false end
+  S.set_actions_on(on)
+  sync()
+  notify()
+  return true
+end
+function M.actions_on() return S.state.actions_on == true end
 
 -- ---------------------------------------------------------------- the params MAP
 local function pmap_learning()
@@ -184,6 +209,12 @@ function M.install()
     end)
     if not ok then M.log("pick: " .. tostring(err)) end
   end
+  -- the window menu's tick and Ctrl+Shift+M (sdl_bridge.cc) tell the new state: one saved state for the page, the menu and the shortcut
+  _norns.midi_actions_changed = function(on)
+    if type(on) ~= "boolean" then return end
+    local ok, err = pcall(function() M.set_actions(on) end)
+    if not ok then M.log("actions switch: " .. tostring(err)) end
+  end
   if hook and hook.script_post_init and hook.script_post_init.register then
     hook.script_post_init:register("midimap-clash", function() local ok, err = pcall(M.after_script_load) if not ok then M.log("load check: " .. tostring(err)) end end)
   end
@@ -216,6 +247,10 @@ function M.find_overlap(id, type_, num, dev, ch)
     local c = S.state.ctl[other]
     if other ~= id and kind_of(c) == type_ and c.num == num and V.dev_overlap(c.dev, dev) and V.ch_overlap(c.ch, ch) then return other end
   end
+  for _, other in ipairs(S.ACTION_IDS) do
+    local a = S.state.actions[other]
+    if other ~= id and a.type ~= "none" and a.num == num and (a.type == "note" and "note" or "cc") == type_ and V.dev_overlap(a.dev, dev) and V.ch_overlap(a.ch, ch) then return other end
+  end
   return nil
 end
 
@@ -227,6 +262,13 @@ function M.overlaps()
     local k = kind_of(c)
     if k then
       local other = M.find_overlap(id, k, c.num, c.dev, c.ch)
+      if other then out[id] = other end
+    end
+  end
+  for _, id in ipairs(S.ACTION_IDS) do
+    local a = S.state.actions[id]
+    if a.type ~= "none" and a.num ~= nil then
+      local other = M.find_overlap(id, a.type == "note" and "note" or "cc", a.num, a.dev, a.ch)
       if other then out[id] = other end
     end
   end
@@ -284,6 +326,7 @@ local function timer_start()
 end
 
 local function end_learn()
+  walk = nil
   local L = M.learn
   L.state, L.target, L.msgs, L.src, L.ask = "idle", nil, nil, nil, nil
   timer_stop()
@@ -346,10 +389,49 @@ end
 
 --- LEARN inside a control's detail view: straight to LISTEN
 function M.start_listen(id)
+  if is_action(id) then return M.start_listen_action(id) end
   M.release_all()
   M.learn.state = "pick"
   M.pick(id)
   timer_start()
+end
+
+--- LEARN for an action: listen for a note on or a CC (the window is not armed: an action has no control to click)
+function M.start_listen_action(id)
+  if not is_action(id) then return end
+  M.release_all()
+  local L = M.learn
+  L.state, L.target, L.deadline, L.msg, L.warn = "listen", id, M.clock() + M.TIMEOUT, nil, nil
+  window(0, 0, nil)
+  toast("LEARN " .. id:upper() .. ": PRESS A BUTTON")
+  timer_start()
+  notify()
+end
+
+--- ASSIGN ALL: the actions one after the other in list order. a message sets the one asked for and goes on, SKIP goes on and keeps what the action has
+function M.walk_start()
+  walk = {i = 1}
+  M.start_listen_action(S.ACTION_IDS[1])
+  if M.learn.state ~= "listen" then walk = nil end
+end
+function M.walk_index() return walk and walk.i or nil end
+--- on to the next action of the walk (msg: what to say about the one before), or the end
+local function walk_advance(msg)
+  local L = M.learn
+  walk.i = walk.i + 1
+  if walk.i > #S.ACTION_IDS then
+    end_learn()
+    L.msg = "ASSIGN ALL DONE"
+    notify()
+    return
+  end
+  L.state, L.ask, L.target, L.deadline, L.msg = "listen", nil, S.ACTION_IDS[walk.i], M.clock() + M.TIMEOUT, msg
+  toast("LEARN " .. L.target:upper() .. ": PRESS A BUTTON")
+  notify()
+end
+function M.walk_skip()
+  if walk == nil or M.learn.state ~= "listen" then return end
+  walk_advance(nil)
 end
 
 local function warn_for(id)
@@ -392,6 +474,28 @@ local function assigned(id, what)
   M.learn.msg = id:upper() .. " = " .. what
 end
 
+--- a learned note or CC goes to an action (a CC always makes an encoder step in the format of the last encoder or arc mapping; the direction of the first click is the direction), then the walk goes on
+local function finish_action(id, type_, num, first)
+  local L = M.learn
+  local ok
+  if type_ == "note" then
+    ok = S.assign_action(id, "note", num)
+  else
+    local mode = S.last_rel_mode()
+    ok = S.assign_action(id, "step", num, {mode = mode, dir = V.rel_decode(mode, first) < 0 and "down" or "up"})
+  end
+  M.guess[id] = nil
+  local text = id:upper() .. " = " .. (type_ == "note" and "NOTE " or "CC ") .. num
+  if not ok then text = id:upper() .. ": NOT SET" end
+  if walk then
+    walk_advance(text)
+  else
+    end_learn()
+    L.msg = text
+    notify()
+  end
+end
+
 --- the learned message goes to the control; if another control already answers to it the question is asked first (K3 yes / K2 no on the page, M.answer)
 local function take(id, type_, num, first)
   local other = M.find_overlap(id, type_, num, "ANY", 0)
@@ -418,6 +522,10 @@ function M.answer(yes)
   M.clear(a.other)
   L.ask = nil
   local id = a.id
+  if is_action(id) then
+    finish_action(id, a.type, a.num, a.first)
+    return
+  end
   S.assign(id, a.type, a.num)
   if is_knob(id) then
     L.state, L.msgs, L.src, L.last = "confirm", {a.first}, L.src, M.clock()
@@ -437,6 +545,14 @@ local function learn_event(d, kind, ch, d1, d2)
   if V.is_non_controller(d.name) then return end
   if L.state == "listen" then
     local id = L.target
+    if is_action(id) then
+      if kind == 0x90 and d2 > 0 then
+        if take(id, "note", d1) then finish_action(id, "note", d1) end
+      elseif kind == 0xB0 and d2 > 0 then
+        if take(id, "cc", d1, d2) then finish_action(id, "cc", d1, d2) end
+      end
+      return
+    end
     if is_knob(id) then
       if kind ~= 0xB0 then
         if kind == 0x90 and d2 > 0 then
@@ -514,6 +630,11 @@ function M.device_removed(d)
 end
 
 function M.clear(id)
+  if is_action(id) then
+    local ok2, why2 = S.clear_action(id)
+    if ok2 then sync() end
+    return ok2, why2
+  end
   local ok, why = S.clear(id)
   if ok then M.guess[id] = nil; sync() end
   return ok, why
@@ -526,7 +647,54 @@ local function matches(c, d, ch)
   return V.name_matches(c.dev, d.name)
 end
 
+local function astate(id)
+  local r = art[id]
+  if r == nil then r = {key = V.key_new(), trig = V.trig_new()}; art[id] = r end
+  return r
+end
+
+--- fire one window action (the same path as the mouse: _norns.window_action runs button_action in the main thread). the guard time, a missing call and an error are all said, never silent
+local function fire_action(id)
+  if not V.guard_ok(guard, id, M.clock()) then return end
+  if not _norns.window_action then
+    toast("ACTIONS NEED THE WINDOW")
+    notify()
+    return
+  end
+  local ok, err = pcall(_norns.window_action, id)
+  if not ok then
+    M.log("action " .. id .. ": " .. tostring(err))
+    toast("ACTION " .. id:upper() .. " FAILED")
+  end
+  notify()
+end
+
+local function act_actions(d, kind, ch, d1, d2)
+  if S.state.actions_on ~= true then return end
+  local pm = norns ~= nil and norns.pmap ~= nil and norns.pmap.rev or nil
+  local params_wins = S.state.on_clash == "params"
+  for _, id in ipairs(S.ACTION_IDS) do
+    local a = S.state.actions[id]
+    if a.type ~= "none" and a.num == d1 and matches(a, d, ch) then
+      if a.type == "note" then
+        if (kind == 0x90 or kind == 0x80) and V.action_note_press(kind == 0x90 and "on" or "off", d2) then fire_action(id) end
+      elseif kind == 0xB0 then
+        local taken = params_wins and pm ~= nil and d.port ~= nil and pm[d.port] ~= nil and pm[d.port][ch] ~= nil and pm[d.port][ch][d1] ~= nil
+        if not taken then
+          local r = astate(id)
+          if a.type == "ccbutton" then
+            if V.action_cc_press(r.key, d2, a.threshold) then fire_action(id) end
+          elseif a.type == "step" then
+            if V.trig_step(r.trig, a.mode, d2, a.dir, M.clock()) then fire_action(id) end
+          end
+        end
+      end
+    end
+  end
+end
+
 local function act(d, kind, ch, d1, d2)
+  act_actions(d, kind, ch, d1, d2)
   local pm = norns ~= nil and norns.pmap ~= nil and norns.pmap.rev or nil
   local params_wins = S.state.on_clash == "params"
   for _, id in ipairs(M.ALL_IDS) do
