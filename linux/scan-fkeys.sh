@@ -2,6 +2,7 @@
 # linux/scan-fkeys.sh [DUST_CODE_FOLDER]: which of your scripts read the function keys that Verdandi's screen window takes (docs/port/detach-plan.md).
 #   F9   detach the screen / bring it back        F11  fullscreen of the screen window        F12  (kept for a later "snap to a whole scale", hidden)
 #   Ctrl+M  mute (docs/port/box-style-plan.md): reported as the scripts that test keyboard.ctrl() and name the letter M
+#   Ctrl+Shift+M  the MIDI actions on and off (docs/port/midi-actions-plan.md): the scripts that test keyboard.ctrl() and keyboard.shift() and name the letter M
 # it only READS the .lua files of the folder (default: <norns home>/dust/code, the norns home as `verdandi` finds it: NORNS_HOME, or ~/Verdandi) and prints
 # (and the arc keys 5 6 T Y G H B N, see below) every script that names one of those keys the way norns scripts do (keyboard.code gets "F9", "F11", "F12" as text), the lines it is on, and how many
 # scripts read the keyboard at all. nothing is changed.
@@ -55,6 +56,26 @@ else
     printf '%s' "$mhits" | sed "s|^$dir/||" | sed 's/^/   /' | head -40
     mrc=2
 fi
+# Ctrl+Shift+M (the MIDI actions on and off, docs/port/midi-actions-plan.md): Verdandi takes it in C too. which scripts test keyboard.ctrl() and keyboard.shift() and name the letter M
+echo
+both_files=$(grep -rlE 'keyboard\.ctrl[[:space:]]*\(' --include='*.lua' "$dir" 2> /dev/null | xargs -r grep -lE 'keyboard\.shift[[:space:]]*\(' 2> /dev/null)
+nboth=0
+[ -n "$both_files" ] && nboth=$(printf '%s\n' "$both_files" | wc -l)
+shits=""
+for f in $both_files; do
+    h=$(grep -nE "[\"'][mM][\"']" "$f" 2> /dev/null | sed "s|^|$f:|")
+    [ -n "$h" ] && shits="$shits$h"$'\n'
+done
+sfiles=0
+[ -n "$shits" ] && sfiles=$(printf '%s' "$shits" | cut -d: -f1 | sort -u | wc -l)
+if [ "$sfiles" = 0 ]; then
+    echo "Ctrl+Shift+M: $nboth script file(s) test both keyboard.ctrl() and keyboard.shift(); none of them name the letter M"
+    src=0
+else
+    echo "Ctrl+Shift+M: $nboth script file(s) test both keyboard.ctrl() and keyboard.shift(); $sfiles of them name the letter M:"
+    printf '%s' "$shits" | sed "s|^$dir/||" | sed 's/^/   /' | head -40
+    src=2
+fi
 # the arc keys (docs/port/arc-plan.md 5.3): 5 6 T Y G H B N turn the encoders of the virtual arc. in the norns window they are taken only while no script reads the keyboard, so a script that does keeps them; only the
 # arc window takes them for itself. which scripts that READ the keyboard (they set keyboard.code or keyboard.char) name one of them, as keyboard.code gets "5" or "T" and keyboard.char gets "h" or "t"
 echo
@@ -84,6 +105,11 @@ if [ $mrc = 0 ]; then
     echo "RESULT no script combines keyboard.ctrl with the letter M: Ctrl+M (mute) takes nothing"
 else
     echo "RESULT Ctrl+M (mute) may be read by the script(s) above: Verdandi takes Ctrl+M for mute before a script sees it (the owner can choose Ctrl+Shift+M instead)"
+fi
+if [ $src = 0 ]; then
+    echo "RESULT no script combines keyboard.ctrl and keyboard.shift with the letter M: Ctrl+Shift+M (MIDI actions on/off) takes nothing"
+else
+    echo "RESULT Ctrl+Shift+M (MIDI actions on/off) may be read by the script(s) above: Verdandi takes it before a script sees it (another key can be chosen)"
 fi
 if [ $arc_rc = 0 ]; then
     echo "RESULT arc keys: no script reads them: nothing is given up"

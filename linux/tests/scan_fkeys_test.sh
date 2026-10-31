@@ -75,6 +75,32 @@ has "Ctrl+M: 2 script file(s) test keyboard.ctrl(); 1 of them name the letter M:
 rm -f "$D/four/four.lua"
 OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
 has "Ctrl+M: 1 script file(s) test keyboard.ctrl(); none of them name the letter M" && has "RESULT no script combines keyboard.ctrl with the letter M: Ctrl+M (mute) takes nothing" && ok "no script names M with ctrl: Ctrl+M takes nothing from anyone" || bad "Ctrl+M none: $OUT"
+# Ctrl+Shift+M (the MIDI actions on and off, docs/port/midi-actions-plan.md): scripts that test keyboard.ctrl() AND keyboard.shift() and name the letter M
+mkdir -p "$D/eight" "$D/nine" "$D/ten"
+cat > "$D/eight/eight.lua" <<'L'
+function keyboard.code(c, v)
+  if keyboard.ctrl() and keyboard.shift() and c == "M" and v == 1 then both() end
+end
+L
+cat > "$D/nine/nine.lua" <<'L'
+function keyboard.code(c, v)
+  if keyboard.ctrl() and c == "M" then only_ctrl() end
+end
+L
+cat > "$D/ten/ten.lua" <<'L'
+function keyboard.code(c, v)
+  if keyboard.shift() and c == 'M' then only_shift() end
+end
+L
+before="$(cd "$T" && find . -type f -exec md5sum {} + | sort)"
+OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
+has "Ctrl+Shift+M: 1 script file(s) test both keyboard.ctrl() and keyboard.shift(); 1 of them name the letter M:" && has "eight/eight.lua:2:" && ok "Ctrl+Shift+M: found, with the file and line; ctrl alone and shift alone are not reported" || bad "Ctrl+Shift+M: $OUT"
+printf '%s\n' "$OUT" | grep -A3 "^Ctrl+Shift+M" | grep -q "nine/nine.lua\|ten/ten.lua" && bad "a script with only ctrl or only shift is not a Ctrl+Shift+M reader" || ok "Ctrl+Shift+M: nine.lua (ctrl) and ten.lua (shift) are not listed"
+has "RESULT Ctrl+Shift+M (MIDI actions on/off) may be read by the script(s) above" && ok "the Ctrl+Shift+M result sentence names the choice" || bad "Ctrl+Shift+M result"
+[ "$(cd "$T" && find . -type f -exec md5sum {} + | sort)" = "$before" ] && ok "Ctrl+Shift+M scan changed nothing" || bad "files changed by the Ctrl+Shift+M scan"
+rm -f "$D/eight/eight.lua"
+OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
+has "Ctrl+Shift+M: 0 script file(s) test both keyboard.ctrl() and keyboard.shift(); none of them name the letter M" && has "RESULT no script combines keyboard.ctrl and keyboard.shift with the letter M: Ctrl+Shift+M (MIDI actions on/off) takes nothing" && ok "no script names Ctrl+Shift+M: it takes nothing from anyone" || bad "Ctrl+Shift+M none: $OUT"
 "$REPO/linux/scan-fkeys.sh" "$T/missing" > /dev/null 2>&1 && bad "a missing folder is an error" || ok "a missing folder is an error"
 [ $FAIL = 0 ] && echo "scan_fkeys_test: all passed"
 exit $FAIL
