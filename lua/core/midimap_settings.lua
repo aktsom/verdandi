@@ -4,6 +4,8 @@
 --   preset=PUSH 2        the name of the preset in use (a label: the mappings below are what counts), CUSTOM when none
 --   on_clash=params      params (default): the params MAP gets a CC that both want; both: both react
 --   e1.type=cc e1.num=71 e1.dev=ANY e1.ch=0 e1.mode=abs e1.sens=5     one control: e1 e2 e3 (encoders) and k1 k2 k3 (keys; type cc or note, k1.threshold=63 instead of mode and sens)
+--   a1.type=cc a1.num=76 a1.dev=ANY a1.ch=0 a1.mode=relob a1.gain=8 a1.accel=off     the four encoders of the virtual arc (a1 to a4: a CC only; gain 1 to 64 ticks per unit; accel off, low, high; docs/port/arc-plan.md)
+--   arc_keys=1 arc_keys_accel=0     the keys 5/6 T/Y G/H B/N in the norns window, and the ramp of a held arc key
 --      dev: ANY or a device name (core/midimap_value.lua name_matches: `mio` is every port of the mio, `mio 2` that port); ch: 0 = any, 1 to 16
 -- unknown keys are ignored with a log line (and kept when the file is written again), missing keys take their defaults, a damaged value falls back to its own default with a log line.
 -- presets: built in (NONE, PUSH 2 (unverified), GENERIC REL 2S) and the owner's own, one small file each in <norns home>/midimap-presets/<slug>.midimap
@@ -18,6 +20,9 @@ M.DIR = "/home/we/midimap-presets/"
 M.log = function(s) print("midimap.conf: " .. s) end
 
 M.IDS = {"e1", "e2", "e3", "k1", "k2", "k3"}
+M.ARC_IDS = {"a1", "a2", "a3", "a4"} -- the four encoders of the virtual arc (docs/port/arc-plan.md)
+M.ALL_IDS = {"e1", "e2", "e3", "k1", "k2", "k3", "a1", "a2", "a3", "a4"}
+M.ACCELS = {"off", "low", "high"}
 M.MODES = {"abs", "rel2c", "relsm", "relob"}
 M.CLASH = {"params", "both"}
 M.MAX_PRESETS = 64 -- of his own
@@ -28,15 +33,17 @@ M.MAX_PRESET_FILE = 2048
 
 local function is_enc(id) return id:sub(1, 1) == "e" end
 local function is_key(id) return id:sub(1, 1) == "k" end
+local function is_arc(id) return id:sub(1, 1) == "a" end
 
 local function new_ctl(id)
   if is_enc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", sens = 5} end
+  if is_arc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", gain = 8, accel = "off"} end
   return {type = "none", dev = "ANY", ch = 0, threshold = 63}
 end
 
 local function defaults()
-  local st = {preset = "NONE", on_clash = "params", ctl = {}, extra = {}}
-  for _, id in ipairs(M.IDS) do st.ctl[id] = new_ctl(id) end
+  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, ctl = {}, extra = {}}
+  for _, id in ipairs(M.ALL_IDS) do st.ctl[id] = new_ctl(id) end
   return st
 end
 
@@ -68,6 +75,7 @@ local function check_field(id, field, v)
     if v == "none" or v == "cc" then return v end
     if v == "note" then
       if is_enc(id) then return nil, "a note cannot turn a knob" end
+      if is_arc(id) then return nil, "a note cannot turn an arc encoder" end
       return v
     end
     return nil, "none, cc or note"
@@ -82,7 +90,7 @@ local function check_field(id, field, v)
     if n == nil or n < 0 or n > 16 then return nil, "0 (any) to 16" end
     return n
   elseif field == "mode" then
-    if not is_enc(id) then return nil, "only encoders have a mode" end
+    if not (is_enc(id) or is_arc(id)) then return nil, "only encoders have a mode" end
     if in_list(M.MODES, v) then return v end
     return nil, "abs, rel2c, relsm or relob"
   elseif field == "sens" then
@@ -90,6 +98,15 @@ local function check_field(id, field, v)
     local n = whole(v)
     if n == nil or n < 1 or n > 9 then return nil, "1 to 9" end
     return n
+  elseif field == "gain" then
+    if not is_arc(id) then return nil, "only arc encoders have a gain" end
+    local n = whole(v)
+    if n == nil or n < 1 or n > 64 then return nil, "1 to 64" end
+    return n
+  elseif field == "accel" then
+    if not is_arc(id) then return nil, "only arc encoders have an acceleration" end
+    if in_list(M.ACCELS, v) then return v end
+    return nil, "off, low or high"
   elseif field == "threshold" then
     if not is_key(id) then return nil, "only keys have a threshold" end
     local n = whole(v)
@@ -144,7 +161,7 @@ function M.slug(name) return (name:lower():gsub(" ", "-")) end
 -- ---------------------------------------------------------------- reading
 --- put the fields found in a file into a state. `raw[id][field] = {value, line}`; every bad value is logged and the field keeps its default
 local function finish_ctl(id, fields, c, log_prefix)
-  for _, field in ipairs({"type", "num", "dev", "ch", "mode", "sens", "threshold"}) do
+  for _, field in ipairs({"type", "num", "dev", "ch", "mode", "sens", "threshold", "gain", "accel"}) do
     local f = fields[field]
     if f ~= nil then
       local v, why = check_field(id, field, f)
@@ -198,13 +215,17 @@ function M.load()
   local fields = {}
   each_line(text, function(k, v, line)
     if k == "verdandi-midimap" then return end
-    local id, field = k:match("^([ek][123])%.(%w+)$")
+    local id, field = k:match("^([eka]%d)%.(%w+)$")
+    if id and M.state.ctl[id] == nil then id = nil end -- a5 and the like are unknown keys
     if k == "preset" then
       if v ~= "" then st.preset = v else M.log("preset= is empty, using NONE") end
     elseif k == "on_clash" then
       if in_list(M.CLASH, v) then st.on_clash = v
       else M.log(string.format("on_clash=%s is not params or both, using params", v:sub(1, 40))) end
-    elseif id and in_list({"type", "num", "dev", "ch", "mode", "sens", "threshold"}, field) then
+    elseif k == "arc_keys" or k == "arc_keys_accel" then
+      if v == "1" or v == "0" then st[k] = v == "1"
+      else M.log(string.format("%s=%s is not 0 or 1, using %s", k, v:sub(1, 40), k == "arc_keys" and "1" or "0")) end
+    elseif id and in_list({"type", "num", "dev", "ch", "mode", "sens", "threshold", "gain", "accel"}, field) then
       fields[id] = fields[id] or {}
       fields[id][field] = v:match("^%s*(.-)%s*$")
     else
@@ -212,7 +233,7 @@ function M.load()
       table.insert(st.extra, line)
     end
   end)
-  for _, id in ipairs(M.IDS) do finish_ctl(id, fields[id] or {}, st.ctl[id], "") end
+  for _, id in ipairs(M.ALL_IDS) do finish_ctl(id, fields[id] or {}, st.ctl[id], "") end
   if st.preset ~= "CUSTOM" and M.preset_by_name(st.preset) == nil then
     M.log("preset=" .. st.preset .. ": there is no such preset, using CUSTOM (the mappings stay)")
     st.preset = "CUSTOM"
@@ -232,6 +253,10 @@ local function write_ctl(f, id, c, with_device)
   if is_enc(id) then
     f:write(id .. ".mode=" .. c.mode .. "\n")
     f:write(id .. ".sens=" .. c.sens .. "\n")
+  elseif is_arc(id) then
+    f:write(id .. ".mode=" .. c.mode .. "\n")
+    f:write(id .. ".gain=" .. c.gain .. "\n")
+    f:write(id .. ".accel=" .. c.accel .. "\n")
   else
     f:write(id .. ".threshold=" .. c.threshold .. "\n")
   end
@@ -250,7 +275,9 @@ function M.save()
   f:write("verdandi-midimap=1\n")
   f:write("preset=" .. st.preset .. "\n")
   f:write("on_clash=" .. st.on_clash .. "\n")
-  for _, id in ipairs(M.IDS) do write_ctl(f, id, st.ctl[id], true) end
+  f:write("arc_keys=" .. (st.arc_keys and "1" or "0") .. "\n")
+  f:write("arc_keys_accel=" .. (st.arc_keys_accel and "1" or "0") .. "\n")
+  for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, st.ctl[id], true) end
   for _, line in ipairs(st.extra or {}) do f:write(line .. "\n") end
   f:close()
   if not os.rename(tmp, M.PATH) then
@@ -300,6 +327,20 @@ function M.clear(id)
   return true
 end
 
+function M.set_arc_keys(v)
+  if type(v) ~= "boolean" then return false, "on or off" end
+  M.state.arc_keys = v
+  M.save()
+  return true
+end
+
+function M.set_arc_keys_accel(v)
+  if type(v) ~= "boolean" then return false, "on or off" end
+  M.state.arc_keys_accel = v
+  M.save()
+  return true
+end
+
 function M.set_clash(v)
   if not in_list(M.CLASH, v) then return false, "params or both" end
   M.state.on_clash = v
@@ -325,9 +366,10 @@ local function read_preset_file(path, file)
   local p = {builtin = false, ctl = {}}
   local fields = {}
   each_line(text, function(k, v)
-    local id, field = k:match("^([ek][123])%.(%w+)$")
+    local id, field = k:match("^([eka]%d)%.(%w+)$")
+    if id and not in_list(M.ALL_IDS, id) then id = nil end
     if k == "name" then p.name = v
-    elseif id and in_list({"type", "num", "mode", "sens", "threshold"}, field) then
+    elseif id and in_list({"type", "num", "mode", "sens", "threshold", "gain", "accel"}, field) then
       fields[id] = fields[id] or {}
       fields[id][field] = v:match("^%s*(.-)%s*$")
     end -- a dev or ch line, and anything else, is ignored: a preset names no device
@@ -339,6 +381,14 @@ local function read_preset_file(path, file)
   for _, id in ipairs(M.IDS) do
     p.ctl[id] = new_ctl(id)
     finish_ctl(id, fields[id] or {}, p.ctl[id], "preset " .. file .. ": ")
+  end
+  -- the arc encoders only if the file has any of their keys (a preset from before them leaves them alone)
+  for _, id in ipairs(M.ARC_IDS) do
+    if fields[id] ~= nil then
+      p.arcs = p.arcs or {}
+      p.arcs[id] = new_ctl(id)
+      finish_ctl(id, fields[id], p.arcs[id], "preset " .. file .. ": ")
+    end
   end
   p.label = p.name
   p.file = M.DIR .. file
@@ -397,6 +447,14 @@ function M.select_preset(name)
     c.dev, c.ch = "ANY", 0
     M.state.ctl[id] = c
   end
+  if p.arcs ~= nil then
+    for _, id in ipairs(M.ARC_IDS) do
+      local c = new_ctl(id)
+      for k, v in pairs(p.arcs[id] or {}) do c[k] = v end
+      c.dev, c.ch = "ANY", 0
+      M.state.ctl[id] = c
+    end
+  end
   M.state.preset = p.name
   M.save()
   return true
@@ -416,7 +474,7 @@ function M.save_preset(name, overwrite)
   local f = io.open(tmp, "w")
   if f == nil then return false, "cannot write " .. file end
   f:write("verdandi-midimap-preset=1\n", "name=" .. n .. "\n")
-  for _, id in ipairs(M.IDS) do write_ctl(f, id, M.state.ctl[id], false) end
+  for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, M.state.ctl[id], false) end
   f:close()
   if not os.rename(tmp, file) then return false, "cannot write " .. file end
   M.reload_presets()

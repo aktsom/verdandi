@@ -174,6 +174,14 @@ static void draw_knob(cairo_t *cr, int n, double turns, int down) {
     cairo_stroke(cr);
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+static int lit_ring = -1;
+
+void varc_skin_set_lit(int ring) {
+    lit_ring = ring;
+}
+#endif
+
 void varc_skin_draw(cairo_t *cr, const varc_geom_t *g, int w, int h,
                     const uint8_t ring[VARC_RINGS][VARC_LEDS], int intensity, const double angle[VARC_RINGS],
                     int pressed) {
@@ -191,5 +199,14 @@ void varc_skin_draw(cairo_t *cr, const varc_geom_t *g, int w, int h,
     for (int n = 0; n < g->rings; n++) {
         draw_knob(cr, n, angle[n], (pressed >> n) & 1);
     }
+#ifdef NORNS_LINUX_DESKTOP
+    if (lit_ring >= 0 && lit_ring < g->rings) {
+        // the ring being learned: a bright circle round the knob and its LEDs
+        cairo_set_source_rgb(cr, 1.0, 0.85, 0.2);
+        cairo_set_line_width(cr, 5);
+        cairo_arc(cr, ring_x(lit_ring), ring_y(), OUTER_R + 4, 0, 2 * M_PI);
+        cairo_stroke(cr);
+    }
+#endif
     cairo_restore(cr);
 }

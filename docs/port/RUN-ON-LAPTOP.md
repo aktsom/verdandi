@@ -345,3 +345,12 @@ SYSTEM > MIDI MAP (below THEME) lets a MIDI controller turn E1-E3 and press K1-K
 5. The files are `~/verdandi-home/midimap.conf` and `midimap-presets/`; clean up never touches them.
 
 Network (RTP-MIDI) controllers arrive through JACK MIDI (`Verdandi:midi_in`, "Verdandi JACK in", all sources one device): use ANY. What to check on your hardware is in `HARDWARE-CHECKLIST.md`, section "MIDI MAP".
+
+## The virtual arc from MIDI and the keyboard (docs/port/arc-plan.md)
+
+SYSTEM > MIDI MAP now has **A1 to A4** (the four encoders of the *virtual* arc, F8), a **WATCH** row and **ARC KEYS**. With your Beatstep Pro through the mio:
+1. **Find out what the Pro sends.** SYSTEM > MIDI MAP > WATCH: turn one encoder one click right, one click left, a few times. The screen shows the device (`MIO`), the channel, the CC, the last six values and a verdict (`65 63 65 63` is REL OFS, `1 127 1 127` is REL 2S, `1 65 1 65` is REL SIGN). Write down the CC numbers of the encoders you want.
+2. **Split the unit.** Your E1-E3 encoders keep their CCs. Open the virtual arc (F8). In MIDI MAP choose LEARN (K3), **click ring 1 in the arc window**, turn another encoder of the Pro (the one for A1), turn it both ways so that norns can suggest the format. Repeat for A2 to A4 with other encoders. If you turn one that E1-E3 already use, the page asks "CC 71 IS E2. MOVE IT TO A1?": K3 moves it, K2 leaves everything as it was.
+3. **Feel.** A1's view has GAIN (default 8 ticks a unit), ACCEL (off) and **ONE TURN**: K3, turn the encoder once round, K3: GAIN is set so that one turn of the encoder is one turn of the ring. Then try a script that uses the arc.
+4. **Keyboard.** With the arc window in front, or with the norns window in front while a script runs: `5` `6` = ring 1 left/right, `T` `Y` = 2, `G` `H` = 3, `B` `N` = 4 (one press = one LED, Shift = a quarter, holding repeats). Run `~/Verdandi/norns/linux/scan-fkeys.sh` (or `verdandi scan-fkeys`) first to see which of your scripts read those keys; ARC KEYS (OFF) gives them back in the norns window.
+5. The window sizes: F6, F7 and F8 no longer move or resize the norns window (they go beside or below it), and F7 closes the keys window again.

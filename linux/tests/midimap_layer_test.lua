@@ -36,7 +36,8 @@ _norns = {midi = {},
   enc = function(n, d) out[#out + 1] = "enc:" .. n .. ":" .. d end,
   toast = function(t) out[#out + 1] = "toast:" .. t end,
   midimap_arm = function(m) out[#out + 1] = "arm:" .. m end,
-  midimap_show = function(s, n) out[#out + 1] = "ring:" .. s .. ":" .. n end}
+  midimap_show = function(s, n) out[#out + 1] = "ring:" .. s .. ":" .. n end,
+  arc_turn = function(n, ticks) out[#out + 1] = "arc:" .. n .. ":" .. ticks; return _G.ARC_OPEN ~= false end}
 local function acts() local r = {} for _, o in ipairs(out) do if o:match("^key:") or o:match("^enc:") then r[#r + 1] = o end end return table.concat(r, " ") end
 params = {lookup = {}, lookup_param = function(self, id) return {name = "Param " .. tostring(id)} end}
 _menu = {rebuild_params = function() end, page = "MIDIMAP", mode = true, redraw = function() end}
@@ -59,7 +60,7 @@ local function send(id, bytes) _norns.midi.event(id, bytes) end
 local function cc(id, ch, num, val) send(id, {0xB0 + ch - 1, num, val}) end
 local function note_on(id, ch, n, vel) send(id, {0x90 + ch - 1, n, vel}) end
 local function note_off(id, ch, n) send(id, {0x80 + ch - 1, n, 0}) end
-local function setup(fn) S.load(); S.select_preset("NONE"); S.set_clash("params"); mm.load(); reset_out(); T = T + 100; if fn then fn() end; mm.changed() end
+local function setup(fn) S.load(); S.select_preset("NONE"); S.set_clash("params"); for _, a in ipairs(S.ARC_IDS) do S.clear(a) end; S.set_arc_keys(true); S.set_arc_keys_accel(false); mm.load(); reset_out(); T = T + 100; if fn then fn() end; mm.changed() end
 
 -- ---- nothing mapped: nothing happens
 setup()
@@ -319,6 +320,142 @@ check(mm.learn.warn and mm.learn.warn:find("PARAMS MAP", 1, true), "learn: a cla
 pmap.clear()
 -- clearing
 setup(function() S.set("e2", "num", 71) end); mm.clear("e2"); eq(S.state.ctl.e2.type, "none", "clear through the layer")
+
+-- ---------------------------------------------------------------- the arc encoders A1 to A4 (docs/port/arc-plan.md)
+local function arcs() local r = {} for _, o in ipairs(out) do if o:match("^arc:") then r[#r + 1] = o end end return table.concat(r, " ") end
+ARC_OPEN = true
+setup(function() S.set("a1", "num", 76); S.set("a1", "mode", "relob"); S.set("a1", "dev", "mio") end)
+cc(2, 1, 76, 65); cc(2, 1, 76, 63); cc(2, 1, 76, 66)
+eq(arcs(), "arc:1:8 arc:1:-8 arc:1:16", "an offset-binary CC turns the arc: 8 ticks a unit")
+reset_out(); cc(2, 1, 76, 64); eq(arcs(), "", "a relative value of 0 (64) gives no ticks")
+reset_out(); cc(5, 1, 76, 65); eq(arcs(), "", "another device does not")
+setup(function() S.set("a2", "num", 30); S.set("a2", "mode", "rel2c"); S.set("a2", "gain", 1) end)
+cc(2, 1, 30, 1); cc(2, 1, 30, 127); cc(2, 1, 30, 0); cc(2, 1, 30, 64)
+eq(arcs(), "arc:2:1 arc:2:-1", "gain 1: a nudge is one tick; 0 and 64 are nothing (a release never steps)")
+setup(function() S.set("a3", "num", 31); S.set("a3", "mode", "abs"); S.set("a3", "gain", 8) end)
+cc(2, 1, 31, 50); eq(arcs(), "", "an absolute arc encoder: the first message is a baseline")
+cc(2, 1, 31, 53); cc(2, 1, 31, 53); cc(2, 1, 31, 52)
+eq(arcs(), "arc:3:24 arc:3:-8", "absolute: +3 values = 24 ticks, the same value again nothing, -1 = -8")
+reset_out(); cc(2, 1, 31, 120); eq(arcs(), "", "absolute: a jump of more than 40 is no turn")
+reset_out(); cc(5, 1, 31, 10); cc(5, 1, 31, 12); eq(arcs(), "arc:3:16", "absolute: another source starts a baseline (+2 = 16)")
+-- acceleration
+setup(function() S.set("a4", "num", 32); S.set("a4", "mode", "rel2c"); S.set("a4", "gain", 8); S.set("a4", "accel", "high") end)
+cc(2, 1, 32, 5); eq(arcs(), "arc:4:120", "accel high: five units at gain 8 = 120")
+-- the window is closed: nothing happens and it is said once
+setup(function() S.set("a1", "num", 40); S.set("a1", "mode", "rel2c") end)
+ARC_OPEN = false
+cc(2, 1, 40, 1); cc(2, 1, 40, 1); cc(2, 1, 40, 127)
+local told = 0
+for _, o in ipairs(out) do if o:match("^toast:.*ARC") then told = told + 1 end end
+eq(told, 1, "the arc window is closed: one toast, however many messages")
+ARC_OPEN = true; reset_out(); cc(2, 1, 40, 1); eq(arcs(), "arc:1:8", "the window opened: the next message turns it")
+ARC_OPEN = false; reset_out(); cc(2, 1, 40, 1)
+told = 0
+for _, o in ipairs(out) do if o:match("^toast:.*ARC") then told = told + 1 end end
+eq(told, 1, "closed again: said once more")
+ARC_OPEN = true
+local real_arc_turn = _norns.arc_turn
+_norns.arc_turn = nil
+reset_out(); cc(2, 1, 40, 1); eq(#out, 0, "a build without the arc call: nothing, no error")
+_norns.arc_turn = real_arc_turn
+-- the params MAP wins for an arc encoder too
+setup(function() S.set("a1", "num", 76); S.set("a1", "mode", "relob"); S.set("a1", "dev", "mio") end)
+pm("cutoff", port_of_mio, 1, 76); reset_out(); cc(2, 1, 76, 65); eq(arcs(), "", "a CC in the params MAP: the arc stands back")
+local cl = mm.clashes(); eq(#cl, 1, "the clash check covers the arc encoders"); eq(cl[1].id, "a1", "A1")
+S.set_clash("both"); reset_out(); cc(2, 1, 76, 65); eq(arcs(), "arc:1:8", "with both, the arc turns too"); S.set_clash("params"); pmap.clear()
+-- the iii grid never turns an arc encoder with ANY
+setup(function() S.set("a1", "num", 12); S.set("a1", "mode", "rel2c") end)
+cc(3, 1, 12, 1); eq(arcs(), "", "ANY skips the iii grid for an arc encoder")
+-- scripts still receive everything with the arc mapped
+midi.devices[2].event = function(data) seen_dev[#seen_dev + 1] = table.concat(data, ",") end
+seen_dev = {}; cc(2, 1, 12, 1); eq(#seen_dev, 1, "the script's handler still gets the message that turned the arc"); midi.devices[2].event = nil
+-- two controls on one CC: the overlaps
+setup(function() S.set("e2", "num", 71); S.set("a1", "num", 71) end)
+local ov = mm.overlaps()
+eq(ov.e2, "a1", "overlap: E2 and A1 share CC 71 (any device, any channel)"); eq(ov.a1, "e2", "overlap: and the other way")
+setup(function() S.set("e2", "num", 71); S.set("e2", "dev", "mio"); S.set("a1", "num", 71); S.set("a1", "dev", "Push 2") end)
+eq(next(mm.overlaps()), nil, "no overlap on different devices")
+setup(function() S.set("e2", "num", 71); S.set("e2", "ch", 1); S.set("a1", "num", 71); S.set("a1", "ch", 2) end)
+eq(next(mm.overlaps()), nil, "no overlap on different channels")
+setup(function() S.set("e2", "num", 71); S.set("e2", "dev", "mio"); S.set("a1", "num", 71); S.set("a1", "dev", "mio 2") end)
+check(mm.overlaps().e2 == "a1", "overlap: mio and its port mio 2")
+setup(function() S.set("k1", "type", "note"); S.set("k1", "num", 71); S.set("a1", "num", 71) end)
+eq(next(mm.overlaps()), nil, "a note and a CC with the same number are not the same message")
+setup(function() S.set("e1", "num", 71); S.set("e1", "dev", "mio") end)
+eq(mm.find_overlap("a1", "cc", 71, "ANY", 0), "e1", "find_overlap: a new CC that another control uses"); eq(mm.find_overlap("e1", "cc", 71, "ANY", 0), nil, "a control does not overlap itself")
+eq(mm.find_overlap("a1", "cc", 72, "ANY", 0), nil, "another number is free"); eq(mm.find_overlap("a1", "note", 71, "ANY", 0), nil, "a note is another message")
+-- the question at assignment (learn): yes moves the CC, no leaves everything
+setup(function() S.set("e2", "num", 71); S.set("e2", "mode", "rel2c") end)
+mm.start_listen("a1"); cc(2, 1, 71, 1)
+eq(learning(), "ask", "learning a CC that E2 uses: the layer asks"); check(mm.ask_text():find("CC 71", 1, true) and mm.ask_text():find("E2", 1, true) and mm.ask_text():find("A1", 1, true), "the question names the CC and both controls: " .. tostring(mm.ask_text()))
+eq(S.state.ctl.a1.type, "none", "nothing is assigned while asking"); eq(S.state.ctl.e2.num, 71, "and E2 keeps its CC")
+reset_out(); cc(2, 1, 71, 1); eq(acts() .. arcs(), "", "nothing acts while the question is open")
+mm.answer(true)
+eq(S.state.ctl.e2.type, "none", "yes: E2 is cleared"); eq(S.state.ctl.a1.num, 71, "yes: A1 has the CC"); eq(learning(), "confirm", "yes: the learn goes on to the confirmation")
+setup(function() S.set("e2", "num", 71) end)
+mm.start_listen("a1"); cc(2, 1, 71, 1); mm.answer(false)
+eq(learning(), "idle", "no: the learn is over"); eq(S.state.ctl.e2.num, 71, "no: E2 keeps the CC"); eq(S.state.ctl.a1.type, "none", "no: A1 has nothing"); check(mm.learn.msg ~= nil, "no: a message")
+setup(function() S.set("e2", "num", 71) end)
+mm.start_listen("a1"); cc(2, 1, 71, 1); T = T + 16; mm.tick(); eq(learning(), "idle", "the question times out like a learn"); eq(S.state.ctl.e2.num, 71, "and changes nothing")
+setup(function() S.set("e2", "num", 71) end)
+mm.start_listen("a1"); cc(2, 1, 71, 1); mm.cancel(); eq(learning(), "idle", "K2 / cancel answers no")
+-- a key and an encoder learn the same way
+setup(function() S.set("a2", "num", 85) end)
+mm.start_listen("k1"); cc(2, 1, 85, 127); eq(learning(), "ask", "a key learning a CC an arc encoder uses asks too"); mm.answer(true); eq(S.state.ctl.a2.type, "none", "and moves it"); eq(S.state.ctl.k1.num, 85, "to the key")
+-- a device by name: a different device does not overlap, so no question
+setup(function() S.set("e2", "num", 71); S.set("e2", "dev", "Push 2") end)
+mm.start_listen("a1"); cc(2, 1, 71, 1)
+eq(learning(), "ask", "learn assigns ANY, which overlaps a named device: asks")
+mm.cancel()
+-- typed numbers use the same check from the page: find_overlap with the control's own device and channel
+setup(function() S.set("e2", "num", 71); S.set("e2", "dev", "mio"); S.set("a1", "dev", "Push 2") end)
+eq(mm.find_overlap("a1", "cc", 71, "Push 2", 0), nil, "a typed CC on another device does not overlap")
+eq(mm.find_overlap("a1", "cc", 71, "mio", 0), "e2", "on the same device it does")
+-- learning an arc encoder: pick, listen, a note refused, the suggestion
+setup()
+mm.start_pick(); mm.pick("a3"); eq(mm.learn.target, "a3", "pick a3"); check(table.concat(out, " "):find("ring:2:9", 1, true), "the window rings the control 9 (A3)")
+note_on(2, 1, 40, 100); eq(learning(), "listen", "a note does not end the learn of an arc encoder"); check(mm.learn.msg:find("CC", 1, true), "it says to use a CC")
+reset_out(); cc(2, 1, 77, 65); eq(arcs(), "", "the learning message turned nothing")
+eq(S.state.ctl.a3.num, 77, "the CC is taken"); eq(learning(), "confirm", "and the suggestion is asked for")
+cc(2, 1, 77, 63); cc(2, 1, 77, 65); cc(2, 1, 77, 63); cc(2, 1, 77, 65); cc(2, 1, 77, 65)
+eq(learning(), "idle", "six messages end it"); eq(S.state.ctl.a3.mode, "relob", "offset binary is suggested"); check(mm.guess.a3, "marked as a guess")
+-- WATCH: the layer records the CC messages while the view is open, and acts on nothing
+setup(function() S.set("e2", "num", 71); S.set("e2", "mode", "rel2c"); S.set("a1", "num", 72) end)
+mm.watch_start()
+reset_out(); cc(2, 1, 71, 1); cc(2, 1, 72, 65); eq(acts() .. arcs(), "", "while WATCH is open nothing acts")
+local wv = mm.watch_view(); eq(wv.cc, 72, "watch: the last CC"); eq(wv.dev, "mio", "watch: the device"); eq(wv.ch, 1, "watch: the channel"); eq(wv.values[1], 65, "watch: the value")
+cc(2, 3, 72, 63); wv = mm.watch_view(); eq(wv.ch, 3, "watch: another channel is its own source")
+note_on(2, 1, 60, 100); send(2, {0xF8}); wv = mm.watch_view(); eq(wv.cc, 72, "watch: notes and clock are not CCs")
+cc(3, 1, 9, 5); wv = mm.watch_view(); eq(wv.dev, "iii grid", "watch: every device is shown, the iii grid too (it is a monitor)")
+mm.watch_stop(); reset_out(); cc(2, 1, 71, 1); eq(acts(), "enc:2:1", "after WATCH everything acts again")
+mm.watch_start(); eq(mm.watch_view().cc, nil, "watch: a new start is empty")
+cc(2, 1, 5, 1); mm.watch_stop(); cc(2, 1, 6, 1); mm.watch_start(); eq(mm.watch_view().cc, nil, "watch: nothing is recorded while it is closed"); mm.watch_stop()
+-- ONE TURN: the calibration
+setup(function() S.set("a1", "num", 76); S.set("a1", "mode", "rel2c"); S.set("a1", "gain", 8) end)
+mm.calib_start("a1")
+reset_out(); for _ = 1, 16 do cc(2, 1, 76, 4) end
+eq(arcs(), "", "while calibrating the arc does not turn"); eq(mm.calib_units(), 64, "the units are counted (16 x 4)")
+for _ = 1, 16 do cc(2, 1, 76, 124) end
+eq(mm.calib_units(), 0, "and go both ways")
+for _ = 1, 32 do cc(2, 1, 76, 127 - 0) end
+eq(mm.calib_units(), -32, "a turn the other way counts down")
+mm.calib_cancel(); eq(S.state.ctl.a1.gain, 8, "cancel leaves the gain")
+mm.calib_start("a1"); for _ = 1, 64 do cc(2, 1, 76, 2) end
+local g = mm.calib_finish(); eq(g, 8, "128 units a turn: gain 8"); eq(S.state.ctl.a1.gain, 8, "stored")
+mm.calib_start("a1"); for _ = 1, 100 do cc(2, 1, 76, 127) end
+g = mm.calib_finish(); eq(g, 10, "100 units the other way: gain 10 (the size of the turn, not its direction)"); eq(S.state.ctl.a1.gain, 10, "stored")
+mm.calib_start("a1"); g = mm.calib_finish(); eq(g, nil, "no units: no gain"); eq(S.state.ctl.a1.gain, 10, "unchanged")
+mm.calib_start("a1"); mm.leave(); eq(mm.calib_units(), nil, "leaving the page ends the calibration")
+setup(function() S.set("a1", "num", 76); S.set("a1", "mode", "abs") end)
+mm.calib_start("a1"); for v = 10, 74, 1 do cc(2, 1, 76, v) end
+g = mm.calib_finish(); eq(g, 16, "an absolute knob swept 64 values: gain 16")
+-- a mapping change or a device removal while calibrating ends it
+setup(function() S.set("a1", "num", 76); S.set("a1", "mode", "rel2c") end)
+mm.calib_start("a1"); mm.device_removed(midi.devices[2]); eq(mm.calib_units(), nil, "a device that goes ends the calibration")
+-- the arc encoders reset their states when the mapping changes (nothing held, but the carry)
+setup(function() S.set("a1", "num", 76); S.set("a1", "mode", "rel2c"); S.set("a1", "accel", "high") end)
+cc(2, 1, 76, 5); S.set("a1", "gain", 2); mm.changed(); reset_out(); cc(2, 1, 76, 2); eq(arcs(), "arc:1:6", "a changed mapping: 2 units at gain 2 with the high factor = 6")
+ARC_OPEN = true
 -- the layer is inert without the platform switch
 check(mm.enabled == true, "enabled on the desktop build")
 

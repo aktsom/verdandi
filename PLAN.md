@@ -77,5 +77,5 @@ Approach note: `docs/port/linux-vst3.md` (written before any plug-in code). Work
 ## Phase 9: MIDI MAP, MIDI control of the on-screen keys and encoders (Linux desktop; BUILT, see `docs/port/midi-map-plan.md` section 9)
 Plan: `docs/port/midi-map-plan.md` (no code yet; one stand-in picture). A tap in `_norns.midi.event` that turns mapped CC / notes into E1-E3 and K1-K3 events; learn by clicking a control in the window; absolute and relative (two's complement, sign-magnitude, offset binary) encoders; `midimap.conf` and presets; a MIDI MAP page below THEME. The params MAP wins a clash; scripts always receive every message. Starts only when the owner says so; the open decisions are in section 8 of the plan.
 
-## Phase 10: the virtual arc from MIDI and the keyboard (Linux desktop; plan only)
+## Phase 10: the virtual arc from MIDI and the keyboard (Linux desktop; BUILT, see `docs/port/arc-plan.md` section 9)
 Plan: `docs/port/arc-plan.md` (no code yet; one stand-in picture): A1 to A4 in MIDI MAP (learn by clicking the ring, GAIN, ACCEL, calibration), the keys 5/6 T/Y G/H B/N, the Beatstep Pro split and a WATCH view. Starts only when the owner says so (decisions in section 8 of the plan).

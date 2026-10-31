@@ -3,7 +3,7 @@
 #   F9   detach the screen / bring it back        F11  fullscreen of the screen window        F12  (kept for a later "snap to a whole scale", hidden)
 #   Ctrl+M  mute (docs/port/box-style-plan.md): reported as the scripts that test keyboard.ctrl() and name the letter M
 # it only READS the .lua files of the folder (default: <norns home>/dust/code, the norns home as `verdandi` finds it: NORNS_HOME, or ~/Verdandi) and prints
-# every script that names one of those keys the way norns scripts do (keyboard.code gets "F9", "F11", "F12" as text), the lines it is on, and how many
+# (and the arc keys 5 6 T Y G H B N, see below) every script that names one of those keys the way norns scripts do (keyboard.code gets "F9", "F11", "F12" as text), the lines it is on, and how many
 # scripts read the keyboard at all. nothing is changed.
 set -u
 dir="${1:-}"
@@ -55,6 +55,25 @@ else
     printf '%s' "$mhits" | sed "s|^$dir/||" | sed 's/^/   /' | head -40
     mrc=2
 fi
+# the arc keys (docs/port/arc-plan.md 5.3): 5 6 T Y G H B N turn the encoders of the virtual arc. in the norns window they are taken only while no script reads the keyboard, so a script that does keeps them; only the
+# arc window takes them for itself. which scripts that READ the keyboard (they set keyboard.code or keyboard.char) name one of them, as keyboard.code gets "5" or "T" and keyboard.char gets "h" or "t"
+echo
+reader_files=$(grep -rlE 'keyboard\.(code|char)[[:space:]]*=|function[[:space:]]+keyboard\.(code|char)' --include='*.lua' "$dir" 2> /dev/null)
+ahits=""
+for f in $reader_files; do
+    h=$(grep -nE "[\"'](5|6|T|Y|G|H|B|N|t|y|g|h|b|n)[\"']" "$f" 2> /dev/null | sed "s|^|$f:|")
+    [ -n "$h" ] && ahits="$ahits$h"$'\n'
+done
+afiles=0
+[ -n "$ahits" ] && afiles=$(printf '%s' "$ahits" | cut -d: -f1 | sort -u | wc -l)
+if [ "$afiles" = 0 ]; then
+    echo "Arc keys 5 6 T Y G H B N: no script that reads the keyboard names them"
+    arc_rc=0
+else
+    echo "Arc keys 5 6 T Y G H B N: $afiles script file(s) that read the keyboard name them:"
+    printf '%s' "$ahits" | sed "s|^$dir/||" | sed 's/^/   /' | head -40
+    arc_rc=2
+fi
 echo
 if [ $rc = 0 ]; then
     echo "RESULT none of your scripts name F9, F11 or F12: nothing is given up"
@@ -65,5 +84,10 @@ if [ $mrc = 0 ]; then
     echo "RESULT no script combines keyboard.ctrl with the letter M: Ctrl+M (mute) takes nothing"
 else
     echo "RESULT Ctrl+M (mute) may be read by the script(s) above: Verdandi takes Ctrl+M for mute before a script sees it (the owner can choose Ctrl+Shift+M instead)"
+fi
+if [ $arc_rc = 0 ]; then
+    echo "RESULT arc keys: no script reads them: nothing is given up"
+else
+    echo "RESULT arc keys: scripts above read some of them: in the norns window those keys stay the script's while it runs (nothing is taken from it); only the arc window takes them, and ARC KEYS in SYSTEM > MIDI MAP can turn the norns window's use off"
 fi
 exit 0

@@ -39,6 +39,7 @@
 #include <cairo.h>
 #ifdef NORNS_LINUX_DESKTOP
 #include "ui_look.h"
+#include "platform/linux/arc_keys.h"
 #include "platform/linux/extras_layout.h"
 #include "platform/linux/screen_window.h"
 #endif
@@ -189,6 +190,11 @@ static skin_state_t skin = {};
 static int midimap_armed = 0, midimap_state = 0, midimap_control = 0;
 static unsigned midimap_phase = 0;
 static volatile unsigned midimap_gen = 0;
+// the virtual arc (docs/port/arc-plan.md): open or not (read from any thread, written on the main thread), the ramp setting of the arc keys, the arc keys held in its window
+static volatile int arc_open_flag = 0;
+static volatile int arc_keys_ramp = 0;
+static int arc_key_down[8];
+static int arc_key_repeats[8];
 #endif
 #ifdef NORNS_LINUX_DESKTOP
 // what a click on the placeholder (the dark panel where the screen was while it is in its own window) answers: not a control of the box, only a click target
@@ -388,8 +394,8 @@ static void redraw(bool full) {
             skin_state_t lit = skin;
             if (midimap_state == 1) {
                 lit.hover = 1 + (int)(midimap_phase % 6);
-            } else if ((midimap_phase & 1) == 0) {
-                lit.hover = midimap_control;
+            } else if ((midimap_phase & 1) == 0 && midimap_control <= SKIN_E3) {
+                lit.hover = midimap_control; // (7 to 10 are the arc's rings, lit in its own window)
             }
             skin_draw_controls(cr, &geom, &lit);
         } else {
@@ -683,6 +689,18 @@ void sdl_bridge_toast(const char *text) {
 }
 
 #ifdef NORNS_LINUX_DESKTOP
+int sdl_bridge_arc_turn(int n, int ticks) {
+    if (!arc_open_flag) {
+        return 0;
+    }
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_ARC_TURN, n, ticks);
+    return 1;
+}
+
+void sdl_bridge_arc_keys_ramp(int ramp) {
+    arc_keys_ramp = ramp != 0;
+}
+
 void sdl_bridge_midimap_arm(int armed) {
     sdl_bridge_show_control(SDL_BRIDGE_SHOW_MIDIMAP_ARM, armed != 0, 0);
 }
@@ -1331,6 +1349,16 @@ static void arc_redraw(void) {
     uint8_t ring[VARC_RINGS][VARC_LEDS];
     int intensity;
     vgrid_rings(varc, ring, &intensity);
+#ifdef NORNS_LINUX_DESKTOP
+    // MIDI MAP learn: PICK lights the four rings in turn, LISTEN blinks the ring being learned (control 7 to 10)
+    if (midimap_state == 1) {
+        varc_skin_set_lit((int)(midimap_phase % ARC_RINGS));
+    } else if (midimap_state == 2 && midimap_control > SKIN_E3 && (midimap_phase & 1) == 0) {
+        varc_skin_set_lit(midimap_control - SKIN_E3 - 1);
+    } else {
+        varc_skin_set_lit(-1);
+    }
+#endif
     varc_skin_draw(cr, &arc_geom, arc_pane.w, arc_pane.h, ring, intensity, arc_turns, arc_pushed);
     pane_end(&arc_pane, cr);
 }
@@ -1344,6 +1372,10 @@ static void toggle_arc(void) {
         }
         unplug(varc);
         varc = NULL;
+#ifdef NORNS_LINUX_DESKTOP
+        arc_open_flag = 0;
+        memset(arc_key_down, 0, sizeof arc_key_down);
+#endif
         pane_close(&arc_pane);
         arc_pushed = 0;
         arc_drag = -1;
@@ -1364,6 +1396,9 @@ static void toggle_arc(void) {
         arrange_windows();
     }
     plug_in(varc, ARC_NAME);
+#ifdef NORNS_LINUX_DESKTOP
+    arc_open_flag = 1;
+#endif
     skin.arc_open = 1;
     redraw(true);
     arc_redraw();
@@ -1404,6 +1439,19 @@ static void arc_button(const SDL_MouseButtonEvent *b) {
     double px, py;
     pane_pixels(&arc_pane, b->x, b->y, &px, &py);
     int n = varc_skin_hit(&arc_geom, px, py);
+#ifdef NORNS_LINUX_DESKTOP
+    if (midimap_armed) {
+        // MIDI MAP learn: a click on a ring picks it (nothing turns or is pushed); a click elsewhere in the window ends a pick
+        if (b->type == SDL_MOUSEBUTTONDOWN) {
+            if (n >= 0) {
+                call_lua("midimap_pick", {"a", std::to_string(n + 1)});
+            } else {
+                call_lua("midimap_pick", {"x", "0"});
+            }
+        }
+        return;
+    }
+#endif
     bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
     if (b->button == SDL_BUTTON_LEFT && !ctrl) {
         if (b->type == SDL_MOUSEBUTTONDOWN && n >= 0 && arc_drag < 0) {
@@ -2736,6 +2784,28 @@ static window_keys_t keys;
 static void handle_key(const SDL_KeyboardEvent *k) {
 #ifdef NORNS_LINUX_DESKTOP
     // F1 to F12 are norns' own keys (the menu pages, F5, F6 grid, F7 keys, F8 arc, F9 the screen, F10 the menu ...): from the keys window they go the same way as from every other window, so that F7 closes it again
+    // the virtual arc window in front: 5 6 / T Y / G H / B N turn its rings (docs/port/arc-plan.md 3.3); the keys never go on to a script
+    if (is_pane(&arc_pane, k->windowID) && varc != NULL) {
+        int ring, dir;
+        int mods = k->keysym.mod;
+        if (arc_key_lookup((int)k->keysym.scancode, &ring, &dir) && !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_MODE))) {
+            if (k->type == SDL_KEYDOWN) {
+                arc_key_down[ring - 1 + (dir > 0 ? 4 : 0)] = 1;
+                int rep = k->repeat != 0;
+                int idx = ring - 1 + (dir > 0 ? 4 : 0);
+                arc_key_repeats[idx] = rep ? arc_key_repeats[idx] + 1 : 0;
+                int ticks = arc_key_ticks(1, rep, (mods & KMOD_SHIFT) != 0, arc_key_repeats[idx], arc_keys_ramp);
+                arc_turn(ring - 1, dir * ticks);
+            } else {
+                arc_key_down[ring - 1 + (dir > 0 ? 4 : 0)] = 0; // a key up steps nothing
+            }
+            return;
+        }
+        int ring2, dir2;
+        if (k->type == SDL_KEYUP && arc_key_lookup((int)k->keysym.scancode, &ring2, &dir2)) {
+            return; // the release of a key the window took
+        }
+    }
     bool function_key = k->keysym.scancode >= SDL_SCANCODE_F1 && k->keysym.scancode <= SDL_SCANCODE_F12;
     if (is_pane(&keys_pane, k->windowID) && !function_key) {
 #else
@@ -2808,19 +2878,31 @@ static void handle_show(int kind, int n, int value) {
     }
     if (kind == SDL_BRIDGE_SHOW_MIDIMAP_RING) {
         midimap_state = (n >= 0 && n <= 2) ? n : 0;
-        midimap_control = (value >= SKIN_K1 && value <= SKIN_E3) ? value : 0;
+        midimap_control = (value >= SKIN_K1 && value <= SKIN_E3 + 4) ? value : 0; // 1-6 the box, 7-10 the arc's rings
         midimap_phase = 0;
         midimap_gen++;
         if (midimap_state != 0) {
             SDL_AddTimer(300, midimap_phase_cb, (void *)(uintptr_t)midimap_gen);
         }
         redraw(true);
+        if (varc != NULL) {
+            arc_redraw();
+        }
         return;
     }
     if (kind == SDL_BRIDGE_SHOW_MIDIMAP_PHASE) {
         if ((unsigned)value == midimap_gen && midimap_state != 0) {
             midimap_phase++;
             redraw(true);
+            if (varc != NULL) {
+                arc_redraw();
+            }
+        }
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_ARC_TURN) {
+        if (varc != NULL && n >= 1 && n <= ARC_RINGS) {
+            arc_turn(n - 1, value);
         }
         return;
     }

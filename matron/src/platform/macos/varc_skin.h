@@ -23,6 +23,11 @@ typedef struct {
     double ox, oy; // origin in device pixels
 } varc_geom_t;
 
+#ifdef NORNS_LINUX_DESKTOP
+// MIDI MAP learn: the ring to light (0-3), -1 none: drawn as a bright ring round the knob (docs/port/arc-plan.md)
+extern void varc_skin_set_lit(int ring);
+#endif
+
 // window size in units (one unit per point at 1:1)
 extern void varc_skin_units(int rings, int *w, int *h);
 extern void varc_skin_geom(int w, int h, int rings, varc_geom_t *g);

@@ -15,10 +15,12 @@ local VISIBLE = 5
 local CTLS = {"e1", "e2", "e3", "k1", "k2", "k3"}
 
 local function is_enc(id) return id:sub(1, 1) == "e" end
+local function is_arc(id) return id:sub(1, 1) == "a" end
+local function is_knob(id) return id:sub(1, 1) ~= "k" end
 
 --- the rows of the page, in order (DELETE only for one of his own presets)
 function m.rows()
-  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "ON CLASH", "SAVE AS"}
+  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "WATCH", "ON CLASH", "ARC KEYS", "SAVE AS"}
   local p = S.preset_by_name(S.state.preset)
   if p ~= nil and not p.builtin then r[#r + 1] = "DELETE" end
   return r
@@ -29,6 +31,7 @@ function m.drows()
   local id = m.ctl or "e1"
   local c = S.state.ctl[id]
   if is_enc(id) then return {"LEARN", "NUMBER", "DEVICE", "CHANNEL", "MODE", "SENS", "CLEAR"} end
+  if is_arc(id) then return {"LEARN", "NUMBER", "DEVICE", "CHANNEL", "MODE", "GAIN", "ACCEL", "ONE TURN", "CLEAR"} end
   local r = {"LEARN", "TYPE", "NUMBER", "DEVICE", "CHANNEL"}
   if c.type == "cc" then r[#r + 1] = "THRESHOLD" end
   r[#r + 1] = "CLEAR"
@@ -93,14 +96,16 @@ local function clash_map()
   return out
 end
 
+local overlap = {} -- id -> the other control that answers to the same message (set at every redraw)
+
 local function ctl_text(id, clash)
   local c = S.state.ctl[id]
   if c.type == "none" or c.num == nil then return "-----" end
   local t
   if c.type == "note" then t = "NOTE " .. c.num
-  elseif is_enc(id) then t = "CC" .. c.num .. " " .. mm.MODE_NAMES[c.mode] .. (mm.guess[id] and "?" or "")
+  elseif is_knob(id) then t = "CC" .. c.num .. " " .. mm.MODE_NAMES[c.mode] .. (mm.guess[id] and "?" or "")
   else t = "CC" .. c.num .. " >" .. c.threshold end
-  if clash and clash[id] then t = t .. " !" end
+  if (clash and clash[id]) or overlap[id] then t = t .. " !" end
   return t
 end
 
@@ -116,6 +121,8 @@ local function row_text(row, clash)
   if row == "PRESET" then return preset_text()
   elseif row == "LEARN" then return "CLICK A CONTROL"
   elseif row == "ON CLASH" then return S.state.on_clash == "both" and "BOTH" or "PARAMS MAP"
+  elseif row == "WATCH" then return "WHAT DOES IT SEND?"
+  elseif row == "ARC KEYS" then return S.state.arc_keys and "ON" or "OFF"
   elseif row == "SAVE AS" then return "NAME..."
   elseif row == "DELETE" then local p = S.preset_by_name(S.state.preset) return p and ("* " .. p.name) or ""
   else return ctl_text(row:lower(), clash) end
@@ -135,6 +142,9 @@ local function detail_text(row)
   elseif row == "CHANNEL" then return c.ch == 0 and "ANY" or tostring(c.ch)
   elseif row == "MODE" then return mm.MODE_NAMES[c.mode] .. (mm.guess[id] and "?" or "")
   elseif row == "SENS" then return tostring(c.sens)
+  elseif row == "GAIN" then return tostring(c.gain)
+  elseif row == "ACCEL" then return c.accel:upper()
+  elseif row == "ONE TURN" then return "K3"
   elseif row == "THRESHOLD" then return ">" .. c.threshold
   end
   return ""
@@ -216,8 +226,21 @@ local function number_done(text)
   reclaim()
   if text ~= nil then
     local n = tonumber(text)
-    local ok = n ~= nil and S.set(m.ctl, "num", n)
-    if not ok then m.msg = "0 TO 127" end
+    local c = S.state.ctl[m.ctl]
+    if n == nil or n ~= math.floor(n) or n < 0 or n > 127 then
+      m.msg = "0 TO 127"
+    else
+      -- a CC that another control answers to: ask first
+      local type_ = c.type == "note" and "note" or "cc"
+      local other = mm.find_overlap(m.ctl, type_, n, c.dev, c.ch)
+      if other then
+        m.mode = "confirm"
+        m.confirm = {kind = "move", id = m.ctl, other = other, num = n, back = "detail",
+          text = string.format("%s %d IS %s. MOVE IT?", type_ == "note" and "NOTE" or "CC", n, other:upper())}
+      elseif not S.set(m.ctl, "num", n) then
+        m.msg = "0 TO 127"
+      end
+    end
   end
   _menu.redraw()
 end
@@ -265,6 +288,11 @@ local function key_rows(n)
     mm.start_pick()
   elseif row == "ON CLASH" then
     S.set_clash(S.state.on_clash == "params" and "both" or "params")
+  elseif row == "ARC KEYS" then
+    S.set_arc_keys(not S.state.arc_keys)
+  elseif row == "WATCH" then
+    mm.watch_start()
+    m.mode = "watch"
   elseif row == "SAVE AS" then
     require('textentry').enter(name_done, "", "NAME FOR THIS PRESET:", name_hint, {accept = name_accept})
   elseif row == "DELETE" then
@@ -293,6 +321,8 @@ local function key_detail(n)
   elseif row == "NUMBER" then
     local c = S.state.ctl[m.ctl]
     require('textentry').enter(number_done, c.num and tostring(c.num) or "", "NUMBER 0-127:", number_hint, {accept = number_accept})
+  elseif row == "ONE TURN" then
+    if mm.calib_start(m.ctl) then m.mode = "turn" end
   elseif row == "CLEAR" then
     mm.clear(m.ctl)
     m.msg = m.ctl:upper() .. " CLEARED"
@@ -306,12 +336,29 @@ end
 local function key_raw(n, z)
   if z ~= 1 then return end
   if learning() then
-    if n == 2 then mm.cancel()
+    if mm.learn.state == "ask" then
+      if n == 3 then mm.answer(true) elseif n == 2 then mm.answer(false) end
+    elseif n == 2 then mm.cancel()
     elseif n == 3 and mm.learn.state == "confirm" then mm.finish_confirm() end
     return
   end
   m.msg = nil
   mm.learn.msg, mm.learn.warn, mm.learn.warn_short = nil, nil, nil
+  if m.mode == "watch" then
+    if n == 2 then mm.watch_stop(); m.mode = "rows"; clamp_rows() end
+    return
+  end
+  if m.mode == "turn" then
+    if n == 2 then
+      mm.calib_cancel()
+      m.mode = "detail"
+    elseif n == 3 then
+      local g = mm.calib_finish()
+      m.msg = g and ("GAIN " .. g) or "NOTHING COUNTED"
+      m.mode = "detail"
+    end
+    return
+  end
   if m.mode == "confirm" then
     if n == 3 then
       local c = m.confirm
@@ -321,9 +368,13 @@ local function key_raw(n, z)
       elseif c.kind == "delete" then
         local ok, why = S.delete_preset(c.name)
         m.msg = ok and ("deleted: " .. c.name) or why
+      elseif c.kind == "move" then
+        mm.clear(c.other)
+        S.set(c.id, "num", c.num)
+        m.msg = c.id:upper() .. " = CC " .. c.num
       end
     end
-    m.mode, m.confirm = "rows", nil
+    m.mode, m.confirm = (m.confirm and m.confirm.back) or "rows", nil
     clamp_rows()
     return
   end
@@ -358,6 +409,11 @@ local function enc_detail(n, delta)
     if mode ~= c.mode then S.set(id, "mode", mode); mm.guess[id] = nil end
   elseif row == "SENS" then
     S.set(id, "sens", math.max(1, math.min(9, c.sens + delta)))
+  elseif row == "GAIN" then
+    S.set(id, "gain", math.max(1, math.min(64, c.gain + delta)))
+  elseif row == "ACCEL" then
+    local a = step_in(S.ACCELS, c.accel, delta)
+    if a ~= c.accel then S.set(id, "accel", a) end
   elseif row == "THRESHOLD" then
     S.set(id, "threshold", math.max(0, math.min(126, c.threshold + delta)))
   end
@@ -367,7 +423,7 @@ local function enc_raw(n, delta)
   if learning() then return end
   m.msg = nil
   mm.learn.msg, mm.learn.warn, mm.learn.warn_short = nil, nil, nil
-  if m.mode == "confirm" then return end
+  if m.mode == "confirm" or m.mode == "watch" or m.mode == "turn" then return end
   if m.mode == "detail" then enc_detail(n, delta) return end
   if n == 2 then
     m.pos = m.pos + delta
@@ -382,6 +438,8 @@ local function enc_raw(n, delta)
       m.browse = list[idx].name
     elseif row == "ON CLASH" then
       S.set_clash(delta > 0 and "both" or "params")
+    elseif row == "ARC KEYS" then
+      S.set_arc_keys(delta > 0)
     end
   end
 end
@@ -441,11 +499,112 @@ local function draw_row(i, y, label, value, selected, target)
   screen.text_right(fit(value, 124 - screen.text_extents(label) - 8))
 end
 
+-- WATCH (docs/port/arc-plan.md 2): the last message's source, its last six values, and what they look like
+local function redraw_watch()
+  local w = mm.watch_view()
+  screen.level(15)
+  screen.move(0, 8)
+  screen.text("WATCH")
+  screen.level(4)
+  screen.move(126, 8)
+  screen.text_right("MIDI MAP")
+  if w.cc ~= nil then
+    screen.level(15)
+    screen.move(2, 22)
+    screen.text(fit(w.dev:upper(), 56))
+    screen.move(62, 22)
+    screen.text("CH " .. w.ch)
+    screen.move(96, 22)
+    screen.text("CC " .. w.cc)
+    screen.level(6)
+    screen.move(2, 31)
+    screen.text("LAST SIX")
+    screen.level(15)
+    for i, v in ipairs(w.values) do
+      screen.move(2 + (i - 1) * 21, 42)
+      screen.text(tostring(v))
+    end
+  end
+  screen.level(15)
+  screen.rect(0, 46, 128, 9)
+  screen.fill()
+  screen.level(0)
+  screen.move(2, 53)
+  screen.text(fit(w.verdict, 124))
+  screen.level(6)
+  screen.move(2, 61)
+  screen.text(fit(w.hint, 124))
+  screen.level(3)
+  screen.move(126, 64)
+  screen.text_right("K2 BACK")
+end
+
+-- ONE TURN: count the units of one turn of the knob (core/midimap.lua calib_*)
+local function redraw_turn()
+  screen.level(15)
+  screen.move(0, 8)
+  screen.text("ONE TURN " .. (mm.calib_target() or ""):upper())
+  screen.level(6)
+  screen.move(2, 24)
+  screen.text("TURN THE KNOB ONCE ROUND")
+  screen.move(2, 33)
+  screen.text("THEN PRESS K3")
+  screen.level(15)
+  screen.move(2, 52)
+  screen.text("UNITS")
+  screen.move(124, 52)
+  screen.text_right(tostring(mm.calib_units() or 0))
+  screen.level(3)
+  screen.move(0, 64)
+  screen.text("K3 DONE  K2 CANCEL")
+end
+
+-- the question when a learned CC is used by another control
+local function redraw_ask()
+  local a = mm.learn.ask
+  screen.level(15)
+  screen.move(0, 8)
+  screen.text("MIDI MAP")
+  banner()
+  screen.level(15)
+  screen.move(2, 30)
+  screen.text(string.format("%s %d IS %s", a.type == "note" and "NOTE" or "CC", a.num, a.other:upper()))
+  screen.move(2, 40)
+  screen.text("MOVE IT TO " .. a.id:upper() .. "?")
+  screen.level(6)
+  screen.move(0, 64)
+  screen.text("K3 YES")
+  screen.move(100, 64)
+  screen.text_right("K2 NO")
+  local left = mm.seconds_left()
+  if left > 0 then
+    screen.level(3)
+    screen.move(126, 64)
+    screen.text_right(tostring(left))
+  end
+end
+
 local function redraw_raw()
   screen.clear()
   screen.aa(0)
   screen.font_face(1)
   screen.font_size(8)
+  overlap = mm.overlaps()
+  if mm.learn.state == "ask" and mm.learn.ask then
+    redraw_ask()
+    screen.update()
+    return
+  end
+  if m.mode == "watch" then
+    redraw_watch()
+    screen.update()
+    return
+  end
+  if m.mode == "turn" then
+    redraw_turn()
+    screen.update()
+    return
+  end
   if m.mode == "confirm" then
     screen.level(15)
     screen.move(0, 26)
@@ -468,7 +627,7 @@ local function redraw_raw()
       local row = rows[m.dtop + i - 1]
       if row then
         local target = L.state ~= "idle" and row == "LEARN" and L.target == m.ctl
-        local value = target and (L.state == "confirm" and "TURN IT" or (is_enc(m.ctl) and "MOVE A KNOB" or "PRESS A BUTTON")) or detail_text(row)
+        local value = target and (L.state == "confirm" and "TURN IT" or (is_knob(m.ctl) and "MOVE A KNOB" or "PRESS A BUTTON")) or detail_text(row)
         draw_row(i, 10 + 9 * i, row, value, m.dtop + i - 1 == m.dpos, target)
       end
     end
@@ -485,14 +644,16 @@ local function redraw_raw()
       if row then
         local target = L.state ~= "idle" and L.target ~= nil and row == L.target:upper()
         local value
-        if target then value = L.state == "confirm" and ctl_text(L.target, clash) or (is_enc(L.target) and "MOVE A KNOB" or "PRESS A BUTTON")
+        if target then value = L.state == "confirm" and ctl_text(L.target, clash) or (is_knob(L.target) and "MOVE A KNOB" or "PRESS A BUTTON")
         else value = row_text(row, clash) end
         draw_row(i, 10 + 9 * i, row, value, m.top + i - 1 == m.pos, target and L.state ~= "confirm")
       end
     end
     scrollbar(m.top, #rows)
     local p = S.preset_by_name(m.browse or S.state.preset)
+    local sel = rows[m.pos] and rows[m.pos]:lower()
     if rows[m.pos] == "PRESET" and p and p.unverified then hint("UNVERIFIED: USE LEARN")
+    elseif sel and overlap[sel] then hint(string.format("CC%d ALSO %s", S.state.ctl[sel].num, overlap[sel]:upper()))
     else hint("E2 row  E3 change  K3") end
   end
   screen.update()

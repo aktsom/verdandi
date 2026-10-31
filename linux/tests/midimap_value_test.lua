@@ -221,5 +221,121 @@ check(not V.is_non_controller("iiiX controller"), "a name that only starts with 
 check(not V.is_non_controller("Push 2"), "Push 2")
 check(not V.is_non_controller(nil), "nil")
 
+
+-- ---- the virtual arc (docs/port/arc-plan.md 3.2, 3.3): ticks, gain, acceleration, calibration, the keyboard step, WATCH, overlaps
+eq(V.ARC_TICKS_PER_TURN, 1024, "an arc turn is 1024 ticks")
+local function arc_run(units, gain, accel, t0, dt)
+  local st, total, out = V.arc_new(), 0, {}
+  local t = t0 or 0
+  for _, u in ipairs(units) do
+    local n = V.arc_step(st, u, gain, accel or "off", t)
+    total = total + n
+    out[#out + 1] = n
+    t = t + (dt or 1)
+  end
+  return total, out, st
+end
+eq(select(1, arc_run({1}, 8)), 8, "arc: one unit at gain 8 = 8 ticks")
+eq(select(1, arc_run({-1}, 8)), -8, "arc: minus one unit = -8 ticks")
+eq(select(1, arc_run({1}, 1)), 1, "arc: gain 1, one unit = 1 tick (a nudge is +-1)")
+eq(select(1, arc_run({3}, 64)), 192, "arc: gain 64, 3 units")
+eq(select(1, arc_run({0}, 8)), 0, "arc: a delta of 0 gives no ticks (the release lesson)")
+eq(select(1, arc_run({0, 0, 0}, 64, "high", 0, 0.001)), 0, "arc: zeros stay zero with acceleration too")
+local many = {}
+for i = 1, 20 do many[i] = 1 end
+eq(select(1, arc_run(many, 8)), select(1, arc_run({20}, 8)), "arc: twenty single units give the same ticks as one step of twenty (linear)")
+eq(select(1, arc_run({127}, 8)), 1016, "arc: an absolute sweep of 127 values at gain 8 is 1016 ticks, about one turn")
+-- the carry: fractions of a tick are kept (a gain below one does not exist, but acceleration and the key ramp make fractions)
+local _, parts = arc_run({1, 1, 1}, 8, "low", 0, 1)
+check(parts[1] == 8 and parts[2] == 8 and parts[3] == 8, "arc: low acceleration is exactly linear for single units at a slow pace")
+-- acceleration: the factor 1 + a (|u| - 1), a = 0.25 (low), 0.5 (high), and 2 / 3 / 4 when the last message was under 20 / 10 / 5 ms ago
+eq(select(1, arc_run({5}, 8, "low")), 8 * 5 * (1 + 0.25 * 4), "arc low: five units = 5 x 8 x 2 = 80")
+eq(select(1, arc_run({5}, 8, "high")), 8 * 5 * (1 + 0.5 * 4), "arc high: five units = 5 x 8 x 3 = 120")
+eq(select(1, arc_run({-5}, 8, "high")), -120, "arc high: symmetric")
+eq(select(1, arc_run({5}, 8, "off")), 40, "arc off: exactly linear")
+do
+  local st = V.arc_new()
+  V.arc_step(st, 1, 8, "low", 0)
+  eq(V.arc_step(st, 1, 8, "low", 0.015), 16, "arc low: a message 15 ms after the last is doubled")
+  eq(V.arc_step(st, 1, 8, "low", 0.015 + 0.008), 24, "arc low: 8 ms after = tripled")
+  eq(V.arc_step(st, 1, 8, "low", 0.015 + 0.008 + 0.003), 32, "arc low: 3 ms after = four times")
+  eq(V.arc_step(st, 1, 8, "low", 5), 8, "arc low: after a long pause no multiplier")
+  eq(V.arc_step(st, 1, 8, "off", 5.001), 8, "arc off: fast messages are not multiplied")
+end
+-- the absolute baseline and jumps (units from the change of value)
+do
+  local st = V.abs_new()
+  eq(V.abs_delta(st, 50, 0), 0, "abs delta: the first message is a baseline")
+  eq(V.abs_delta(st, 53, 0.1), 3, "abs delta: +3")
+  eq(V.abs_delta(st, 52, 0.2), -1, "abs delta: -1")
+  eq(V.abs_delta(st, 120, 0.3), 0, "abs delta: a jump of more than 40 is a baseline")
+  eq(V.abs_delta(st, 121, 5), 0, "abs delta: after a pause of more than 1.5 s the next is a baseline")
+  eq(V.abs_delta(st, 124, 5.1), 3, "abs delta: and then counts again")
+end
+-- the calibration: units counted in one turn -> gain (1024 / units, a whole number, 1 to 64)
+eq(V.gain_from_turn(128), 8, "calibration: 128 units a turn = gain 8")
+eq(V.gain_from_turn(4), 64, "calibration: 4 units a turn = 256, clamped to 64")
+eq(V.gain_from_turn(2000), 1, "calibration: 2000 units a turn = 0.5, clamped to 1")
+eq(V.gain_from_turn(100), 10, "calibration: 100 units = 10.24, rounded to 10")
+eq(V.gain_from_turn(0), nil, "calibration: no units, no gain")
+eq(V.gain_from_turn(-5), nil, "calibration: negative, no gain")
+-- the keyboard step: 16 ticks (one LED), Shift 4, a repeat repeats, a release is nothing, no ramp by default
+eq(V.ARC_KEY_TICKS, 16, "a key press is 16 ticks"); eq(V.ARC_KEY_SHIFT_TICKS, 4, "shift is 4 ticks")
+eq(V.arc_key_ticks(1, false, 0, false), 16, "key: press = 16")
+eq(V.arc_key_ticks(1, true, 0, false), 4, "key: shift press = 4")
+eq(V.arc_key_ticks(2, false, 3, false), 16, "key: a repeat = 16")
+eq(V.arc_key_ticks(2, true, 3, false), 4, "key: a shifted repeat = 4")
+eq(V.arc_key_ticks(0, false, 0, false), 0, "key: a release is nothing")
+eq(V.arc_key_ticks(0, true, 30, true), 0, "key: a release is nothing, whatever the ramp")
+eq(V.arc_key_ticks(2, false, 9, true), 16, "key ramp: 9 repeats = x1")
+eq(V.arc_key_ticks(2, false, 10, true), 32, "key ramp: 10 repeats = x2")
+eq(V.arc_key_ticks(2, false, 25, true), 64, "key ramp: 25 repeats = x4")
+eq(V.arc_key_ticks(2, false, 25, false), 16, "key: no ramp unless asked")
+eq(V.arc_key_ticks(5, false, 0, false), 0, "key: an unknown value is nothing")
+-- two mappings that could answer to the same message
+check(V.dev_overlap("ANY", "mio"), "overlap: ANY meets a name"); check(V.dev_overlap("mio", "ANY"), "overlap: a name meets ANY")
+check(V.dev_overlap("mio", "mio 2"), "overlap: mio and mio 2"); check(V.dev_overlap("mio 2", "mio"), "overlap: mio 2 and mio")
+check(not V.dev_overlap("mio 1", "mio 2"), "overlap: two different ports"); check(not V.dev_overlap("mio", "Push 2"), "overlap: two devices")
+check(V.dev_overlap("ANY", "ANY"), "overlap: ANY and ANY")
+check(V.ch_overlap(0, 5) and V.ch_overlap(5, 0) and V.ch_overlap(3, 3) and not V.ch_overlap(3, 4), "overlap: channels")
+-- WATCH: the last six values of the last CC, and a verdict
+do
+  local w = V.watch_new()
+  local view = V.watch_view(w)
+  eq(view.cc, nil, "watch: nothing yet"); eq(#view.values, 0, "watch: no values"); check(view.verdict ~= nil and view.verdict ~= "", "watch: says to turn the knob")
+  for _, v in ipairs({65, 63, 65, 63, 65, 65}) do V.watch_add(w, "mio", 1, 76, v) end
+  view = V.watch_view(w)
+  eq(view.dev, "mio", "watch: the device"); eq(view.ch, 1, "watch: the channel"); eq(view.cc, 76, "watch: the CC")
+  eq(table.concat(view.values, " "), "65 63 65 63 65 65", "watch: the last six values")
+  eq(view.mode, "relob", "watch: offset binary"); check(view.verdict:find("REL OFS", 1, true), "watch: says REL OFS"); check(view.hint:find("65 UP", 1, true), "watch: says which is up")
+  w = V.watch_new()
+  for _, v in ipairs({1, 127, 1, 127, 1, 127}) do V.watch_add(w, "mio", 1, 77, v) end
+  view = V.watch_view(w); eq(view.mode, "rel2c", "watch: two's complement"); check(view.verdict:find("REL 2S", 1, true), "watch: says REL 2S")
+  w = V.watch_new()
+  for _, v in ipairs({1, 65, 1, 65, 1, 65}) do V.watch_add(w, "mio", 1, 78, v) end
+  view = V.watch_view(w); eq(view.mode, "relsm", "watch: sign-magnitude"); check(view.verdict:find("REL SIGN", 1, true), "watch: says REL SIGN")
+  w = V.watch_new()
+  for _, v in ipairs({40, 41, 43, 44, 46, 47}) do V.watch_add(w, "mio", 1, 79, v) end
+  view = V.watch_view(w); eq(view.mode, "abs", "watch: a ramp is absolute"); check(view.verdict:find("ABSOLUTE", 1, true), "watch: says absolute")
+  w = V.watch_new(); V.watch_add(w, "mio", 1, 80, 65)
+  view = V.watch_view(w); eq(view.mode, nil, "watch: one value is no verdict"); check(view.verdict:find("CLICK", 1, true), "watch: asks for one click each way")
+  -- the display follows the last message; interleaved CCs keep their own lists
+  w = V.watch_new()
+  for i = 1, 6 do V.watch_add(w, "mio", 1, 10, 65); V.watch_add(w, "mio", 1, 11, 63) end
+  view = V.watch_view(w); eq(view.cc, 11, "watch: the last message's CC"); eq(table.concat(view.values, " "), "63 63 63 63 63 63", "watch: its own list")
+  V.watch_add(w, "mio", 1, 10, 1)
+  view = V.watch_view(w); eq(view.cc, 10, "watch: back to the other CC"); eq(view.values[#view.values], 1, "watch: with its newest value")
+  -- another device or channel is another list
+  V.watch_add(w, "Push 2", 3, 10, 7)
+  view = V.watch_view(w); eq(view.dev, "Push 2", "watch: another device"); eq(#view.values, 1, "watch: its own list is short")
+  -- more than six values: the last six
+  w = V.watch_new()
+  for i = 1, 10 do V.watch_add(w, "mio", 1, 5, i) end
+  eq(#V.watch_view(w).values, 6, "watch: six values at most"); eq(V.watch_view(w).values[1], 5, "watch: the oldest of the six")
+  -- the watch never grows without limit (many CCs)
+  for cc = 0, 127 do for ch = 1, 16 do V.watch_add(w, "mio", ch, cc, 1) end end
+  check(V.watch_size(w) <= V.WATCH_MAX_SOURCES, "watch: a limit on the sources it remembers")
+end
+
 if fails == 0 then print("midimap value: all passed") end
 os.exit(fails == 0 and 0 or 1)

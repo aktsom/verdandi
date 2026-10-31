@@ -239,6 +239,71 @@ eq(own, S.MAX_PRESETS, "no more than the maximum are read"); check(logged("more 
 eq(S.MAX_PRESETS, 64, "the maximum is 64")
 local okm, whym = S.save_preset("one more"); check(okm == false and tostring(whym):find("64", 1, true), "a new one past the maximum is refused with the number")
 
+
+-- ---- the arc encoders A1 to A4 (docs/port/arc-plan.md 3.4)
+fresh()
+st = S.load()
+eq(table.concat(S.ALL_IDS, ","), "e1,e2,e3,k1,k2,k3,a1,a2,a3,a4", "the controls: six and four arc encoders")
+for _, id in ipairs({"a1", "a2", "a3", "a4"}) do
+  local c = st.ctl[id]
+  eq(c.type, "none", id .. " default type"); eq(c.dev, "ANY", id .. " default device"); eq(c.ch, 0, id .. " default channel")
+  eq(c.mode, "abs", id .. " default mode"); eq(c.gain, 8, id .. " default gain 8"); eq(c.accel, "off", id .. " default accel off")
+end
+eq(st.arc_keys, true, "the arc keys are on by default"); eq(st.arc_keys_accel, false, "no key ramp by default")
+S.set("a2", "num", 76); S.set("a2", "mode", "relob"); S.set("a2", "gain", 12); S.set("a2", "accel", "low"); S.set("a2", "dev", "mio"); S.set("a2", "ch", 2)
+eq(S.state.ctl.a2.type, "cc", "a number makes the arc encoder a CC")
+check(S.set_arc_keys(false) and S.set_arc_keys_accel(true), "the key switches")
+text = slurp("/home/we/midimap.conf")
+check(text:find("a2.num=76", 1, true) and text:find("a2.mode=relob", 1, true) and text:find("a2.gain=12", 1, true) and text:find("a2.accel=low", 1, true), "the file has the arc values")
+check(text:find("arc_keys=0", 1, true) and text:find("arc_keys_accel=1", 1, true), "the file has the key switches")
+logs = {}
+again = S.load()
+eq(again.ctl.a2.num, 76, "round trip a2 num"); eq(again.ctl.a2.mode, "relob", "round trip mode"); eq(again.ctl.a2.gain, 12, "round trip gain"); eq(again.ctl.a2.accel, "low", "round trip accel")
+eq(again.ctl.a2.dev, "mio", "round trip device"); eq(again.ctl.a2.ch, 2, "round trip channel"); eq(again.arc_keys, false, "round trip arc_keys"); eq(again.arc_keys_accel, true, "round trip arc_keys_accel")
+eq(#logs, 0, "a good file logs nothing")
+-- validation
+fresh(); S.load()
+bad("a1", "type", "note", "a note on an arc encoder"); bad("a1", "gain", 0, "gain 0"); bad("a1", "gain", 65, "gain 65"); bad("a1", "gain", 1.5, "gain 1.5"); bad("a1", "accel", "fast", "accel fast")
+bad("a1", "sens", 5, "a sens on an arc encoder"); bad("a1", "threshold", 5, "a threshold on an arc encoder"); bad("a1", "num", 128, "CC 128"); bad("a1", "mode", "rel9", "mode rel9")
+bad("e1", "gain", 8, "a gain on a norns encoder"); bad("k1", "accel", "low", "an accel on a key"); bad("a5", "num", 1, "an unknown arc encoder")
+check(not S.set_arc_keys("yes"), "arc_keys wants a boolean")
+-- damaged file values
+st = load_text("verdandi-midimap=1\na1.type=cc\na1.num=300\na2.type=cc\na2.num=5\na2.gain=900\na2.accel=warp\na2.mode=zigzag\na3.type=note\na3.num=2\narc_keys=maybe\narc_keys_accel=2\n")
+eq(st.ctl.a1.type, "none", "a1: CC 300 refused"); check(logged("a1.num=300"), "a1.num logged")
+eq(st.ctl.a2.type, "cc", "a2 kept"); eq(st.ctl.a2.gain, 8, "a2: a damaged gain is 8"); eq(st.ctl.a2.accel, "off", "a2: a damaged accel is off"); eq(st.ctl.a2.mode, "abs", "a2: a damaged mode is abs")
+check(logged("a2.gain=900") and logged("a2.accel=warp") and logged("a2.mode=zigzag"), "each is logged")
+eq(st.ctl.a3.type, "none", "a3: a note is refused"); check(logged("a3.type=note"), "and logged")
+eq(st.arc_keys, true, "a damaged arc_keys is on"); eq(st.arc_keys_accel, false, "a damaged arc_keys_accel is off"); check(logged("arc_keys=maybe") and logged("arc_keys_accel=2"), "both logged")
+-- an old file without arc keys, and an unknown a5 kept
+st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\na5.num=3\n")
+eq(st.ctl.e1.num, 9, "an old file reads"); eq(st.ctl.a1.type, "none", "arcs default"); eq(st.arc_keys, true, "arc keys default")
+check(logged("a5.num"), "an unknown arc encoder is logged"); S.save(); text = slurp("/home/we/midimap.conf"); check(text:find("a5.num=3", 1, true), "and kept")
+-- clear
+fresh(); S.load(); S.set("a3", "num", 5); S.set("a3", "gain", 20); S.clear("a3")
+eq(S.state.ctl.a3.type, "none", "clear: arc type none"); eq(S.state.ctl.a3.gain, 8, "clear: gain back to 8"); eq(S.state.ctl.a3.dev, "ANY", "clear: ANY")
+-- presets and the arcs: the built-in ones leave the arcs alone; an own preset carries them (and no device or channel)
+fresh(); S.load()
+S.set("a1", "num", 80); S.set("a1", "mode", "relob"); S.set("a1", "gain", 10); S.set("a1", "dev", "mio")
+check(S.select_preset("PUSH 2"), "a built-in preset")
+eq(S.state.ctl.a1.num, 80, "a built-in preset leaves the arc encoders as they are"); eq(S.state.ctl.a1.dev, "mio", "and their device")
+check(S.select_preset("NONE"), "NONE"); eq(S.state.ctl.a1.num, 80, "NONE clears the six, not the arc encoders")
+for _, p in ipairs(S.preset_list()) do if p.builtin then check(p.arcs == nil, p.name .. " has no arc section") end end
+S.set("a2", "num", 81); S.set("a2", "accel", "high")
+okp = S.save_preset("With arcs")
+check(okp, "save a preset with arc encoders")
+ptext = slurp("/home/we/midimap-presets/with-arcs.midimap")
+check(ptext:find("a1.num=80", 1, true) and ptext:find("a1.gain=10", 1, true) and ptext:find("a2.accel=high", 1, true), "the preset file has the arc encoders")
+check(not ptext:find("a1.dev", 1, true) and not ptext:find("a1.ch", 1, true), "but no device or channel")
+S.clear("a1"); S.clear("a2")
+S.select_preset("With arcs")
+eq(S.state.ctl.a1.num, 80, "applying it brings the arc encoders back"); eq(S.state.ctl.a1.gain, 10, "with their gain"); eq(S.state.ctl.a1.dev, "ANY", "for any device"); eq(S.state.ctl.a2.accel, "high", "and their accel")
+-- a preset file from before the arcs leaves them alone
+put("/home/we/midimap-presets/old.midimap", "verdandi-midimap-preset=1\nname=old\ne1.type=cc\ne1.num=4\n")
+S.load()
+S.set("a3", "num", 90)
+S.select_preset("old")
+eq(S.state.ctl.e1.num, 4, "an old preset applies"); eq(S.state.ctl.a3.num, 90, "and leaves the arc encoders")
+
 if fails == 0 then print("midimap settings: all passed") end
 os.execute("rm -rf '" .. tmp .. "'")
 os.exit(fails == 0 and 0 or 1)

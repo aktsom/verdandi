@@ -172,3 +172,34 @@ Different mechanisms (MIDI against the computer keyboard): the keys never touch 
 
 - [monome norns study 4b: arc, the full 1024-step resolution, deltas of ±1 for nudges](https://monome.org/docs/norns/study-4b) and [monome arc SuperCollider study: 1024 steps per revolution](https://monome.org/docs/arc/studies/sc); [norns arc reference](https://monome.org/docs/norns/reference/arc) (64 LEDs per ring)
 - BeatStep relative mode, forum level: [Patch parameter control with beatstep encoder issue](https://community.blokas.io/t/patch-parameter-control-with-beatstep-encoder-issue/5425), [Loopy Pro forum: the quoted Arturia excerpt, relative 1 = 61-63 / 65-67](https://forum.loopypro.com/discussion/comment/1367343/), [Arturia Beatstep and endless encoders (Image-Line forum)](https://forum.image-line.com/viewtopic.php?p=1248220), [BeatStep manual (Scribd)](https://www.scribd.com/doc/286238741/BeatStep-Manual-1-0-1-En), [MiniLab relative modes (a different unit)](https://manualshive.com/en/manual/arturia/minilab-mk-ii/2978926?page=38)
+
+## 9. What was built, and where it differs from the plan above
+
+**Built** (Linux desktop only; `macos/` untouched; shared files guarded by `NORNS_LINUX_DESKTOP` / `NORNS_PLATFORM`), tests first and seen to fail:
+
+| piece | where |
+|---|---|
+| value functions: arc ticks with GAIN and ACCEL, absolute deltas, ONE TURN gain, the key step and ramp, overlap of two mappings, the WATCH data and verdict | `lua/core/midimap_value.lua`, `linux/tests/midimap_value_test.lua` |
+| settings: `a1` to `a4` (type, num, dev, ch, mode, gain, accel), `arc_keys`, `arc_keys_accel`; presets carry the arc encoders | `lua/core/midimap_settings.lua`, `midimap_settings_test.lua` |
+| the layer: arc turns through `_norns.arc_turn` (the closed window said once), `find_overlap` / `overlaps`, the question at assignment (`ask`, `answer`), WATCH (`watch_*`), ONE TURN (`calib_*`) | `lua/core/midimap.lua`, `midimap_layer_test.lua` |
+| the page: A1 to A4, WATCH, ARC KEYS, the arc view (GAIN, ACCEL, ONE TURN), the question and the WATCH / ONE TURN views | `lua/core/menu/midimap.lua`, `midimap_page_test.lua` |
+| the keys in the norns window (tier 2) | `lua/core/keyboard.lua`, `linux/tests/arc_keys_test.lua` |
+| the keys in the arc window (tier 1), `_norns.arc_turn`, the pick on a ring, the lit ring | `matron/src/platform/linux/arc_keys.c/.h`, `sdl_bridge.cc/.h`, `varc_skin.c/.h`, `weaver.cc`; `arc_keys_c_test.c`, the `arc_scenario` of `run_all.sh` (`probe_arc.lua`) |
+| the stress test: arc rows, WATCH, ONE TURN, the question, an arc that opens and closes, the arc keys among the random keys | `menu_stress_test.lua` (a deliberately broken WATCH stop was caught at seed 13) |
+| `scan-fkeys.sh` lists scripts that read the keyboard and name 5 6 T Y G H B N | `linux/scan-fkeys.sh`, `scan_fkeys_test.sh` |
+
+**Where it differs from the plan above:**
+1. **Presets and the arc encoders.** The built-in presets (NONE, PUSH 2, GENERIC REL 2S) have no arc section and **leave A1 to A4 as they are** (applying PUSH 2 must not wipe the arc mappings you made); your own presets save A1 to A4 and bring them back; a preset file from before the arcs leaves them alone. Presets still carry no device or channel.
+2. **The question is asked when a CC is learned or typed**, not when E3 steps the NUMBER (that would ask at every step): there the overlap shows as `!` on both rows and the help line says `CC72 ALSO A1`. A learn assigns "any device, any channel", so it overlaps any control with that CC and asks.
+3. **WATCH** is a row after A4 (not above PRESET), its data comes from every device (the iii grid too: it is a monitor), and while it is open nothing is mapped and no learn runs. The view has the layout of the stand-in (`arc-previews/`), with the device name cut to fit.
+4. **ARC KEYS** is a page row (ON/OFF) for the norns window only; the arc window always has the keys (tier 1). **The key ramp** (`arc_keys_accel`) is a file setting only, no page row, and it is pushed to the window's C code (`_norns.arc_keys_config`) so that both tiers use it. Ctrl, Alt (and AltGr in the norns window, Super in the arc window) make the keys shortcuts, not arc keys.
+5. **The lit ring** is a gold circle round the knob in the arc window (PICK: the four in turn; LISTEN: the one being learned, blinking), drawn by the arc skin; the box is lit as before for E1 to K3.
+6. **A closed arc window:** `_norns.arc_turn` answers false from a flag the window keeps (open or not, readable from any thread); the layer says so once with the box's toast and says it again only after a turn got through.
+7. **Tier 2 only takes a key if the window took the turn:** with the arc closed the first press makes the call, is refused and the key goes on its way (to the script or nothing).
+8. **The stand-in picture** of the plan is replaced by a real capture, `arc-previews/arc-watch-real.png` (the WATCH view in the real window).
+
+**Test run:** `linux/tests/run_all.sh` from a clean environment: 124 passed, 0 failed (the first runs failed on two mistakes in my new checks, a count and a test name too long for its log file; fixed).
+
+![WATCH view (real capture)](arc-previews/arc-watch-real.png)
+
+**Not verified here (hardware):** the Beatstep Pro's relative mode, step size and CC numbers (WATCH and ONE TURN are how you find out), the feel of GAIN 8 and of the keys on your desktop, a real arc's delta behaviour, your installed scripts (run `linux/scan-fkeys.sh`). The checks are in `HARDWARE-CHECKLIST.md`.

@@ -207,6 +207,7 @@ def build(bld):
             '../matron/src/platform/linux/plugin_arch_note.cc',
             '../matron/src/platform/linux/desktop_shell_linux.cc',
             '../matron/src/platform/linux/extras_layout.c',
+            '../matron/src/platform/linux/arc_keys.c',
             '../matron/src/platform/linux/file_picker.cc',
             '../matron/src/platform/linux/hid_virtual.cc',
             '../matron/src/platform/linux/jack_midi_in.cc',

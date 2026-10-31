@@ -159,4 +159,122 @@ function V.is_non_controller(name)
   return n == "iii" or n:sub(1, 4) == "iii "
 end
 
+
+-- ---------------------------------------------------------------- the virtual arc (docs/port/arc-plan.md 3.2, 3.3)
+V.ARC_TICKS_PER_TURN = 1024 -- as the hardware (monome docs)
+V.ARC_KEY_TICKS = 16        -- one press of an arc key: 1/64 of a turn, one LED of the ring
+V.ARC_KEY_SHIFT_TICKS = 4
+
+function V.arc_new() return {acc = 0, t = nil} end
+function V.arc_reset(st) st.acc, st.t = 0, nil end
+
+--- one message worth `units` (a relative amount, or the change of an absolute value) at `gain` ticks per unit: the whole ticks to turn the arc by (the fraction is carried). accel "off" (linear, like an arc), "low" or "high":
+--- the ticks are multiplied by 1 + a (|units| - 1), a = 0.25 or 0.5, and by 2, 3 or 4 when the last message came less than 20, 10 or 5 ms ago (the thresholds of norns's own encoder acceleration). a delta of 0 is nothing
+function V.arc_step(st, units, gain, accel, now)
+  if units == 0 then return 0 end
+  local mult = 1
+  if accel == "low" or accel == "high" then
+    mult = 1 + (accel == "high" and 0.5 or 0.25) * (math.abs(units) - 1)
+    if st.t ~= nil then
+      local dt = now - st.t
+      if dt < 0.005 then mult = mult * 4 elseif dt < 0.01 then mult = mult * 3 elseif dt < 0.02 then mult = mult * 2 end
+    end
+  end
+  st.t = now
+  st.acc = st.acc + units * gain * mult
+  local n = trunc(st.acc)
+  st.acc = st.acc - n
+  return n
+end
+
+--- the change of an absolute value (0 for the first message, after a pause of more than V.PAUSE seconds and after a jump of more than V.JUMP: those only set the baseline)
+function V.abs_delta(st, v, now)
+  local last, t = st.last, st.t
+  st.last, st.t = v, now
+  if last == nil or t == nil or now - t > V.PAUSE or math.abs(v - last) > V.JUMP then return 0 end
+  return v - last
+end
+
+--- ONE TURN: the units counted while the knob was turned once round -> ticks per unit (1024 / units, whole, 1 to 64), nil without units
+function V.gain_from_turn(units)
+  if type(units) ~= "number" or units <= 0 then return nil end
+  local g = math.floor(V.ARC_TICKS_PER_TURN / units + 0.5)
+  return math.max(1, math.min(64, g))
+end
+
+--- the ticks of an arc key event: value 1 press, 2 repeat (0 release and anything else is nothing: a release never steps); shift is finer; the optional ramp doubles after 10 repeats and again after 25
+function V.arc_key_ticks(value, shift, repeats, ramp)
+  if value ~= 1 and value ~= 2 then return 0 end
+  local n = shift and V.ARC_KEY_SHIFT_TICKS or V.ARC_KEY_TICKS
+  if value == 2 and ramp then
+    if repeats >= 25 then n = n * 4 elseif repeats >= 10 then n = n * 2 end
+  end
+  return n
+end
+
+-- ---------------------------------------------------------------- two mappings that could answer to one message
+function V.dev_overlap(a, b)
+  if a == "ANY" or b == "ANY" then return true end
+  return V.name_matches(a, b) or V.name_matches(b, a)
+end
+
+function V.ch_overlap(a, b) return a == 0 or b == 0 or a == b end
+
+-- ---------------------------------------------------------------- WATCH: the last six values of the last CC, and what they look like
+V.WATCH_N = 6
+V.WATCH_MAX_SOURCES = 32
+
+function V.watch_new() return {map = {}, order = {}, last = nil} end
+
+function V.watch_size(w)
+  local n = 0
+  for _ in pairs(w.map) do n = n + 1 end
+  return n
+end
+
+function V.watch_add(w, dev, ch, cc, v)
+  local key = tostring(dev) .. "|" .. ch .. "|" .. cc
+  local e = w.map[key]
+  if e == nil then
+    e = {dev = dev, ch = ch, cc = cc, values = {}}
+    w.map[key] = e
+  else
+    for i, k in ipairs(w.order) do if k == key then table.remove(w.order, i) break end end
+  end
+  w.order[#w.order + 1] = key
+  e.values[#e.values + 1] = v
+  if #e.values > V.WATCH_N then table.remove(e.values, 1) end
+  w.last = key
+  while #w.order > V.WATCH_MAX_SOURCES do
+    local old = table.remove(w.order, 1)
+    w.map[old] = nil
+  end
+end
+
+local WATCH_TEXT = {
+  rel2c = {"LOOKS LIKE REL 2S", "1 UP  127 DOWN"},
+  relsm = {"LOOKS LIKE REL SIGN", "1 UP  65 DOWN"},
+  relob = {"LOOKS LIKE REL OFS", "65 UP  63 DOWN"},
+  abs = {"LOOKS ABSOLUTE", "CHECK THE MODE"},
+}
+
+--- what the WATCH view shows: dev, ch, cc and values of the last message's source, the suggested mode (V.suggest on the last six values) and two lines of text
+function V.watch_view(w)
+  local e = w.last and w.map[w.last]
+  if e == nil then return {values = {}, verdict = "TURN AN ENCODER", hint = "ONE CLICK EACH WAY"} end
+  local view = {dev = e.dev, ch = e.ch, cc = e.cc, values = {table.unpack(e.values)}}
+  if #e.values < 4 then
+    view.verdict, view.hint = "TURN ONE CLICK EACH WAY", "A FEW TIMES"
+    return view
+  end
+  local mode, why = V.suggest(e.values)
+  view.mode = mode
+  if mode then
+    view.verdict, view.hint = WATCH_TEXT[mode][1], WATCH_TEXT[mode][2]
+  else
+    view.verdict, view.hint = "NOT SURE", why or ""
+  end
+  return view
+end
+
 return V

@@ -135,11 +135,14 @@ run "lua:MIDI MAP value functions (absolute steps, baseline, jump 40, pause 1.5 
 run "lua:MIDI MAP settings and presets (midimap.conf defaults, round trip, every damaged value, unknown keys kept, preset files, built-in PUSH 2 marked unverified, atomic save)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_settings_test.lua
 run "lua:MIDI MAP layer and learn (through the real midi.lua and pmap: device and channel filters, ANY skips the iii grid and the keys window, the params MAP wins a clash, scripts get every message, held keys released, every way out of a learn)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_layer_test.lua
 run "lua:MIDI MAP page (rows and wording, views, preset row, device list with the mio, visible learn state, every handler redraws, SYSTEM list below THEME)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_page_test.lua
+run "lua:arc keys through the real keyboard module (16 ticks, Shift 4, repeat, release nothing, inactive in menu or text entry or with a script reading keys, other keys untouched)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/arc_keys_test.lua
 SKM=matron/src/platform/macos; LNM=matron/src/platform/linux
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/midimap_hit_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/box_palette.c -o "$T/mmhit" $(pkg-config --libs cairo freetype2) -lm 2> "$T/mmhit.err" || cat "$T/mmhit.err"
 run "c:MIDI MAP hit test (K1-K3 and E1-E3 are hit alike in every style and pixel look, row shown or hidden, muted or not, three sizes)" "$T/mmhit"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layout_test.c matron/src/platform/linux/extras_layout.c -lm -o "$T/xlt" 2> "$T/xlt.err" || cat "$T/xlt.err"
 run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
+cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux $(pkg-config --cflags sdl2) linux/tests/arc_keys_c_test.c matron/src/platform/linux/arc_keys.c -o "$T/akc" 2> "$T/akc.err" || cat "$T/akc.err"
+run "c:arc keys of the arc window (eight keys and no others, 16 ticks, Shift 4, ramp only if asked, a key up is nothing)" "$T/akc"
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
@@ -825,6 +828,46 @@ PY
         rm -rf "$TH"
     }
     window_toggle_scenario
+    # the virtual arc from the keyboard and from MIDI in the real window (docs/port/arc-plan.md): 5/6 T/Y G/H B/N with the arc window in front (tier 1) and with the norns window in front (tier 2), a held key repeats and
+    # its release steps nothing, no other key and no key in the menu turns it, a click on a ring while a learn is armed picks it, a CC played through JACK MIDI is learned and turns that ring, a closed window is not turned
+    arc_scenario() {
+        if [ ! -x "$T/midimap_send" ]; then
+            echo "SKIP  window:arc (the JACK sender did not build)"
+            return
+        fi
+        AH="$(mktemp -d)"
+        ln -s "$REPO" "$AH/norns"
+        mkdir -p "$AH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$AH/dust/code/probe/"
+        printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$AH/box.conf"
+        ALOG="$T/arc.log"
+        MMS="$T/midimap_send" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_arc.lua" "$ALOG" > /dev/null 2>&1
+        # the arc deltas between two markers of the log, one "ring delta" per line
+        between() { sed -n "/$1/,/$2/p" "$ALOG" | sed -n 's/^PROBE arcdelta[[:space:]]*\([0-9]*\)[[:space:]]*\(-*[0-9]*\)$/\1 \2/p' | tr '\n' ','; }
+        arc_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (got: $(eval "${3:-true}"))"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE arc done" "$ALOG"'
+            chk "tier 1, the arc window in front: 5, y, shift+g, b = ring 1 left, 2 right, 3 left fine, 4 left" '[ "$(between "PROBE window init" "PROBE tier1 done")" = "1 -16,2 16,3 -4,4 -16," ]' 'between "PROBE window init" "PROBE tier1 done"'
+            chk "tier 2, the norns window in front: 6 and n" '[ "$(between "PROBE tier1 done" "PROBE tier2 done")" = "1 16,4 16," ]' 'between "PROBE tier1 done" "PROBE tier2 done"'
+            chk "a held key repeats, in steps of 16, and nothing comes after the release" '[ "$(between "PROBE tier2 done" "PROBE hold done" | tr "," "\n" | grep -c "^2 -16$")" -ge 3 ] && [ "$(between "PROBE tier2 done" "PROBE hold done" | tr "," "\n" | grep -vc "^2 -16$")" = 0 ] && [ -z "$(between "PROBE hold done" "PROBE other keys done")" ]'
+            chk "the keys 1 and 2 do not turn the arc" '[ -z "$(between "PROBE hold done" "PROBE other keys done")" ]'
+            chk "in the menu the keys are not the arc (H there is the colour picker's)" '[ -z "$(between "PROBE other keys done" "PROBE menu keys done")" ]'
+            chk "a learn is armed from the page" 'grep -q "PROBE learn state.pick" "$ALOG"'
+            chk "a click on ring 3 picks it and does not turn it" 'grep -q "PROBE picked.listen.a3" "$ALOG" && [ -z "$(between "PROBE learn state" "PROBE picked")" ]'
+            chk "the controller played through JACK MIDI is learned for A3: CC 76, offset binary" 'grep -q "PROBE learned.idle.cc.76.relob" "$ALOG"'
+            chk "the learned CC turns ring 3: 8 ticks a unit, the right way" '[ "$(between "PROBE learned" "PROBE arc closed done")" = "3 8,3 -8,3 16," ]' 'between "PROBE learned" "PROBE arc closed done"'
+            chk "with the arc window closed a mapped CC turns nothing" '[ "$(between "PROBE learned" "PROBE arc done")" = "3 8,3 -8,3 16," ]' 'between "PROBE learned" "PROBE arc done"'
+            chk "WATCH shows what the unit sends: CC 76, offset binary, six values" 'grep -q "PROBE watch.76.relob.LOOKS LIKE REL OFS.6" "$ALOG"'
+            chk "midimap.conf has the arc mapping" 'grep -q "^a3.num=76" "$AH/midimap.after" && grep -q "^a3.mode=relob" "$AH/midimap.after" && grep -q "^a3.gain=8" "$AH/midimap.after"'
+            return $bad
+        }
+        run "window:virtual arc from the keyboard (both windows, hold, release) and from MIDI (learn by clicking the ring, ticks, closed window)" arc_ok
+        mkdir -p "${SHOT_DIR:-/dev/null}" 2> /dev/null
+        cp "$AH/watch-real.png" "${SHOT_DIR:-/dev/null}/arc-watch.png" 2> /dev/null
+        rm -rf "$AH"
+    }
+    arc_scenario
     # the pixel looks in the real window (docs/port/retro-look-plan.md): from box.conf, switched live from the THEME page's PIXEL LOOK row, each look is another picture, saved, remembered after a restart, and the
     # colour picker changes a colour live in a retro look
     retro_scenario() {

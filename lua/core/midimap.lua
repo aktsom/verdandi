@@ -13,6 +13,7 @@ local S = require 'core/midimap_settings'
 local M = {enabled = os.getenv("NORNS_PLATFORM") ~= nil}
 
 M.IDS = S.IDS
+M.ALL_IDS = S.ALL_IDS
 M.TIMEOUT = 15   -- seconds of nothing in PICK or LISTEN
 M.CONFIRM_MSGS = 6 -- messages of the learned CC that the suggestion looks at (the first included)
 M.CONFIRM_SILENCE = 3 -- seconds
@@ -26,14 +27,16 @@ local rt = {}     -- per control: {abs, rel, key, src, dev}
 local seen_version
 
 local function is_enc(id) return id:sub(1, 1) == "e" end
+local function is_arc(id) return id:sub(1, 1) == "a" end
+local function is_knob(id) return id:sub(1, 1) ~= "k" end -- a norns encoder or an arc encoder: takes a CC, not a note
 local function number_of(id) return tonumber(id:sub(2)) end
---- the id the window uses for a control (device_skin.h: K1-K3 are 1-3, E1-E3 are 4-6)
-local function skin_id(id) return (is_enc(id) and 3 or 0) + number_of(id) end
+--- the id the window uses for a control (device_skin.h: K1-K3 are 1-3, E1-E3 are 4-6; the arc's encoders 1-4 are 7-10)
+local function skin_id(id) return (is_enc(id) and 3 or is_arc(id) and 6 or 0) + number_of(id) end
 
 local function state_of(id)
   local r = rt[id]
   if r == nil then
-    r = {abs = V.abs_new(), rel = V.rel_new(), key = V.key_new(), src = nil, dev = nil}
+    r = {abs = V.abs_new(), rel = V.rel_new(), key = V.key_new(), arc = V.arc_new(), src = nil, dev = nil}
     rt[id] = r
   end
   return r
@@ -77,17 +80,22 @@ function M.held()
 end
 
 local function reset_states()
-  for _, id in ipairs(M.IDS) do
+  for _, id in ipairs(M.ALL_IDS) do
     local r = rt[id]
     if r then
-      V.abs_reset(r.abs); V.rel_reset(r.rel); V.key_reset(r.key); r.src, r.dev = nil, nil
+      V.abs_reset(r.abs); V.rel_reset(r.rel); V.key_reset(r.key); V.arc_reset(r.arc); r.src, r.dev = nil, nil
     end
   end
 end
 
 --- a change in the settings (any set, clear, preset, load) releases what is held and starts the values again
+local function push_arc_config()
+  if _norns.arc_keys_config then _norns.arc_keys_config(S.state.arc_keys_accel and 1 or 0) end
+end
+
 local function sync()
   if seen_version ~= S.version then
+    push_arc_config()
     M.release_all()
     reset_states()
     seen_version = S.version
@@ -101,6 +109,7 @@ function M.load()
   rt = {}
   M.guess = {}
   seen_version = S.version
+  push_arc_config()
 end
 
 -- ---------------------------------------------------------------- the params MAP
@@ -118,7 +127,7 @@ end
 function M.clashes()
   local out = {}
   if S.state.on_clash ~= "params" or norns == nil or norns.pmap == nil then return out end
-  for _, id in ipairs(M.IDS) do
+  for _, id in ipairs(M.ALL_IDS) do
     local c = S.state.ctl[id]
     if c.type == "cc" and c.num ~= nil then
       for pid, p in pairs(norns.pmap.data or {}) do
@@ -159,6 +168,10 @@ function M.after_script_load()
   toast(text)
 end
 
+--- the settings the keyboard module asks for (lua/core/keyboard.lua, the arc keys)
+function M.arc_keys_on() return S.state.arc_keys ~= false end
+function M.arc_keys_ramp() return S.state.arc_keys_accel == true end
+
 --- put it in the script hook list (once, at start), and answer the window's click on a control while a pick is armed (sdl_bridge.cc: _norns.midimap_pick("e" or "k", n))
 function M.install()
   _norns.midimap_pick = function(kind, n)
@@ -174,6 +187,83 @@ function M.install()
   if hook and hook.script_post_init and hook.script_post_init.register then
     hook.script_post_init:register("midimap-clash", function() local ok, err = pcall(M.after_script_load) if not ok then M.log("load check: " .. tostring(err)) end end)
   end
+end
+
+-- ---------------------------------------------------------------- the virtual arc (docs/port/arc-plan.md)
+local arc_told = false -- the closed window was said once (reset when a turn gets through)
+
+--- turn a ring of the virtual arc window by ticks (the same path as the mouse); the window being closed is said once and nothing else happens. a build without the call does nothing
+local function send_arc(n, ticks)
+  if not _norns.arc_turn then return end
+  if _norns.arc_turn(n, ticks) then
+    arc_told = false
+  elseif not arc_told then
+    arc_told = true
+    toast("ARC WINDOW IS CLOSED: F8")
+  end
+end
+
+-- ---------------------------------------------------------------- two controls on one message
+--- the message a control answers to as a comparable kind: "cc" or "note", and its number, or nil for an empty control
+local function kind_of(c)
+  if c.type == "none" or c.num == nil then return nil end
+  return c.type
+end
+
+--- the control (other than `id`) that would also answer to a CC or note with this device and channel filter, or nil
+function M.find_overlap(id, type_, num, dev, ch)
+  for _, other in ipairs(M.ALL_IDS) do
+    local c = S.state.ctl[other]
+    if other ~= id and kind_of(c) == type_ and c.num == num and V.dev_overlap(c.dev, dev) and V.ch_overlap(c.ch, ch) then return other end
+  end
+  return nil
+end
+
+--- id -> the other control it shares a message with (both directions), for the ! marks
+function M.overlaps()
+  local out = {}
+  for _, id in ipairs(M.ALL_IDS) do
+    local c = S.state.ctl[id]
+    local k = kind_of(c)
+    if k then
+      local other = M.find_overlap(id, k, c.num, c.dev, c.ch)
+      if other then out[id] = other end
+    end
+  end
+  return out
+end
+
+-- ---------------------------------------------------------------- WATCH: which relative format does a unit send?
+M.watching = false
+local watch = V.watch_new()
+
+function M.watch_start() watch = V.watch_new(); M.watching = true end
+function M.watch_stop() M.watching = false end
+function M.watch_view() return V.watch_view(watch) end
+
+-- ---------------------------------------------------------------- ONE TURN: the gain of an arc encoder from one turn of its knob
+local calib = nil
+
+function M.calib_start(id)
+  if S.state.ctl[id] == nil or not is_arc(id) then return false end
+  M.release_all()
+  calib = {id = id, units = 0, abs = V.abs_new(), src = nil}
+  return true
+end
+
+function M.calib_units() return calib and calib.units or nil end
+function M.calib_target() return calib and calib.id or nil end
+
+function M.calib_cancel() calib = nil end
+
+--- the end of ONE TURN: the gain from the size of the turn (its direction does not matter), stored; nil if nothing was counted
+function M.calib_finish()
+  if calib == nil then return nil end
+  local id, units = calib.id, math.abs(calib.units)
+  calib = nil
+  local g = V.gain_from_turn(units)
+  if g then S.set(id, "gain", g) end
+  return g
 end
 
 -- ---------------------------------------------------------------- learn
@@ -195,7 +285,7 @@ end
 
 local function end_learn()
   local L = M.learn
-  L.state, L.target, L.msgs, L.src = "idle", nil, nil, nil
+  L.state, L.target, L.msgs, L.src, L.ask = "idle", nil, nil, nil, nil
   timer_stop()
   window(0, 0, nil)
   notify()
@@ -216,12 +306,21 @@ end
 --- leaving the page: no learn, no held key
 function M.leave()
   M.cancel_quiet()
+  calib = nil
+  M.watching = false
   M.learn.msg, M.learn.warn = nil, nil
   M.release_all()
 end
 
 local function listen_text(id)
-  return is_enc(id) and "MOVE A KNOB" or "PRESS A BUTTON"
+  return is_knob(id) and "MOVE A KNOB" or "PRESS A BUTTON"
+end
+
+--- the text of the question when the CC a control was given is used by another control
+function M.ask_text()
+  local a = M.learn.ask
+  if a == nil then return nil end
+  return string.format("%s %d IS %s. MOVE IT TO %s?", a.type == "note" and "NOTE" or "CC", a.num, a.other:upper(), a.id:upper())
 end
 
 function M.start_pick()
@@ -293,13 +392,52 @@ local function assigned(id, what)
   M.learn.msg = id:upper() .. " = " .. what
 end
 
+--- the learned message goes to the control; if another control already answers to it the question is asked first (K3 yes / K2 no on the page, M.answer)
+local function take(id, type_, num, first)
+  local other = M.find_overlap(id, type_, num, "ANY", 0)
+  if other then
+    local L = M.learn
+    L.state, L.ask, L.deadline = "ask", {id = id, other = other, type = type_, num = num, first = first}, M.clock() + M.TIMEOUT
+    window(0, 2, id)
+    L.msg = nil
+    notify()
+    return false
+  end
+  return true
+end
+
+--- the answer to the question: yes clears the other control and goes on, no (or cancel) leaves everything as it was
+function M.answer(yes)
+  local L = M.learn
+  if L.state ~= "ask" or L.ask == nil then return end
+  local a = L.ask
+  if not yes then
+    M.cancel("LEARN STOPPED")
+    return
+  end
+  M.clear(a.other)
+  L.ask = nil
+  local id = a.id
+  S.assign(id, a.type, a.num)
+  if is_knob(id) then
+    L.state, L.msgs, L.src, L.last = "confirm", {a.first}, L.src, M.clock()
+    window(0, 2, id)
+    assigned(id, "CC " .. a.num)
+    L.msg = "TURN IT BOTH WAYS"
+  else
+    end_learn()
+    assigned(id, (a.type == "note" and "NOTE " or "CC ") .. a.num)
+  end
+  notify()
+end
+
 local function learn_event(d, kind, ch, d1, d2)
   local L = M.learn
-  if L.state == "pick" then return end
+  if L.state == "pick" or L.state == "ask" then return end
   if V.is_non_controller(d.name) then return end
   if L.state == "listen" then
     local id = L.target
-    if is_enc(id) then
+    if is_knob(id) then
       if kind ~= 0xB0 then
         if kind == 0x90 and d2 > 0 then
           L.msg = "A NOTE? USE A CC"
@@ -307,18 +445,22 @@ local function learn_event(d, kind, ch, d1, d2)
         end
         return
       end
+      L.src = {dev = d.name, ch = ch, cc = d1}
+      if not take(id, "cc", d1, d2) then return end
       S.assign(id, "cc", d1)
-      L.state, L.msgs, L.src, L.last = "confirm", {d2}, {dev = d.name, ch = ch, cc = d1}, M.clock()
+      L.state, L.msgs, L.last = "confirm", {d2}, M.clock()
       window(0, 2, id)
       assigned(id, "CC " .. d1)
       L.msg = "TURN IT BOTH WAYS"
       notify()
     else
       if kind == 0xB0 and d2 > 0 then
+        if not take(id, "cc", d1) then return end
         S.assign(id, "cc", d1)
         end_learn()
         assigned(id, "CC " .. d1)
       elseif kind == 0x90 and d2 > 0 then
+        if not take(id, "note", d1) then return end
         S.assign(id, "note", d1)
         end_learn()
         assigned(id, "NOTE " .. d1)
@@ -341,7 +483,7 @@ end
 function M.tick()
   local L = M.learn
   local now = M.clock()
-  if (L.state == "pick" or L.state == "listen") and now > L.deadline then
+  if (L.state == "pick" or L.state == "listen" or L.state == "ask") and now > L.deadline then
     M.cancel("LEARN STOPPED")
   elseif L.state == "confirm" and now - L.last > M.CONFIRM_SILENCE then
     M.finish_confirm()
@@ -353,13 +495,14 @@ end
 --- the seconds left of a PICK or LISTEN (0 when there is no time-out)
 function M.seconds_left()
   local L = M.learn
-  if L.state ~= "pick" and L.state ~= "listen" then return 0 end
+  if L.state ~= "pick" and L.state ~= "listen" and L.state ~= "ask" then return 0 end
   return math.max(0, math.ceil(L.deadline - M.clock()))
 end
 
 --- a device went away: what it held is released, and a learn is over
 function M.device_removed(d)
   if d == nil then return end
+  calib = nil
   for _, id in ipairs(M.IDS) do
     local r = rt[id]
     if r and r.dev == d.id and V.key_held(r.key) then
@@ -386,14 +529,21 @@ end
 local function act(d, kind, ch, d1, d2)
   local pm = norns ~= nil and norns.pmap ~= nil and norns.pmap.rev or nil
   local params_wins = S.state.on_clash == "params"
-  for _, id in ipairs(M.IDS) do
+  for _, id in ipairs(M.ALL_IDS) do
     local c = S.state.ctl[id]
     if c.type ~= "none" and c.num == d1 and matches(c, d, ch) then
       if kind == 0xB0 and c.type == "cc" then
         local taken = params_wins and pm ~= nil and d.port ~= nil and pm[d.port] ~= nil and pm[d.port][ch] ~= nil and pm[d.port][ch][d1] ~= nil
         if not taken then
           local r = state_of(id)
-          if is_enc(id) then
+          if is_arc(id) then
+            local src = d.name .. "/" .. ch
+            if r.src ~= src then V.abs_reset(r.abs); V.arc_reset(r.arc); r.src = src end
+            local units
+            if c.mode == "abs" then units = V.abs_delta(r.abs, d2, M.clock()) else units = V.rel_decode(c.mode, d2) end
+            local n = V.arc_step(r.arc, units, c.gain, c.accel, M.clock())
+            if n ~= 0 then send_arc(number_of(id), n) end
+          elseif is_enc(id) then
             local src = d.name .. "/" .. ch
             if r.src ~= src then V.abs_reset(r.abs); V.rel_reset(r.rel); r.src = src end
             local n
@@ -406,7 +556,7 @@ local function act(d, kind, ch, d1, d2)
             if what == "press" then send_key(number_of(id), 1) elseif what == "release" then send_key(number_of(id), 0) end
           end
         end
-      elseif (kind == 0x90 or kind == 0x80) and c.type == "note" and not is_enc(id) then
+      elseif (kind == 0x90 or kind == 0x80) and c.type == "note" and id:sub(1, 1) == "k" then
         local r = state_of(id)
         local what = V.key_note(r.key, kind == 0x90 and "on" or "off", d2)
         r.dev = d.id
@@ -428,6 +578,20 @@ function M.event(d, data)
   local d2 = data[3] or 0
   local ch = status % 16 + 1
   sync()
+  if M.watching then
+    if kind == 0xB0 and d.name ~= nil then V.watch_add(watch, d.name, ch, d1, d2); notify() end
+    return
+  end
+  if calib ~= nil then
+    local c = S.state.ctl[calib.id]
+    if kind == 0xB0 and c.type == "cc" and c.num == d1 and matches(c, d, ch) then
+      local src = d.name .. "/" .. ch
+      if calib.src ~= src then V.abs_reset(calib.abs); calib.src = src end
+      calib.units = calib.units + (c.mode == "abs" and V.abs_delta(calib.abs, d2, M.clock()) or V.rel_decode(c.mode, d2))
+      notify()
+    end
+    return
+  end
   if M.learn.state ~= "idle" then
     learn_event(d, kind, ch, d1, d2)
     return

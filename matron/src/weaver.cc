@@ -370,6 +370,8 @@ static int _clipboard_set(lua_State *l);
 static int _clipboard_request(lua_State *l);
 static int _toast(lua_State *l);
 static int _midimap_arm(lua_State *l);
+static int _arc_turn(lua_State *l);
+static int _arc_keys_config(lua_State *l);
 static int _midimap_show(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
@@ -736,6 +738,8 @@ void w_init(void) {
     lua_register_norns("clipboard_request", &_clipboard_request);
     lua_register_norns("toast", &_toast);
     lua_register_norns("midimap_arm", &_midimap_arm);
+    lua_register_norns("arc_turn", &_arc_turn);
+    lua_register_norns("arc_keys_config", &_arc_keys_config);
     lua_register_norns("midimap_show", &_midimap_show);
     lua_register_norns("set_warning", &_set_warning);
 #endif
@@ -3795,6 +3799,28 @@ int _toast(lua_State *l) {
  */
 int _midimap_arm(lua_State *l) {
     sdl_bridge_midimap_arm((int)luaL_checkinteger(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: turn a ring of the virtual arc window (the same path as the mouse; docs/port/arc-plan.md)
+ * @function arc_turn
+ * @tparam integer n ring 1-4
+ * @tparam integer ticks signed, 1024 to a turn
+ * @treturn boolean true if the window is open and took the turn
+ */
+int _arc_turn(lua_State *l) {
+    lua_pushboolean(l, sdl_bridge_arc_turn((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2)) != 0);
+    return 1;
+}
+
+/***
+ * Linux desktop: the ramp setting of the arc keys in the arc window
+ * @function arc_keys_config
+ * @tparam integer ramp 0 or 1
+ */
+int _arc_keys_config(lua_State *l) {
+    sdl_bridge_arc_keys_ramp((int)luaL_checkinteger(l, 1));
     return 0;
 }
 

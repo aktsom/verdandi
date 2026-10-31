@@ -109,6 +109,9 @@ keyboard.hardware_keys = os.getenv("NORNS_HARDWARE_KEYS") == "1"
 local hw_key = {['1']=1, ['2']=2, ['3']=3, ENTER=3, KPENTER=3, SPACE=3, ESC=2, BACKSPACE=2}
 local hw_enc = {Q={1,-1}, W={1,1}, A={2,-1}, S={2,1}, Z={3,-1}, X={3,1}}
 local hw_arrow = {UP={2,-1}, DOWN={2,1}, LEFT={3,-1}, RIGHT={3,1}}
+-- Linux desktop (docs/port/arc-plan.md 3.3): 5/6 T/Y G/H B/N turn the encoders 1 to 4 of the virtual arc, left and right: one press 16 ticks (one LED), Shift 4, a repeat repeats, a release is nothing.
+-- under the same rules as the keys above (not in the menu, not while a text entry or a script wants the keyboard), and only while the virtual arc window is open and ARC KEYS is on (core/midimap.lua)
+local hw_arc = {['5']={1,-1}, ['6']={1,1}, T={2,-1}, Y={2,1}, G={3,-1}, H={3,1}, B={4,-1}, N={4,1}}
 -- keys whose press went to the hardware: code -> {key=n} or {enc=n, dir=d}
 local hw_down = {}
 
@@ -124,6 +127,17 @@ end
 local function hw_press(n, z)
   hw_show(1, n, z)
   _norns.key(n, z)
+end
+
+local function arc_keys_wanted()
+  if not _norns.arc_turn then return false end
+  local mm = norns.midimap
+  return mm == nil or mm.arc_keys_on == nil or mm.arc_keys_on()
+end
+
+local function arc_ticks(value, repeats)
+  local mm = norns.midimap
+  return require('core/midimap_value').arc_key_ticks(value, keyboard.shift() and true or false, repeats, mm ~= nil and mm.arc_keys_ramp ~= nil and mm.arc_keys_ramp() or false)
 end
 
 local function hw_turn(h)
@@ -144,6 +158,10 @@ local function hardware(c, value)
   end
   if h ~= nil then
     if value == 2 and h.enc then hw_turn(h) end
+    if value == 2 and h.arc and _norns.arc_turn then
+      h.repeats = h.repeats + 1
+      _norns.arc_turn(h.arc, h.dir * arc_ticks(2, h.repeats))
+    end
     return true
   end
   if value ~= 1 or not keyboard.hardware_keys then return false end
@@ -154,6 +172,15 @@ local function hardware(c, value)
     hw_down[c] = {key=hw_key[c]}
     hw_press(hw_key[c], 1)
     return true
+  end
+  local a = hw_arc[c]
+  if a and not _menu.mode and not keyboard.ctrl() and not keyboard.alt() and not keyboard.altgr() and arc_keys_wanted() then
+    -- taken only if the window took the turn (it is open): else the key is not ours and goes on its way
+    if _norns.arc_turn(a[1], a[2] * arc_ticks(1, 0)) then
+      hw_down[c] = {arc=a[1], dir=a[2], repeats=0}
+      return true
+    end
+    return false
   end
   local e = hw_enc[c] or ((not _menu.mode) and hw_arrow[c])
   if e then

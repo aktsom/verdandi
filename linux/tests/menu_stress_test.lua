@@ -53,6 +53,13 @@ local function world()
     toast = function(t) w.toasts[#w.toasts + 1] = t end,
     clipboard_set = function(t) w.clip = t end, clipboard_request = function() w.clip_asked = w.clip_asked + 1 end,
     midimap_arm = function(a) w.armed = a end, midimap_show = function(st) w.ring = st end,
+    -- the virtual arc: ticks are whole, non-zero, for a ring of 1 to 4; the window may be closed (the call says so)
+    arc_turn = function(n, t)
+      if type(n) ~= "number" or n < 1 or n > 4 or n ~= math.floor(n) or type(t) ~= "number" or t ~= math.floor(t) or t == 0 then w.arc_bad = "arc_turn(" .. tostring(n) .. ", " .. tostring(t) .. ")" end
+      if not w.arc_open then w.arc_refused = (w.arc_refused or 0) + 1 return false end
+      w.arc_turns = (w.arc_turns or 0) + 1
+      return true
+    end,
     key = function(n, z) if n ~= 1 then _menu.key(n, z) end end, enc = function(n, d) if n ~= 1 then _menu.penc(n, d) end end}
   write("/home/we/keyboard.layout", "us\n")
   _path = {keyboard_layout = "/home/we/keyboard.layout"}
@@ -85,7 +92,7 @@ local function world()
   w.pages.BOX.msg_log = nil
   -- the MIDI MAP page (docs/port/midi-map-plan.md): the real layer, settings and page; the devices are plain tables, the window's calls are recorded
   for _, k in ipairs({"core/midimap", "core/midimap_settings", "core/midimap_value", "core/pmap"}) do package.loaded[k] = nil end
-  w.armed, w.ring, w.T = 0, 0, 1000
+  w.armed, w.ring, w.T, w.arc_open = 0, 0, 1000, true
   params = {lookup = {}, lookup_param = function(self, id) return {name = id} end}
   midi = {devices = {}, vports = {}}
   for i = 1, 16 do midi.vports[i] = {name = "none"} end
@@ -153,6 +160,8 @@ local function apply(w, e)
   elseif e.k == "ext" then
     if e.what == "pmap" then w.pmap.clear() w.pmap.new("p") w.pmap.assign("p", e.dev, 1, e.cc)
     elseif e.what == "unpmap" then w.pmap.clear()
+    elseif e.what == "arcopen" then w.arc_open = true
+    elseif e.what == "arcclose" then w.arc_open = false
     elseif e.what == "unplug" then local d = w.devs[e.dev] midi.devices[d.id] = nil w.mm.device_removed(d)
     elseif e.what == "plug" then local d = w.devs[e.dev] midi.devices[d.id] = d
     elseif e.what == "drop" then os.remove("/home/we/box-presets/alpha.box") w.box.reload_looks()
@@ -215,7 +224,10 @@ local function invariants(w)
   elseif p == "UI" then
     if not (pg.pos >= 1 and pg.pos <= 4) then return "selection: UI row " .. tostring(pg.pos) end
   elseif p == "MIDIMAP" then
-    if pg.mode ~= "rows" and pg.mode ~= "detail" and pg.mode ~= "confirm" then return "modal: unknown mode " .. tostring(pg.mode) end
+    if pg.mode ~= "rows" and pg.mode ~= "detail" and pg.mode ~= "confirm" and pg.mode ~= "watch" and pg.mode ~= "turn" then return "modal: unknown mode " .. tostring(pg.mode) end
+    if (pg.mode == "watch") ~= w.mm.watching then return "modal: the WATCH view and the layer's watching flag disagree (" .. tostring(pg.mode) .. ", " .. tostring(w.mm.watching) .. ")" end
+    if (pg.mode == "turn") ~= (w.mm.calib_target() ~= nil) then return "modal: the ONE TURN view and the layer's calibration disagree" end
+    if pg.mode == "turn" and (pg.ctl == nil or pg.ctl:sub(1, 1) ~= "a") then return "modal: ONE TURN for a control that is not an arc encoder" end
     if (pg.mode == "confirm") ~= (pg.confirm ~= nil) then return "modal: the confirm flag and the mode disagree" end
     local rows = pg.rows()
     if rows[1] ~= "PRESET" or rows[2] ~= "LEARN" then return "rows: PRESET and LEARN are not the first two rows" end
@@ -247,7 +259,10 @@ local function invariants(w)
   do
     local L = w.mm.learn
     local waiting = L.state == "pick" or L.state == "listen"
-    if not (L.state == "idle" or waiting or L.state == "confirm") then return "learn: unknown state " .. tostring(L.state) end
+    if not (L.state == "idle" or waiting or L.state == "confirm" or L.state == "ask") then return "learn: unknown state " .. tostring(L.state) end
+    if (L.state == "ask") ~= (L.ask ~= nil) then return "learn: the question and the learn state disagree" end
+    if p ~= "MIDIMAP" and (w.mm.watching or w.mm.calib_target() ~= nil) then return "learn: WATCH or ONE TURN is open on another page (" .. p .. ")" end
+    if w.arc_bad then return "arc: a bad arc_turn call " .. w.arc_bad end
     if (w.armed == 1) ~= waiting then return "learn: the window is " .. (w.armed == 1 and "armed" or "not armed") .. " but the learn state is " .. L.state end
     if (w.ring == 0) ~= (L.state == "idle") then return "learn: the ring is " .. tostring(w.ring) .. " but the learn state is " .. L.state end
     if p ~= "MIDIMAP" and L.state ~= "idle" then return "learn: a learn is open on another page (" .. p .. ")" end
@@ -318,7 +333,7 @@ local function run(events, trace)
 end
 
 -- the generator
-local KEYS = {"UP", "DOWN", "LEFT", "RIGHT", "EQUAL", "MINUS", "ENTER", "ESC", "BACKSPACE", "SPACE", "1", "2", "3", "Q", "W", "A", "S", "Z", "X", "PAGEUP", "PAGEDOWN",
+local KEYS = {"T", "Y", "G", "N", "5", "6", "UP", "DOWN", "LEFT", "RIGHT", "EQUAL", "MINUS", "ENTER", "ESC", "BACKSPACE", "SPACE", "1", "2", "3", "Q", "W", "A", "S", "Z", "X", "PAGEUP", "PAGEDOWN",
   "4", "5", "6", "7", "8", "9", "0", "B", "C", "D", "E", "F", "H", "RIGHT", "RIGHT", "DOWN", "UP", "3", "2", "R", "HOME", "END", "H", "C"}
 local function pick(t) return t[math.random(#t)] end
 local CCS = {10, 16, 17, 18, 64, 71, 72, 73, 85, 102, 103, 104}
@@ -334,7 +349,7 @@ local function gen_midi()
     return {k = "midi", dev = math.random(4), b = pick({{0xF8}, {0xFE}, {0xE0, 1, 2}, {0xB0}, {0xC0, 5}})}
   elseif r <= 70 then return {k = "click", id = pick({"e1", "e2", "e3", "k1", "k2", "k3"})}
   elseif r <= 85 then return {k = "tick", dt = pick({0.1, 1, 2, 4, 16})}
-  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug"}), dev = math.random(4), cc = pick(CCS)} end
+  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug", "arcopen", "arcclose"}), dev = math.random(4), cc = pick(CCS)} end
 end
 local function gen(n)
   local ev = {}

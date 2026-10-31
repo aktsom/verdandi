@@ -39,7 +39,7 @@ package.loaded.util = util
 local T = 100
 local sent = {}
 _norns = {midi = {}, show_control = function() end, key = function() end, enc = function() end,
-  toast = function(t) sent[#sent + 1] = "toast:" .. t end, midimap_arm = function(m) sent[#sent + 1] = "arm:" .. m end, midimap_show = function(s, n) sent[#sent + 1] = "ring:" .. s .. ":" .. n end}
+  toast = function(t) sent[#sent + 1] = "toast:" .. t end, arc_turn = function(n, t) sent[#sent + 1] = "arc:" .. n .. ":" .. t; return true end, midimap_arm = function(m) sent[#sent + 1] = "arm:" .. m end, midimap_show = function(s, n) sent[#sent + 1] = "ring:" .. s .. ":" .. n end}
 local set_pages = {}
 local redraws = 0
 local page
@@ -86,7 +86,7 @@ fresh()
 page.redraw()
 eq(texts()[1], "MIDI MAP", "the title")
 local ro = page.rows()
-eq(table.concat(ro, ","), "PRESET,LEARN,E1,E2,E3,K1,K2,K3,ON CLASH,SAVE AS", "the rows of the page")
+eq(table.concat(ro, ","), "PRESET,LEARN,E1,E2,E3,K1,K2,K3,A1,A2,A3,A4,WATCH,ON CLASH,ARC KEYS,SAVE AS", "the rows of the page")
 check(drawn("PRESET") and drawn("LEARN") and drawn("E1") and drawn("E2"), "the first rows are drawn")
 check(drawn("-----"), "an unmapped control shows -----")
 eq(page.pos, 1, "the selection starts on PRESET")
@@ -205,7 +205,7 @@ _norns.midi.remove(6)
 
 -- ---- ON CLASH
 fresh()
-page.pos = 9; page.redraw(); check(page.rows()[9] == "ON CLASH", "row 9 is ON CLASH"); check(drawn("PARAMS MAP"), "the default is the params MAP wins")
+page.pos = 14; page.redraw(); check(page.rows()[14] == "ON CLASH", "row 14 is ON CLASH"); check(drawn("PARAMS MAP"), "the default is the params MAP wins")
 turn(3, 1); eq(S.state.on_clash, "both", "E3 switches to BOTH"); check(drawn("BOTH"), "shown"); turn(3, -1); eq(S.state.on_clash, "params", "and back")
 press(3); eq(S.state.on_clash, "both", "K3 toggles too")
 
@@ -225,15 +225,15 @@ pmap.clear()
 -- ---- SAVE AS and DELETE
 fresh()
 S.select_preset("PUSH 2"); S.set("e1", "num", 20); mm.changed()
-page.pos = 10; check(page.rows()[10] == "SAVE AS", "SAVE AS"); press(3); check(entry ~= nil, "K3 opens the name entry")
+page.pos = 16; check(page.rows()[16] == "SAVE AS", "SAVE AS"); press(3); check(entry ~= nil, "K3 opens the name entry")
 entry.cb("My Push"); eq(S.state.preset, "My Push", "the preset is saved and in use"); check(S.preset_by_name("My Push") ~= nil, "it is in the list")
-check(page.rows()[11] == "DELETE", "DELETE appears for one of his own presets")
-page.pos = 11; press(3); eq(page.mode, "confirm", "K3 asks once"); check(drawn("DELETE My Push"), "naming the preset"); press(2); eq(page.mode, "rows", "K2 says no"); check(S.preset_by_name("My Push") ~= nil, "nothing deleted")
-press(3); press(3); check(S.preset_by_name("My Push") == nil, "K3 then K3 deletes it"); check(#page.rows() == 10, "and DELETE is gone")
+check(page.rows()[17] == "DELETE", "DELETE appears for one of his own presets")
+page.pos = 17; press(3); eq(page.mode, "confirm", "K3 asks once"); check(drawn("DELETE My Push"), "naming the preset"); press(2); eq(page.mode, "rows", "K2 says no"); check(S.preset_by_name("My Push") ~= nil, "nothing deleted")
+press(3); press(3); check(S.preset_by_name("My Push") == nil, "K3 then K3 deletes it"); check(#page.rows() == 16, "and DELETE is gone")
 -- the same name asks first
-S.save_preset("My Push"); page.pos = 10; press(3); entry.cb("my push"); eq(page.mode, "confirm", "an existing name asks before overwriting"); press(3); eq(page.mode, "rows", "and K3 overwrites")
+S.save_preset("My Push"); page.pos = 16; press(3); entry.cb("my push"); eq(page.mode, "confirm", "an existing name asks before overwriting"); press(3); eq(page.mode, "rows", "and K3 overwrites")
 -- a bad name
-page.pos = 10; press(3); entry.cb("a/b"); check(#page.rows() >= 10, "a bad name is refused"); check(page.msg ~= nil, "with a message")
+page.pos = 16; press(3); entry.cb("a/b"); check(#page.rows() >= 16, "a bad name is refused"); check(page.msg ~= nil, "with a message")
 
 -- ---- an error in a handler leaves the page whole
 fresh()
@@ -244,6 +244,84 @@ S.set = real_set
 check(page.mode == "detail" or page.mode == "rows", "an error in a handler keeps the page in a known mode")
 page.redraw(); check(#shown > 0, "and it still draws")
 press(2); press(2)
+
+
+-- ---- the arc encoders A1 to A4, ARC KEYS and WATCH (docs/port/arc-plan.md)
+fresh()
+page.pos = 9; page.redraw()
+check(page.rows()[9] == "A1" and page.rows()[12] == "A4", "A1 to A4 follow K3")
+check(drawn("A1") and drawn("-----"), "an empty arc encoder shows -----")
+press(3)
+eq(page.mode, "detail", "K3 on A1 opens its view"); eq(page.ctl, "a1", "it is A1")
+eq(table.concat(page.drows(), ","), "LEARN,NUMBER,DEVICE,CHANNEL,MODE,GAIN,ACCEL,ONE TURN,CLEAR", "the rows of an arc encoder: GAIN and ACCEL, no SENS")
+page.dpos = 2; turn(3, 1); eq(S.state.ctl.a1.num, 0, "NUMBER sets CC 0 first"); turn(3, 76); eq(S.state.ctl.a1.num, 76, "E3 steps the number"); eq(S.state.ctl.a1.type, "cc", "a CC")
+page.dpos = 5; turn(3, 1); turn(3, 1); eq(S.state.ctl.a1.mode, "relsm", "MODE steps"); turn(3, 1); eq(S.state.ctl.a1.mode, "relob", "to REL OFS"); check(drawn("REL OFS"), "shown")
+page.dpos = 6; page.redraw(); check(drawn("GAIN") and drawn("8"), "GAIN shows its default"); turn(3, 4); eq(S.state.ctl.a1.gain, 12, "E3 steps the gain"); turn(3, 200); eq(S.state.ctl.a1.gain, 64, "to 64 at most"); turn(3, -200); eq(S.state.ctl.a1.gain, 1, "and 1 at least")
+turn(3, 7); eq(S.state.ctl.a1.gain, 8, "back to 8")
+page.dpos = 7; page.redraw(); check(drawn("ACCEL") and drawn("OFF"), "ACCEL is off by default"); turn(3, 1); eq(S.state.ctl.a1.accel, "low", "ACCEL low"); turn(3, 1); eq(S.state.ctl.a1.accel, "high", "high"); turn(3, 5); eq(S.state.ctl.a1.accel, "high", "stops at high"); turn(3, -9); eq(S.state.ctl.a1.accel, "off", "and at off")
+press(2); page.pos = 9; page.redraw(); check(drawn("CC76 REL OFS"), "the row shows the arc encoder's mapping")
+-- LEARN from the view, and from the page
+press(3); page.dpos = 1; press(3); eq(mm.learn.state, "listen", "LEARN in the view goes to LISTEN"); eq(mm.learn.target, "a1", "for A1"); check(drawn("LEARN A1"), "the banner names it"); check(drawn("MOVE A KNOB"), "and the row says what to do"); mm.cancel()
+press(2)
+-- ONE TURN
+page.pos = 9; press(3); page.dpos = 8; press(3)
+eq(page.mode, "turn", "K3 on ONE TURN opens the counting view"); eq(mm.calib_target(), "a1", "calibrating A1"); check(drawn("ONE TURN"), "the view says so"); check(drawn("0"), "and counts from 0")
+for _ = 1, 16 do _norns.midi.event(2, {0xB0, 76, 72}) end -- offset binary: 72 = +8 each
+check(drawn("128"), "the view shows the units counted (16 x 8 = 128)")
+reset_sent = nil
+press(3); eq(S.state.ctl.a1.gain, 8, "K3 stores the gain: 1024 / 128 = 8"); eq(page.mode, "detail", "and goes back to the view"); check(page.msg ~= nil and page.msg:find("8", 1, true), "and says it")
+page.dpos = 8; press(3); for _ = 1, 4 do _norns.midi.event(2, {0xB0, 76, 72}) end; press(2); eq(mm.calib_target(), nil, "K2 cancels the calibration"); eq(S.state.ctl.a1.gain, 8, "and keeps the gain")
+page.dpos = 8; press(3); press(3); check(page.msg ~= nil, "K3 with nothing counted says so"); eq(S.state.ctl.a1.gain, 8, "and keeps the gain")
+page.mode = "detail"
+-- every control in the turn view ends with a redraw: E2, E3 do nothing there
+page.dpos = 8; press(3); turn(2, 1); turn(3, 1); eq(page.mode, "turn", "E2 and E3 leave the counting view alone"); press(2)
+-- CLEAR
+page.dpos = 9; press(3); eq(S.state.ctl.a1.type, "none", "CLEAR clears an arc encoder"); eq(S.state.ctl.a1.gain, 8, "and its gain")
+press(2)
+-- device list for an arc encoder is the same list
+page.pos = 10; press(3); page.dpos = 3; check(#page.device_choices() >= 2, "the device list is the same for an arc encoder"); press(2)
+-- ARC KEYS
+fresh()
+page.pos = 15; page.redraw(); check(page.rows()[15] == "ARC KEYS", "row 15 is ARC KEYS"); check(drawn("ON"), "ON by default")
+turn(3, -1); eq(S.state.arc_keys, false, "E3 down turns it off"); check(drawn("OFF"), "shown"); turn(3, 1); eq(S.state.arc_keys, true, "E3 up turns it on")
+press(3); eq(S.state.arc_keys, false, "K3 toggles"); press(3)
+-- a typed CC that another control uses: the question
+fresh()
+S.set("e2", "num", 71)
+page.pos = 9; press(3); page.dpos = 2; press(3); entry.cb("71")
+eq(page.mode, "confirm", "a typed CC another control uses asks"); check(drawn("CC 71") and drawn("E2"), "the question names the CC and the control"); check(drawn("K3 yes"), "K3 yes, K2 no")
+press(2); eq(S.state.ctl.a1.type, "none", "no: nothing is assigned"); eq(S.state.ctl.e2.num, 71, "and E2 keeps it")
+page.mode = "detail"; page.ctl = "a1"; page.dpos = 2; press(3); entry.cb("71"); press(3)
+eq(S.state.ctl.a1.num, 71, "yes: A1 has it"); eq(S.state.ctl.e2.type, "none", "yes: E2 is cleared"); eq(page.mode, "detail", "back in the view")
+page.mode = "rows"
+-- the overlap mark and its help line
+fresh()
+S.set("e2", "num", 72); S.set("a1", "num", 72)
+page.pos = 4; page.redraw(); check(drawn("!"), "two controls on one CC: the row is marked !"); check(drawn("ALSO A1"), "and the help line says which")
+S.set("a1", "num", 73); page.redraw(); check(not drawn("!"), "no mark when they differ")
+-- the learn question on the page
+fresh()
+S.set("e2", "num", 71)
+page.pos = 2; press(3); mm.pick("a1"); _norns.midi.event(2, {0xB0, 71, 65})
+eq(mm.learn.state, "ask", "the learn asks"); check(drawn("CC 71 IS E2"), "the page shows the question"); check(drawn("MOVE IT TO A1"), "with both controls"); check(drawn("K3 YES"), "and the keys"); check(drawn("K2 NO"), "and no")
+press(2); eq(mm.learn.state, "idle", "K2 answers no"); eq(S.state.ctl.e2.num, 71, "E2 keeps it"); eq(#set_pages, 0, "and the page is still there")
+page.pos = 2; press(3); mm.pick("a1"); _norns.midi.event(2, {0xB0, 71, 65}); press(3)
+eq(S.state.ctl.a1.num, 71, "K3 answers yes"); eq(S.state.ctl.e2.type, "none", "E2 is cleared"); eq(mm.learn.state, "confirm", "the learn goes on"); mm.cancel()
+turn(2, 1); turn(3, 1)
+-- WATCH
+fresh()
+page.pos = 13; page.redraw(); check(page.rows()[13] == "WATCH", "row 13 is WATCH")
+press(3); eq(page.mode, "watch", "K3 opens the WATCH view"); check(drawn("WATCH"), "the title"); check(drawn("ONE CLICK EACH WAY"), "it asks for one click each way")
+for _, v in ipairs({65, 63, 65, 63, 65, 65}) do _norns.midi.event(2, {0xB0, 76, v}) end
+check(drawn("MIO") and drawn("CH 1") and drawn("CC 76"), "the device, the channel and the CC"); check(drawn("65") and drawn("63"), "the last values"); check(drawn("REL OFS"), "the verdict"); check(drawn("65 UP"), "and which is up")
+same_as_redraw("in WATCH")
+turn(2, 1); turn(3, 1); eq(page.mode, "watch", "the encoders leave WATCH alone"); press(3); eq(page.mode, "watch", "so does K3")
+S.set("e1", "num", 76); S.set("e1", "mode", "rel2c"); reset_sent = #sent
+_norns.midi.event(2, {0xB0, 76, 1}); eq(#sent, reset_sent, "a mapped CC does nothing while WATCH is open")
+press(2); eq(page.mode, "rows", "K2 leaves WATCH"); eq(mm.watching, false, "and stops watching"); eq(#set_pages, 0, "without leaving the page")
+-- leaving the page while watching or calibrating stops both
+page.pos = 13; press(3); page.deinit(); eq(mm.watching, false, "leaving the page stops WATCH"); page.init()
+S.set("a1", "num", 76); page.pos = 9; press(3); page.dpos = 8; press(3); page.deinit(); eq(mm.calib_target(), nil, "leaving the page stops ONE TURN"); page.init()
 
 -- ---- the page in SYSTEM's list, below THEME
 local getenv = os.getenv

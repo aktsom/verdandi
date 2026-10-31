@@ -42,6 +42,32 @@ has "RESULT some scripts name those keys" && ok "the result sentence says what i
 has "Ctrl+M: 2 script file(s) test keyboard.ctrl(); 1 of them name the letter M:" && has "four/four.lua:2:" && ok "Ctrl+M: found, with the file and line; five.lua tests ctrl but not M" || bad "Ctrl+M: $OUT"
 has "RESULT Ctrl+M (mute) may be read by the script(s) above" && ok "the Ctrl+M result sentence" || bad "Ctrl+M result"
 [ "$(cd "$T" && find . -type f -exec md5sum {} + | sort)" = "$before" ] && ok "nothing was changed" || bad "files changed"
+# the arc keys (docs/port/arc-plan.md 5.3): 5 6 T Y G H B N, only in scripts that read the keyboard (keyboard.code names "5", "T"; keyboard.char gets "h")
+mkdir -p "$D/six" "$D/seven"
+cat > "$D/six/six.lua" <<'L'
+function keyboard.code(c, v)
+  if c == "5" and v == 1 then a() elseif c == 'T' then b() end
+end
+function keyboard.char(ch)
+  if ch == "h" then c() end
+end
+L
+cat > "$D/seven/seven.lua" <<'L'
+-- no keyboard handler: a string "T" or "5" here is not a key
+local names = {"T", "5", "H"}
+L
+OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
+has "Arc keys 5 6 T Y G H B N: 1 script file(s) that read the keyboard name them:" && ok "arc keys: one script reads them" || bad "arc keys: $OUT"
+has "six/six.lua:2:" && has "six/six.lua:5:" && ok "arc keys: the lines of keyboard.code and keyboard.char" || bad "arc keys lines: $OUT"
+printf '%s\n' "$OUT" | grep -q "seven/seven.lua" && bad "a script with no keyboard handler is not reported" || ok "arc keys: a script that does not read the keyboard is not reported"
+has "RESULT arc keys: scripts above read some of them" && ok "arc keys: the result sentence" || bad "arc keys result"
+[ "$(cd "$T" && find . -type f -exec md5sum {} + | sort)" != "$before" ] || bad "the fixtures were not added"
+rm -f "$D/six/six.lua"
+OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
+has "Arc keys 5 6 T Y G H B N: no script that reads the keyboard names them" && has "RESULT arc keys: no script reads them: nothing is given up" && ok "arc keys: none named, nothing given up" || bad "arc keys none: $OUT"
+before="$(cd "$T" && find . -type f -exec md5sum {} + | sort)"
+"$REPO/linux/scan-fkeys.sh" "$D" > /dev/null 2>&1
+[ "$(cd "$T" && find . -type f -exec md5sum {} + | sort)" = "$before" ] && ok "still nothing was changed" || bad "files changed by the second scan"
 rm -f "$D/one/one.lua" "$D/two/two.lua"
 OUT="$("$REPO/linux/scan-fkeys.sh" "$D" 2>&1)"
 has "RESULT none of your scripts name F9, F11 or F12" && ok "no script: nothing is given up" || bad "empty result: $OUT"
