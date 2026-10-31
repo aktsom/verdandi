@@ -7,6 +7,9 @@ S = require "core/midimap_settings"
 lvl = function() return tostring(params:get("output_level")) end
 print("PROBE restart state", S.state.actions_on, S.state.actions.mute.num)
 #xdo search --name ^Verdandi.Linux$ windowfocus
+# the menu opens where the pointer is: put it where the first run left it (its last click, 0.645 x 0.109 of the window), so that the two pictures line up
+#xdo search --name ^Verdandi.Linux$ mousemove --window %1 639 72
+#sleep 0.5
 #xdo key F10
 #sleep 0.5
 #xdo key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
