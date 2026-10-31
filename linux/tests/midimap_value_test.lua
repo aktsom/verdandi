@@ -337,5 +337,55 @@ do
   check(V.watch_size(w) <= V.WATCH_MAX_SOURCES, "watch: a limit on the sources it remembers")
 end
 
+-- ---- MIDI actions: what counts as a press (docs/port/midi-actions-plan.md)
+do
+  eq(V.GUARD, 0.25, "actions: guard time"); eq(V.BURST_QUIET, 0.3, "actions: encoder quiet time")
+  eq(V.action_note_press("on", 100), true, "action note: on with velocity presses")
+  eq(V.action_note_press("on", 1), true, "action note: velocity 1 presses")
+  eq(V.action_note_press("on", 0), false, "action note: on with velocity 0 is a release")
+  eq(V.action_note_press("off", 64), false, "action note: off never presses")
+  eq(V.action_note_press("off", 0), false, "action note: off 0 never presses")
+  -- CC button: edge at the threshold, the release at 0 never acts, a held value acts once
+  local st = V.key_new()
+  eq(V.action_cc_press(st, 0, 63), false, "action cc: 0 is nothing")
+  eq(V.action_cc_press(st, 63, 63), false, "action cc: the threshold itself is not above")
+  eq(V.action_cc_press(st, 64, 63), true, "action cc: above the threshold presses")
+  eq(V.action_cc_press(st, 127, 63), false, "action cc: held high, no second press")
+  eq(V.action_cc_press(st, 0, 63), false, "action cc: 0 releases, never acts")
+  eq(V.action_cc_press(st, 100, 63), true, "action cc: pressed again after the release")
+  -- encoder step trigger: one per burst, only in the chosen direction
+  local tr = V.trig_new()
+  eq(V.trig_step(tr, "relob", 65, "up", 0), true, "trig: first click up fires")
+  eq(V.trig_step(tr, "relob", 65, "up", 0.05), false, "trig: the same burst, no second")
+  eq(V.trig_step(tr, "relob", 66, "up", 0.2), false, "trig: still the burst")
+  eq(V.trig_step(tr, "relob", 65, "up", 0.45), false, "trig: 0.25 s after the last message is still one burst")
+  eq(V.trig_step(tr, "relob", 65, "up", 0.8), true, "trig: after 0.3 s of quiet a new burst fires")
+  eq(V.trig_step(tr, "relob", 63, "up", 2), false, "trig: the other direction never fires")
+  eq(V.trig_step(tr, "relob", 64, "up", 3), false, "trig: delta 0 never fires")
+  eq(V.trig_step(tr, "relob", 65, "up", 4), true, "trig: a click up fires again")
+  tr = V.trig_new()
+  eq(V.trig_step(tr, "relob", 63, "down", 0), true, "trig: down fires on a down click")
+  eq(V.trig_step(tr, "rel2c", 127, "down", 1), true, "trig: rel2c 127 is down")
+  eq(V.trig_step(tr, "rel2c", 1, "down", 2), false, "trig: rel2c 1 is up, not down")
+  eq(V.trig_step(tr, "rel2c", 0, "down", 3), false, "trig: rel2c 0 is nothing")
+  eq(V.trig_step(tr, "relsm", 65, "down", 4), true, "trig: relsm 65 is down")
+  eq(V.trig_step(tr, "relsm", 1, "up", 5), true, "trig: relsm 1 is up")
+  -- a burst of the other direction does not start a new burst for this direction
+  tr = V.trig_new()
+  eq(V.trig_step(tr, "relob", 65, "up", 0), true, "trig: burst starts")
+  eq(V.trig_step(tr, "relob", 63, "up", 0.1), false, "trig: back click inside the burst")
+  eq(V.trig_step(tr, "relob", 65, "up", 0.2), false, "trig: and up again inside the burst, still one")
+  -- the guard: 0.25 s per action
+  local g = V.guard_new()
+  eq(V.guard_ok(g, "mix", 10), true, "guard: the first goes")
+  eq(V.guard_ok(g, "mix", 10.1), false, "guard: 0.1 s later is blocked")
+  eq(V.guard_ok(g, "tape", 10.1), true, "guard: another action has its own time")
+  eq(V.guard_ok(g, "mix", 10.2), false, "guard: a blocked press does not restart the time")
+  eq(V.guard_ok(g, "mix", 10.26), true, "guard: 0.25 s after the one that went")
+  eq(V.guard_ok(g, "mix", 10.4), false, "guard: blocked again")
+  V.guard_reset(g)
+  eq(V.guard_ok(g, "mix", 10.41), true, "guard: reset forgets")
+end
+
 if fails == 0 then print("midimap value: all passed") end
 os.exit(fails == 0 and 0 or 1)

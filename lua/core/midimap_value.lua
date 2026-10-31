@@ -277,4 +277,38 @@ function V.watch_view(w)
   return view
 end
 
+-- ---------------------------------------------------------------- MIDI actions (docs/port/midi-actions-plan.md): press-only triggers and the guard time
+V.GUARD = 0.25       -- seconds: the same action does not fire again sooner
+V.BURST_QUIET = 0.3  -- seconds without a message before an encoder turn counts as a new burst
+
+--- a note message presses only as a note on with a velocity above 0 (a note off, velocity 0 and anything else never act)
+function V.action_note_press(kind, vel) return kind == "on" and vel > 0 end
+
+--- a CC as a button: true only for the press edge above the threshold (st from V.key_new); the release at 0 never acts
+function V.action_cc_press(st, v, threshold) return V.key_cc(st, v, threshold) == "press" end
+
+function V.trig_new() return {t = nil} end
+function V.trig_reset(st) st.t = nil end
+
+--- an encoder as a trigger: true for the first message of a burst that turns the chosen way ("up" or "down"). every message with an amount keeps the burst alive; delta 0 is nothing
+function V.trig_step(st, mode, v, dir, now)
+  local r = V.rel_decode(mode, v)
+  if r == 0 then return false end
+  local fresh = st.t == nil or now - st.t >= V.BURST_QUIET
+  st.t = now
+  if not fresh then return false end
+  return (dir == "up" and r > 0) or (dir == "down" and r < 0)
+end
+
+function V.guard_new() return {} end
+function V.guard_reset(g) for k in pairs(g) do g[k] = nil end end
+
+--- true and the time is noted when the action may fire; a blocked press does not restart the time
+function V.guard_ok(g, id, now)
+  local last = g[id]
+  if last ~= nil and now - last < V.GUARD then return false end
+  g[id] = now
+  return true
+end
+
 return V
