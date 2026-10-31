@@ -73,7 +73,7 @@ print("PROBE arc closed done")
 _menu.set_mode(true)
 _menu.set_page("MIDIMAP")
 pg = require "core/menu/midimap"
-pg.pos = 13
+pg.pos = 14
 pg.key(3, 1)
 #sleep 1
 #sh ("$MMS" B0:4C:41 B0:4C:3F B0:4C:41 B0:4C:3F B0:4C:41 B0:4C:41 > "$MARKS.send4" 2>&1 &)

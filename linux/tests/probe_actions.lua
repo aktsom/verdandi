@@ -92,6 +92,7 @@ print("PROBE master off", S.state.actions_on)
 #sh "$MMS" 90:25:64 80:25:00 90:26:64 80:26:00 B0:47:01 B0:55:7F B0:55:00 > "$MARKS.s10" 2>&1
 #sleep 1.5
 print("PROBE off mute", lvl(), st())
+print("PROBE e2 state", S.state.ctl.e2.type, S.state.ctl.e2.num, S.state.ctl.e2.mode, S.state.ctl.e2.dev, mm.learn.state, S.state.actions_on)
 #xdo search --name ^Verdandi.Linux$ windowfocus
 #xdo key ctrl+shift+m
 #sleep 1
