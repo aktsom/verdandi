@@ -7,7 +7,7 @@ local fails = 0
 local function check(ok, what) if not ok then fails = fails + 1; print("FAIL " .. what) end end
 local function eq(a, b, what) check(a == b, what .. ": got " .. tostring(a) .. ", wanted " .. tostring(b)) end
 
-screen = setmetatable({}, {__index = function() return function() end end})
+screen = setmetatable({text_extents = function(t) return #tostring(t) * 5 end}, {__index = function() return function() end end})
 local log = {}
 local ARC_OPEN = true
 _norns = {
@@ -105,6 +105,41 @@ eq(run(function() send("6", 2) end), "arc:1:16", "a repeat goes where the press 
 -- an arc closed during a hold: no error
 reset(); send("Y", 1); ARC_OPEN = false
 eq(run(function() send("Y", 2) end), "arc:2:16", "a repeat after the arc closed makes the call and the call refuses"); send("Y", 0)
+
+-- ---- a real text entry (the real textentry module): while ANY entry is open the arc keys take nothing, with the arc window open or closed and ARC KEYS on or off (the MIDI MAP number and
+-- preset name entries, THEME, SCREEN, the picker, the tape name); the digits 5 and 6 and the letters T Y G H B N are typed into it; when it is closed the arc keys work again
+norns.menu = {status = function() return true end, get_key = function() return "k" end, get_enc = function() return "e" end, get_redraw = function() return "r" end,
+  get_refresh = function() return "f" end, set = function() end, init = function() end}
+local textentry = require 'textentry'
+for _, open in ipairs({true, false}) do
+  for _, on in ipairs({true, false}) do
+    reset(); ARC_OPEN, arc_keys = open, on
+    local done
+    textentry.enter(function(txt) done = txt end, "", "NAME:", nil, {accept = function(t) return #t <= 20 end})
+    check(textentry.active, "the entry is open")
+    local calls = run(function() for _, k in ipairs(order) do send(k, 1); send(k, 0) end end)
+    eq(calls, "", "an entry is open (arc " .. (open and "open" or "closed") .. ", ARC KEYS " .. (on and "on" or "off") .. "): the arc keys take nothing, not even a call")
+    eq(#(textentry.txt or ""), 8, "and all eight keys were typed into the entry (5 6 T Y G H B N)")
+    check((textentry.txt or ""):find("5", 1, true) and (textentry.txt or ""):find("6", 1, true), "including the digits 5 and 6")
+    -- the keys of the existing hardware mapping are the entry's too: no K1-K3 and no E1-E3 while it is open (1 2 3 Q W A S Z X)
+    local before_txt = #(textentry.txt or "")
+    eq(run(function() for _, k in ipairs({"1", "2", "3", "Q", "W", "A", "S", "Z", "X"}) do send(k, 1); send(k, 0) end end), "", "an entry is open: 1 2 3 Q W A S Z X are not K1-K3 or E1-E3")
+    eq(#(textentry.txt or "") - before_txt, math.min(9, 20 - before_txt), "and they are typed")
+    textentry.txt = string.sub(textentry.txt, 1, 8)
+    -- digits
+    for _, d in ipairs({"0", "1", "2", "3", "4", "7", "8", "9"}) do send(d, 1); send(d, 0) end
+    eq(#(textentry.txt or ""), 16, "the other digits too")
+    -- a key held while the entry opens: its repeat and release must not turn the arc
+    textentry.exit()
+    reset(); ARC_OPEN, arc_keys = open, on
+    send("6", 1)
+    textentry.enter(function() end, "", "NAME:")
+    eq(run(function() send("6", 2); send("6", 0) end), "", "a key held while an entry opens: its repeat does not turn the arc")
+    textentry.exit()
+    reset(); ARC_OPEN, arc_keys = open, on
+    if open and on then eq(run(function() send("5", 1); send("5", 0) end), "arc:1:-16", "after the entry the arc keys work again") end
+  end
+end
 -- ---- the existing mapping is unchanged, and no other key turns the arc
 reset()
 local expect = {["1"] = "key:1:1", ["2"] = "key:2:1", ["3"] = "key:3:1", ENTER = "key:3:1", SPACE = "key:3:1", ESC = "key:2:1", BACKSPACE = "key:2:1",

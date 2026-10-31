@@ -62,6 +62,18 @@ int main(void) {
     CHECK(arc_key_ticks(1, 1, 0, 25, 1) == 64, "ramp: 25 = x4");
     CHECK(arc_key_ticks(1, 1, 0, 40, 0) == 16, "no ramp unless asked");
     CHECK(arc_key_ticks(1, 0, 0, 40, 1) == 16, "a press is never ramped");
+    // a text entry open: the arc window takes no key (the flag is set from lua by the entry, textentry.lua); lookup itself stays what it is
+    CHECK(arc_keys_blocked() == 0, "not blocked at first");
+    arc_keys_set_blocked(1);
+    CHECK(arc_keys_blocked() == 1, "blocked while an entry is open");
+    for (int i = 0; i < 8; i++) {
+        int ring, dir;
+        CHECK(arc_key_lookup(keys[i].sc, &ring, &dir) == 1, "%s is still an arc key for the lookup (the caller checks the flag)", keys[i].name);
+    }
+    arc_keys_set_blocked(5);
+    CHECK(arc_keys_blocked() == 1, "any non-zero value blocks");
+    arc_keys_set_blocked(0);
+    CHECK(arc_keys_blocked() == 0, "and 0 gives the keys back");
     if (fails == 0) {
         printf("arc keys (C): eight keys, no others; 16 ticks, Shift 4, ramp only if asked, a key up is nothing\n");
     }

@@ -372,6 +372,7 @@ static int _toast(lua_State *l);
 static int _midimap_arm(lua_State *l);
 static int _arc_turn(lua_State *l);
 static int _arc_keys_config(lua_State *l);
+static int _arc_keys_block(lua_State *l);
 static int _midimap_show(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
@@ -740,6 +741,7 @@ void w_init(void) {
     lua_register_norns("midimap_arm", &_midimap_arm);
     lua_register_norns("arc_turn", &_arc_turn);
     lua_register_norns("arc_keys_config", &_arc_keys_config);
+    lua_register_norns("arc_keys_block", &_arc_keys_block);
     lua_register_norns("midimap_show", &_midimap_show);
     lua_register_norns("set_warning", &_set_warning);
 #endif
@@ -3821,6 +3823,16 @@ int _arc_turn(lua_State *l) {
  */
 int _arc_keys_config(lua_State *l) {
     sdl_bridge_arc_keys_ramp((int)luaL_checkinteger(l, 1));
+    return 0;
+}
+
+/***
+ * Linux desktop: a text entry is open (1) or closed (0): the arc window takes none of its keys while it is open (lua/lib/textentry.lua)
+ * @function arc_keys_block
+ * @tparam integer blocked 0 or 1
+ */
+int _arc_keys_block(lua_State *l) {
+    sdl_bridge_arc_keys_block((int)luaL_checkinteger(l, 1));
     return 0;
 }
 

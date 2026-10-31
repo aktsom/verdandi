@@ -17,6 +17,43 @@ local te = {}
 -- on the device none of this exists: the entry is the one of upstream norns
 local desktop = os.getenv("NORNS_PLATFORM") ~= nil
 te.active = false
+te.opening = false -- true while enter() sets the entry up (it calls the menu, which tells textentry that it changed)
+
+-- computers: the arc window's keys (5 6 T Y G H B N, matron/src/platform/linux/arc_keys.h) are the entry's too while one is open: lua tells the window
+local function arc_block(on)
+  if desktop and _norns and _norns.arc_keys_block then _norns.arc_keys_block(on and 1 or 0) end
+end
+
+-- computers: an entry that is marked active but whose menu moved on (a page or a mode change that did not close it) would keep every key for itself, hide itself, and make every later entry refuse to open
+-- ("one entry at a time"). what it takes to know: the menu mode and the page it was opened in, and (in a menu) that the menu's key handler is still the entry's
+local function orphaned()
+  if not te.active then return false end
+  if te.opened_menu ~= norns.menu.status() then return true end
+  if te.opened_menu then
+    return _menu.page ~= te.opened_page or norns.menu.get_key() ~= te.key
+  end
+  return key ~= te.key
+end
+
+--- close an entry without calling its callback (its page is gone): hooks off, the script's handlers back if it was opened over a script
+local function abandon()
+  te.active = false
+  te_kbd_cb.code = nil
+  te_kbd_cb.char = nil
+  if te.opened_menu == false and te.key_restore ~= nil then
+    key = te.key_restore
+    enc = te.enc_restore
+    redraw = te.redraw_restore
+    refresh = te.refresh_restore
+  end
+  arc_block(false)
+end
+
+--- the menu changed its page or its mode (lua/core/menu.lua set_page and set_mode): an entry that was open for the old one is closed
+te.menu_changed = function(what)
+  if not desktop or te.opening or not te.active then return end
+  abandon()
+end
 
 -- add one character: false (and a hint) if the entry refuses it
 local function add_char(a)
@@ -155,8 +192,18 @@ end
 -- opts (computers only): accept(text) -> true, or false and a short hint; replace = true: the first typed character replaces the default
 te.enter = function(callback, default, heading, check, opts)
   if desktop and te.active then
-    return -- one entry at a time: the keys are the open entry's, and its restore must stay the page's
+    if orphaned() then
+      -- the entry that is marked active is not on the screen any more: close it and open this one, and say so (the next time it happens the log shows what left it behind)
+      print("textentry: an earlier entry ('" .. tostring(te.heading) .. "') was left active (the menu moved on: page " .. tostring(te.opened_page) .. ", now " .. tostring(_menu.page) .. "); it is closed")
+      abandon()
+    else
+      print("textentry: cannot open '" .. tostring(heading) .. "': another entry ('" .. tostring(te.heading) .. "') is still active")
+      return -- one entry at a time: the keys are the open entry's, and its restore must stay the page's
+    end
   end
+  te.opening = true
+  te.opened_menu = norns.menu.status()
+  te.opened_page = _menu and _menu.page
   te.active = true
   te.accept = desktop and opts and opts.accept or nil
   te.refuse = desktop and opts and opts.refuse or nil
@@ -174,6 +221,7 @@ te.enter = function(callback, default, heading, check, opts)
   te.skip_char = false
   te_kbd_cb.code = keycode
   te_kbd_cb.char = keychar
+  arc_block(true)
 
   if norns.menu.status() == false then
     te.key_restore = key
@@ -191,6 +239,7 @@ te.enter = function(callback, default, heading, check, opts)
     te.refresh_restore = norns.menu.get_refresh()
     norns.menu.set(te.enc, te.key, te.redraw, te.refresh)
   end
+  te.opening = false
   te.redraw()
 end
 
@@ -201,6 +250,7 @@ te.exit = function()
   te.active = false
   te_kbd_cb.code = nil
   te_kbd_cb.char = nil
+  arc_block(false)
 
   if norns.menu.status() == false then
     key = te.key_restore

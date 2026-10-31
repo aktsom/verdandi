@@ -157,8 +157,10 @@ local function hardware(c, value)
     return true
   end
   if h ~= nil then
-    if value == 2 and h.enc then hw_turn(h) end
-    if value == 2 and h.arc and _norns.arc_turn then
+    -- a hold that began before a text entry opened does not go on turning anything under it: the keys are the entry's
+    local entry_open = te_kbd_cb.code ~= nil or te_kbd_cb.char ~= nil
+    if value == 2 and h.enc and not entry_open then hw_turn(h) end
+    if value == 2 and h.arc and _norns.arc_turn and not entry_open then
       h.repeats = h.repeats + 1
       _norns.arc_turn(h.arc, h.dir * arc_ticks(2, h.repeats))
     end

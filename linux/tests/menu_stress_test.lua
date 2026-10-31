@@ -46,7 +46,8 @@ local function world()
   screen.update = function() w.shown = w.frame end
   screen.ping = function() end
   util = {clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
-    scandir = function(dir) local out = {} local p = io.popen("ls -p '" .. map(dir) .. "' 2>/dev/null") for l in p:lines() do out[#out + 1] = l end p:close() return out end}
+    scandir = function(dir) local out = {} local p = io.popen("ls -p '" .. map(dir) .. "' 2>/dev/null") for l in p:lines() do out[#out + 1] = l end p:close() return out end,
+    file_exists = function() return false end, make_dir = function() end, os_capture = function() return "" end, s_to_hms = function() return "0:00:00" end}
   package.loaded.util = util
   w.box_calls, w.ui_calls, w.clip, w.clip_asked, w.toasts = {}, {}, nil, 0, {}
   _norns = {box_look = function(...) w.box_calls[#w.box_calls + 1] = {...} end, ui_look = function(...) w.ui_calls[#w.ui_calls + 1] = {...} end, show_control = function() end,
@@ -64,7 +65,9 @@ local function world()
   write("/home/we/keyboard.layout", "us\n")
   _path = {keyboard_layout = "/home/we/keyboard.layout"}
   norns = {none = function() end}
-  _menu = {mode = true, page = "SYSTEM", goto_panel = function() end, set_mode = function() end}
+  _menu = {mode = true, page = "SYSTEM", goto_panel = function() end, draw_panel = function() end,
+    -- the menu's own set_mode tells the text entry that the menu changed (lua/core/menu.lua; a source check below makes sure it does)
+    set_mode = function(mode) _menu.mode = mode; if w.textentry and w.textentry.menu_changed then w.textentry.menu_changed("mode") end end}
   norns.menu = {}
   norns.menu.init = function() end
   norns.menu.status = function() return _menu.mode end
@@ -109,8 +112,20 @@ local function world()
   w.mm.load()
   w.mm.install()
   w.pages.MIDIMAP = dofile("lua/core/menu/midimap.lua")
+  -- the tape page (its REC name entry is a text entry like the others): the audio side is a stub
+  audio = {tape = {constants = setmetatable({}, {__index = function() return 0 end}), subscribe = function() end, unsubscribe = function() end, get_state = function() return {rec = {state = 0, pos = 0}, play = {state = 0, pos = 0, len = 0}} end}}
+  for _, f in ipairs({"tape_play_stop", "tape_record_open", "tape_record_start", "tape_play_start", "tape_play_pause", "tape_record_pause", "tape_record_stop", "tape_play_open", "tape_play_loop"}) do audio[f] = function() end end
+  audio.tape_compute_diskfree = function() return 0 end
+  tab = require "tabutil"
+  _path.tape = "/home/we/tape/"
+  -- (the tape page's file browser and its unload question are other modals: stubs here, they are not what is tested)
+  package.loaded.fileselect = {enter = function() end, pushd = function() end}
+  package.loaded.listselect = {enter = function() end}
+  package.loaded["core/menu/tape"] = nil
+  w.pages.TAPE = dofile("lua/core/menu/tape.lua")
   _menu.set_page = function(p)
     w.pages[_menu.page].deinit()
+    if w.textentry.menu_changed then w.textentry.menu_changed("page") end
     _menu.page = p
     local pg = w.pages[p]
     _menu.key, _menu.penc, _menu.redraw, _menu.refresh = pg.key, pg.enc, pg.redraw, pg.refresh
@@ -153,13 +168,16 @@ local function apply(w, e)
     w.T = w.T + e.dt
     w.mm.tick()
   elseif e.k == "page" then
-    if w.textentry.active then return end -- the menu does not change pages under an open entry (its keys are the entry's)
+    -- (the menu may change pages under an open entry: it is closed, docs/port/KNOWN-ISSUES.md item 25)
     local from = _menu.page
     _menu.set_page(e.p)
     if from == "MIDIMAP" and e.p ~= "MIDIMAP" then w.left_midimap = true end
   elseif e.k == "ext" then
     if e.what == "pmap" then w.pmap.clear() w.pmap.new("p") w.pmap.assign("p", e.dev, 1, e.cc)
     elseif e.what == "unpmap" then w.pmap.clear()
+    elseif e.what == "arckeyson" or e.what == "arckeysoff" then
+      -- (a setting written from outside the page: not while a learn waits, which promises that no file is written)
+      if w.mm.learn.state == "idle" then w.mm_set.set_arc_keys(e.what == "arckeyson") end
     elseif e.what == "arcopen" then w.arc_open = true
     elseif e.what == "arcclose" then w.arc_open = false
     elseif e.what == "unplug" then local d = w.devs[e.dev] midi.devices[d.id] = nil w.mm.device_removed(d)
@@ -297,6 +315,8 @@ local function invariants(w)
     if w.pkr_files == nil then w.pkr_files = now elseif w.pkr_files ~= now then return "preview: a file was written while the picker is open" end
   end
   -- the screen shows the state: a redraw now draws what the last one drew
+  -- (the tape page is upstream's: its E2 switches PLAY and REC and redraws with its next tape update, so it is not held to this rule)
+  if p == "TAPE" and not w.textentry.active then return nil end
   local before = frame_text(w.shown)
   _menu.redraw()
   local after = frame_text(w.shown)
@@ -308,6 +328,7 @@ end
 local function escape_check(w)
   for _ = 1, 4 do
     if _menu.page == "SYSTEM" and not w.textentry.active then break end
+    if _menu.page == "TAPE" and not w.textentry.active then _menu.set_page("SYSTEM") break end -- (the tape page's K2 arms the recorder: it is left with a page key, as on the device)
     tap(w, "ESC")
   end
   if _menu.page ~= "SYSTEM" or w.textentry.active then return "liveness: 4 times ESC did not leave the page (" .. state_of(w) .. ")" end
@@ -324,7 +345,7 @@ local function run(events, trace)
     local msg = not ok and ("error: " .. tostring(err)) or invariants(w)
     if not msg and i % 25 == 0 then
       local w2msg = escape_check(w)
-      if w2msg then msg = w2msg else _menu.set_page(({"BOX", "UI", "MIDIMAP"})[(i // 25) % 3 + 1]) end
+      if w2msg then msg = w2msg else _menu.set_page(({"BOX", "UI", "MIDIMAP", "TAPE"})[(i // 25) % 4 + 1]) end
     end
     if trace then lines[#lines + 1] = string.format("%3d %-22s -> %s", i, fmt(e), state_of(w) .. (msg and ("   <-- " .. msg) or "")) end
     if msg then return {index = i, message = msg, trace = lines} end
@@ -349,7 +370,7 @@ local function gen_midi()
     return {k = "midi", dev = math.random(4), b = pick({{0xF8}, {0xFE}, {0xE0, 1, 2}, {0xB0}, {0xC0, 5}})}
   elseif r <= 70 then return {k = "click", id = pick({"e1", "e2", "e3", "k1", "k2", "k3"})}
   elseif r <= 85 then return {k = "tick", dt = pick({0.1, 1, 2, 4, 16})}
-  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug", "arcopen", "arcclose"}), dev = math.random(4), cc = pick(CCS)} end
+  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug", "arcopen", "arcclose", "arckeyson", "arckeysoff"}), dev = math.random(4), cc = pick(CCS)} end
 end
 local function gen(n)
   local ev = {}
@@ -362,7 +383,7 @@ local function gen(n)
     elseif r <= 76 then ev[i] = {k = "ctrl", name = pick({"C", "V", "V", "C", "O", "M", "Q"})}
     elseif r <= 80 then ev[i] = {k = "clip", i = math.random(11)}
     elseif r <= 90 then ev[i] = {k = "enc", n = math.random(2, 3), d = pick({-5, -2, -1, 0, 1, 1, 2, 5})}
-    elseif r <= 96 then ev[i] = {k = "page", p = pick({"BOX", "UI", "SYSTEM", "BOX", "MIDIMAP", "MIDIMAP", "MIDIMAP"})}
+    elseif r <= 96 then ev[i] = {k = "page", p = pick({"BOX", "UI", "SYSTEM", "BOX", "MIDIMAP", "MIDIMAP", "MIDIMAP", "TAPE"})}
     else ev[i] = {k = "ext", what = pick({"drop", "add"})} end
   end
   return ev
@@ -874,6 +895,150 @@ do
   pg.pos = 9
   for _ = 1, 3 do apply(w, {k = "tap", name = "DOWN"}) end
   for _, l in ipairs(printed) do if l:find("clamped", 1, true) then fails_total = fails_total + 1 print("FAIL scrolling past the last row is logged as a clamp") break end end
+end
+
+-- ---------------------------------------------------------------- text entries on MIDI MAP and the tape page (found on the installed package: digits 5 and 6 could not be typed with the arc window open, a preset name vanished, the tape
+-- name entry would not open any more). every entry goes through the real keyboard module and the real textentry; the tape page is the real one
+do
+  local function F(what) fails_total = fails_total + 1 print("FAIL entries: " .. what) end
+  local function is(c, what) if not c then F(what) end end
+  local function logged(part) for _, l in ipairs(printed) do if l:find(part, 1, true) then return true end end return false end
+  local function setup(arc_open, arc_keys)
+    local w = world()
+    w.arc_open = arc_open
+    w.mm_set.set_arc_keys(arc_keys)
+    return w
+  end
+  local function open_midimap(w, row) _menu.set_page("MIDIMAP"); w.pages.MIDIMAP.pos = row; w.pages.MIDIMAP.redraw() end
+  local function tape_entry_opens(w, what, stay)
+    if not stay then _menu.set_page("TAPE") end
+    w.pages.TAPE.mode = w.pages.TAPE.constants.TAPE_MODE_REC
+    if stay then _menu.key(3, 1); _menu.key(3, 0) -- a mouse click or a mapped control: the keyboard still belongs to the entry that was left behind
+    else tap(w, "RIGHT") end -- K3 on the REC side of the tape page: the name entry
+    is(w.textentry.active and w.textentry.heading == "tape filename:", "the tape name entry opens " .. what .. " (active " .. tostring(w.textentry.active) .. ", heading " .. tostring(w.textentry.heading) .. ")")
+    local msg = invariants(w)
+    is(msg == nil, "the page is whole with the tape entry open " .. what .. ": " .. tostring(msg))
+    tap(w, "ESC")
+    is(not w.textentry.active and w.te_kbd.code == nil, "the tape name entry closes with ESC " .. what)
+    if stay then w.textentry.exit() end
+  end
+  for _, arc_open in ipairs({true, false}) do
+    for _, arc_keys in ipairs({true, false}) do
+      local combo = "(arc window " .. (arc_open and "open" or "closed") .. ", ARC KEYS " .. (arc_keys and "on" or "off") .. ")"
+      -- a preset name whose first letter is, or is not, one of the arc keys; the digits 5 and 6 as a first character too
+      for _, first in ipairs({"B", "T", "H", "N", "Y", "G", "A", "M", "5", "6"}) do
+        local w = setup(arc_open, arc_keys)
+        open_midimap(w, 16)
+        tap(w, "RIGHT")
+        is(w.textentry.active, "SAVE AS opens the entry " .. combo)
+        tap(w, first); tap(w, "A")
+        local want = first:lower() .. "a"
+        is(w.textentry.txt == want, "the name typed with '" .. first .. "' first is '" .. want .. "' " .. combo .. " (got " .. tostring(w.textentry.txt) .. ")")
+        tap(w, "ENTER")
+        is(not w.textentry.active, "ENTER closes the entry " .. combo)
+        is(w.mm_set.preset_by_name(want) ~= nil, "the preset '" .. want .. "' was saved " .. combo)
+        is((w.arc_turns or 0) == 0, "typing a name turned the arc " .. combo)
+      end
+      -- a number typed for a control: the digits 5 and 6 included
+      do
+        local w = setup(arc_open, arc_keys)
+        open_midimap(w, 9)
+        tap(w, "RIGHT")               -- K3 on A1: its view
+        w.pages.MIDIMAP.dpos = 2
+        tap(w, "RIGHT")               -- K3 on NUMBER: the entry
+        is(w.textentry.active, "NUMBER opens the entry " .. combo)
+        for _, d in ipairs({"5", "6"}) do tap(w, d) end
+        is(w.textentry.txt == "56", "56 can be typed " .. combo .. " (got " .. tostring(w.textentry.txt) .. ")")
+        tap(w, "ENTER")
+        is(w.mm_set.state.ctl.a1.num == 56, "CC 56 was set " .. combo .. " (" .. tostring(w.mm_set.state.ctl.a1.num) .. ")")
+        is((w.arc_turns or 0) == 0, "typing a number turned the arc " .. combo)
+      end
+      -- mapped controls (a Beatstep or any unit) do not touch an entry: K2 would cancel it, E2 and E3 move its cursor
+      do
+        local w = setup(arc_open, arc_keys)
+        local S = w.mm_set
+        S.set("k2", "type", "cc"); S.set("k2", "num", 85); S.set("e2", "num", 72); S.set("e2", "mode", "rel2c"); S.set("e3", "num", 73); S.set("e3", "mode", "rel2c")
+        S.set("a1", "num", 76); S.set("a1", "mode", "rel2c"); S.set("k3", "type", "cc"); S.set("k3", "num", 86); w.mm.changed()
+        open_midimap(w, 16)
+        tap(w, "RIGHT")
+        tap(w, "A")
+        local te = w.textentry
+        local before = {te.pos, te.row, te.delok, te.txt}
+        for _, m in ipairs({{0xB0, 85, 127}, {0xB0, 85, 0}, {0xB0, 72, 1}, {0xB0, 72, 127}, {0xB0, 73, 1}, {0xB0, 73, 127}, {0xB0, 76, 1}, {0xB0, 86, 127}, {0xB0, 86, 0}}) do
+          w.mm.event(w.devs[1], m)
+        end
+        is(te.active, "a mapped K2 or K3 closed the entry " .. combo)
+        is(te.txt == before[4] and te.pos == before[1] and te.row == before[2] and te.delok == before[3], "mapped controls moved the entry (text " .. tostring(te.txt) .. ", pos " .. tostring(te.pos) .. ", row " .. tostring(te.row) .. ") " .. combo)
+        is((w.arc_turns or 0) == 0, "a mapped arc encoder turned while an entry was open " .. combo)
+        tap(w, "B")
+        is(te.txt == "ab", "typing goes on after the controls were moved (got " .. tostring(te.txt) .. ") " .. combo)
+        tap(w, "ENTER")
+        is(S.preset_by_name("ab") ~= nil, "the name was saved " .. combo)
+        -- and when no entry is open they work again
+        w.mm.event(w.devs[1], {0xB0, 76, 1})
+        is((w.arc_turns or 0) == 1 or not arc_open, "the mapped arc encoder works again after the entry " .. combo)
+      end
+      -- the menu moves on under an open entry (a window button, a page key, a mapped K1): the entry is closed, the handlers are the page's, the tape name entry opens
+      for _, how in ipairs({"page", "mode"}) do
+        local w = setup(arc_open, arc_keys)
+        open_midimap(w, 16)
+        tap(w, "RIGHT")
+        is(w.textentry.active, "the entry is open before the menu moves " .. combo)
+        if how == "page" then _menu.set_page("TAPE") else _menu.set_mode(false); _menu.set_mode(true); _menu.set_page("TAPE") end
+        is(not w.textentry.active, "the entry is closed when the menu moves on (" .. how .. ") " .. combo)
+        is(w.te_kbd.code == nil and w.te_kbd.char == nil, "its keyboard hooks are gone (" .. how .. ") " .. combo)
+        tape_entry_opens(w, "after the menu moved on (" .. how .. ") " .. combo)
+      end
+      -- an entry left active by something that did not tell textentry (the hook is off): the next entry recovers and says so in one line
+      do
+        local w = setup(arc_open, arc_keys)
+        open_midimap(w, 16)
+        tap(w, "RIGHT")
+        local hook = w.textentry.menu_changed
+        w.textentry.menu_changed = nil
+        _menu.set_page("TAPE")
+        w.textentry.menu_changed = hook
+        is(w.textentry.active, "the orphaned entry is still marked active (the situation of the bug) " .. combo)
+        printed = {}
+        tape_entry_opens(w, "although an earlier entry was left active " .. combo, true)
+        is(logged("textentry: an earlier entry") , "the recovery is logged " .. combo)
+      end
+      -- a second entry while one really is open: refused, and the log says why, once
+      do
+        local w = setup(arc_open, arc_keys)
+        open_midimap(w, 16)
+        tap(w, "RIGHT")
+        tap(w, "A")
+        printed = {}
+        w.textentry.enter(function() end, "", "SECOND:")
+        is(w.textentry.heading ~= "SECOND:" and w.textentry.txt == "a", "a second entry does not replace the open one " .. combo)
+        local n = 0
+        for _, l in ipairs(printed) do if l:find("textentry: cannot open", 1, true) and l:find("another entry", 1, true) then n = n + 1 end end
+        is(n == 1, "one log line says why it could not open (" .. n .. ") " .. combo)
+        tap(w, "ENTER")
+      end
+      -- the sequence of the report: MIDI MAP number entries, preset saves and cancels, then the tape page and its name entry
+      do
+        local w = setup(arc_open, arc_keys)
+        for round = 1, 3 do
+          open_midimap(w, 9); tap(w, "RIGHT"); w.pages.MIDIMAP.dpos = 2; tap(w, "RIGHT"); tap(w, "7"); tap(w, round == 2 and "ESC" or "ENTER")
+          is(not w.textentry.active, "the number entry closed (round " .. round .. ") " .. combo)
+          tap(w, "ESC"); tap(w, "ESC") -- out of the view and the page
+          open_midimap(w, 16); tap(w, "RIGHT"); tap(w, "C"); tap(w, round == 3 and "ESC" or "ENTER")
+          is(not w.textentry.active, "the preset entry closed (round " .. round .. ") " .. combo)
+          open_midimap(w, 16); tap(w, "RIGHT"); tap(w, "ENTER") -- an empty name: refused
+          is(not w.textentry.active, "an empty name closed the entry (round " .. round .. ") " .. combo)
+          tape_entry_opens(w, "after MIDI MAP entries (round " .. round .. ") " .. combo)
+        end
+      end
+    end
+  end
+  -- menu.lua tells the text entry when the menu page or mode changes (the stress world's stubs do the same: this checks the real file)
+  local src = io.open("lua/core/menu.lua"):read("a")
+  local mode_body = src:match("_menu%.set_mode = function%(mode%)(.-)\n_menu%.set_page = function")
+  local page_body = src:match("_menu%.set_page = function%(page%)(.-)\nend")
+  is(mode_body and mode_body:find("menu_changed", 1, true), "lua/core/menu.lua: set_mode tells the text entry")
+  is(page_body and page_body:find("menu_changed", 1, true), "lua/core/menu.lua: set_page tells the text entry")
 end
 if fails_total == 0 then print("menu_stress_test: all passed (" .. SEEDS .. " runs of " .. EVENTS .. " events)") end
 os.exit(fails_total == 0 and 0 or 1)

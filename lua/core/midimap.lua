@@ -597,6 +597,9 @@ function M.event(d, data)
     return
   end
   if pmap_learning() then return end
+  -- a text entry is open (a name, a number): the keys and the encoders are its own, not a controller's (a mapped K2 would cancel it, a mapped E would move its cursor, a mapped K1 would close the menu under it)
+  local te = package.loaded['textentry']
+  if te and te.active then return end
   act(d, kind, ch, d1, d2)
 end
 

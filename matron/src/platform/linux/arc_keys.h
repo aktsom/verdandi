@@ -15,6 +15,10 @@ extern int arc_key_lookup(int scancode, int *ring, int *dir);
 // the ticks of a key event: down 0 = a key up (0 ticks); repeat = an autorepeat event; shift; the repeats so far; the ramp setting
 extern int arc_key_ticks(int down, int repeat, int shift, int repeats, int ramp);
 
+// a text entry is open (lua/lib/textentry.lua tells the window): the arc window takes no key. the caller checks it before arc_key_lookup (a name or a number typed in the arc window, after a learn by clicking a ring)
+extern void arc_keys_set_blocked(int blocked);
+extern int arc_keys_blocked(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -80,6 +80,8 @@ extern void sdl_bridge_toast(const char *text);
 extern int sdl_bridge_arc_turn(int n, int ticks);
 // any thread: the ramp setting of the arc keys in the arc window (the keys of the norns window are lua's)
 extern void sdl_bridge_arc_keys_ramp(int ramp);
+// any thread: a text entry is open (1) or not (0): the arc window takes no key while it is
+extern void sdl_bridge_arc_keys_block(int blocked);
 extern void sdl_bridge_midimap_arm(int armed);
 extern void sdl_bridge_midimap_show(int state, int control);
 #endif

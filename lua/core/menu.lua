@@ -499,6 +499,8 @@ _norns.window_button = function(n)
 end
 
 _menu.set_mode = function(mode)
+  -- Linux desktop: a text entry that is open belongs to the page it was opened for; it is closed when the menu changes its mode (lua/lib/textentry.lua)
+  do local te = package.loaded['textentry']; if te and te.menu_changed then te.menu_changed("mode") end end
   if mode == false then -- ACTIVATE PLAY MODE
     if _menu.mode == true then _norns.screen_restore() end
     _menu.mode = false
@@ -534,6 +536,7 @@ end
 
 -- set page
 _menu.set_page = function(page)
+  do local te = package.loaded['textentry']; if te and te.menu_changed then te.menu_changed("page") end end -- (see set_mode)
   m[_menu.page].deinit()
   _menu.page = page
   _menu.key = m[page].key

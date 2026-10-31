@@ -22,6 +22,16 @@ int arc_key_lookup(int scancode, int *ring, int *dir) {
     return 0;
 }
 
+static volatile int blocked = 0;
+
+void arc_keys_set_blocked(int b) {
+    blocked = b != 0;
+}
+
+int arc_keys_blocked(void) {
+    return blocked;
+}
+
 int arc_key_ticks(int down, int repeat, int shift, int repeats, int ramp) {
     if (!down) {
         return 0;

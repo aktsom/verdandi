@@ -30,6 +30,23 @@ print("PROBE hold done")
 #xdo key 1 2
 #sleep 0.4
 print("PROBE other keys done")
+# a text entry open (any: MIDI MAP numbers and names, THEME, the picker, the tape name) and the arc window in front: the keys 5 y 6 are typed into the entry, the arc turns nothing; after it the keys are the arc's again
+te = require "textentry"
+te.enter(function(t) print("PROBE entry done", t) end, "", "NAME:")
+#xdo search --name ^arc$ windowfocus
+#sleep 0.4
+#xdo key 5
+#xdo key y
+#xdo key 6
+#sleep 0.5
+print("PROBE entry text", te.txt, te.active)
+te.exit()
+#sleep 0.3
+#xdo key 5
+#sleep 0.5
+print("PROBE after entry done")
+#xdo search --name ^Verdandi.Linux$ windowfocus
+#sleep 0.3
 _menu.set_mode(true)
 _menu.set_page("MIDIMAP")
 #xdo key h

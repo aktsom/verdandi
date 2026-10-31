@@ -697,6 +697,10 @@ int sdl_bridge_arc_turn(int n, int ticks) {
     return 1;
 }
 
+void sdl_bridge_arc_keys_block(int blocked) {
+    arc_keys_set_blocked(blocked);
+}
+
 void sdl_bridge_arc_keys_ramp(int ramp) {
     arc_keys_ramp = ramp != 0;
 }
@@ -2788,7 +2792,7 @@ static void handle_key(const SDL_KeyboardEvent *k) {
     if (is_pane(&arc_pane, k->windowID) && varc != NULL) {
         int ring, dir;
         int mods = k->keysym.mod;
-        if (arc_key_lookup((int)k->keysym.scancode, &ring, &dir) && !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_MODE))) {
+        if (!arc_keys_blocked() && arc_key_lookup((int)k->keysym.scancode, &ring, &dir) && !(mods & (KMOD_CTRL | KMOD_ALT | KMOD_GUI | KMOD_MODE))) {
             if (k->type == SDL_KEYDOWN) {
                 arc_key_down[ring - 1 + (dir > 0 ? 4 : 0)] = 1;
                 int rep = k->repeat != 0;
