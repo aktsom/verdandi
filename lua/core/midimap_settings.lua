@@ -23,6 +23,10 @@ M.IDS = {"e1", "e2", "e3", "k1", "k2", "k3"}
 M.ARC_IDS = {"a1", "a2", "a3", "a4"} -- the four encoders of the virtual arc (docs/port/arc-plan.md)
 M.ALL_IDS = {"e1", "e2", "e3", "k1", "k2", "k3", "a1", "a2", "a3", "a4"}
 M.ACCELS = {"off", "low", "high"}
+-- the actions (docs/port/midi-actions-plan.md): the buttons of the box and a few utility actions, in the order of the list on the page. there is no quit, no menu navigation, no typing
+M.ACTION_IDS = {"mix", "tape", "home", "params", "input", "grid", "arc", "keys", "maiden", "manual", "mute", "detach", "fullscreen", "screenshot"}
+M.ACTION_KINDS = {"none", "note", "ccbutton", "step"}
+M.REL_MODES = {"rel2c", "relsm", "relob"}
 M.MODES = {"abs", "rel2c", "relsm", "relob"}
 M.CLASH = {"params", "both"}
 M.MAX_PRESETS = 64 -- of his own
@@ -35,6 +39,8 @@ local function is_enc(id) return id:sub(1, 1) == "e" end
 local function is_key(id) return id:sub(1, 1) == "k" end
 local function is_arc(id) return id:sub(1, 1) == "a" end
 
+local function new_action() return {type = "none", dev = "ANY", ch = 0, mode = "relob", dir = "up", threshold = 63} end
+
 local function new_ctl(id)
   if is_enc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", sens = 5} end
   if is_arc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", gain = 8, accel = "off"} end
@@ -42,8 +48,9 @@ local function new_ctl(id)
 end
 
 local function defaults()
-  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, ctl = {}, extra = {}}
+  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, actions_on = true, ctl = {}, actions = {}, extra = {}}
   for _, id in ipairs(M.ALL_IDS) do st.ctl[id] = new_ctl(id) end
+  for _, id in ipairs(M.ACTION_IDS) do st.actions[id] = new_action() end
   return st
 end
 
@@ -114,6 +121,53 @@ local function check_field(id, field, v)
     return n
   end
   return nil, "unknown field"
+end
+
+--- check one field of one action
+local function check_action_field(field, v)
+  if field == "type" then
+    if in_list(M.ACTION_KINDS, v) then return v end
+    return nil, "none, note, ccbutton or step"
+  elseif field == "num" then
+    local n = whole(v)
+    if n == nil or n < 0 or n > 127 then return nil, "0 to 127" end
+    return n
+  elseif field == "dev" then
+    return clean_dev(v)
+  elseif field == "ch" then
+    local n = whole(v)
+    if n == nil or n < 0 or n > 16 then return nil, "0 (any) to 16" end
+    return n
+  elseif field == "mode" then
+    if in_list(M.REL_MODES, v) then return v end
+    return nil, "rel2c, relsm or relob"
+  elseif field == "dir" then
+    if v == "up" or v == "down" then return v end
+    return nil, "up or down"
+  elseif field == "threshold" then
+    local n = whole(v)
+    if n == nil or n < 0 or n > 126 then return nil, "0 to 126" end
+    return n
+  end
+  return nil, "unknown field"
+end
+
+local ACTION_FIELDS = {"type", "num", "dev", "ch", "mode", "dir", "threshold"}
+
+local function finish_action(id, fields, a, prefix)
+  for _, field in ipairs(ACTION_FIELDS) do
+    local f = fields[field]
+    if f ~= nil then
+      local v, why = check_action_field(field, f)
+      if v ~= nil then a[field] = v
+      else M.log(string.format("%sact.%s.%s=%s: %s, using %s", prefix, id, field, tostring(f):sub(1, 40), why, tostring(a[field]))) end
+    end
+  end
+  if a.type ~= "none" and a.num == nil then
+    M.log(string.format("%sact.%s: type %s without a number, using none", prefix, id, a.type))
+    a.type = "none"
+  end
+  if a.type == "none" then a.num = nil end
 end
 
 -- ---------------------------------------------------------------- the built-in presets
@@ -212,16 +266,24 @@ function M.load()
   local ver = first:match("^verdandi%-midimap=(.*)$")
   if ver == nil then M.log("does not start with the header verdandi-midimap=1 (read anyway)")
   elseif ver ~= "1" then M.log("version " .. ver .. " is newer than this one knows (read as far as understood)") end
-  local fields = {}
+  local fields, afields = {}, {}
   each_line(text, function(k, v, line)
     if k == "verdandi-midimap" then return end
     local id, field = k:match("^([eka]%d)%.(%w+)$")
     if id and M.state.ctl[id] == nil then id = nil end -- a5 and the like are unknown keys
+    local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
+    if aid and M.state.actions[aid] == nil then aid = nil end -- an action that does not exist (there is no quit): an unknown key
     if k == "preset" then
       if v ~= "" then st.preset = v else M.log("preset= is empty, using NONE") end
     elseif k == "on_clash" then
       if in_list(M.CLASH, v) then st.on_clash = v
       else M.log(string.format("on_clash=%s is not params or both, using params", v:sub(1, 40))) end
+    elseif k == "actions" then
+      if v == "1" or v == "0" then st.actions_on = v == "1"
+      else M.log(string.format("actions=%s is not 0 or 1, using 1", v:sub(1, 40))) end
+    elseif aid and in_list(ACTION_FIELDS, afield) then
+      afields[aid] = afields[aid] or {}
+      afields[aid][afield] = v:match("^%s*(.-)%s*$")
     elseif k == "arc_keys" or k == "arc_keys_accel" then
       if v == "1" or v == "0" then st[k] = v == "1"
       else M.log(string.format("%s=%s is not 0 or 1, using %s", k, v:sub(1, 40), k == "arc_keys" and "1" or "0")) end
@@ -234,6 +296,12 @@ function M.load()
     end
   end)
   for _, id in ipairs(M.ALL_IDS) do finish_ctl(id, fields[id] or {}, st.ctl[id], "") end
+  for _, id in ipairs(M.ACTION_IDS) do finish_action(id, afields[id] or {}, st.actions[id], "") end
+  M.last_rel = nil
+  for i = #M.ALL_IDS, 1, -1 do
+    local c = st.ctl[M.ALL_IDS[i]]
+    if M.last_rel == nil and c.mode and c.mode ~= "abs" and c.type ~= "none" then M.last_rel = c.mode end
+  end
   if st.preset ~= "CUSTOM" and M.preset_by_name(st.preset) == nil then
     M.log("preset=" .. st.preset .. ": there is no such preset, using CUSTOM (the mappings stay)")
     st.preset = "CUSTOM"
@@ -262,6 +330,23 @@ local function write_ctl(f, id, c, with_device)
   end
 end
 
+local function write_action(f, id, a, with_device)
+  local complete = a.type ~= "none" and a.num ~= nil
+  f:write("act." .. id .. ".type=" .. (complete and a.type or "none") .. "\n")
+  if not complete then return end
+  f:write("act." .. id .. ".num=" .. a.num .. "\n")
+  if with_device then
+    f:write("act." .. id .. ".dev=" .. a.dev .. "\n")
+    f:write("act." .. id .. ".ch=" .. a.ch .. "\n")
+  end
+  if a.type == "step" then
+    f:write("act." .. id .. ".mode=" .. a.mode .. "\n")
+    f:write("act." .. id .. ".dir=" .. a.dir .. "\n")
+  elseif a.type == "ccbutton" then
+    f:write("act." .. id .. ".threshold=" .. a.threshold .. "\n")
+  end
+end
+
 --- write midimap.conf (through a temporary file, so that a crash never leaves half of it)
 function M.save()
   M.version = M.version + 1
@@ -277,7 +362,9 @@ function M.save()
   f:write("on_clash=" .. st.on_clash .. "\n")
   f:write("arc_keys=" .. (st.arc_keys and "1" or "0") .. "\n")
   f:write("arc_keys_accel=" .. (st.arc_keys_accel and "1" or "0") .. "\n")
+  f:write("actions=" .. (st.actions_on and "1" or "0") .. "\n")
   for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, st.ctl[id], true) end
+  for _, id in ipairs(M.ACTION_IDS) do write_action(f, id, st.actions[id], true) end
   for _, line in ipairs(st.extra or {}) do f:write(line .. "\n") end
   f:close()
   if not os.rename(tmp, M.PATH) then
@@ -297,6 +384,7 @@ function M.set(id, field, value)
   local v, why = check_field(id, field, value)
   if v == nil then return false, why end
   c[field] = v
+  if field == "mode" and v ~= "abs" and (is_enc(id) or is_arc(id)) then M.last_rel = v end -- the format new actions are read with
   if field == "num" and c.type == "none" then c.type = "cc" end
   if field == "type" and v == "none" then c.num = nil end
   if field ~= "dev" and field ~= "ch" then modified() end
@@ -323,6 +411,70 @@ function M.clear(id)
   if M.state.ctl[id] == nil then return false, "no such control" end
   M.state.ctl[id] = new_ctl(id)
   modified()
+  M.save()
+  return true
+end
+
+-- ---------------------------------------------------------------- the actions
+function M.count_actions()
+  local n = 0
+  for _, id in ipairs(M.ACTION_IDS) do if M.state.actions[id].type ~= "none" then n = n + 1 end end
+  return n
+end
+
+--- the format a new encoder-step action is read with: the format of the last encoder or arc mapping made, else REL OFS (WATCH shows the real one)
+function M.last_rel_mode() return M.last_rel or "relob" end
+
+--- learn: a note, a CC button or an encoder step for an action; the device and the channel go back to ANY and any. `extra` for a step: {mode, dir}. one write
+function M.assign_action(id, kind, num, extra)
+  local a = M.state.actions[id]
+  if a == nil then return false, "no such action" end
+  if kind ~= "note" and kind ~= "ccbutton" and kind ~= "step" then return false, "note, ccbutton or step" end
+  local n, why = check_action_field("num", num)
+  if n == nil then return false, why end
+  local mode, dir = a.mode, a.dir
+  if kind == "step" then
+    mode = extra and extra.mode or M.last_rel_mode()
+    dir = extra and extra.dir or "up"
+    local m2, w2 = check_action_field("mode", mode)
+    if m2 == nil then return false, w2 end
+    local d2, w3 = check_action_field("dir", dir)
+    if d2 == nil then return false, w3 end
+  end
+  a.type, a.num, a.dev, a.ch, a.mode, a.dir = kind, n, "ANY", 0, mode, dir
+  M.save()
+  return true
+end
+
+--- set one field of an action (validated, saved at once)
+function M.set_action(id, field, value)
+  local a = M.state.actions[id]
+  if a == nil then return false, "no such action" end
+  local v, why = check_action_field(field, value)
+  if v == nil then return false, why end
+  a[field] = v
+  if field == "num" and a.type == "none" then a.type = "note" end
+  M.save()
+  return true
+end
+
+function M.clear_action(id)
+  if M.state.actions[id] == nil then return false, "no such action" end
+  M.state.actions[id] = new_action()
+  M.save()
+  return true
+end
+
+function M.clear_all_actions()
+  for _, id in ipairs(M.ACTION_IDS) do M.state.actions[id] = new_action() end
+  M.save()
+  return true
+end
+
+--- the master switch (the page row, the window menu's tick and Ctrl+Shift+M all come here): saved at once
+function M.set_actions_on(v)
+  if type(v) ~= "boolean" then return false, "on or off" end
+  M.state.actions_on = v
   M.save()
   return true
 end
@@ -364,11 +516,16 @@ local function read_preset_file(path, file)
     return nil, "does not start with verdandi-midimap-preset=1"
   end
   local p = {builtin = false, ctl = {}}
-  local fields = {}
+  local fields, afields = {}, {}
   each_line(text, function(k, v)
     local id, field = k:match("^([eka]%d)%.(%w+)$")
     if id and not in_list(M.ALL_IDS, id) then id = nil end
-    if k == "name" then p.name = v
+    local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
+    if aid and not in_list(M.ACTION_IDS, aid) then aid = nil end
+    if aid and in_list({"type", "num", "mode", "dir", "threshold"}, afield) then
+      afields[aid] = afields[aid] or {}
+      afields[aid][afield] = v:match("^%s*(.-)%s*$")
+    elseif k == "name" then p.name = v
     elseif id and in_list({"type", "num", "mode", "sens", "threshold", "gain", "accel"}, field) then
       fields[id] = fields[id] or {}
       fields[id][field] = v:match("^%s*(.-)%s*$")
@@ -388,6 +545,14 @@ local function read_preset_file(path, file)
       p.arcs = p.arcs or {}
       p.arcs[id] = new_ctl(id)
       finish_ctl(id, fields[id], p.arcs[id], "preset " .. file .. ": ")
+    end
+  end
+  -- the actions only if the file has any of their keys (a preset from before them leaves them alone)
+  for _, id in ipairs(M.ACTION_IDS) do
+    if afields[id] ~= nil then
+      p.actions = p.actions or {}
+      p.actions[id] = new_action()
+      finish_action(id, afields[id], p.actions[id], "preset " .. file .. ": ")
     end
   end
   p.label = p.name
@@ -455,6 +620,14 @@ function M.select_preset(name)
       M.state.ctl[id] = c
     end
   end
+  if p.actions ~= nil then
+    for _, id in ipairs(M.ACTION_IDS) do
+      local a = new_action()
+      for k, v in pairs(p.actions[id] or {}) do a[k] = v end
+      a.dev, a.ch = "ANY", 0
+      M.state.actions[id] = a
+    end
+  end
   M.state.preset = p.name
   M.save()
   return true
@@ -475,6 +648,7 @@ function M.save_preset(name, overwrite)
   if f == nil then return false, "cannot write " .. file end
   f:write("verdandi-midimap-preset=1\n", "name=" .. n .. "\n")
   for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, M.state.ctl[id], false) end
+  for _, id in ipairs(M.ACTION_IDS) do write_action(f, id, M.state.actions[id], false) end
   f:close()
   if not os.rename(tmp, file) then return false, "cannot write " .. file end
   M.reload_presets()

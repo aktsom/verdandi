@@ -304,6 +304,87 @@ S.set("a3", "num", 90)
 S.select_preset("old")
 eq(S.state.ctl.e1.num, 4, "an old preset applies"); eq(S.state.ctl.a3.num, 90, "and leaves the arc encoders")
 
+
+-- ---- the actions (docs/port/midi-actions-plan.md 3.4): the buttons of the box and utility actions
+fresh(); S.load()
+eq(table.concat(S.ACTION_IDS, ","), "mix,tape,home,params,input,grid,arc,keys,maiden,manual,mute,detach,fullscreen,screenshot", "the 14 actions in the order of the list")
+eq(S.state.actions_on, true, "the master switch starts ON")
+for _, id in ipairs(S.ACTION_IDS) do
+  local a = S.state.actions[id]
+  check(a ~= nil and a.type == "none" and a.dev == "ANY" and a.ch == 0, id .. " starts empty (any device, any channel)")
+end
+check(S.state.actions.mute.threshold == 63 and S.state.actions.mute.dir == "up", "defaults: threshold 63, direction up")
+eq(S.count_actions(), 0, "no action assigned")
+-- assign: a note, a CC step with its format, a CC button
+check(S.assign_action("mix", "note", 36), "assign a note"); eq(S.state.actions.mix.type, "note", "note"); eq(S.state.actions.mix.num, 36, "its number")
+check(S.assign_action("mute", "step", 77, {mode = "relob", dir = "up"}), "assign a step"); eq(S.state.actions.mute.mode, "relob", "format"); eq(S.state.actions.mute.dir, "up", "direction")
+check(S.assign_action("tape", "ccbutton", 20), "assign a CC button")
+eq(S.count_actions(), 3, "three assigned")
+check(not S.assign_action("mix", "note", 128), "a note of 128 is refused"); check(not S.assign_action("nope", "note", 1), "an unknown action is refused")
+check(not S.assign_action("mix", "arc", 1), "an unknown kind is refused"); check(not S.assign_action("mix", "step", 5, {mode = "abs"}), "a step needs a relative format")
+check(not S.assign_action("mix", "step", 5, {mode = "relob", dir = "left"}), "a step needs up or down")
+-- learn resets the device and channel (the message may come from anywhere)
+S.set_action("tape", "dev", "mio"); S.set_action("tape", "ch", 3)
+S.assign_action("tape", "note", 40); eq(S.state.actions.tape.dev, "ANY", "an assignment goes back to ANY"); eq(S.state.actions.tape.ch, 0, "and any channel")
+-- set one field
+check(S.set_action("mix", "ch", 5), "a channel"); eq(S.state.actions.mix.ch, 5, "set")
+bad2 = function(id, f, v, what) local ok2, why = S.set_action(id, f, v); check(ok2 == false and type(why) == "string", what .. " refused") end
+bad2("mix", "num", 200, "num 200"); bad2("mix", "type", "arc", "type arc"); bad2("mix", "dir", "left", "dir left"); bad2("mix", "mode", "abs", "mode abs"); bad2("mix", "threshold", 127, "threshold 127"); bad2("mix", "dev", "", "empty device"); bad2("x", "num", 1, "unknown action")
+-- the master switch
+check(S.set_actions_on(false), "switch off"); eq(S.state.actions_on, false, "off"); check(not S.set_actions_on("no"), "a boolean is wanted")
+check(S.set_actions_on(true), "on")
+-- round trip
+S.assign_action("keys", "note", 45); S.set_action("keys", "dev", "mio"); S.set_actions_on(false)
+text = slurp("/home/we/midimap.conf")
+check(text:find("actions=0", 1, true), "the file has the switch")
+check(text:find("act.mix.type=note", 1, true) and text:find("act.mix.num=36", 1, true) and text:find("act.mute.type=step", 1, true) and text:find("act.mute.mode=relob", 1, true) and text:find("act.mute.dir=up", 1, true), "the file has the actions")
+check(text:find("act.tape.type=note", 1, true) and text:find("act.keys.dev=mio", 1, true), "and a device")
+logs = {}
+again = S.load()
+eq(again.actions_on, false, "round trip: the switch"); eq(again.actions.mix.num, 36, "round trip: note"); eq(again.actions.mute.mode, "relob", "round trip: step"); eq(again.actions.keys.dev, "mio", "round trip: device")
+eq(again.actions.mix.ch, 5, "round trip: channel"); eq(#logs, 0, "a good file logs nothing")
+-- damaged values fall back with a log line
+st = load_text("verdandi-midimap=1\nactions=maybe\nact.mix.type=note\nact.mix.num=300\nact.tape.type=step\nact.tape.num=5\nact.tape.mode=zigzag\nact.tape.dir=sideways\nact.home.type=ccbutton\nact.home.num=9\nact.home.threshold=500\nact.params.type=bogus\nact.params.num=3\nact.input.type=note\n")
+eq(st.actions_on, true, "a damaged switch is on"); check(logged("actions=maybe"), "and logged")
+eq(st.actions.mix.type, "none", "a note without a valid number is none"); check(logged("act.mix.num=300"), "logged")
+eq(st.actions.tape.type, "step", "tape is a step"); eq(st.actions.tape.mode, "relob", "a damaged format is REL OFS"); eq(st.actions.tape.dir, "up", "a damaged direction is up"); check(logged("act.tape.mode=zigzag") and logged("act.tape.dir=sideways"), "each logged")
+eq(st.actions.home.threshold, 63, "a damaged threshold is 63"); check(logged("act.home.threshold=500"), "logged")
+eq(st.actions.params.type, "none", "an unknown type is none"); check(logged("act.params.type=bogus"), "logged")
+eq(st.actions.input.type, "none", "a type without a number is none"); check(logged("act.input"), "logged")
+st = load_text("verdandi-midimap=1\nact.quit.type=note\nact.quit.num=5\nact.mix.colour=red\n")
+check(logged("act.quit"), "there is no quit action: logged and ignored"); S.save(); text = slurp("/home/we/midimap.conf")
+check(text:find("act.quit.type=note", 1, true), "an unknown action key is kept in the file")
+eq(st.actions.mix.type, "none", "and nothing else changes")
+-- an old file has no actions
+st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\n")
+eq(st.actions_on, true, "an old file: the switch is on"); eq(S.count_actions(), 0, "and nothing assigned"); eq(#logs, 0, "without a log line")
+-- clear
+fresh(); S.load(); S.assign_action("mix", "note", 36); S.assign_action("mute", "note", 38); S.set_action("mix", "dev", "mio")
+check(S.clear_action("mix"), "clear one"); eq(S.state.actions.mix.type, "none", "cleared"); eq(S.state.actions.mix.dev, "ANY", "to the defaults"); eq(S.state.actions.mute.num, 38, "the others stay")
+check(S.clear_all_actions(), "clear all"); eq(S.count_actions(), 0, "none left"); eq(S.load().actions.mute.type, "none", "saved")
+check(not S.clear_action("x"), "an unknown action")
+-- the format of the last encoder or arc mapping, else REL OFS
+fresh(); S.load()
+eq(S.last_rel_mode(), "relob", "no encoder mapped: REL OFS")
+S.set("e1", "num", 5); S.set("e1", "mode", "rel2c"); eq(S.last_rel_mode(), "rel2c", "the format of the last encoder mapping")
+S.set("a2", "num", 6); S.set("a2", "mode", "relsm"); eq(S.last_rel_mode(), "relsm", "the last one wins (an arc encoder)")
+S.set("e3", "num", 7); S.set("e3", "mode", "abs"); eq(S.last_rel_mode(), "relsm", "an absolute mapping does not count")
+S.load(); eq(S.last_rel_mode(), "relsm", "after a load: the last relative one in the file's order (a4 down to e1)")
+-- presets: built-ins leave the actions alone, own presets carry them without device and channel
+fresh(); S.load()
+S.assign_action("mix", "note", 36); S.set_action("mix", "dev", "mio"); S.set_action("mix", "ch", 4); S.assign_action("mute", "step", 77, {mode = "rel2c", dir = "down"})
+check(S.select_preset("PUSH 2"), "a built-in preset"); eq(S.state.actions.mix.num, 36, "leaves the actions"); eq(S.state.actions.mix.dev, "mio", "and their device")
+for _, p in ipairs(S.preset_list()) do if p.builtin then check(p.actions == nil, p.name .. " has no action section") end end
+S.save_preset("With pads")
+ptext = slurp("/home/we/midimap-presets/with-pads.midimap")
+check(ptext:find("act.mix.num=36", 1, true) and ptext:find("act.mute.dir=down", 1, true), "an own preset has the actions")
+check(not ptext:find("act.mix.dev", 1, true) and not ptext:find("act.mix.ch", 1, true) and not ptext:find("actions=", 1, true), "but no device, channel or switch")
+S.clear_all_actions(); S.set_actions_on(false)
+S.select_preset("With pads")
+eq(S.state.actions.mix.num, 36, "applying brings them back"); eq(S.state.actions.mix.dev, "ANY", "for any device"); eq(S.state.actions.mute.dir, "down", "with their direction"); eq(S.state.actions_on, false, "the master switch is not part of a preset")
+put("/home/we/midimap-presets/old2.midimap", "verdandi-midimap-preset=1\nname=old2\ne1.type=cc\ne1.num=4\n")
+S.load(); S.select_preset("old2"); eq(S.state.actions.mix.num, 36, "a preset from before the actions leaves them alone")
+
 if fails == 0 then print("midimap settings: all passed") end
 os.execute("rm -rf '" .. tmp .. "'")
 os.exit(fails == 0 and 0 or 1)
