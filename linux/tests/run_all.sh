@@ -808,6 +808,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         ALOG2="$T/actions2.log"
         MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions.lua" "$ALOG" > /dev/null 2>&1
         cp "$AH/midimap.conf" "$T/actions-midimap.conf" 2> /dev/null
+        for _ in $(seq 1 60); do pgrep -x norns > /dev/null || break; sleep 1; done # the first norns must be gone, or the second start only raises its window
         MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions_restart.lua" "$ALOG2" > /dev/null 2>&1
         amark() { sed -n "s/^$1=//p" "$AH/probe.marks" 2> /dev/null | tail -1; }
         alg() { grep -a -- "PROBE $2" "$1" | tail -1 | sed "s/.*PROBE $2[[:space:]]*//; s/[[:space:]][[:space:]]*/ /g"; }
