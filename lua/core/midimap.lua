@@ -426,6 +426,7 @@ local function walk_advance(msg)
     return
   end
   L.state, L.ask, L.target, L.deadline, L.msg = "listen", nil, S.ACTION_IDS[walk.i], M.clock() + M.TIMEOUT, msg
+  window(0, 0, nil)
   toast("LEARN " .. L.target:upper() .. ": PRESS A BUTTON")
   notify()
 end

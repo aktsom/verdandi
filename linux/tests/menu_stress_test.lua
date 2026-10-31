@@ -54,6 +54,18 @@ local function world()
     toast = function(t) w.toasts[#w.toasts + 1] = t end,
     clipboard_set = function(t) w.clip = t end, clipboard_request = function() w.clip_asked = w.clip_asked + 1 end,
     midimap_arm = function(a) w.armed = a end, midimap_show = function(st) w.ring = st end,
+    -- the window actions: a call is a finding when the master switch is off, a text entry is open, a learn is on, or the name is not one of the 14
+    window_action = function(name)
+      w.actions_fired = (w.actions_fired or 0) + 1
+      COVER.fired = COVER.fired + 1
+      local ok = false
+      for _, id in ipairs(w.mm_set.ACTION_IDS) do if id == name then ok = true end end
+      if not ok then w.action_bad = "window_action(" .. tostring(name) .. ")"
+      elseif not w.mm_set.state.actions_on then w.action_bad = "window_action(" .. name .. ") while the master switch is off"
+      elseif w.textentry.active then w.action_bad = "window_action(" .. name .. ") while a text entry is open"
+      elseif w.mm.learn.state ~= "idle" then w.action_bad = "window_action(" .. name .. ") during a learn (" .. w.mm.learn.state .. ")" end
+    end,
+    midi_actions_menu = function(on) w.menu_tick = on end,
     -- the virtual arc: ticks are whole, non-zero, for a ring of 1 to 4; the window may be closed (the call says so)
     arc_turn = function(n, t)
       if type(n) ~= "number" or n < 1 or n > 4 or n ~= math.floor(n) or type(t) ~= "number" or t ~= math.floor(t) or t == 0 then w.arc_bad = "arc_turn(" .. tostring(n) .. ", " .. tostring(t) .. ")" end
@@ -148,6 +160,7 @@ local function tap(w, name, repeats)
   send(w, name, 0)
 end
 
+COVER = {fired = 0, walks = 0, aviews = 0} -- (the random runs must reach the new code: counted, checked at the end)
 -- one event: {k = "tap" name repeats} | {k = "press" name} | {k = "release" name} | {k = "enc" n d} | {k = "page" p} | {k = "ext" what}
 local function apply(w, e)
   if e.k == "tap" then tap(w, e.name, e.rep)
@@ -164,6 +177,14 @@ local function apply(w, e)
     w.mm.event(w.devs[e.dev], e.b) -- (midi.lua calls it under pcall; here an error is a finding)
   elseif e.k == "click" then
     if w.armed == 1 then _norns.midimap_pick(e.id:sub(1, 1), e.id:sub(2)) end -- the window only reports a click while a pick is armed
+  elseif e.k == "nav" then
+    -- straight to the actions list (row 13) and one of its rows: ASSIGN ALL, an action's view, CLEAR ALL (the random page keys rarely get so far down)
+    if _menu.page ~= "MIDIMAP" then _menu.set_page("MIDIMAP") end
+    local pg = w.pages.MIDIMAP
+    if pg.mode == "rows" and not w.textentry.active and w.mm.learn.state == "idle" then
+      pg.pos = 13; pg.redraw(); tap(w, "RIGHT")
+      pg.apos = e.n; pg.redraw(); tap(w, "RIGHT")
+    end
   elseif e.k == "tick" then
     w.T = w.T + e.dt
     w.mm.tick()
@@ -178,6 +199,15 @@ local function apply(w, e)
     elseif e.what == "arckeyson" or e.what == "arckeysoff" then
       -- (a setting written from outside the page: not while a learn waits, which promises that no file is written)
       if w.mm.learn.state == "idle" then w.mm_set.set_arc_keys(e.what == "arckeyson") end
+    elseif e.what == "amap" then
+      -- an action set from outside the page (a preset, another session of the page): only while no learn waits
+      if w.mm.learn.state == "idle" then
+        local kinds = {"note", "ccbutton", "step"}
+        w.mm_set.assign_action(w.mm_set.ACTION_IDS[e.id], kinds[e.kind], e.num, {mode = ({"rel2c", "relsm", "relob"})[e.kind], dir = (e.id % 2 == 0) and "up" or "down"})
+      end
+    elseif e.what == "aclear" then if w.mm.learn.state == "idle" then w.mm.clear(w.mm_set.ACTION_IDS[e.id]) end
+    elseif e.what == "aon" or e.what == "aoff" then _norns.midi_actions_changed(e.what == "aon") -- the window menu's tick and Ctrl+Shift+M
+    elseif e.what == "mon" or e.what == "moff" then w.mm.set_actions(e.what == "mon")   -- the page's row
     elseif e.what == "arcopen" then w.arc_open = true
     elseif e.what == "arcclose" then w.arc_open = false
     elseif e.what == "unplug" then local d = w.devs[e.dev] midi.devices[d.id] = nil w.mm.device_removed(d)
@@ -196,6 +226,7 @@ local function fmt(e)
   elseif e.k == "page" then return "page " .. e.p
   elseif e.k == "midi" then return "midi dev" .. e.dev .. " " .. table.concat(e.b, ",")
   elseif e.k == "click" then return "click " .. e.id
+  elseif e.k == "nav" then return "nav actions row " .. e.n
   elseif e.k == "tick" then return "tick +" .. e.dt
   elseif e.k == "ext" then return "ext " .. e.what .. (e.dev and (" dev" .. e.dev) or "") .. (e.cc and (" cc" .. e.cc) or "") end
   return e.k .. " " .. e.name
@@ -242,7 +273,7 @@ local function invariants(w)
   elseif p == "UI" then
     if not (pg.pos >= 1 and pg.pos <= 4) then return "selection: UI row " .. tostring(pg.pos) end
   elseif p == "MIDIMAP" then
-    if pg.mode ~= "rows" and pg.mode ~= "detail" and pg.mode ~= "confirm" and pg.mode ~= "watch" and pg.mode ~= "turn" then return "modal: unknown mode " .. tostring(pg.mode) end
+    if pg.mode ~= "rows" and pg.mode ~= "detail" and pg.mode ~= "confirm" and pg.mode ~= "watch" and pg.mode ~= "turn" and pg.mode ~= "actions" and pg.mode ~= "aview" then return "modal: unknown mode " .. tostring(pg.mode) end
     if (pg.mode == "watch") ~= w.mm.watching then return "modal: the WATCH view and the layer's watching flag disagree (" .. tostring(pg.mode) .. ", " .. tostring(w.mm.watching) .. ")" end
     if (pg.mode == "turn") ~= (w.mm.calib_target() ~= nil) then return "modal: the ONE TURN view and the layer's calibration disagree" end
     if pg.mode == "turn" and (pg.ctl == nil or pg.ctl:sub(1, 1) ~= "a") then return "modal: ONE TURN for a control that is not an arc encoder" end
@@ -251,6 +282,12 @@ local function invariants(w)
     if rows[1] ~= "PRESET" or rows[2] ~= "LEARN" then return "rows: PRESET and LEARN are not the first two rows" end
     local pr = w.mm_set.preset_by_name(w.mm_set.state.preset)
     if (rows[#rows] == "DELETE") ~= (pr ~= nil and not pr.builtin) then return "rows: DELETE does not match the preset in use (" .. tostring(w.mm_set.state.preset) .. ")" end
+    if pg.mode == "actions" and not (pg.apos >= 1 and pg.apos <= #pg.arows()) then return "selection: actions row " .. pg.apos .. " of " .. #pg.arows() end
+    if pg.mode == "aview" then
+      if pg.act == nil or w.mm_set.state.actions[pg.act] == nil then return "modal: an action view without an action" end
+      local ar = pg.adrows()
+      if not (pg.dpos >= 1 and pg.dpos <= #ar) then return "selection: action view row " .. pg.dpos .. " of " .. #ar end
+    end
     if pg.mode ~= "detail" and not (pg.pos >= 1 and pg.pos <= #rows) then return "selection: row " .. pg.pos .. " of " .. #rows end
     if pg.mode == "detail" then
       if pg.ctl == nil or w.mm_set.state.ctl[pg.ctl] == nil then return "modal: a view without a control" end
@@ -277,18 +314,27 @@ local function invariants(w)
   do
     local L = w.mm.learn
     local waiting = L.state == "pick" or L.state == "listen"
+    local act_target = L.target ~= nil and w.mm.is_action(L.target)
     if not (L.state == "idle" or waiting or L.state == "confirm" or L.state == "ask") then return "learn: unknown state " .. tostring(L.state) end
     if (L.state == "ask") ~= (L.ask ~= nil) then return "learn: the question and the learn state disagree" end
     if p ~= "MIDIMAP" and (w.mm.watching or w.mm.calib_target() ~= nil) then return "learn: WATCH or ONE TURN is open on another page (" .. p .. ")" end
     if w.arc_bad then return "arc: a bad arc_turn call " .. w.arc_bad end
+    if act_target and L.state == "listen" then waiting = false end -- (an action has no control in the window to click: the window is not armed)
     if (w.armed == 1) ~= waiting then return "learn: the window is " .. (w.armed == 1 and "armed" or "not armed") .. " but the learn state is " .. L.state end
-    if (w.ring == 0) ~= (L.state == "idle") then return "learn: the ring is " .. tostring(w.ring) .. " but the learn state is " .. L.state end
+    if (w.ring == 0) ~= (L.state == "idle" or (act_target and L.state == "listen")) then return "learn: the ring is " .. tostring(w.ring) .. " but the learn state is " .. L.state end
     if p ~= "MIDIMAP" and L.state ~= "idle" then return "learn: a learn is open on another page (" .. p .. ")" end
-    if (L.state == "listen" or L.state == "confirm") and (L.target == nil or w.mm_set.state.ctl[L.target] == nil) then return "learn: listening without a target" end
+    if (L.state == "listen" or L.state == "confirm") and (L.target == nil or (w.mm_set.state.ctl[L.target] == nil and not act_target)) then return "learn: listening without a target" end
+    if w.mm.walk_index() then
+      if p ~= "MIDIMAP" or L.state == "idle" or L.state == "pick" then return "walk: ASSIGN ALL is open but the learn is " .. L.state .. " on " .. p end
+      if not act_target or w.mm.walk_index() < 1 or w.mm.walk_index() > 14 or w.mm_set.ACTION_IDS[w.mm.walk_index()] ~= L.target then return "walk: the target " .. tostring(L.target) .. " is not action " .. tostring(w.mm.walk_index()) end
+    end
+    if w.action_bad then return "actions: " .. w.action_bad end
+    if w.menu_tick ~= nil and w.menu_tick ~= (w.mm_set.state.actions_on == true) then return "actions: the window menu's tick (" .. tostring(w.menu_tick) .. ") and the stored switch (" .. tostring(w.mm_set.state.actions_on) .. ") disagree" end
     local h = io.open(map("/home/we/midimap.conf"), "r")
     local conf = h and h:read("a") or ""
     if h then h:close() end
-    if waiting then
+    conf = conf:gsub("actions=%d\n", "") -- (the master switch may be flipped by a shortcut at any time: that is not a mapping)
+    if waiting and not w.mm.walk_index() then
       if w.learn_conf == nil then w.learn_conf = conf elseif w.learn_conf ~= conf then return "learn: the mapping file changed while a learn was waiting" end
     else w.learn_conf = nil end
     if w.left_midimap then
@@ -343,6 +389,8 @@ local function run(events, trace)
   for i, e in ipairs(events) do
     local ok, err = pcall(apply, w, e)
     local msg = not ok and ("error: " .. tostring(err)) or invariants(w)
+    if w.mm.walk_index() then COVER.walks = COVER.walks + 1 end
+    if _menu.page == "MIDIMAP" and w.pages.MIDIMAP.mode == "aview" then COVER.aviews = COVER.aviews + 1 end
     if not msg and i % 25 == 0 then
       local w2msg = escape_check(w)
       if w2msg then msg = w2msg else _menu.set_page(({"BOX", "UI", "MIDIMAP", "TAPE"})[(i // 25) % 4 + 1]) end
@@ -365,18 +413,19 @@ local function gen_midi()
     local ch = math.random(3) - 1
     local kind = math.random(10)
     if kind <= 7 then return {k = "midi", dev = math.random(4), b = {0xB0 + ch, pick(CCS), pick(VALS)}} end
-    if kind == 8 then return {k = "midi", dev = math.random(4), b = {0x90 + ch, pick({36, 37, 60}), pick({0, 1, 100, 127})}} end
+    if kind == 8 then return {k = "midi", dev = math.random(4), b = {0x90 + ch, pick({36, 37, 38, 40, 60}), pick({0, 1, 100, 127})}} end
     if kind == 9 then return {k = "midi", dev = math.random(4), b = {0x80 + ch, pick({36, 37, 60}), 0}} end
     return {k = "midi", dev = math.random(4), b = pick({{0xF8}, {0xFE}, {0xE0, 1, 2}, {0xB0}, {0xC0, 5}})}
   elseif r <= 70 then return {k = "click", id = pick({"e1", "e2", "e3", "k1", "k2", "k3"})}
   elseif r <= 85 then return {k = "tick", dt = pick({0.1, 1, 2, 4, 16})}
-  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug", "arcopen", "arcclose", "arckeyson", "arckeysoff"}), dev = math.random(4), cc = pick(CCS)} end
+  else return {k = "ext", what = pick({"pmap", "unpmap", "unplug", "plug", "arcopen", "arcclose", "arckeyson", "arckeysoff", "amap", "amap", "amap", "aclear", "aon", "aoff", "mon", "moff"}), dev = math.random(4), cc = pick(CCS), id = math.random(14), kind = math.random(3), num = pick({36, 37, 38, 40, 10, 16, 17, 71, 72, 73})} end
 end
 local function gen(n)
   local ev = {}
   for i = 1, n do
     local r = math.random(100)
-    if math.random(100) <= 30 then ev[i] = gen_midi()
+    if math.random(100) <= 4 then ev[i] = {k = "nav", n = pick({1, 1, 2, 3, 5, 16})}
+    elseif math.random(100) <= 30 then ev[i] = gen_midi()
     elseif r <= 52 then ev[i] = {k = "tap", name = pick(KEYS), rep = math.random(4) == 1 and math.random(3) or 0}
     elseif r <= 60 then ev[i] = {k = "press", name = pick(KEYS)}
     elseif r <= 68 then ev[i] = {k = "release", name = pick(KEYS)}
@@ -928,7 +977,7 @@ do
       -- a preset name whose first letter is, or is not, one of the arc keys; the digits 5 and 6 as a first character too
       for _, first in ipairs({"B", "T", "H", "N", "Y", "G", "A", "M", "5", "6"}) do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 16)
+        open_midimap(w, 18)
         tap(w, "RIGHT")
         is(w.textentry.active, "SAVE AS opens the entry " .. combo)
         tap(w, first); tap(w, "A")
@@ -959,7 +1008,7 @@ do
         local S = w.mm_set
         S.set("k2", "type", "cc"); S.set("k2", "num", 85); S.set("e2", "num", 72); S.set("e2", "mode", "rel2c"); S.set("e3", "num", 73); S.set("e3", "mode", "rel2c")
         S.set("a1", "num", 76); S.set("a1", "mode", "rel2c"); S.set("k3", "type", "cc"); S.set("k3", "num", 86); w.mm.changed()
-        open_midimap(w, 16)
+        open_midimap(w, 18)
         tap(w, "RIGHT")
         tap(w, "A")
         local te = w.textentry
@@ -981,7 +1030,7 @@ do
       -- the menu moves on under an open entry (a window button, a page key, a mapped K1): the entry is closed, the handlers are the page's, the tape name entry opens
       for _, how in ipairs({"page", "mode"}) do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 16)
+        open_midimap(w, 18)
         tap(w, "RIGHT")
         is(w.textentry.active, "the entry is open before the menu moves " .. combo)
         if how == "page" then _menu.set_page("TAPE") else _menu.set_mode(false); _menu.set_mode(true); _menu.set_page("TAPE") end
@@ -992,7 +1041,7 @@ do
       -- an entry left active by something that did not tell textentry (the hook is off): the next entry recovers and says so in one line
       do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 16)
+        open_midimap(w, 18)
         tap(w, "RIGHT")
         local hook = w.textentry.menu_changed
         w.textentry.menu_changed = nil
@@ -1006,7 +1055,7 @@ do
       -- a second entry while one really is open: refused, and the log says why, once
       do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 16)
+        open_midimap(w, 18)
         tap(w, "RIGHT")
         tap(w, "A")
         printed = {}
@@ -1024,9 +1073,9 @@ do
           open_midimap(w, 9); tap(w, "RIGHT"); w.pages.MIDIMAP.dpos = 2; tap(w, "RIGHT"); tap(w, "7"); tap(w, round == 2 and "ESC" or "ENTER")
           is(not w.textentry.active, "the number entry closed (round " .. round .. ") " .. combo)
           tap(w, "ESC"); tap(w, "ESC") -- out of the view and the page
-          open_midimap(w, 16); tap(w, "RIGHT"); tap(w, "C"); tap(w, round == 3 and "ESC" or "ENTER")
+          open_midimap(w, 18); tap(w, "RIGHT"); tap(w, "C"); tap(w, round == 3 and "ESC" or "ENTER")
           is(not w.textentry.active, "the preset entry closed (round " .. round .. ") " .. combo)
-          open_midimap(w, 16); tap(w, "RIGHT"); tap(w, "ENTER") -- an empty name: refused
+          open_midimap(w, 18); tap(w, "RIGHT"); tap(w, "ENTER") -- an empty name: refused
           is(not w.textentry.active, "an empty name closed the entry (round " .. round .. ") " .. combo)
           tape_entry_opens(w, "after MIDI MAP entries (round " .. round .. ") " .. combo)
         end
@@ -1086,6 +1135,10 @@ do
   tap(w, "LEFT")
   is(w.textentry.active, "K2 (on release) opens the rec name entry too")
   tap(w, "ESC")
+end
+if SEEDS >= 20 and (COVER.fired == 0 or COVER.walks == 0 or COVER.aviews == 0) then
+  print(string.format("FAIL coverage: the random runs did not reach the actions (fired %d, walk events %d, action view events %d)", COVER.fired, COVER.walks, COVER.aviews))
+  fails_total = fails_total + 1
 end
 if fails_total == 0 then print("menu_stress_test: all passed (" .. SEEDS .. " runs of " .. EVENTS .. " events)") end
 os.exit(fails_total == 0 and 0 or 1)
