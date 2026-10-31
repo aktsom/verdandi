@@ -1040,5 +1040,52 @@ do
   is(mode_body and mode_body:find("menu_changed", 1, true), "lua/core/menu.lua: set_mode tells the text entry")
   is(page_body and page_body:find("menu_changed", 1, true), "lua/core/menu.lua: set_page tells the text entry")
 end
+
+-- ---------------------------------------------------------------- the tape page's K3 (record): a file in the tape folder whose name starts with a number that is not a whole number ("0.50 take.wav") made the
+-- default name a fraction and string.format("%04d") raised an error, so K3 did nothing (KNOWN-ISSUES 26). fractional tempo and clock values are in the world too, as the owner suspected them
+do
+  local function F(what) fails_total = fails_total + 1 print("FAIL tape: " .. what) end
+  local function is(c, what) if not c then F(what) end end
+  local listings = {
+    ["a fraction first"] = "0.50 take.wav\n",
+    ["a fraction among numbers"] = "0003_a.wav\n1.5_x.wav\n0007.wav\n",
+    ["an exponent"] = "1e02 loop.wav\n",
+    ["a hex-like name"] = "0x10.wav\n",
+    ["negative and blank"] = "-1.5 a.wav\n  7 b.wav\n",
+    ["only whole numbers"] = "0001.wav\n0002.wav\n",
+    ["nothing"] = "",
+    ["a long float"] = "3.14159.wav\n",
+  }
+  local want = {["a fraction first"] = "0000", ["a fraction among numbers"] = "0008", ["an exponent"] = "0000", ["a hex-like name"] = "0000", ["negative and blank"] = "0000",
+    ["only whole numbers"] = "0003", ["nothing"] = "0000", ["a long float"] = "0000"}
+  for name, listing in pairs(listings) do
+    for _, tempo in ipairs({120, 120.5, 97.3333, 0.5, 1e-9}) do
+      local w = world()
+      util.os_capture = function() return listing end
+      clock = {get_tempo = function() return tempo end, get_beats = function() return tempo * 1.25 end, get_beat_sec = function() return 60 / tempo end}
+      norns.state = norns.state or {}
+      norns.state.clock = {tempo = tempo}
+      _menu.set_page("TAPE")
+      w.pages.TAPE.mode = w.pages.TAPE.constants.TAPE_MODE_REC
+      printed = {}
+      tap(w, "RIGHT") -- K3
+      is(w.textentry.active and w.textentry.heading == "tape filename:", "K3 opens the rec name entry (" .. name .. ", tempo " .. tostring(tempo) .. ")")
+      is(w.textentry.txt == want[name], "the default name is " .. want[name] .. " (" .. name .. "): got " .. tostring(w.textentry.txt))
+      for _, l in ipairs(printed) do if l:find("bad argument", 1, true) or l:find("raised an error", 1, true) then F("an error was logged (" .. name .. "): " .. l) end end
+      local msg = invariants(w)
+      is(msg == nil, "the page is whole (" .. name .. "): " .. tostring(msg))
+      tap(w, "ESC")
+      is(not w.textentry.active, "the entry closes (" .. name .. ")")
+    end
+  end
+  -- K2 arms it too (on release) and the REC side stays usable after the entry
+  local w = world()
+  util.os_capture = function() return "0.50 take.wav\n" end
+  _menu.set_page("TAPE")
+  w.pages.TAPE.mode = w.pages.TAPE.constants.TAPE_MODE_REC
+  tap(w, "LEFT")
+  is(w.textentry.active, "K2 (on release) opens the rec name entry too")
+  tap(w, "ESC")
+end
 if fails_total == 0 then print("menu_stress_test: all passed (" .. SEEDS .. " runs of " .. EVENTS .. " events)") end
 os.exit(fails_total == 0 and 0 or 1)

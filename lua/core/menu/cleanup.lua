@@ -26,10 +26,11 @@ local function human(b)
   local units = {"B", "K", "M", "G"}
   local i = 1
   while b >= 1024 and i < #units do b = b / 1024; i = i + 1 end
-  if i == 1 then return string.format("%d%s", b, units[i]) end
+  if i == 1 then return string.format("%d%s", math.floor(b), units[i]) end -- (%d wants a whole number: a size can be a fraction)
   if b < 10 then return string.format("%.1f%s", b, units[i]) end
-  return string.format("%d%s", b, units[i])
+  return string.format("%d%s", math.floor(b), units[i])
 end
+m.human = human -- (for linux/tests/menu_format_test.lua)
 
 local function fit(s, w)
   if screen.text_extents(s) <= w then return s end

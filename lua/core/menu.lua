@@ -122,6 +122,26 @@ local function next_panel(delta)
   return util.clamp(_menu.panel+delta,1,4)
 end
 
+-- BEGIN handler guard
+-- Linux desktop: an error in a menu key or encoder handler used to be only a line in the log (a page that "does nothing"). now it is logged with the handler's name, the page is redrawn so that it stays whole, and a short
+-- message stands on the device window for a few seconds (the note of show_note). on the device the handlers are called as before
+local handler_guard = os.getenv("NORNS_PLATFORM") ~= nil
+
+local function call_handler(what, fn, ...)
+  if not handler_guard then return fn(...) end
+  local res = table.pack(pcall(fn, ...))
+  if res[1] then return table.unpack(res, 2, res.n) end
+  local err = res[2]
+  if type(err) ~= "string" then err = tostring(err) end
+  print("menu " .. what .. " handler error: " .. err)
+  local short = err:gsub("^.-([%w_]+%.lua:%d+:)", "%1"):gsub("%s+", " ")
+  _menu.error_note = ("ERROR " .. what .. ": " .. short):sub(1, 78)
+  _menu.error_note_until = util.time() + 8
+  if _menu.show_note then _menu.show_note() end
+  if _menu.mode and _menu.redraw then pcall(_menu.redraw) end
+end
+-- END handler guard
+
 _menu.enc = function(n, delta)
   if n==1 and _menu.alt == false then
     --mix:delta("output",delta)
@@ -132,7 +152,7 @@ _menu.enc = function(n, delta)
       _menu.set_page(_menu.panels[_menu.panel])
       nav_vanish:start()
     end
-  else _menu.penc(n, delta) end
+  else call_handler("enc", _menu.penc, n, delta) end
 end
 
 
@@ -152,14 +172,14 @@ _norns.key = function(n, z)
       pending = false
     elseif z == 0 then
       _menu.alt = false
-      _menu.key(n,z) -- always 1,0
+      call_handler("key", _menu.key, n, z) -- always 1,0
       if _menu.mode == true then _menu.redraw() end
     else
-      _menu.key(n,z) -- always 1,1
+      call_handler("key", _menu.key, n, z) -- always 1,1
     end
     -- key 2/3 pass
   else
-    _menu.key(n,z)
+    call_handler("key", _menu.key, n, z)
   end
   screen.ping()
 end
@@ -201,7 +221,7 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -427,6 +447,10 @@ if _norns.grid_conflict_text and _norns.set_warning then
       -- the note of the MAIDEN and MANUAL buttons goes after a few seconds
       if _menu.maiden_note and util.time() >= (_menu.maiden_note_until or 0) then
         _menu.maiden_note = nil
+        _menu.show_note()
+      end
+      if _menu.error_note and util.time() >= (_menu.error_note_until or 0) then
+        _menu.error_note = nil
         _menu.show_note()
       end
       -- a script ran "sudo systemctl restart norns-*" (a script's installer): linux/shims/systemctl left a request instead of the Raspberry Pi's

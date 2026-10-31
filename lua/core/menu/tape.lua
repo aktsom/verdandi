@@ -99,7 +99,7 @@ end
 -- file system helpers
 local function file_tape_exists(index)
   if type(index) == "number" then
-    index = string.format("%04d", index)
+    index = string.format("%04d", math.floor(index)) -- (%d wants a whole number)
   end
   local filename = _path.tape .. index .. ".wav"
   return util.file_exists(filename)
@@ -110,8 +110,10 @@ local function file_read_tape_index()
   local tape = util.os_capture("ls " .. _path.tape, true)
   local t = {}
   for f in tape:gmatch("([^\n]+)") do
-    local fs = string.sub(f, 1, 4)
-    if tonumber(fs) then
+    -- a take is named with four digits first ("0007.wav"); any other file whose first four characters happen to read as a number ("0.50 take.wav", "1e02", " 7 b") is not one: a fraction here made
+    -- the next name a fraction and string.format("%04d") raised an error, so K3 did nothing (KNOWN-ISSUES 26)
+    local fs = string.match(f, "^(%d%d%d%d)")
+    if fs then
       table.insert(t, tonumber(fs))
     end
   end
@@ -231,7 +233,7 @@ local function arm_record_prompt()
   file_read_tape_index()
   textentry.enter(
     edit_filename,
-    string.format("%04d", m.fileindex),
+    string.format("%04d", math.floor(m.fileindex)),
     "tape filename:",
     function(txt)
       if file_tape_exists(txt) then

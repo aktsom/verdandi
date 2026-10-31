@@ -335,3 +335,7 @@ Everything in the tests ran headless: a JACK client played the controller (`midi
 - [ ] Type a preset name (SAVE AS) while **touching the Beatstep's encoders and pads** that are mapped to E1-E3, K1-K3 or A1-A4: nothing changes in the entry (mapped controls are ignored while an entry is open); finish the name with Enter; it is saved. After the entry the mapped controls work again.
 - [ ] After a session with MIDI MAP entries and preset saves open the **TAPE page, REC side (E2), K3**: the "tape filename" entry opens and recording starts. If it ever does not, `logs/norns.log` has a line beginning `textentry:` (an earlier entry left active, or another entry still active): send me that line and what you did just before.
 - [ ] While an entry is open, click a page button of the window (MIX, TAPE, ...) or press a mapped K1: the entry closes, the page changes, and the TAPE rec name entry still opens afterwards.
+
+## The tape page K3 and handler errors (KNOWN-ISSUES 26)
+- [ ] TAPE page, REC side (E2), **K3**: the "tape filename" entry opens with the next free four-digit number, also with files like `0.50 take.wav` in `dust/audio/tape`; recording starts and stops.
+- [ ] If any menu key ever fails again, the device window shows `ERROR key: <file>:<line>: <message>` for about 8 seconds and `logs/norns.log` has `menu key handler error: ...`: send me that line.
