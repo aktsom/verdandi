@@ -20,6 +20,7 @@ print("PROBE restart pad", lvl())
 #xdo key F10
 #sleep 0.5
 #xdo key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+#sleep 0.5
 #xdo key Return
 #sleep 1
 print("PROBE restart menu on", S.state.actions_on)
