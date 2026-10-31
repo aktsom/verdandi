@@ -39,6 +39,7 @@
 #include <cairo.h>
 #ifdef NORNS_LINUX_DESKTOP
 #include "ui_look.h"
+#include "platform/linux/extras_layout.h"
 #include "platform/linux/screen_window.h"
 #endif
 #ifdef NORNS_LINUX_DESKTOP
@@ -930,6 +931,30 @@ static void arrange_windows(void) {
     if (the_window == NULL || !usable_bounds(&u)) {
         return;
     }
+#ifdef NORNS_LINUX_DESKTOP
+    // the norns window stays where it is and as large as the user made it (it used to be moved and resized to fit the device windows with it, as on the Mac): the device windows go round it
+    if (n == 0) {
+        return;
+    }
+    {
+        SDL_Rect mr;
+        SDL_GetWindowPosition(the_window, &mr.x, &mr.y);
+        SDL_GetWindowSize(the_window, &mr.w, &mr.h);
+        xl_rect_t usable = {u.x, u.y, u.w, u.h}, main_rect = {mr.x, mr.y, mr.w, mr.h}, out[3];
+        int uw[3], uh[3];
+        for (int i = 0; i < n; i++) {
+            uw[i] = open[i]->uw;
+            uh[i] = open[i]->uh;
+        }
+        extras_layout(&usable, &main_rect, title_height(the_window), n, uw, uh, out);
+        for (int i = 0; i < n; i++) {
+            SDL_SetWindowSize(open[i]->window, out[i].w, out[i].h);
+            SDL_SetWindowPosition(open[i]->window, out[i].x, out[i].y);
+            SDL_RaiseWindow(open[i]->window);
+        }
+        return;
+    }
+#endif
     if (n == 0) {
         restore_main_window();
         return;
@@ -2709,7 +2734,13 @@ static void handle_wheel(const SDL_MouseWheelEvent *w) {
 static window_keys_t keys;
 
 static void handle_key(const SDL_KeyboardEvent *k) {
+#ifdef NORNS_LINUX_DESKTOP
+    // F1 to F12 are norns' own keys (the menu pages, F5, F6 grid, F7 keys, F8 arc, F9 the screen, F10 the menu ...): from the keys window they go the same way as from every other window, so that F7 closes it again
+    bool function_key = k->keysym.scancode >= SDL_SCANCODE_F1 && k->keysym.scancode <= SDL_SCANCODE_F12;
+    if (is_pane(&keys_pane, k->windowID) && !function_key) {
+#else
     if (is_pane(&keys_pane, k->windowID)) {
+#endif
         keys_typed(k);
         return;
     }

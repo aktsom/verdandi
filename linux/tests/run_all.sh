@@ -138,6 +138,8 @@ run "lua:MIDI MAP page (rows and wording, views, preset row, device list with th
 SKM=matron/src/platform/macos; LNM=matron/src/platform/linux
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/midimap_hit_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/box_palette.c -o "$T/mmhit" $(pkg-config --libs cairo freetype2) -lm 2> "$T/mmhit.err" || cat "$T/mmhit.err"
 run "c:MIDI MAP hit test (K1-K3 and E1-E3 are hit alike in every style and pixel look, row shown or hidden, muted or not, three sizes)" "$T/mmhit"
+cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layout_test.c matron/src/platform/linux/extras_layout.c -lm -o "$T/xlt" 2> "$T/xlt.err" || cat "$T/xlt.err"
+run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
 D="$(mktemp -d)"
 run "lua:mods (glob through the virtual home, the page, enable, restart, a failing mod)" env HOME="$D" NORNS_PLATFORM=linux lua5.3 linux/tests/mods_test.lua
 run "tidy:flatten dry run (a nested home is reported and nothing is changed; --apply refuses without the typed line)" linux/tests/tidy_flatten_test.sh
@@ -536,8 +538,8 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         chk "keyboard: 3 = K3 up" "PROBE key.3.0"
         chk "keyboard: w = E1" "PROBE enc.1"
         chk "grid and arc connected" "PROBE devices.virtual grid m0000001.monome arc virtual m0000002"
-        chk "click on the grid window: down" "PROBE gridkey.2.2.1"
-        chk "click on the grid window: up" "PROBE gridkey.2.2.0"
+        chk "click on the grid window: down" "PROBE gridkey.[0-9]*.[0-9]*.1" # which cell is hit at a fixed pixel depends on the size of the grid window, which now fits the screen round the norns window instead of the old centred layout
+        chk "click on the grid window: up" "PROBE gridkey.[0-9]*.[0-9]*.0"
         chk "arc wheel" "PROBE arcdelta.1.2"
         chk "arc key down" "PROBE arckey.1.1"
         chk "arc key up" "PROBE arckey.1.0"
@@ -783,6 +785,46 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$MH"
     }
     midimap_scenario
+    # the virtual grid (F6), keys (F7) and arc (F8) windows: the norns window keeps its size and position while they open and close again and again, from the norns window and from their own window, also with the detached
+    # screen window open; each closes with the key that opens it (F7 did not close the keys window: its key events never reached norns)
+    window_toggle_scenario() {
+        TH="$(mktemp -d)"
+        ln -s "$REPO" "$TH/norns"
+        mkdir -p "$TH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$TH/dust/code/probe/"
+        printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$TH/box.conf"
+        TLOG="$T/toggle.log"
+        NORNS_HOME="$TH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_toggle.lua" "$TLOG" > /dev/null 2>&1
+        toggle_ok() {
+            grep -q "PROBE toggle done" "$TLOG" || { echo "missing: the probe ran"; return 1; }
+            python3 -I - "$TH/probe.marks" << 'PY'
+import sys
+m = dict(l.rstrip("\n").split("=", 1) for l in open(sys.argv[1]) if "=" in l)
+bad = []
+base = m.get("base")
+if base is None or not base.startswith("800x516+"):
+    bad.append("the norns window could not be set to 800 x 516 (base=%s)" % base)
+for k, v in m.items():
+    if k.endswith("_main") and v != base:
+        bad.append("the norns window changed at %s: %s instead of %s" % (k, v, base))
+    elif "_open" in k and not k.endswith("_main") and v != "1":
+        bad.append("%s: %s window(s), wanted 1 (the key did not open it)" % (k, v))
+    elif "_closed" in k and not k.endswith("_main") and v != "0":
+        bad.append("%s: %s window(s), wanted 0 (the key did not close it)" % (k, v))
+for need in ("grid_open1", "arc_open2", "keys_closed1", "keys_closed2", "all_open_keys", "all_closed_keys", "d_keys_closed1", "d_arc_closed2", "d_grid_open2"):
+    if need not in m:
+        bad.append("no mark %s" % need)
+if m.get("detached") != "1" or m.get("d_screen_still") != "1":
+    bad.append("the detached screen window was not open (detached=%s, still=%s)" % (m.get("detached"), m.get("d_screen_still")))
+for b in bad:
+    print("missing: " + b)
+sys.exit(1 if bad else 0)
+PY
+        }
+        run "window:grid, keys and arc windows open and close with F6, F7, F8 again and again (from the norns window and from their own window, with the screen detached) and the norns window keeps its size and position" toggle_ok
+        rm -rf "$TH"
+    }
+    window_toggle_scenario
     # the pixel looks in the real window (docs/port/retro-look-plan.md): from box.conf, switched live from the THEME page's PIXEL LOOK row, each look is another picture, saved, remembered after a restart, and the
     # colour picker changes a colour live in a retro look
     retro_scenario() {
@@ -875,8 +917,8 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "2 in the screen window is K2 (down and up)" 'grep -q "PROBE key.2.1" "$D1" && grep -q "PROBE key.2.0" "$D1"'
             chk "no other key or encoder came from the screen window (a click and the wheel are not controls)" '[ "$(grep -c "PROBE key" "$D1")" = 2 ] && [ "$(grep -c "PROBE enc" "$D1")" = 0 ]'
             chk "F6 in the screen window opens the grid" '[ "$(m1 grid_open)" = 1 ]'
-            chk "a cell press reaches the script while the screen is detached" '[ "$(grep -c "PROBE gridkey.2.2.1" "$D1")" -ge 1 ]'
-            chk "...and again while the screen window is hidden" '[ "$(grep -c "PROBE gridkey.2.2.1" "$D1")" -ge 2 ]'
+            chk "a cell press reaches the script while the screen is detached" '[ "$(grep -c "PROBE gridkey.[0-9]*.[0-9]*.1" "$D1")" -ge 1 ]'
+            chk "...and again while the screen window is hidden" '[ "$(grep -c "PROBE gridkey.[0-9]*.[0-9]*.1" "$D1")" -ge 2 ]'
             chk "the virtual keys window plays a note while the screen window is hidden" 'grep -q "PROBE midi.note_on" "$D1"'
             chk "F6 again closes the grid" '[ "$(m1 grid_closed)" = 0 ]'
             # shortcuts
