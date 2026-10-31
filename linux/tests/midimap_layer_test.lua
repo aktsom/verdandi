@@ -512,6 +512,9 @@ eq(S.state.actions_on, false, "master: the menu / shortcut callback turns it off
 S.load(); eq(S.state.actions_on, false, "master: saved, loaded off")
 menu_tick = nil; mm.load(); eq(menu_tick, false, "master: after a restart the menu is given the saved state")
 _norns.midi_actions_changed(true); S.load(); eq(S.state.actions_on, true, "master: on again, saved"); mm.load(); eq(menu_tick, true, "master: the tick after a restart is on")
+-- the window passes "1" and "0" (call_lua sends strings)
+_norns.midi_actions_changed("0"); eq(S.state.actions_on, false, "master: the string 0 turns it off"); _norns.midi_actions_changed("1"); eq(S.state.actions_on, true, "master: the string 1 turns it on")
+_norns.midi_actions_changed("x"); eq(S.state.actions_on, true, "master: another string changes nothing")
 -- bad argument from C is ignored
 _norns.midi_actions_changed(nil); eq(S.state.actions_on, true, "master: a nil callback changes nothing")
 

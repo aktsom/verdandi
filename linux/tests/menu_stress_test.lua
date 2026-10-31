@@ -370,14 +370,14 @@ local function invariants(w)
   return nil
 end
 
--- ESC at most 4 times leaves the page and ends every modal state
+-- ESC at most 5 times leaves the page and ends every modal state (the action view with a learn open is the deepest: cancel, view, list, rows, SYSTEM; a random 'press ESC' left held swallows the next ESC press)
 local function escape_check(w)
-  for _ = 1, 4 do
+  for _ = 1, 5 do
     if _menu.page == "SYSTEM" and not w.textentry.active then break end
     if _menu.page == "TAPE" and not w.textentry.active then _menu.set_page("SYSTEM") break end -- (the tape page's K2 arms the recorder: it is left with a page key, as on the device)
     tap(w, "ESC")
   end
-  if _menu.page ~= "SYSTEM" or w.textentry.active then return "liveness: 4 times ESC did not leave the page (" .. state_of(w) .. ")" end
+  if _menu.page ~= "SYSTEM" or w.textentry.active then return "liveness: 5 times ESC did not leave the page (" .. state_of(w) .. ")" end
   return nil
 end
 

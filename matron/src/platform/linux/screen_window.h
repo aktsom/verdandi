@@ -36,6 +36,8 @@ extern void screen_window_draw(cairo_surface_t *picture, const char *toast, bool
 
 // every SDL event goes through here first: true if the window (or its timers, or F9/F11) used it; *act says what the box has to do
 extern bool screen_window_event(const SDL_Event *ev, sw_action_t *act);
+// fullscreen on and back, as F11 does (a MIDI action, docs/port/midi-actions-plan.md); false when the screen is not in its own window
+extern bool screen_window_toggle_fullscreen(void);
 
 // at quit: writes the state now (it also saves itself half a second after a change)
 extern void screen_window_save_now(void);

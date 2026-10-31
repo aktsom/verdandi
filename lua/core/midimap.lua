@@ -210,8 +210,9 @@ function M.install()
     if not ok then M.log("pick: " .. tostring(err)) end
   end
   -- the window menu's tick and Ctrl+Shift+M (sdl_bridge.cc) tell the new state: one saved state for the page, the menu and the shortcut
-  _norns.midi_actions_changed = function(on)
-    if type(on) ~= "boolean" then return end
+  _norns.midi_actions_changed = function(v)
+    local on
+    if v == true or v == "1" or v == 1 then on = true elseif v == false or v == "0" or v == 0 then on = false else return end -- (the window passes "1" or "0")
     local ok, err = pcall(function() M.set_actions(on) end)
     if not ok then M.log("actions switch: " .. tostring(err)) end
   end

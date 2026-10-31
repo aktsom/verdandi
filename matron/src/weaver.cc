@@ -374,6 +374,8 @@ static int _arc_turn(lua_State *l);
 static int _arc_keys_config(lua_State *l);
 static int _arc_keys_block(lua_State *l);
 static int _midimap_show(lua_State *l);
+static int _window_action(lua_State *l);
+static int _midi_actions_menu(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
@@ -743,6 +745,8 @@ void w_init(void) {
     lua_register_norns("arc_keys_config", &_arc_keys_config);
     lua_register_norns("arc_keys_block", &_arc_keys_block);
     lua_register_norns("midimap_show", &_midimap_show);
+    lua_register_norns("window_action", &_window_action);
+    lua_register_norns("midi_actions_menu", &_midi_actions_menu);
     lua_register_norns("set_warning", &_set_warning);
 #endif
     lua_register_norns("choose_file", &_choose_file);
@@ -3844,6 +3848,27 @@ int _arc_keys_block(lua_State *l) {
  */
 int _midimap_show(lua_State *l) {
     sdl_bridge_midimap_show((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2));
+    return 0;
+}
+
+/***
+ * Linux desktop: MIDI actions (docs/port/midi-actions-plan.md): do what a click on a button of the window does (the main thread of the window runs it, like the mouse)
+ * @function window_action
+ * @tparam string name one of mix tape home params input grid arc keys maiden manual mute detach fullscreen screenshot
+ * @treturn boolean true if the name is one of the 14 and the action was handed over
+ */
+int _window_action(lua_State *l) {
+    lua_pushboolean(l, sdl_bridge_window_action(luaL_checkstring(l, 1)) != 0);
+    return 1;
+}
+
+/***
+ * Linux desktop: the tick of "MIDI actions enabled" in the window's menu (lua holds the value in midimap.conf and says it at start and at every change)
+ * @function midi_actions_menu
+ * @tparam boolean on
+ */
+int _midi_actions_menu(lua_State *l) {
+    sdl_bridge_set_midi_actions(lua_toboolean(l, 1));
     return 0;
 }
 

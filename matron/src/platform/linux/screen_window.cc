@@ -405,6 +405,14 @@ void screen_window_draw(cairo_surface_t *picture, const char *toast, bool record
 
 // ---- events ----
 
+bool screen_window_toggle_fullscreen(void) {
+    if (win == NULL) {
+        return false;
+    }
+    set_fullscreen(!conf.fullscreen);
+    return true;
+}
+
 bool screen_window_event(const SDL_Event *ev, sw_action_t *act) {
     *act = SW_NONE;
     if (ev->type == own_event) {

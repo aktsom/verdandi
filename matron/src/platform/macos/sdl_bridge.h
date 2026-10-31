@@ -34,6 +34,8 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_MIDIMAP_RING 7  // n = 0 off, 1 pick (the six controls in turn), 2 listen; value = the control (SKIN_K1..SKIN_E3)
 #define SDL_BRIDGE_SHOW_MIDIMAP_PHASE 8 // the blink (internal)
 #define SDL_BRIDGE_SHOW_ARC_TURN 9      // n = ring 1-4, value = ticks: the virtual arc turns (docs/port/arc-plan.md)
+#define SDL_BRIDGE_SHOW_ACTION 10       // n = the index of a window action (window_actions.h): the main thread does what a click on its button does
+#define SDL_BRIDGE_SHOW_ACTION_FLASH 11 // n = the control that was flashed: its press ends (internal)
 #endif
 #define SDL_BRIDGE_SHOW_OUT 5  // n = the output level's place on its scale x 1000, value = muted
 extern void sdl_bridge_show_control(int kind, int n, int value);
@@ -82,6 +84,10 @@ extern int sdl_bridge_arc_turn(int n, int ticks);
 extern void sdl_bridge_arc_keys_ramp(int ramp);
 // any thread: a text entry is open (1) or not (0): the arc window takes no key while it is
 extern void sdl_bridge_arc_keys_block(int blocked);
+// any thread, does not block: a MIDI action (MIDI MAP, docs/port/midi-actions-plan.md): the name is one of the 14 of window_actions.h; 1 if it was handed to the window, 0 for any other name
+extern int sdl_bridge_window_action(const char *name);
+// any thread: the tick of "MIDI actions enabled" in the window's menu
+extern void sdl_bridge_set_midi_actions(int on);
 extern void sdl_bridge_midimap_arm(int armed);
 extern void sdl_bridge_midimap_show(int state, int control);
 #endif

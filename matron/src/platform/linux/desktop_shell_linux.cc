@@ -38,6 +38,7 @@ static int copy_samples = 0;
 static int screen_out = 0; // the screen is in its own window
 static int buttons_shown = 1; // "Show the page buttons" (docs/port/box-style-plan.md): the bridge says what lua holds
 static int muted = 0;         // the output is muted: the tick of "Mute output"
+static std::atomic<int> midi_actions{1}; // "MIDI actions enabled": lua owns the value (midimap.conf, starts on), this is the tick
 static std::atomic<int> file_dialog{0}; // "Open the file dialog when a script loads a file": lua owns the value (ui.conf), this is the tick
 static int import_mode = SHELL_IMPORT_LINK;
 
@@ -117,6 +118,14 @@ void shell_set_muted(int on) {
     muted = on ? 1 : 0;
 }
 
+void shell_set_midi_actions(int on) {
+    midi_actions = on != 0;
+}
+
+int shell_get_midi_actions(void) {
+    return midi_actions.load();
+}
+
 void shell_set_file_dialog(int on) {
     file_dialog = on ? 1 : 0;
 }
@@ -189,6 +198,7 @@ static void menu_build(void) {
     add_item(SHELL_MENU_MANUAL, "Open the manual", "", 0);
     add_separator();
     add_item(SHELL_MENU_MUTE, "Mute output", "Ctrl+M", muted);
+    add_item(SHELL_MENU_MIDI_ACTIONS, "MIDI actions enabled", "Ctrl+Shift+M", midi_actions.load());
     // what norns hears: the sound card's input, every application but norns, one application, off
     const char *cur = app_audio_current();
     add_item(SHELL_MENU_INPUT_MIC, "Input: microphone", "", input_now == 1);
@@ -225,6 +235,12 @@ static void menu_do(int id) {
         file_dialog = !file_dialog.load();
         if (cb_item != NULL) {
             cb_item(id); // the bridge tells lua, which saves it
+        }
+        break;
+    case SHELL_MENU_MIDI_ACTIONS:
+        midi_actions = !midi_actions.load();
+        if (cb_item != NULL) {
+            cb_item(id); // the bridge tells lua, which saves it, and says so in the window
         }
         break;
     case SHELL_MENU_SHOW_BUTTONS:
@@ -334,6 +350,11 @@ int shell_menu_key(int down, int scancode, int mods, double px, double py, doubl
         if (ctrl && !shift && scancode == SDL_SCANCODE_M) {
             // mute: also with the row of buttons hidden, from the box window and the screen window, and not passed on to scripts
             menu_do(SHELL_MENU_MUTE);
+            return SHELL_USED;
+        }
+        if (ctrl && shift && scancode == SDL_SCANCODE_M) {
+            // the MIDI actions on and off: from the box window and the screen window, and not passed on to scripts
+            menu_do(SHELL_MENU_MIDI_ACTIONS);
             return SHELL_USED;
         }
         if (ctrl && shift && scancode == SDL_SCANCODE_S) {

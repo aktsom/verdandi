@@ -42,6 +42,7 @@
 #include "platform/linux/arc_keys.h"
 #include "platform/linux/extras_layout.h"
 #include "platform/linux/screen_window.h"
+#include "platform/linux/window_actions.h"
 #endif
 #ifdef NORNS_LINUX_DESKTOP
 #include <arpa/inet.h>
@@ -703,6 +704,19 @@ void sdl_bridge_arc_keys_block(int blocked) {
 
 void sdl_bridge_arc_keys_ramp(int ramp) {
     arc_keys_ramp = ramp != 0;
+}
+
+int sdl_bridge_window_action(const char *name) {
+    int i = window_action_find(name);
+    if (i < 0) {
+        return 0;
+    }
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_ACTION, i, 0);
+    return 1;
+}
+
+void sdl_bridge_set_midi_actions(int on) {
+    shell_set_midi_actions(on);
 }
 
 void sdl_bridge_midimap_arm(int armed) {
@@ -2371,6 +2385,11 @@ static void menu_item(int id) {
     case SHELL_MENU_MANUAL:
         post_window_button(5);
         break;
+    case SHELL_MENU_MIDI_ACTIONS:
+        // the menu (or Ctrl+Shift+M) flipped its tick: lua saves it in midimap.conf (core/midimap.lua) and the page row follows
+        call_lua("midi_actions_changed", {shell_get_midi_actions() ? "1" : "0"});
+        show_toast(window_actions_switch_message(shell_get_midi_actions()));
+        break;
 #endif
 #endif
     default:
@@ -2874,6 +2893,45 @@ static Uint32 midimap_phase_cb(Uint32 interval, void *gen) {
 }
 #endif
 
+#ifdef NORNS_LINUX_DESKTOP
+static Uint32 action_flash_cb(Uint32 interval, void *control) {
+    (void)interval;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = show_event_type;
+    ev.user.code = SDL_BRIDGE_SHOW_ACTION_FLASH;
+    ev.user.data1 = (void *)(intptr_t)(int)(intptr_t)control;
+    ev.user.data2 = (void *)(uintptr_t)0;
+    SDL_PushEvent(&ev);
+    return 0;
+}
+
+// a MIDI action (window_actions.h): the same call a click on the button ends in (button_action), so a mapped note and the mouse do the same thing. the pressed look lasts
+// 150 ms, only while the row of buttons is drawn; nothing is said when it worked
+static void run_window_action(int index) {
+    const wa_entry_t *e = window_action_get(index);
+    if (e == NULL) {
+        return;
+    }
+    if (e->kind == WA_CONTROL) {
+        if (e->control >= SKIN_PAGE1 && e->control <= SKIN_MUTE && skin_buttons_shown() && skin.button_down == SKIN_NONE) {
+            skin.button_down = e->control;
+            redraw(true);
+            SDL_AddTimer(150, action_flash_cb, (void *)(intptr_t)e->control);
+        }
+        button_action(e->control);
+    } else if (e->kind == WA_FULLSCREEN) {
+        if (!skin.screen_out || !screen_window_is_open()) {
+            show_toast(window_action_fullscreen_message());
+        } else {
+            screen_window_toggle_fullscreen();
+        }
+    } else if (e->kind == WA_SCREENSHOT) {
+        save_screenshot();
+    }
+}
+#endif
+
 static void handle_show(int kind, int n, int value) {
 #ifdef NORNS_LINUX_DESKTOP
     if (kind == SDL_BRIDGE_SHOW_MIDIMAP_ARM) {
@@ -2907,6 +2965,18 @@ static void handle_show(int kind, int n, int value) {
     if (kind == SDL_BRIDGE_SHOW_ARC_TURN) {
         if (varc != NULL && n >= 1 && n <= ARC_RINGS) {
             arc_turn(n - 1, value);
+        }
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_ACTION) {
+        run_window_action(n);
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_ACTION_FLASH) {
+        // the 150 ms press of a button ends (if nothing else is pressed meanwhile)
+        if (skin.button_down == n && n != SKIN_NONE) {
+            skin.button_down = SKIN_NONE;
+            redraw(true);
         }
         return;
     }

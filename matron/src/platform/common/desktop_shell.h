@@ -83,6 +83,7 @@ enum {
     SHELL_MENU_MUTE,         // Ctrl+M too: the output off and back (the bridge calls lua's output_mute; the shell only shows the tick)
     SHELL_MENU_MAIDEN,       // the menu twins of the MAIDEN and MANUAL buttons, for when the row is hidden
     SHELL_MENU_MANUAL,
+    SHELL_MENU_MIDI_ACTIONS, // toggle: the MIDI actions are on (Ctrl+Shift+M too; lua saves it in midimap.conf, docs/port/midi-actions-plan.md)
     SHELL_MENU_INPUT_APP = 40, // + n: the n-th application of the list
 };
 
@@ -112,6 +113,8 @@ extern void shell_set_screen_out(int on); // main thread: the screen is in its o
 extern void shell_set_buttons_shown(int on); // main thread: the tick of "Show the page buttons"
 extern int shell_get_buttons_shown(void);
 extern void shell_set_muted(int on); // main thread: the tick of "Mute output"
+extern void shell_set_midi_actions(int on); // any thread: lua says what midimap.conf holds (the tick of "MIDI actions enabled")
+extern int shell_get_midi_actions(void);
 extern void shell_hid_keyboard_event(uint16_t usage, int value);
 
 // the in-window menu (there is no menu bar). the window gives it the events of the norns window
