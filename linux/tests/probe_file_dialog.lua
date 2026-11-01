@@ -15,7 +15,7 @@ fileselect.path = nil; fileselect.exit()
 #shot @home/menu-off.png
 # 2. tick it in the menu
 #xdo mousemove 340 212 click 1
-#sleep 1
+#sleep 2.5
 #sh grep -q '^file_dialog=1' "$NORNS_HOME/ui.conf" && echo "saved_on=yes" >> "$MARKS" || echo "saved_on=no" >> "$MARKS"
 #xdo mousemove 300 300 click 3
 #sleep 0.6
