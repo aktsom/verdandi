@@ -28,6 +28,12 @@ for how in ${HOWS:-quit close term hup segv}; do
     if [ "$last0" = "$zero32" ] && [ "$last8" = "$zero32" ]; then ok "$how: the last map of both halves written on the way out is all zero (the LEDs are off)"; else bad "$how: after the exit the last maps are: left ${last0:0:16}, right ${last8:0:16} (wanted all zero)"; fi
     if awk '$1 == "W" && $3 != $2 {bad = 1} END {exit !bad}' "$WRITE_LOG" 2> /dev/null; then bad "$how: a write was cut short"; fi
     pgrep -x norns > /dev/null && bad "$how: norns is still running afterwards"
+    if [ "$how" = segv ]; then
+        # the crash report names our own functions, static ones too (crash_symbols.c): "#frame name +0xoffset" lines
+        f="$(ls "$T"/logs/crash/crash-*.txt 2> /dev/null | head -n 1)"
+        [ -n "$f" ] && ok "segv: a crash report was written" || bad "segv: no crash report in logs/crash"
+        [ -n "$f" ] && grep -aq "^---- functions of norns" "$f" && grep -aqE "^#[0-9]+ [a-zA-Z_][a-zA-Z0-9_]* \+0x" "$f" && ok "segv: the report names functions of norns from its own symbol table ($(grep -aE '^#[0-9]+ ' "$f" | head -n 3 | tr '\n' ' '))" || bad "segv: no function names in the crash report"
+    fi
     [ -n "${KEEP:-}" ] && echo "kept $T" || rm -rf "$T"
 done
 [ $FAILS -eq 0 ] && echo "grid_exit_test: all passed" || echo "grid_exit_test: $FAILS failed"

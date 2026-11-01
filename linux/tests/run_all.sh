@@ -88,6 +88,7 @@ cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local
 cc $CFLAGS -I matron/src/platform/macos -I/usr/local/include linux/tests/monome_write_test.c "$P/vgrid_proto.c" -L/usr/local/lib -lmonome \
     -lpthread -o "$T/mwt" && LD_LIBRARY_PATH=/usr/local/lib run "c:monome_write (a stalled serial port, no half message)" "$T/mwt"
 run "grid:LED data reaches the serial port (script, script change clears, prompt commands)" linux/tests/grid_led_test.sh
+run "grid:LEDs go off when norns ends (Ctrl+Q, window close, SIGTERM, SIGHUP, a crash; bounded; the crash report names functions)" linux/tests/grid_exit_test.sh
 cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" && run "c:dust_import" "$T/dit"
 # the same as an ordinary user: root can read every file, so the failed-copy case only runs here
 chmod 755 "$T" && setpriv --reuid=65534 --regid=65534 --clear-groups true 2> /dev/null &&
@@ -143,6 +144,11 @@ run "c:MIDI MAP hit test (K1-K3 and E1-E3 are hit alike in every style and pixel
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layout_test.c matron/src/platform/linux/extras_layout.c -lm -o "$T/xlt" 2> "$T/xlt.err" || cat "$T/xlt.err"
 run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux $(pkg-config --cflags sdl2) linux/tests/arc_keys_c_test.c matron/src/platform/linux/arc_keys.c -o "$T/akc" 2> "$T/akc.err" || cat "$T/akc.err"
+run "lua:grid and arc removal without a port (a fifth grid, a callback that raises: the device always goes; the owner's grid.lua:205 error)" env NORNS_PLATFORM=linux lua5.3 linux/tests/grid_remove_test.lua
+run "lua:script clear and load (two quick loads: the second reaches its engine; a failing step does not stop the clear; mod cleanup hooks once; the 15 s watchdog)" env NORNS_PLATFORM=linux lua5.3 linux/tests/script_clear_test.lua
+cc -std=gnu11 -Wall -Wextra -g -O0 -I matron/src/platform/linux linux/tests/crash_symbols_test.c matron/src/platform/linux/crash_symbols.c -o "$T/cst" 2> "$T/cst.err" || cat "$T/cst.err"
+cp "$T/cst" "$T/cst_stripped" 2> /dev/null && strip "$T/cst_stripped" 2> /dev/null
+run "c:crash symbols (our static functions found by address in the program's own file, a stripped copy gives no names and no crash)" bash -c "\"$T/cst\" && \"$T/cst_stripped\" stripped"
 run "c:arc keys of the arc window (eight keys and no others, 16 ticks, Shift 4, ramp only if asked, a key up is nothing)" "$T/akc"
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/window_actions_test.c $LNM/window_actions.c -o "$T/wat" 2> "$T/wat.err" || cat "$T/wat.err"
 run "c:window actions (the 14 names are lua's, in order; each is a control of the window, fullscreen or screenshot; unknown, empty, wrong-case names find nothing; the messages)" "$T/wat" lua/core/midimap_settings.lua
@@ -876,6 +882,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "after devices came and went during three more changes the last script (b) is running" 'grep -aq "PROBE last2.false.rapid_b" "$RLOG"'
             chk "no error in the clear or in a device removal (no traceback, no grid.lua / arc.lua error, no failed step)" '! grep -aE "attempt to index|stack traceback|script clear: .* failed|hook: .* failed|remove failed" "$RLOG"'
             chk "a call through the pointer of a removed grid is ignored and said (no write into freed memory), and the removed device is gone from grid.devices" 'grep -aq "PROBE grid devices after close.true" "$RLOG" && grep -aq "this grid or arc is gone" "$RLOG" && grep -aq "PROBE grid rows of a gone grid.0" "$RLOG"'
+            chk "clicks on the window after the churn did not crash it" 'grep -aq "PROBE clicks done" "$RLOG"'
             chk "no crash report" '[ -z "$(ls "$RH"/logs/crash 2>/dev/null)" ]'
             return $bad
         }

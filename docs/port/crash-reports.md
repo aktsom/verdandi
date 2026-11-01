@@ -7,6 +7,9 @@ The Linux desktop build installs handlers for SIGSEGV, SIGABRT, SIGBUS, SIGFPE a
 
 Then the default action runs again, so the process still dies by the same signal and **the core dump is made as before** (`coredumpctl list`, `coredumpctl info`, `coredumpctl gdb`).
 
+## Names of static functions (KNOWN-ISSUES 28)
+At start the program reads its own function symbols (`.symtab` of `/proc/self/exe`, `matron/src/platform/linux/crash_symbols.c`) and a crash report adds `---- functions of norns (from its own symbol table) ----` with `#frame name +0xoffset` for every frame in norns itself, static functions and the crash handler included. Frames in libraries (libSDL2, libc) stay `lib.so(+0xoffset)`: resolve them with `nm -D`/`objdump -d` of the same library version.
+
 ## Reading an offset
 The package keeps the function names of `/opt/verdandi/build/norns/norns` (only debug info is stripped), so the offsets of static functions resolve:
 `nm -n /opt/verdandi/build/norns/norns | awk '$1 <= "000000000006b36f"' | tail -1` (put the offset, 16 digits) or `addr2line -f -e /opt/verdandi/build/norns/norns 0x6b36f`; `coredumpctl gdb` shows the names directly.

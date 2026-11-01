@@ -25,6 +25,14 @@ norns.script.load("code/probe/rapid_b.lua")
 _norns.grid_window("arc")
 #sleep 8
 print("PROBE last2", engine.is_loading, norns.state.shortname)
+-- mouse events after the churn: SDL looks up a hint on every click (the crash of KNOWN-ISSUES 28 was in that lookup): clicks on the box, a key, an encoder and the screen
+#click ^Verdandi.Linux$ 0.30 0.60
+#click ^Verdandi.Linux$ 0.10 0.70
+#click ^Verdandi.Linux$ 0.85 0.65
+#click ^Verdandi.Linux$ 0.50 0.15 3
+#xdo key Escape
+#sleep 1
+print("PROBE clicks done")
 -- a script that kept a removed grid: the call through the stale pointer must not write into freed memory (matron says it is gone and ignores it)
 stale = nil
 for id, d in pairs(grid.devices) do stale = d.dev end

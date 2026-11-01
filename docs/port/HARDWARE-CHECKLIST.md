@@ -356,3 +356,9 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **Ctrl+Shift+M** from the norns window and from the detached screen window on your keyboard layout: the box says *MIDI actions on/off*, the tick in the right-click menu (F10) and the MIDI ACTIONS row agree. `verdandi scan-fkeys` on your real `dust/code`: do any of your scripts name Ctrl+Shift+M? If one does, tell me and I propose another key.
 - [ ] **A restart** with the switch OFF: the menu tick is off and the pads do nothing until you switch it on again.
 
+## Crash, frozen script load, LEDs on exit (KNOWN-ISSUES 28, 29, 30): what only your hardware can show
+
+- [ ] **Grid LEDs:** light both real grids (128 and 256) with a script, then end Verdandi four ways: Ctrl+Q, the window's close button, `verdandi restart` (or the launcher's restart), Ctrl+C in a terminal start. Are all LEDs off each time? With serialosc running (`systemctl status serialosc`) do they stay lit again? (The log line of the startup check now says why.) Does the **iii grid** go dark by itself on a quit (it is not touched by norns)?
+- [ ] **Quick script changes** with the virtual grid and arc windows open, both real grids plugged in and a mapped controller playing: change the script five times in a row (also awake-rings, then sidvagn). The last script starts every time. If a load takes more than 15 s `logs/norns.log` says `### script load is taking longer than 15 s: still waiting for engine ...`: send me that line and the end of `logs/sclang.log`.
+- [ ] **The crash again?** If norns crashes, `logs/crash/crash-*.txt` now has `---- functions of norns ----` with names. Send it with the `grid.lua`/`weaver:` lines just before it in `logs/norns.log` (`this grid or arc is gone` means a script kept a removed device), `dpkg -l libsdl2-2.0-0`, and `coredumpctl gdb <pid>` then `bt full` if you can.
+

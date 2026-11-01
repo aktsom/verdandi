@@ -759,7 +759,7 @@ void sdl_bridge_set_screen_look(double brightness, int r, int g, int b, double g
 
 // mac_menu.m's messages (any thread)
 static void note_toast(const char *text) {
-    post_toast(text);
+    post_toast(text != NULL ? text : ""); // (a std::string from a NULL pointer would crash)
 }
 
 //--- calls into lua: _norns.<fn>(args...) on matron's thread (any thread)
