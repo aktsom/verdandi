@@ -33,15 +33,27 @@ local function sync_list()
   end
 end
 
--- words to lines of at most `width` characters
+-- words to lines no wider than `width` pixels, measured with the screen's own font (screen.text_extents); a word wider than the line is cut between characters
+local function fits(t, width) return screen.text_extents(t) <= width end
 local function wrap(text, width)
+  width = width or 124
   local out = {}
   for para in (text .. "\n"):gmatch("(.-)\n") do
     local line = ""
     for word in para:gmatch("%S+") do
-      if #line == 0 then line = word
-      elseif #line + 1 + #word <= width then line = line .. " " .. word
-      else out[#out + 1] = line; line = word end
+      local try = #line == 0 and word or (line .. " " .. word)
+      if fits(try, width) then
+        line = try
+      else
+        if #line > 0 then out[#out + 1] = line; line = "" end
+        while not fits(word, width) and #word > 1 do
+          local n = #word - 1
+          while n > 1 and not fits(word:sub(1, n), width) do n = n - 1 end
+          out[#out + 1] = word:sub(1, n)
+          word = word:sub(n + 1)
+        end
+        line = word
+      end
     end
     if #line > 0 then out[#out + 1] = line end
   end
@@ -114,8 +126,8 @@ m.key = function(n,z)
       m.mode = "serialosc"
     elseif n == 3 then
       local S = require 'core/serialosc_stop'
-      if S.stop() then m.result = wrap("STOPPED. UNPLUG AND REPLUG THE GRID.", 25)
-      else m.result = wrap("FAILED: NEEDS A PASSWORD. TYPE IN A TERMINAL:\n" .. S.COMMAND, 25) end
+      if S.stop() then m.result = wrap("STOPPED. UNPLUG AND REPLUG THE GRID.")
+      else m.result = wrap("FAILED: NEEDS A PASSWORD. TYPE IN A TERMINAL:\n" .. S.COMMAND) end
       m.mode = "serialosc"
     end
     _menu.redraw()
@@ -263,7 +275,7 @@ local function redraw_serialosc()
   else
     local y = 18
     screen.level(6)
-    for _, t in ipairs(m.result or wrap(_menu.grid_note or "", 25)) do
+    for _, t in ipairs(m.result or wrap(_menu.grid_note or "")) do
       if y <= 52 then screen.move(0, y); screen.text(t); y = y + 8 end
     end
     screen.level(4); screen.move(0, 62); screen.text("K3 STOP IT  K2 BACK")

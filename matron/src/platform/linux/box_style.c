@@ -415,34 +415,44 @@ static void draw_button(uint32_t *px, int i, const skin_state_t *st) {
     label_in(px, x, y + dy, w, h - dy, label, argb(ink));
 }
 
-// a message right of E1 (a button-style pill in the buttons and font colours)
+// a message right of E1 (a button-style pill in the buttons and font colours). it sizes itself to its text and wraps into up to TOAST_MAX_LINES lines inside the room it has: the text never leaves
+// the pill (docs/port/KNOWN-ISSUES.md 33). the layout is in blocks here; box_style_toast_layout gives the same in layout units (the retro looks have theirs in the .inc)
+static double pixel_measure(void *ctx, const char *s) {
+    (void)ctx;
+    return box_style_text_width(s);
+}
+
+typedef struct {
+    toast_lines_t lines;
+    int x, y, w, h, dot, rows, pitch, builtin;
+} pixel_toast_t;
+
+static void pixel_toast_geometry(const char *text, int recording, pixel_toast_t *t) {
+    font_init();
+    t->dot = recording ? 9 : 0;
+    t->builtin = font_mode != 1;
+    t->rows = cap_rows(t->builtin);
+    t->pitch = t->rows + 3;
+    int maxw = (SKIN_W - 95 - 300) / BS_BLOCK;
+    toast_fit(text, pixel_measure, NULL, maxw - 14 - t->dot, &t->lines);
+    t->w = (int)t->lines.widest + 14 + t->dot;
+    t->h = 18 + (t->lines.n - 1) * t->pitch;
+    int right = bx(SKIN_W - 95), cy = bx(175);
+    t->x = right - t->w;
+    t->y = cy - t->h / 2;
+}
+
 static void draw_toast(uint32_t *px, const char *text, int recording) {
     const shades_t *bt = &sh[BOX_PART_BUTTONS], *fo = &sh[BOX_PART_FONT], *bo = &sh[BOX_PART_BOX];
-    font_init();
-    int dot = recording ? 9 : 0;
-    int tw = box_style_text_width(text);
-    int w = tw + 14 + dot, h = 18;
-    int right = bx(SKIN_W - 95), cy = bx(175);
-    int maxw = (SKIN_W - 95 - 300) / BS_BLOCK;
-    if (w > maxw) {
-        w = maxw;
-    }
-    int x = right - w, y = cy - h / 2;
-    draw_rr(px, x, y, w, h, 6, argb(bt->base), argb(bo->darker), argb(box_light(bt->base)), argb(bt->dark), 1);
+    pixel_toast_t t;
+    pixel_toast_geometry(text, recording, &t);
+    draw_rr(px, t.x, t.y, t.w, t.h, 6, argb(bt->base), argb(bo->darker), argb(box_light(bt->base)), argb(bt->dark), 1);
     if (recording) {
-        disc(px, x + 8, cy, 3, 0xffff453au, 0, 0);
+        disc(px, t.x + 8, t.y + t.h / 2, 3, 0xffff453au, 0, 0);
     }
-    // the text, cut at the pill's inner width
-    uint32_t *tmp = px;
-    int builtin = font_mode != 1;
-    int rows = cap_rows(builtin);
-    int inner = w - 14 - dot;
-    if (tw <= inner) {
-        draw_text(tmp, x + 7 + dot, cy - rows / 2, text, argb(fo->base), builtin);
-    } else {
-        // too long: draw it and let the pill's right edge hide the rest
-        draw_text(tmp, x + 7 + dot, cy - rows / 2, text, argb(fo->base), builtin);
-        fill_rect(px, x + w - 6, y + 1, x + w, y + h - 1, argb(bt->base));
+    int top = t.y + t.h / 2 - (t.rows + (t.lines.n - 1) * t.pitch) / 2;
+    for (int i = 0; i < t.lines.n; i++) {
+        draw_text(px, t.x + 7 + t.dot, top + i * t.pitch, t.lines.line[i], argb(fo->base), t.builtin);
     }
 }
 
@@ -485,6 +495,25 @@ static void render_controls_pixel(uint32_t *px, const skin_state_t *st, int butt
 }
 
 #include "box_style_retro.inc"
+
+// the toast as drawn, in layout units, for the look in use
+void box_style_toast_layout(const char *text, int recording, box_toast_t *out) {
+    memset(out, 0, sizeof *out);
+    if (variant == BOX_LOOK_PIXEL) {
+        pixel_toast_t t;
+        pixel_toast_geometry(text, recording, &t);
+        out->lines = t.lines;
+        // blocks to layout units: the box starts at BS_MARGIN blocks (the 16 unit margin is 8 blocks of 2 units)
+        out->x = (t.x - BS_MARGIN) * (double)BS_BLOCK;
+        out->y = (t.y - BS_MARGIN) * (double)BS_BLOCK;
+        out->w = t.w * (double)BS_BLOCK;
+        out->h = t.h * (double)BS_BLOCK;
+        out->text_w = t.lines.widest * BS_BLOCK;
+        out->inner_w = ((SKIN_W - 95 - 300) / BS_BLOCK - 14 - t.dot) * (double)BS_BLOCK;
+    } else {
+        v_toast_layout(text, recording, out);
+    }
+}
 
 // the layers of the look in use
 void box_style_render_static(uint32_t *px) {

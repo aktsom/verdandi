@@ -10,6 +10,7 @@
 #ifdef NORNS_LINUX_DESKTOP
 #include "../linux/box_palette.h"
 #include "../linux/box_style.h"
+#include "../linux/toast_fit.h"
 #endif
 
 typedef struct {
@@ -646,7 +647,66 @@ static void draw_button(cairo_t *cr, int i, const skin_state_t *st) {
     cairo_show_text(cr, label);
 }
 
-// a message under the buttons, right of E1: a dark pill like a notification
+#ifdef NORNS_LINUX_DESKTOP
+// a message under the buttons, right of E1: a dark pill like a notification. Linux: the pill sizes itself to its text and wraps into up to TOAST_MAX_LINES lines inside the room it has
+// (x 300 to SKIN_W - 95 units), so that the text never leaves the border (docs/port/KNOWN-ISSUES.md 33); skin_toast_layout is what is drawn, and what the width test checks
+static double toast_measure(void *ctx, const char *s) {
+    cairo_text_extents_t te;
+    cairo_text_extents((cairo_t *)ctx, s, &te);
+    return te.x_advance;
+}
+
+// measured in the context that draws (cairo's glyph advances depend on the scale it draws at: the pill must be as wide as the text IS there)
+static void toast_layout_cr(cairo_t *cr, const char *text, int recording, skin_toast_t *out) {
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 14);
+    double dot = recording ? 22 : 0;
+    double right = SKIN_W - 95, cy = 175;
+    double room = right - 300;
+    toast_fit(text, toast_measure, cr, room - 36 - dot, &out->lines);
+    out->line_h = 17;
+    out->w = out->lines.widest + 36 + dot;
+    out->h = 36 + (out->lines.n - 1) * out->line_h;
+    out->x = right - out->w;
+    out->y = cy - out->h / 2;
+    out->dot = dot;
+}
+
+void skin_toast_layout(const char *text, int recording, double scale, skin_toast_t *out) {
+    cairo_surface_t *surf = cairo_image_surface_create(CAIRO_FORMAT_A8, 8, 8);
+    cairo_t *cr = cairo_create(surf);
+    if (scale > 0) {
+        cairo_scale(cr, scale, scale); // the glyph advances are those of the scale it is drawn at
+    }
+    toast_layout_cr(cr, text, recording, out);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surf);
+}
+
+static void draw_toast(cairo_t *cr, const char *text, int recording) {
+    skin_toast_t t;
+    toast_layout_cr(cr, text, recording, &t);
+    double x = t.x, y = t.y, w = t.w, h = t.h, cy = y + 18;
+    rounded_rect(cr, x, y + 2, w, h, 18);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+    cairo_fill(cr);
+    rounded_rect(cr, x, y, w, h, 18);
+    hex(cr, "1d1e21", 0.92);
+    cairo_fill(cr);
+    if (recording) {
+        circle(cr, x + 22, cy, 6);
+        hex(cr, "ff453a", 1);
+        cairo_fill(cr);
+    }
+    hex(cr, "f2f3f5", 1);
+    for (int i = 0; i < t.lines.n; i++) {
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, t.lines.line[i], &te);
+        cairo_move_to(cr, x + 18 + t.dot - te.x_bearing, cy + i * t.line_h - te.height / 2 - te.y_bearing);
+        cairo_show_text(cr, t.lines.line[i]);
+    }
+}
+#else
 static void draw_toast(cairo_t *cr, const char *text, int recording) {
     cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 14);
@@ -678,6 +738,7 @@ static void draw_toast(cairo_t *cr, const char *text, int recording) {
     cairo_show_text(cr, text);
     cairo_restore(cr);
 }
+#endif
 
 #ifndef NORNS_LINUX_DESKTOP
 // the OUT fader: a slot, the level lit up to the cap, the cap; MUTE under it

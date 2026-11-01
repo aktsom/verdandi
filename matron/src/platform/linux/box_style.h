@@ -16,6 +16,7 @@
 
 #include "box_palette.h"
 #include "../macos/device_skin.h"
+#include "toast_fit.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,6 +66,16 @@ extern void box_style_set_fast(int fast);
 
 // the pixel font: width in blocks of a text (the font of the screen, norns.ttf at 8 px, or the built-in 3 x 5 font), which font is in use ("norns.ttf" or "builtin")
 extern int box_style_text_width(const char *text);
+
+// the toast of the pixel looks as it is drawn (layout units): the lines it wraps into (at most TOAST_MAX_LINES, each no wider than the pill's inner width), the pill's rectangle, the room for the text.
+// docs/port/KNOWN-ISSUES.md 33
+typedef struct {
+    toast_lines_t lines;
+    double x, y, w, h;   // the pill
+    double text_w;       // the widest line
+    double inner_w;      // the room the pill leaves for a line
+} box_toast_t;
+extern void box_style_toast_layout(const char *text, int recording, box_toast_t *out);
 extern const char *box_style_font_name(void);
 // for tests: NULL = look for norns.ttf as the screen does ($HOME/norns/resources/norns.ttf, or NORNS_BOX_FONT_PATH), "builtin" = the built-in font
 extern void box_style_set_font(const char *path_or_builtin);

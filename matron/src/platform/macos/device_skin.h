@@ -15,6 +15,9 @@
 #pragma once
 
 #include <cairo.h>
+#ifdef NORNS_LINUX_DESKTOP
+#include "../linux/toast_fit.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -108,6 +111,16 @@ extern double skin_fader_value(const skin_geom_t *g, double y);
 // that is not the default tints the aluminium style (box_palette.c) and is the palette of the pixel style; with all five at their defaults the aluminium drawing is the original
 enum { SKIN_STYLE_ALUMINIUM = 0, SKIN_STYLE_PIXEL = 1 };
 extern void skin_set_look(int style, const char *box, const char *keys, const char *encoders, const char *buttons, const char *font);
+
+// the aluminium style's toast, as it is drawn (layout units): the lines it wraps into (at most TOAST_MAX_LINES), the pill's rectangle. docs/port/KNOWN-ISSUES.md 33
+typedef struct {
+    toast_lines_t lines;
+    double x, y, w, h; // the pill
+    double line_h;     // distance between the lines
+    double dot;        // room for the recording dot
+} skin_toast_t;
+// scale: device pixels per layout unit the pill is drawn at (cairo's glyph advances follow it); 0 or 1 for the unscaled layout
+extern void skin_toast_layout(const char *text, int recording, double scale, skin_toast_t *out);
 extern int skin_look_style(void);
 // the pixel look of the pixel style (docs/port/retro-look-plan.md): 0 PIXEL, 1 RETRO, 2 8-BIT, 3 16-BIT; PIXEL is the look of the box styles step and never changes. the colours work with every look
 extern void skin_set_pixel_look(int look);

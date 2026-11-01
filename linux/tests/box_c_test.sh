@@ -17,13 +17,13 @@ SK=matron/src/platform/macos; LN=matron/src/platform/linux
 cc -std=gnu11 -Wall -Wextra -I $LN linux/tests/box_palette_test.c $LN/box_palette.c -o "$T/bpt" -lm 2> "$T/cc.log" || { bad "box_palette_test does not build"; cat "$T/cc.log"; }
 [ -x "$T/bpt" ] && { "$T/bpt" > "$T/bpt.out" 2>&1 && ok "palette: $(tail -n 1 "$T/bpt.out")" || { bad "palette test"; cat "$T/bpt.out"; }; }
 
-cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_style_test.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/bst" $LF -lm 2> "$T/cc.log" || { bad "box_style_test does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_style_test.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/bst" $LF -lm 2> "$T/cc.log" || { bad "box_style_test does not build"; cat "$T/cc.log"; }
 if [ -x "$T/bst" ]; then
     NORNS_TEST_TTF="$REPO/resources/norns.ttf" "$T/bst" > "$T/bst.out" 2>&1 && ok "pixel style, hidden row, fonts, sizes: $(tail -n 1 "$T/bst.out")" || { bad "box_style_test"; cat "$T/bst.out"; }
 fi
 
 # the aluminium style with its default colours: byte for byte
-cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/dump" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/dump" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump does not build"; cat "$T/cc.log"; }
 if [ -x "$T/dump" ]; then
     mkdir -p "$T/new"
     "$T/dump" "$T/new"
@@ -33,7 +33,7 @@ fi
 
 # PIXEL stays exactly as it is (docs/port/retro-look-plan.md): the same 24 renders (6 states at 4 window sizes, the DARK look) as the code before the retro looks, with the pixel look set to 0 and not set, and the
 # same hit map; then the retro looks: sizes, layout, hit areas, outlines, decorations, determinism, the four built-in looks, the caches (box_retro_test.c)
-cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_LOOK -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/dumpp" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump (pixel) does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_LOOK -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/dumpp" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump (pixel) does not build"; cat "$T/cc.log"; }
 if [ -x "$T/dumpp" ]; then
     for vv in unset 0; do
         mkdir -p "$T/pix-$vv"
@@ -42,7 +42,7 @@ if [ -x "$T/dumpp" ]; then
         if (cd "$T/pix-$vv" && sha256sum -c --quiet "$REPO/linux/tests/box_pixel_golden.txt" > "$T/sha.out" 2>&1); then ok "PIXEL (pixel look $vv): all $n renders are byte for byte the ones of the code before the retro looks"; else bad "PIXEL renders differ from the golden hashes ($vv)"; head -5 "$T/sha.out"; fi
     done
 fi
-cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_hit_dump.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/hitd" $LF -lm 2> "$T/cc.log" || { bad "box_hit_dump does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_hit_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/hitd" $LF -lm 2> "$T/cc.log" || { bad "box_hit_dump does not build"; cat "$T/cc.log"; }
 if [ -x "$T/hitd" ]; then
     for vv in "" 0; do
         got=$("$T/hitd" $vv | sha256sum | cut -d' ' -f1)
@@ -50,7 +50,7 @@ if [ -x "$T/hitd" ]; then
     done
     [ "$("$T/hitd" 1 | sha256sum | cut -d' ' -f1)" != "$(cat linux/tests/box_pixel_hits_golden.txt)" ] && ok "RETRO's hit areas are its own (snapped to its block grid)" || bad "RETRO's hit map is PIXEL's"
 fi
-cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_retro_test.c $SK/device_skin.c $LN/box_style.c $LN/box_palette.c -o "$T/brt" $LF -lm 2> "$T/cc.log" || { bad "box_retro_test does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_retro_test.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/brt" $LF -lm 2> "$T/cc.log" || { bad "box_retro_test does not build"; cat "$T/cc.log"; }
 if [ -x "$T/brt" ]; then
     "$T/brt" > "$T/brt.out" 2>&1 && ok "retro looks: $(tail -n 1 "$T/brt.out")" || { bad "box_retro_test"; head -20 "$T/brt.out"; }
 fi
@@ -72,7 +72,7 @@ for f in ("matron/src/platform/macos/device_skin.c", "matron/src/platform/macos/
         elif s.startswith("#if"): depth_stack.append("?")
         elif s.startswith("#else") and depth_stack: depth_stack[-1] = {"L": "M", "M": "L"}.get(depth_stack[-1], "?")
         elif s.startswith("#endif") and depth_stack: depth_stack.pop()
-        if re.search(r"\b(skin_set_look|skin_set_pixel_look|skin_set_fast|look_fast|skin_set_buttons_shown|look_style|look_shown|look_muted|part_tinted|look_col|box_style_|box_tint_stop|BOX_PART_)", line) and "stopt(" not in line:
+        if re.search(r"\b(skin_set_look|skin_set_pixel_look|skin_set_fast|look_fast|skin_set_buttons_shown|look_style|look_shown|look_muted|part_tinted|look_col|box_style_|box_tint_stop|BOX_PART_|skin_toast|toast_fit|toast_lines|toast_measure)", line) and "stopt(" not in line:
             if "L" not in depth_stack and not s.startswith(("//", "*", "/*")):
                 print("%s:%d outside: %s" % (f, n, s)); sys.exit(1)
 PY

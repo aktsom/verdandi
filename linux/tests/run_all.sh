@@ -139,7 +139,7 @@ run "lua:MIDI MAP page (rows and wording, views, preset row, device list with th
 run "lua:menu number formats and handler errors (sizes with fractions, an error in a key or encoder handler is logged, shown and the page redrawn on the desktop, left alone on the device)" env NORNS_PLATFORM=linux lua5.3 linux/tests/menu_format_test.lua
 run "lua:arc keys through the real keyboard module (16 ticks, Shift 4, repeat, release nothing, inactive in menu or text entry or with a script reading keys, other keys untouched)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/arc_keys_test.lua
 SKM=matron/src/platform/macos; LNM=matron/src/platform/linux
-cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/midimap_hit_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/box_palette.c -o "$T/mmhit" $(pkg-config --libs cairo freetype2) -lm 2> "$T/mmhit.err" || cat "$T/mmhit.err"
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/midimap_hit_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/toast_fit.c $LNM/box_palette.c -o "$T/mmhit" $(pkg-config --libs cairo freetype2) -lm 2> "$T/mmhit.err" || cat "$T/mmhit.err"
 run "c:MIDI MAP hit test (K1-K3 and E1-E3 are hit alike in every style and pixel look, row shown or hidden, muted or not, three sizes)" "$T/mmhit"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layout_test.c matron/src/platform/linux/extras_layout.c -lm -o "$T/xlt" 2> "$T/xlt.err" || cat "$T/xlt.err"
 run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
@@ -148,6 +148,10 @@ run "lua:grid and arc removal without a port (a fifth grid, a callback that rais
 run "lua:script clear and load (two quick loads: the second reaches its engine; a failing step does not stop the clear; mod cleanup hooks once; the 15 s watchdog)" env NORNS_PLATFORM=linux lua5.3 linux/tests/script_clear_test.lua
 cc -std=gnu11 -Wall -Wextra -g -O0 -I matron/src/platform/linux linux/tests/crash_symbols_test.c matron/src/platform/linux/crash_symbols.c -o "$T/cst" 2> "$T/cst.err" || cat "$T/cst.err"
 cp "$T/cst" "$T/cst_stripped" 2> /dev/null && strip "$T/cst_stripped" 2> /dev/null
+cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/toast_fit_test.c matron/src/platform/linux/toast_fit.c -o "$T/tft" -lm 2> "$T/tft.err" || cat "$T/tft.err"
+run "c:toast lines (words whole, long words cut, at most three lines, an ellipsis, UTF-8, proportional fonts, a space smaller than a character)" "$T/tft"
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/toast_width_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/box_palette.c $LNM/toast_fit.c $LNM/screen_toast.c -o "$T/twt" $(pkg-config --libs cairo freetype2) -lm 2> "$T/twt.err" || cat "$T/twt.err"
+run "c:no toast leaves its border (31 messages measured with the real fonts: aluminium, PIXEL, RETRO, 8-BIT, 16-BIT with norns.ttf and the built-in font, the screen window at five sizes; at most three lines, inside the room, clear of the controls, nothing drawn outside the pill)" env NORNS_TEST_TTF="$REPO/resources/norns.ttf" "$T/twt"
 run "c:crash symbols (our static functions found by address in the program's own file, a stripped copy gives no names and no crash)" bash -c "\"$T/cst\" && \"$T/cst_stripped\" stripped"
 run "c:arc keys of the arc window (eight keys and no others, 16 ticks, Shift 4, ramp only if asked, a key up is nothing)" "$T/akc"
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/window_actions_test.c $LNM/window_actions.c -o "$T/wat" 2> "$T/wat.err" || cat "$T/wat.err"
@@ -916,6 +920,32 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$RH"
     }
     rapid_scenario
+    # the serialosc note in the real window (docs/port/KNOWN-ISSUES.md 33): the toast pill on the box and on the detached screen window and the guide on the norns screen; every line the page draws is measured with the real font
+    toast_scenario() {
+        TH2="$(mktemp -d)"
+        ln -s "$REPO" "$TH2/norns"
+        mkdir -p "$TH2/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$TH2/dust/code/probe/"
+        TLOG2="$T/toast.log"
+        DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$TH2" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_toast.lua" "$TLOG2" > /dev/null 2>&1
+        toast_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran" 'grep -aq "PROBE toast done" "$TLOG2"'
+            chk "the list of SYSTEM > DEVICES fits the screen (widest line 128 or less)" '[ "$(grep -a "PROBE devices list widest" "$TLOG2" | tail -n 1 | awk "{print \$NF}" | cut -d. -f1)" -le 128 ]'
+            chk "every line of the SERIALOSC guide fits the screen" '[ "$(grep -a "PROBE guide widest" "$TLOG2" | tail -n 1 | awk "{print \$(NF-1)}" | cut -d. -f1)" -le 128 ]'
+            chk "every line of the question fits the screen" '[ "$(grep -a "PROBE question widest" "$TLOG2" | tail -n 1 | awk "{print \$(NF-1)}" | cut -d. -f1)" -le 128 ]'
+            chk "the captures exist" '[ -s "$TH2/serialosc-note.png" ] && [ -s "$TH2/serialosc-devices.png" ] && [ -s "$TH2/serialosc-screen.png" ]'
+            return $bad
+        }
+        run "window:the serialosc note fits its border (the toast on the box and on the screen window, the guide on the norns screen, measured)" toast_ok
+        mkdir -p "${SHOT_DIR:-/dev/null}" 2> /dev/null
+        cp "$TH2/serialosc-note.png" "${SHOT_DIR:-/dev/null}/serialosc-note.png" 2> /dev/null
+        cp "$TH2/serialosc-devices.png" "${SHOT_DIR:-/dev/null}/serialosc-devices.png" 2> /dev/null
+        cp "$TH2/serialosc-screen.png" "$T/serialosc-screen-full.png" 2> /dev/null
+        rm -rf "$TH2"
+    }
+    toast_scenario
     # the virtual grid (F6), keys (F7) and arc (F8) windows: the norns window keeps its size and position while they open and close again and again, from the norns window and from their own window, also with the detached
     # screen window open; each closes with the key that opens it (F7 did not close the keys window: its key events never reached norns)
     window_toggle_scenario() {

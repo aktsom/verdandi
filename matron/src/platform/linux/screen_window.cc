@@ -7,6 +7,7 @@
  */
 
 #include "screen_window.h"
+#include "screen_toast.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -313,35 +314,7 @@ static bool ensure_canvas(int w, int h) {
 }
 
 static void draw_toast(cairo_t *cr, int w, int h, const char *text, bool recording) {
-    double k = fmin(2.0, fmax(0.8, w / 992.0));
-    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14 * k);
-    cairo_text_extents_t te;
-    cairo_text_extents(cr, text, &te);
-    double dot = recording ? 22 * k : 0;
-    double pw = te.x_advance + 36 * k + dot, ph = 36 * k;
-    if (pw > w - 20) {
-        pw = w - 20;
-    }
-    double x = (w - pw) / 2, y = h - ph - 14 * k;
-    cairo_new_path(cr);
-    cairo_arc(cr, x + ph / 2, y + ph / 2, ph / 2, M_PI / 2, 3 * M_PI / 2);
-    cairo_arc(cr, x + pw - ph / 2, y + ph / 2, ph / 2, -M_PI / 2, M_PI / 2);
-    cairo_close_path(cr);
-    cairo_set_source_rgba(cr, 0.114, 0.118, 0.129, 0.92);
-    cairo_fill(cr);
-    if (recording) {
-        cairo_arc(cr, x + 22 * k, y + ph / 2, 6 * k, 0, 2 * M_PI);
-        cairo_set_source_rgb(cr, 1, 0.27, 0.23);
-        cairo_fill(cr);
-    }
-    cairo_save(cr);
-    cairo_rectangle(cr, x + 12 * k, y, pw - 24 * k, ph);
-    cairo_clip(cr);
-    cairo_move_to(cr, x + 18 * k + dot - te.x_bearing, y + ph / 2 - te.height / 2 - te.y_bearing);
-    cairo_set_source_rgb(cr, 0.949, 0.953, 0.961);
-    cairo_show_text(cr, text);
-    cairo_restore(cr);
+    screen_toast_draw(cr, w, h, text, recording ? 1 : 0); // sized to its text, wrapped, inside the window (screen_toast.c)
 }
 
 void screen_window_draw(cairo_surface_t *picture, const char *toast, bool recording) {

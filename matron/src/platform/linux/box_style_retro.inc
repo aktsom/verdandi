@@ -369,31 +369,67 @@ static void v_button(uint32_t *px, int i, const skin_state_t *st) {
     v_label(px, VOX + bx0 * v->bl, VOX + (by0 + dy) * v->bl, w * v->bl, (h - dy) * v->bl, label, argb(ink), argb(bt[0]), v->tshadow && !lit);
 }
 
-// a message right of E1 (a button-style pill, as the PIXEL look's)
-static void v_toast(uint32_t *px, const char *text, int recording) {
+// a message right of E1 (a button-style pill, as the PIXEL look's): sized to its text, wrapped into up to TOAST_MAX_LINES lines inside the room it has (docs/port/KNOWN-ISSUES.md 33)
+static double v_measure(void *ctx, const char *s) {
+    int builtin = *(int *)ctx;
+    return (builtin ? width_builtin(s) : box_style_text_width(s)) * 2.0; // layout units (a text pixel is 2 units)
+}
+
+typedef struct {
+    toast_lines_t lines;
+    int w, h, x, y; // blocks
+    int dot_u, builtin, rows, pitch;
+    int inner_u;
+} v_toast_t;
+
+static void v_toast_geometry(const char *text, int recording, v_toast_t *t) {
     const vp_t *v = &VP[variant];
-    const box_rgb_t *bt = ramps[BOX_PART_BUTTONS], *fo = ramps[BOX_PART_FONT], *bo = ramps[BOX_PART_BOX];
     font_init();
     int ts = text_scale();
-    int builtin = font_mode != 1;
-    int tw = (builtin ? width_builtin(text) : box_style_text_width(text)) * 2; // layout units (a text pixel is 2 units)
-    int dot_u = recording ? 18 : 0;
-    int wu = tw + 28 + dot_u, hu = 36;
+    t->builtin = font_mode != 1;
+    t->dot_u = recording ? 18 : 0;
     int maxw = (SKIN_W - 95 - 300);
-    if (wu > maxw) {
-        wu = maxw;
-    }
-    int w = (wu + VB / 2) / VB, h = (hu + VB / 2) / VB;
+    t->inner_u = maxw - 28 - t->dot_u;
+    toast_fit(text, v_measure, &t->builtin, t->inner_u, &t->lines);
+    t->rows = cap_rows(t->builtin) * ts;     // cells
+    t->pitch = t->rows + 3 * ts;             // cells
+    int wu = (int)t->lines.widest + 28 + t->dot_u;
+    int hu = 36 + (t->lines.n - 1) * (t->pitch * v->cu);
+    t->w = (wu + VB / 2) / VB;
+    t->h = (hu + VB / 2) / VB;
     int right = vsn(SKIN_W - 95), cy = vsn(175);
-    int x = right - w, y = cy - h / 2;
-    vrrect(px, x, y, w, h, v->cut_btn, argb(bt[4]), argb(bt[0]), argb(box_light(bt[4])), argb(bt[2]), 1, BOX_DITHER_NONE, 0);
-    (void)bo;
+    t->x = right - t->w;
+    t->y = cy - t->h / 2;
+}
+
+static void v_toast(uint32_t *px, const char *text, int recording) {
+    const vp_t *v = &VP[variant];
+    const box_rgb_t *bt = ramps[BOX_PART_BUTTONS], *fo = ramps[BOX_PART_FONT];
+    v_toast_t t;
+    v_toast_geometry(text, recording, &t);
+    int ts = text_scale();
+    vrrect(px, t.x, t.y, t.w, t.h, v->cut_btn, argb(bt[4]), argb(bt[0]), argb(box_light(bt[4])), argb(bt[2]), 1, BOX_DITHER_NONE, 0);
     if (recording) {
-        vrect(px, x + 2, cy - 1, x + 4, cy + 1, 0xffff453au);
+        int cy = t.y + t.h / 2;
+        vrect(px, t.x + 2, cy - 1, t.x + 4, cy + 1, 0xffff453au);
     }
-    int rows = cap_rows(builtin) * ts;
-    int cx = VOX + x * v->bl + (7 * 2 / v->cu) + dot_u / v->cu, cyc = VOX + cy * v->bl - rows / 2;
-    draw_text_ts(px, cx, cyc, text, argb(fo[4]), builtin, ts);
+    int cx = VOX + t.x * v->bl + (7 * 2 / v->cu) + t.dot_u / v->cu;
+    int top = VOX + t.y * v->bl + t.h * v->bl / 2 - (t.rows + (t.lines.n - 1) * t.pitch) / 2;
+    for (int i = 0; i < t.lines.n; i++) {
+        draw_text_ts(px, cx, top + i * t.pitch, t.lines.line[i], argb(fo[4]), t.builtin, ts);
+    }
+}
+
+static void v_toast_layout(const char *text, int recording, box_toast_t *out) {
+    v_toast_t t;
+    v_toast_geometry(text, recording, &t);
+    out->lines = t.lines;
+    out->x = (t.x - 0) * (double)VB;
+    out->y = (t.y - 0) * (double)VB;
+    out->w = t.w * (double)VB;
+    out->h = t.h * (double)VB;
+    out->text_w = t.lines.widest;
+    out->inner_w = t.inner_u;
 }
 
 static void v_key(uint32_t *px, int idx, int down, int hover) {
