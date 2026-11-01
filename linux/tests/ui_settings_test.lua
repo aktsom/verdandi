@@ -71,7 +71,7 @@ check(ui.hex_hint("ggg") ~= "" and ui.hex_hint("1234567") ~= "", "an impossible 
 -- ---- defaults, save, load ----
 os.remove("/home/we/ui.conf")
 local s = ui.load()
-check(s.brightness == 1.0 and s.colour == "white" and s.contrast == 0.5 and s.custom == nil, "defaults: brightness 1, white, contrast 0.5")
+check(s.brightness == 1.0 and s.preset == "WHITE" and s.tint == "FFFFFF" and s.contrast == 0.5, "defaults: brightness 1, white, contrast 0.5")
 check(logs("not found"), "a missing file is logged")
 check(slurp("/home/we/ui.conf") == nil, "a missing file is not created by loading")
 
@@ -113,29 +113,31 @@ ui.state.brightness = 1.0
 for _ = 1, 9 do ui.step_brightness(-1); seen[#seen + 1] = ui.format_brightness(s.brightness) end
 check(table.concat(seen, " ") == "0.9 0.8 0.7 0.6 0.5 0.4 0.3 0.2 0.1", "the nine steps: " .. table.concat(seen, " "))
 
--- the colour: WHITE YELLOW PINK, CUSTOM only once a valid hex has been entered
-ui.state.colour = "white"
-ui.step_colour(1); check(s.colour == "yellow", "E3 once: yellow")
-ui.step_colour(1); check(s.colour == "pink", "E3 twice: pink")
-ui.step_colour(1); check(s.colour == "pink", "no CUSTOM before a hex was entered")
+-- the colour: the presets WHITE YELLOW PINK, and a colour of his own (the tint) from the picker
+ui.reload_presets()
+ui.state.preset, ui.state.tint = "WHITE", "FFFFFF"
+ui.step_preset(1); check(s.preset == "YELLOW" and s.tint == "FFD000", "E3 once: yellow")
+ui.step_preset(1); check(s.preset == "PINK", "E3 twice: pink")
+ui.step_preset(1); check(s.preset == "PINK", "stops at the last preset")
 local ok = ui.set_custom("#ff8800")
-check(ok and s.colour == "custom" and s.custom == "FF8800", "a valid hex selects CUSTOM")
+check(ok and s.tint == "FF8800" and ui.label() == "PINK~", "a valid hex sets the tint, the preset reads changed")
 local r, g, b = ui.tint()
-check(r == 255 and g == 136 and b == 0, "the tint of custom ff8800")
-ui.state.colour = "pink"; r, g, b = ui.tint()
+check(r == 255 and g == 136 and b == 0, "the tint of ff8800")
+ui.select_preset("PINK"); r, g, b = ui.tint()
 check(r == 255 and g == 128 and b == 184, "pink is FF80B8")
-ui.state.colour = "yellow"; r, g, b = ui.tint()
+ui.select_preset("YELLOW"); r, g, b = ui.tint()
 check(r == 255 and g == 208 and b == 0, "yellow is FFD000")
 -- a bad hex keeps the previous colour
-local before = s.colour
+ui.set_custom("ff8800")
+local before = s.tint
 local ok2, msg = ui.set_custom("12")
-check(not ok2 and type(msg) == "string" and s.colour == before and s.custom == "FF8800", "a bad hex changes nothing and says why")
+check(not ok2 and type(msg) == "string" and s.tint == before, "a bad hex changes nothing and says why")
 
 -- save: exactly the four keys, in order, read back by a second load
-ui.state.brightness, ui.state.colour, ui.state.contrast = 0.7, "custom", 0.6
+ui.state.brightness, ui.state.preset, ui.state.tint, ui.state.contrast = 0.7, "CUSTOM", "FF8800", 0.6
 ui.save()
 local text = slurp("/home/we/ui.conf")
-check(text == "brightness=0.7\ncolour=custom\ncustom=FF8800\ncontrast=0.6\nfile_dialog=0\n", "the file: " .. tostring(text))
+check(text == "brightness=0.7\npreset=CUSTOM\ntint=FF8800\ncontrast=0.6\nfile_dialog=0\n", "the file: " .. tostring(text))
 check(slurp("/home/we/ui.conf.tmp") == nil, "no temporary file is left")
 calls = {}
 package.loaded["core/ui_settings"] = nil
@@ -161,7 +163,7 @@ local function load_text(t)
   return ok and st or {}
 end
 local st = load_text("brightness=abc\ncolour=purple\ncustom=12\ncontrast=x\n")
-check(st.brightness == 1.0 and st.colour == "white" and st.contrast == 0.5 and st.custom == nil, "every bad key falls back to its own default")
+check(st.brightness == 1.0 and st.preset == "WHITE" and st.tint == "FFFFFF" and st.contrast == 0.5, "every bad key falls back to its own default")
 check(logs("brightness") and logs("colour") and logs("custom") and logs("contrast"), "one log line for each bad key")
 st = load_text("brightness=5\ncontrast=3\n")
 check(st.brightness == 1.0 and st.contrast == 0.5 and logs("contrast"), "brightness 5 is clamped to 1; contrast 3 is out of range: the default 0.5 with a log line")
@@ -173,7 +175,7 @@ st = load_text("contrast=0.73\n")
 check(st.contrast == 0.7, "contrast 0.73 snaps to a tenth: " .. tostring(st.contrast))
 -- an old ui.conf with greys= (a gamma) converts; contrast wins when both are there
 st = load_text("brightness=0.6\ncolour=yellow\ngreys=0.7\n")
-check(st.contrast == 0.3 and st.brightness == 0.6 and st.colour == "yellow" and logs("greys"), "old greys=0.7 becomes contrast 0.3, the rest is kept, a log line says so")
+check(st.contrast == 0.3 and st.brightness == 0.6 and st.preset == "YELLOW" and logs("greys"), "old greys=0.7 becomes contrast 0.3, the rest is kept, a log line says so")
 st = load_text("greys=1.0\n")
 check(st.contrast == 0.0, "old greys=1.0 (linear) is contrast 0")
 st = load_text("greys=0.4\n")
@@ -191,13 +193,13 @@ check(rewritten:find("contrast=0.3", 1, true) and not rewritten:find("greys", 1,
 st = load_text("brightness=0.75\n")
 check(st.brightness == 0.8 or st.brightness == 0.7, "0.75 snaps to a tenth")
 st = load_text("colour=custom\n")
-check(st.colour == "white" and logs("custom"), "colour=custom without a custom hex is white")
+check(st.preset == "WHITE" and logs("custom"), "colour=custom without a custom hex is white")
 st = load_text("color=yellow\ncolour=pink\n")
-check(st.colour == "pink", "color is an accepted spelling, the last one wins")
+check(st.preset == "PINK", "color is an accepted spelling, the last one wins")
 st = load_text("")
-check(st.brightness == 1.0 and st.colour == "white" and st.contrast == 0.5, "an empty file is the defaults")
+check(st.brightness == 1.0 and st.preset == "WHITE" and st.contrast == 0.5, "an empty file is the defaults")
 st = load_text("\0\1\2 junk \255\n===\nbrightness\n")
-check(st.brightness == 1.0 and st.colour == "white", "binary junk and lines without = are ignored")
+check(st.brightness == 1.0 and st.preset == "WHITE", "binary junk and lines without = are ignored")
 st = load_text("foo=bar\nbrightness=0.5\nnot a line\n")
 check(st.brightness == 0.5 and logs("foo"), "an unknown key is ignored with a log line")
 ui.save()
@@ -210,15 +212,15 @@ ui.load()
 local page = dofile("lua/core/menu/ui.lua")
 page.init()
 page.redraw()
-check(shown("BRIGHTNESS") and shown("COLOUR") and shown("CONTRAST") and shown("HEX") and not shown("GREYS"), "the four rows are shown, the third is CONTRAST")
+check(shown("PRESET") and shown("BRIGHTNESS") and shown("COLOUR") and shown("CONTRAST") and not shown("HEX") and not shown("GREYS"), "the rows are shown, no HEX row")
 check(shown("1.0") and shown("WHITE") and shown("0.5"), "the values: 1.0, WHITE, 0.5")
 calls = {}
-page.enc(3, -1)
+page.enc(2, 2); page.enc(3, -1)
 check(ui.state.brightness == 0.9 and #calls == 1 and calls[1][1] == 0.9, "E3 on BRIGHTNESS: 0.9, applied at once")
 check(slurp("/home/we/ui.conf") and slurp("/home/we/ui.conf"):find("brightness=0.9", 1, true), "and saved at once")
-page.enc(2, 1); page.enc(3, 1)
-check(ui.state.colour == "yellow" and #calls == 2 and calls[2][2] == 255 and calls[2][3] == 208 and calls[2][4] == 0, "E2 then E3 on COLOUR: yellow applied")
-page.enc(2, 1); page.enc(3, 1)
+page.enc(2, -2); page.enc(3, 1)
+check(ui.state.preset == "YELLOW" and #calls == 2 and calls[2][2] == 255 and calls[2][3] == 208 and calls[2][4] == 0, "E3 on PRESET: yellow applied")
+page.enc(2, 3); page.enc(3, 1)
 check(ui.state.contrast == 0.6 and math.abs(calls[3][5] - 0.48) < 1e-9, "E3 on CONTRAST: 0.6 applied (gamma 0.48)")
 page.redraw(); check(shown("0.6") and shown("YELLOW"), "the page shows the new values")
 page.key(2, 1); check(pushed[#pushed] == "SYSTEM", "K2 goes back to SYSTEM")
@@ -235,7 +237,7 @@ local function typed(str)
 end
 keyboard.clear()
 page.init()
-page.enc(2, 1); page.enc(2, 1); page.enc(2, 1) -- HEX row (4th)
+page.enc(2, 1) -- the COLOUR row (2nd)
 calls = {}
 -- K3 on HEX opens the colour picker; its HEX row (K3) opens the text entry. K3 on another row of the picker keeps the colour, K2 gives the old one back
 local picker = require 'core/menu/picker'
@@ -247,11 +249,14 @@ local function open_entry()
 end
 local function keep() picker.enc(2, -3) picker.key(3, 1) end
 open_entry()
-check(te_kbd.char ~= nil and te_kbd.code ~= nil, "K3 on HEX, then the picker's HEX row, opens the text entry (the keyboard handlers are set)")
+check(te_kbd.char ~= nil and te_kbd.code ~= nil, "K3 on COLOUR, then the picker's HEX row, opens the text entry (the keyboard handlers are set)")
 check(textentry.heading:find("HEX", 1, true) ~= nil, "the heading says HEX: " .. tostring(textentry.heading))
-check(textentry.txt == "#408080", "no custom colour yet: the picker is at the middle and the entry starts with it: " .. tostring(textentry.txt))
+check(textentry.txt == "#" .. ui.state.tint, "the picker starts at the screen colour and the entry with it: " .. tostring(textentry.txt))
 local presses = {}
 _norns.key = function(n, z) presses[#presses + 1] = n .. "=" .. z end
+for _ = 1, 8 do tap("BACKSPACE") end -- the entry starts with the screen colour: clear it
+check(textentry.txt == "", "cleared")
+presses = {}
 typed("12")
 check(textentry.txt == "12", "typing 1 and 2 in the entry builds the text: '" .. tostring(textentry.txt) .. "'")
 check(#presses == 0, "1 and 2 typed in the entry do not press K1 and K2")
@@ -262,10 +267,10 @@ typed("ff8800")
 check(textentry.txt == "FF8800" or textentry.txt == "ff8800", "typed ff8800: '" .. tostring(textentry.txt) .. "'")
 check(textentry.warn == nil or textentry.warn == "", "a valid code has no warning")
 tap("ENTER")
-check(ui.state.custom == nil, "Enter in the entry only shows the colour: nothing is stored until the picker keeps it")
+check(ui.state.tint ~= "FF8800", "Enter in the entry only shows the colour: nothing is stored until the picker keeps it")
 check(#calls >= 1 and calls[#calls][2] == 255 and calls[#calls][3] == 136 and calls[#calls][4] == 0, "the colour was applied to the screen at once")
 keep()
-check(ui.state.custom == "FF8800" and ui.state.colour == "custom", "K3 in the picker keeps it: CUSTOM with FF8800")
+check(ui.state.tint == "FF8800", "K3 in the picker keeps it: CUSTOM with FF8800")
 check(#presses == 0, "Enter in the entry is not K3")
 check(te_kbd.char == nil and te_kbd.code == nil, "the entry is closed: the keyboard handlers are gone")
 -- a bad code: the page says so, the colour stays
@@ -275,14 +280,14 @@ tap("BACKSPACE"); tap("BACKSPACE"); tap("BACKSPACE"); tap("BACKSPACE"); tap("BAC
 typed("12")
 tap("ENTER")
 check(picker.msg ~= nil and picker.msg:find("bad hex", 1, true), "a bad hex: the picker says so")
-check(ui.state.custom == "FF8800" and ui.state.colour == "custom", "a bad hex keeps the previous colour")
+check(ui.state.tint == "FF8800", "a bad hex keeps the previous colour")
 picker.key(2, 1) -- K2: the old colour back
 -- Escape cancels
 page.init()
 open_entry()
 typed("00ff00")
 tap("ESC")
-check(ui.state.custom == "FF8800", "Esc cancels: nothing changed")
+check(ui.state.tint == "FF8800", "Esc cancels: nothing changed")
 check(te_kbd.char == nil, "and the entry is closed")
 picker.key(2, 1)
 -- the '#' typed with shift is accepted too
@@ -292,7 +297,7 @@ typed("#0f0")
 check(textentry.txt:upper() == "#0F0" or textentry.txt == "#0f0", "# typed with shift: '" .. tostring(textentry.txt) .. "'")
 tap("ENTER")
 keep()
-check(ui.state.custom == "00FF00", "#0f0 is 00FF00: " .. tostring(ui.state.custom))
+check(ui.state.tint == "00FF00", "#0f0 is 00FF00: " .. tostring(ui.state.tint))
 
 -- ---- the page is in SYSTEM's list on a computer only ----
 local getenv = os.getenv

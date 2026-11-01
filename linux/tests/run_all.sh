@@ -131,6 +131,7 @@ run "lua:renames (SCREEN and THEME in the list, the manual and RUN-ON-LAPTOP.md;
 run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
+run "lua:screen presets" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_screen_test.lua
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
 run "lua:MIDI MAP value functions (absolute steps, baseline, jump 40, pause 1.5 s, the three relative formats value by value, sensitivity and carry, the format suggestion, keys by CC and note, device name matching: mio and its ports, Push 2, iii grid)" lua5.3 linux/tests/midimap_value_test.lua
 run "lua:MIDI MAP settings and presets (midimap.conf defaults, round trip, every damaged value, unknown keys kept, preset files, built-in PUSH 2 marked unverified, atomic save)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_settings_test.lua

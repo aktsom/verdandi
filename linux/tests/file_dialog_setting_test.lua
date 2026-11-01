@@ -106,7 +106,7 @@ put("/home/we/ui.conf", "brightness=0.6\ncolour=pink\ncontrast=0.3\nfile_dialog=
 fresh_start()
 ui.set_file_dialog(true)
 local text = slurp("/home/we/ui.conf")
-check(text:find("brightness=0.6", 1, true) and text:find("colour=pink", 1, true) and text:find("contrast=0.3", 1, true) and text:find("something=else", 1, true),
+check(text:find("brightness=0.6", 1, true) and text:find("preset=PINK", 1, true) and text:find("contrast=0.3", 1, true) and text:find("something=else", 1, true),
   "the other settings and unknown lines are kept when the file is written")
 
 -- ---- saved and loaded across a restart ----

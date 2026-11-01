@@ -54,18 +54,18 @@ function _menu.keychar(c) if _menu.keyboardchar then _menu.keyboardchar(c) end e
 
 local function code(name) for k, v in pairs(keyboard.codes) do if v == name then return k end end error("no code " .. name) end
 local function send(name, value) keyboard.process(1, code(name), value) end
-local ROWS = {"BRIGHTNESS", "COLOUR", "CONTRAST", "HEX"}
-local function snapshot() local s = ui.state; return string.format("row %s  brightness %s  colour %s  contrast %s", ROWS[page.pos], ui.format_brightness(s.brightness), s.colour, ui.format_contrast(s.contrast)) end
+local ROWS = {"PRESET", "COLOUR", "BRIGHTNESS", "CONTRAST", "SAVE"}
+local function snapshot() local s = ui.state; return string.format("row %s  brightness %s  colour %s  contrast %s", ROWS[page.pos], ui.format_brightness(s.brightness), s.preset, ui.format_contrast(s.contrast)) end
 local function reset(row)
   if te_kbd.code then send("ESC", 1); send("ESC", 0) end -- an entry left open by the previous case
   os.remove("/home/we/ui.conf")
   page.init()
-  ui.state.brightness, ui.state.colour, ui.state.contrast, ui.state.custom = 0.5, "yellow", 0.7, "FF8800"
+  ui.state.brightness, ui.state.preset, ui.state.tint, ui.state.contrast = 0.5, "YELLOW", "FFD000", 0.7
   page.pos = row
   keyboard.clear()
   pressed, pushed, looks = {}, {}, {}
 end
-local function vals() local s = ui.state; return {s.brightness, s.colour, s.contrast} end
+local function vals() local s = ui.state; return {s.brightness, s.preset .. s.tint, s.contrast} end
 local function same(a, b) return a[1] == b[1] and a[2] == b[2] and a[3] == b[3] end
 
 local function step_of(row, name)
@@ -76,7 +76,7 @@ local function step_of(row, name)
 end
 
 local tablelines = {}
-for _, row in ipairs({1, 2, 3, 4}) do
+for _, row in ipairs({1, 2, 3, 4, 5}) do
   for _, name in ipairs({"EQUAL", "MINUS", "X", "Z", "UP", "DOWN", "LEFT", "RIGHT", "W", "A"}) do
     reset(row)
     local line = {string.format("%-10s %-5s", ROWS[row], name)}
@@ -95,16 +95,17 @@ for _, row in ipairs({1, 2, 3, 4}) do
     line[#line + 1] = "up: " .. snapshot()
     tablelines[#tablelines + 1] = table.concat(line, "  |  ")
     local want = step_of(row, name)
-    if row <= 3 and want ~= 0 then
+    local valued = row == 1 or row == 3 or row == 4
+    if valued and want ~= 0 then
       local tag = ROWS[row] .. " " .. name
       -- one step in the right direction on the press; the value moved, and by exactly one step
       check(not same(before, after_down), tag .. ": the press changes the value")
       -- the release changes nothing
       check(same(after_rep, after_up), tag .. ": releasing changes nothing (" .. tostring(after_rep[1]) .. "/" .. tostring(after_rep[2]) .. "/" .. tostring(after_rep[3]) .. " -> " .. tostring(after_up[1]) .. "/" .. tostring(after_up[2]) .. "/" .. tostring(after_up[3]) .. ")")
-      if row == 1 then
+      if row == 3 then
         check(after_down[1] == (want > 0 and 0.6 or 0.4), tag .. ": brightness 0.5 goes one step to " .. tostring(want > 0 and 0.6 or 0.4) .. ", is " .. tostring(after_down[1]))
-      elseif row == 2 then
-        check(after_down[2] == (want > 0 and "pink" or "white"), tag .. ": colour yellow goes one step, is " .. tostring(after_down[2]))
+      elseif row == 1 then
+        check(after_down[2] == (want > 0 and "PINKFF80B8" or "WHITEFFFFFF"), tag .. ": preset YELLOW goes one step, is " .. tostring(after_down[2]))
       else
         check(after_down[3] == (want > 0 and 0.8 or 0.6), tag .. ": contrast 0.7 goes one step to " .. tostring(want > 0 and 0.8 or 0.6) .. ", is " .. tostring(after_down[3]))
       end
@@ -112,29 +113,29 @@ for _, row in ipairs({1, 2, 3, 4}) do
     if name == "UP" or name == "DOWN" then
       check(same(before, after_up), ROWS[row] .. " " .. name .. ": moving between rows changes no value")
       local d = name == "DOWN" and 1 or -1
-      check(pos_down == math.max(1, math.min(4, pos0 + d)), ROWS[row] .. " " .. name .. ": one press moves one row (" .. pos0 .. " -> " .. pos_down .. ")")
+      check(pos_down == math.max(1, math.min(5, pos0 + d)), ROWS[row] .. " " .. name .. ": one press moves one row (" .. pos0 .. " -> " .. pos_down .. ")")
     end
-    if row <= 3 and (name == "UP" or name == "DOWN" or name == "LEFT" or name == "RIGHT" or name == "W" or name == "A") then
+    if row ~= 5 and (name == "UP" or name == "DOWN" or name == "LEFT" or name == "RIGHT" or name == "W" or name == "A") then
       check(same(before, after_up), ROWS[row] .. " " .. name .. ": this key changes no value of the page")
     end
     if name == "LEFT" then
       check(pushed[#pushed] == "SYSTEM", ROWS[row] .. " LEFT is K2: back to SYSTEM")
     end
-    if name == "RIGHT" and row ~= 4 then
-      check(te_kbd.char == nil, ROWS[row] .. " RIGHT (K3) does not open the hex entry")
+    if name == "RIGHT" and row ~= 5 then
+      check(te_kbd.char == nil, ROWS[row] .. " RIGHT (K3) does not open a text entry")
     end
   end
 end
 if show_table then for _, l in ipairs(tablelines) do print(l) end end
 
--- the hex entry: K3 on HEX opens it, takes the keys, closes; when closed it takes none
-reset(4)
-check(te_kbd.char == nil and te_kbd.code == nil, "no key interception while the HEX row is not open")
+-- the hex entry: K3 on COLOUR opens the picker, its HEX row the entry, takes the keys, closes; when closed it takes none
+reset(2)
+check(te_kbd.char == nil and te_kbd.code == nil, "no key interception while the entry is not open")
 send("1", 1); send("1", 0)
 check(pressed[1] == "1=1" and pressed[2] == "1=0", "K1 from the keyboard works while the entry is closed: " .. table.concat(pressed, " "))
 pressed = {}
 send("RIGHT", 1); send("RIGHT", 0)
-check(pushed[#pushed] == "PICKER", "K3 (RIGHT) on HEX opens the colour picker")
+check(pushed[#pushed] == "PICKER", "K3 (RIGHT) on COLOUR opens the colour picker")
 -- the menu's set_page: the picker is the page now (its own key, encoder, keyboard handlers)
 local ui_page = page
 local picker = require 'core/menu/picker'
@@ -149,16 +150,16 @@ check(textentry.txt:sub(-1) == "1", "a typed 1 goes into the entry")
 for _ = 1, 20 do send("BACKSPACE", 1); send("BACKSPACE", 0) end
 for _, ch in ipairs({"0", "0", "F", "F", "0", "0"}) do send(ch, 1); send(ch, 0) end
 send("ENTER", 1); send("ENTER", 0)
-check(ui.state.custom == "FF8800", "Enter in the entry shows the colour, the picker keeps it only on K3")
+check(ui.state.tint == "FFD000", "Enter in the entry shows the colour, the picker keeps it only on K3")
 send("UP", 1); send("UP", 0); send("UP", 1); send("UP", 0); send("UP", 1); send("UP", 0)
 send("ENTER", 1); send("ENTER", 0)
-check(ui.state.custom == "00FF00" and ui.state.colour == "custom", "K3 in the picker keeps 00ff00: " .. tostring(ui.state.custom))
+check(ui.state.tint == "00FF00", "K3 in the picker keeps 00ff00: " .. tostring(ui.state.tint))
 check(te_kbd.char == nil and te_kbd.code == nil, "the entry is closed again: the keys are free")
 check(pushed[#pushed] == "UI", "the picker gives the page back")
 page = ui_page
 _menu.key, _menu.penc, _menu.keyboardcode, _menu.keyboardchar = page.key, page.enc, page.keycode, nil
 -- a release applies and writes nothing at all (delta 0), a press does
-page.pos = 1
+page.pos = 3
 local n0 = #looks
 local conf0 = io.open("/home/we/ui.conf"):read("a")
 send("EQUAL", 0)

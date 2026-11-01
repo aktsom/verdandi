@@ -31,10 +31,15 @@ local function own_look(name, a, b)
   write("/home/we/box-presets/" .. slug .. ".box", "verdandi-box=1\nname=" .. name .. "\nbox=" .. a .. "\nkeys=" .. b .. "\nencoders=" .. a .. "\nbuttons=" .. b .. "\nfont=FFFFFF\n")
 end
 
+local function own_screen(name, hex)
+  os.execute("mkdir -p /home/we/screen-presets")
+  write("/home/we/screen-presets/" .. name:lower() .. ".screen", "verdandi-screen=1\nname=" .. name .. "\ncolour=" .. hex .. "\n")
+end
+
 -- a fresh world: new modules, new state, an own look or two on disk
 local W
 local function world()
-  os.execute("rm -rf '" .. tmp .. "'/box.conf '" .. tmp .. "'/ui.conf '" .. tmp .. "'/box-presets '" .. tmp .. "'/midimap.conf '" .. tmp .. "'/midimap-presets")
+  os.execute("rm -rf '" .. tmp .. "'/box.conf '" .. tmp .. "'/ui.conf '" .. tmp .. "'/box-presets '" .. tmp .. "'/screen-presets '" .. tmp .. "'/midimap.conf '" .. tmp .. "'/midimap-presets")
   for _, k in ipairs({"core/keyboard", "lib/textentry_kbd", "textentry", "lib/textentry", "core/box_settings", "core/ui_settings", "box_settings", "ui_settings", "keyboard", "core/menu/picker", "core/clipboard", "core/colour"}) do package.loaded[k] = nil end
   local w = {frame = {}, shown = {}, errors = {}, logs = {}}
   screen = setmetatable({}, {__index = function() return function() end end})
@@ -150,6 +155,10 @@ local function world()
   end
   own_look("Alpha", "112233", "445566")
   own_look("Beta", "AA3300", "00AA33")
+  own_screen("Sunset", "FF6633")
+  own_screen("Moss", "88AA44")
+  w.ui.load()
+  w.ui.reload_presets()
   w.box.load()
   w.codes = {}
   for k, v in pairs(keyboard.codes) do w.codes[v] = k end
@@ -216,8 +225,8 @@ local function apply(w, e)
     elseif e.what == "arcclose" then w.arc_open = false
     elseif e.what == "unplug" then local d = w.devs[e.dev] midi.devices[d.id] = nil w.mm.device_removed(d)
     elseif e.what == "plug" then local d = w.devs[e.dev] midi.devices[d.id] = d
-    elseif e.what == "drop" then os.remove("/home/we/box-presets/alpha.box") w.box.reload_looks()
-    elseif e.what == "add" then own_look("Gamma", "336699", "996633") w.box.reload_looks() end
+    elseif e.what == "drop" then os.remove("/home/we/box-presets/alpha.box") w.box.reload_looks() os.remove("/home/we/screen-presets/sunset.screen") w.ui.reload_presets()
+    elseif e.what == "add" then own_look("Gamma", "336699", "996633") w.box.reload_looks() own_screen("Dusk", "9966CC") w.ui.reload_presets() end
     _menu.redraw() -- the change comes from outside the page; whatever triggers the next redraw finds the page in range
   end
 end
@@ -240,7 +249,7 @@ local function state_of(w)
   local p, pg = _menu.page, w.pages[_menu.page]
   local s = p
   if p == "BOX" then s = s .. string.format(" mode=%s pos=%s top=%s lpos=%s rows=%d", pg.mode, pg.pos, pg.top, pg.lpos, #pg.rows())
-  elseif p == "UI" then s = s .. " pos=" .. tostring(pg.pos)
+  elseif p == "UI" then s = s .. string.format(" mode=%s pos=%s top=%s lpos=%s rows=%d", pg.mode, pg.pos, pg.top, pg.lpos, #pg.rows())
   elseif p == "MIDIMAP" then s = s .. string.format(" mode=%s pos=%s dpos=%s ctl=%s learn=%s target=%s armed=%s", pg.mode, pg.pos, pg.dpos, tostring(pg.ctl), w.mm.learn.state, tostring(w.mm.learn.target), tostring(w.armed)) end
   return s .. " entry=" .. tostring(w.textentry.active)
 end
@@ -275,7 +284,21 @@ local function invariants(w)
       if #w.box.own > 0 and pg.lpos == builtin + 1 then return "selection: the list position is on the separator" end
     end
   elseif p == "UI" then
-    if not (pg.pos >= 1 and pg.pos <= 4) then return "selection: UI row " .. tostring(pg.pos) end
+    if pg.mode ~= "rows" and pg.mode ~= "list" and pg.mode ~= "confirm" then return "modal: unknown mode " .. tostring(pg.mode) end
+    if (pg.mode == "confirm") ~= (pg.confirm ~= nil) then return "modal: the confirm flag and the mode disagree" end
+    local rows = pg.rows()
+    if rows[1] ~= "PRESET" or rows[2] ~= "COLOUR" then return "rows: PRESET and COLOUR are not the first two rows" end
+    if pg.mode == "rows" and not (pg.pos >= 1 and pg.pos <= #rows) then return "selection: SCREEN row " .. tostring(pg.pos) .. " of " .. #rows end
+    if pg.mode == "rows" and not (pg.top >= 1 and pg.top <= math.max(1, #rows)) then return "selection: SCREEN top " .. tostring(pg.top) end
+    local pr = w.ui.preset_by_name(w.ui.state.preset)
+    local own = pr ~= nil and not pr.builtin and w.ui.state.preset ~= "CUSTOM"
+    if (rows[#rows] == "DELETE") ~= own then return "rows: DELETE does not match the screen preset in use (" .. tostring(w.ui.state.preset) .. ")" end
+    if pg.mode == "list" then
+      local builtin = #w.ui.preset_list() - #w.ui.own
+      local n = builtin + (#w.ui.own > 0 and 1 + #w.ui.own or 0)
+      if pg.lpos < 1 or pg.lpos > n then return "selection: SCREEN list position " .. pg.lpos .. " of " .. n end
+      if #w.ui.own > 0 and pg.lpos == builtin + 1 then return "selection: the SCREEN list position is on the separator" end
+    end
   elseif p == "MIDIMAP" then
     if pg.mode ~= "rows" and pg.mode ~= "detail" and pg.mode ~= "confirm" and pg.mode ~= "watch" and pg.mode ~= "turn" and pg.mode ~= "actions" and pg.mode ~= "aview" then return "modal: unknown mode " .. tostring(pg.mode) end
     if (pg.mode == "watch") ~= w.mm.watching then return "modal: the WATCH view and the layer's watching flag disagree (" .. tostring(pg.mode) .. ", " .. tostring(w.mm.watching) .. ")" end
@@ -559,24 +582,24 @@ do
     is(slurp("/home/we/box.conf") == c0, how .. ": nothing was written")
     is(not w2.pages.PICKER.active, how .. ": the picker is closed")
   end
-  -- no valid colour yet (the SCREEN page's custom colour): the picker starts at the middle, nothing is applied; C centres with the preview; R resets
+  -- the SCREEN page's COLOUR row: the picker starts at the screen colour, nothing is applied; C centres with the preview; R resets
   local w3 = world()
   _menu.set_page("UI")
-  w3.pages.UI.pos = 4
+  w3.pages.UI.pos = 2
   tap(w3, "RIGHT")
   local pk3 = w3.pages.PICKER
-  is(_menu.page == "PICKER" and pk3.opts.label == "SCREEN HEX", "K3 on the SCREEN HEX row opens the picker")
-  is(pk3.val.h == 180 and pk3.val.s == 50 and pk3.val.v == 50 and #w3.ui_calls == 0, "no colour yet: the markers are at the middle (180, 50, 50) and nothing is applied")
-  tap(w3, "EQUAL")
+  is(_menu.page == "PICKER" and pk3.opts.label == "SCREEN COLOUR", "K3 on the SCREEN COLOUR row opens the picker")
+  is(pk3.opts.value == "FFFFFF" and #w3.ui_calls == 0, "the picker opens with the screen colour and nothing is applied")
+  tap(w3, "DOWN") tap(w3, "EQUAL")
   is(#w3.ui_calls == 1, "a step shows on the screen at once")
   tap(w3, "C")
   local lu = w3.ui_calls[#w3.ui_calls]
   is(pk3.val.h == 180 and pk3.val.s == 50 and pk3.val.v == 50 and lu[2] == 64 and lu[3] == 128 and lu[4] == 128, "C centres all three and the screen follows (#408080)")
   tap(w3, "R")
-  is(w3.ui.state.custom == nil, "R goes back to what it opened with")
+  is(w3.ui.state.tint == "FFFFFF", "R goes back to what it opened with")
   tap(w3, "C")
   tap(w3, "ENTER")
-  is(w3.ui.state.custom == "408080" and w3.ui.state.colour == "custom", "K3 keeps the centred colour for the screen")
+  is(w3.ui.state.tint == "408080" and w3.ui.label() == "WHITE~", "K3 keeps the centred colour for the screen")
   -- a grey keeps its hue: raise the saturation again and the colour does not jump
   local w4 = world()
   w4.box.set_part("box", "808080")
@@ -731,13 +754,13 @@ do
   is(#w3b.toasts == 0, "a page change with nothing changed says nothing")
   -- the SCREEN page: saved and restored messages (its init keeps the message after the picker)
   local w4 = world()
-  _menu.set_page("UI") w4.pages.UI.pos = 4
+  _menu.set_page("UI") w4.pages.UI.pos = 2
   tap(w4, "RIGHT")
   tap(w4, "C")
   tap(w4, "ENTER")
   is(w4.pages.UI.msg == "saved #408080", "SCREEN: 'saved #408080' (" .. tostring(w4.pages.UI.msg) .. ")")
   local w5 = world()
-  _menu.set_page("UI") w5.pages.UI.pos = 4
+  _menu.set_page("UI") w5.pages.UI.pos = 2
   tap(w5, "RIGHT") tap(w5, "C") tap(w5, "2")
   is(w5.pages.UI.msg == "restored", "SCREEN: 'restored' after K2")
   -- a contrast warning is kept next to 'saved'

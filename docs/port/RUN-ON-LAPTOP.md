@@ -201,7 +201,7 @@ terminal output and `~/verdandi-home/logs/jackd.log` and `logs/sclang.log` if pr
       MAIDEN MANUAL MUTE across the top, the screen at its lower left, K1 E1 above it, E2 E3 K2 K3 to its right; no OUT slider and no K/E text); the black frame around the screen has the Mac's proportions; it resizes without breaking (the screen scales with the window: crisp at 75/100/125/150 percent, very slightly soft in between; smallest size is half); closing it ends norns.
 - [ ] With the script above loaded, or from HOME > SELECT, the screen shows the script's picture.
 - [ ] It looks right on your screen scale (HiDPI) and in X11 *and* Wayland if you can try both.
-- [ ] **SYSTEM > SCREEN** (HOME > SYSTEM > SCREEN, was UI): BRIGHTNESS, COLOUR (white, yellow, pink, custom hex typed on the keyboard), CONTRAST (0 = the old linear look, higher = lighter dim greys). The detailed list is in `HARDWARE-CHECKLIST.md`, "SYSTEM > SCREEN". In short: the Cheat Codes 2 loops page at CONTRAST 0, 0.3 and 0.5 (which is closest to your norns?), one colour change, one custom hex colour, a low brightness.
+- [ ] **SYSTEM > SCREEN** (HOME > SYSTEM > SCREEN, was UI): PRESET (WHITE, YELLOW, PINK, your own saved colours), COLOUR (the colour picker), BRIGHTNESS, CONTRAST, SAVE and DELETE, laid out like THEME (0 = the old linear look, higher = lighter dim greys). The detailed list is in `HARDWARE-CHECKLIST.md`, "SYSTEM > SCREEN". In short: the Cheat Codes 2 loops page at CONTRAST 0, 0.3 and 0.5 (which is closest to your norns?), one preset change (brightness and contrast keep their values), one colour from the picker saved under a name and loaded again, a low brightness.
 
 **Keys and knobs**
 - [ ] Click K1-K3 (they light and norns reacts); drag a knob; scroll over E1-E3.
@@ -322,7 +322,7 @@ if nothing answers on the port (not built, port taken, crashed) it opens nothing
 - [ ] Judge on your display, over a longer sitting: eye strain (the dither band and speckle of RETRO, the dither shading of 16-BIT), the button text next to the chunky blocks (it stays small), whether the buttons' narrower gaps (RETRO/8-BIT: 4 units, 16-BIT: 3) look cramped, crispness when you drag the window (the quick drawing while dragging, the crisp picture a moment after).
 
 ## The colour picker (docs/port/colour-picker-plan.md)
-- [ ] THEME > a colour row (or SCREEN > HEX), K3: the norns screen shows HUE, SATURATION, BRIGHTNESS and HEX; the box (keys, encoders, buttons, font; or the screen) changes live as you move a row; K3 keeps and saves, K2 gives the old colour back (try it, and check the box goes back).
+- [ ] THEME > a colour row (or SCREEN > COLOUR), K3: the norns screen shows HUE, SATURATION, BRIGHTNESS and HEX; the box (keys, encoders, buttons, font; or the screen) changes live as you move a row; K3 keeps and saves, K2 gives the old colour back (try it, and check the box goes back).
 - [ ] Keyboard: UP/DOWN choose the row, LEFT/RIGHT and the keys right of 0 change it (hold: it repeats; let go: it stops), Shift is bigger, Ctrl is finer, C centres, H types a code, R resets, F1 cancels.
 - [ ] Ctrl+C on a colour row or in the picker copies `#RRGGBB`; paste it into another program. Copy a code in another program (`#3B6EA8`, `3b6`, `336699`) and press Ctrl+V in the picker or on a colour row: the colour is applied. Copy something else (a sentence, a very long text, an image): a short message and no change. Tell me if it fails on your session (X11 or Wayland).
 - [ ] Ctrl+O, Ctrl+Q, Ctrl+M and Ctrl+Shift+S still do what they did.

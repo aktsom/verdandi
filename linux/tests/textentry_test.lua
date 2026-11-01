@@ -241,7 +241,7 @@ for cname, close in pairs(closers) do
     uipage.init()
     norns.menu.set(uipage.enc, uipage.key, uipage.redraw, nil)
     current_page = uipage
-    uipage.pos = 4 -- HEX
+    uipage.pos = 2 -- COLOUR
     open_entry(uipage)
     check(te.active == true, label .. ": the HEX row opens the picker and the entry")
     type_text(input)
@@ -250,8 +250,8 @@ for cname, close in pairs(closers) do
     close_picker()
     check(owner_is(uipage), label .. ": the UI page has the keys again")
     uipage.enc(2, -1)
-    check(uipage.pos == 3, label .. ": E2 moves (pos " .. uipage.pos .. ")")
-    check(#(ui.state.custom or "") <= 6, label .. ": the custom colour is never longer than 6 digits")
+    check(uipage.pos == 1, label .. ": E2 moves (pos " .. uipage.pos .. ")")
+    check(#(ui.state.tint or "") <= 6, label .. ": the custom colour is never longer than 6 digits")
   end
 end
 
