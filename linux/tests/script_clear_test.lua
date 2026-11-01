@@ -46,7 +46,7 @@ keyboard = {clear = rec("keyboard.clear")}; gamepad = {clear = rec("gamepad.clea
 params = {clear = rec("params.clear"), string = function() return "internal" end, name = nil}
 screen = setmetatable({}, {__index = function() return function() end end})
 local hook = require 'core/hook'
-engine = require 'core/engine'
+engine = tab.readonly{table = require 'core/engine', except = {'name'}} -- as lua/core/startup.lua makes it: only `name` can be set
 local Script = require 'core/script'
 norns.script = Script
 local function reset() calls = {}; printed = {}; INIT_LOG = {} end

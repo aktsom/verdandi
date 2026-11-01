@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -51,6 +52,9 @@ void matron_cleanup(void) {
         return;
     }
     done = true;
+#ifdef NORNS_LINUX_DESKTOP
+    dev_list_monome_all_off(800); // the grids' and arcs' LEDs off before the devices are closed (a quit, a window close, a restart)
+#endif
     dev_monitor_deinit();
     osc_deinit();
     o_deinit();
@@ -67,6 +71,65 @@ void matron_cleanup(void) {
     exit(0);
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+#include <errno.h>
+#include <signal.h>
+
+// the LEDs of every grid and arc go off when norns ends (docs/port/KNOWN-ISSUES.md 30): in matron_cleanup (a quit, a window close), after a crash report (best effort) and on SIGTERM / SIGHUP / SIGINT (a launcher
+// restart, a logout, a closed terminal, Ctrl+C). a signal handler can only do signal-safe things: it writes the signal number into a pipe, a thread started here takes it from there, switches the LEDs off (bounded
+// by a timeout) and ends the process with the signal's default action, as it would have ended without this
+static int quit_pipe[2] = {-1, -1};
+
+static void crash_leds_off(void) {
+    dev_list_monome_all_off(1000);
+}
+
+static void on_end_signal(int sig) {
+    int e = errno;
+    unsigned char b = (unsigned char)sig;
+    ssize_t r = write(quit_pipe[1], &b, 1);
+    (void)r;
+    errno = e;
+}
+
+static void *end_signal_thread(void *unused) {
+    (void)unused;
+    unsigned char b = 0;
+    ssize_t r;
+    do {
+        r = read(quit_pipe[0], &b, 1);
+    } while (r < 0 && errno == EINTR);
+    if (r == 1) {
+        dev_list_monome_all_off(800);
+        signal(b, SIG_DFL);
+        sigset_t set;
+        sigemptyset(&set);
+        sigaddset(&set, b);
+        pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+        kill(getpid(), b);
+    }
+    return NULL;
+}
+
+static void leds_off_on_signals(void) {
+    if (pipe(quit_pipe) != 0) {
+        return;
+    }
+    pthread_t th;
+    if (pthread_create(&th, NULL, end_signal_thread, NULL) != 0) {
+        return;
+    }
+    pthread_detach(th);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = on_end_signal;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+}
+#endif
+
 int matron_main(int argc, char **argv) {
 #ifdef NORNS_LINUX_DESKTOP
     {
@@ -74,6 +137,8 @@ int matron_main(int argc, char **argv) {
         const char *home = getenv("HOME");
         std::string dir = home != NULL && home[0] == '/' ? std::string(home) + "/logs/crash" : "";
         crash_report_install(dir.empty() ? NULL : dir.c_str());
+        crash_report_set_hook(crash_leds_off);
+        leds_off_on_signals();
     }
 #endif
     args_parse(argc, argv);

@@ -28,7 +28,7 @@ for how in ${HOWS:-quit close term hup segv}; do
     if [ "$last0" = "$zero32" ] && [ "$last8" = "$zero32" ]; then ok "$how: the last map of both halves written on the way out is all zero (the LEDs are off)"; else bad "$how: after the exit the last maps are: left ${last0:0:16}, right ${last8:0:16} (wanted all zero)"; fi
     if awk '$1 == "W" && $3 != $2 {bad = 1} END {exit !bad}' "$WRITE_LOG" 2> /dev/null; then bad "$how: a write was cut short"; fi
     pgrep -x norns > /dev/null && bad "$how: norns is still running afterwards"
-    rm -rf "$T"
+    [ -n "${KEEP:-}" ] && echo "kept $T" || rm -rf "$T"
 done
 [ $FAILS -eq 0 ] && echo "grid_exit_test: all passed" || echo "grid_exit_test: $FAILS failed"
 [ $FAILS -eq 0 ]

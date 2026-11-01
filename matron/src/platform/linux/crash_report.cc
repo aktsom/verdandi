@@ -4,8 +4,10 @@
  */
 
 #include "crash_report.h"
+#include "crash_symbols.h"
 
 #include <execinfo.h>
+#include <stdbool.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
@@ -20,6 +22,8 @@
 // where a report goes: <dir>/crash-<unix seconds>-<pid>.txt, made at the crash and only then (no empty file at every start)
 static char crash_dir[400];
 static size_t crash_dir_len;
+static void (*crash_hook)(void) = NULL; // called once after the report is written (the grids' LEDs off), under a 3 s alarm
+static uintptr_t crash_bias = 0;
 
 static void put(int fd, const char *s) {
     if (fd >= 0) {
@@ -80,6 +84,26 @@ static void report_to(int fd, int sig, siginfo_t *si, void **frames, int n) {
     put(fd, " ====\n");
     if (fd >= 0) {
         backtrace_symbols_fd(frames, n, fd);
+        // our own functions, static ones too (the table is read from the program's own file at start): "#frame name+0xoffset"
+        bool any = false;
+        for (int i = 0; i < n; i++) {
+            uintptr_t off = 0;
+            uintptr_t a = (uintptr_t)frames[i];
+            const char *fn = a > crash_bias ? crash_symbols_find(a - crash_bias - (i > 0 ? 1 : 0), &off) : NULL;
+            if (fn != NULL) {
+                if (!any) {
+                    put(fd, "---- functions of norns (from its own symbol table) ----\n");
+                    any = true;
+                }
+                put(fd, "#");
+                put_num(fd, i, 10);
+                put(fd, " ");
+                put(fd, fn);
+                put(fd, " +");
+                put_num(fd, (long)off, 16);
+                put(fd, "\n");
+            }
+        }
     }
     put(fd, "==== end of the crash report (names shown are the exported ones; for the others use the offset with `nm -n` or "
             "`addr2line -f -e <the norns binary>`; the core dump is kept) ====\n");
@@ -128,11 +152,25 @@ static void on_crash(int sig, siginfo_t *si, void *ctx) {
             close(fd);
         }
     }
+    if (crash_hook != NULL) {
+        // best effort, bounded: the process may be damaged. a 3 s alarm ends it whatever happens (SIGALRM kills)
+        void (*h)(void) = crash_hook;
+        crash_hook = NULL;
+        alarm(3);
+        h();
+        alarm(0);
+    }
     // the default action (SA_RESETHAND) with the same signal: the core dump is made as without this handler
     raise(sig);
 }
 
+extern "C" void crash_report_set_hook(void (*fn)(void)) {
+    crash_hook = fn;
+}
+
 extern "C" void crash_report_install(const char *dir) {
+    crash_symbols_load("/proc/self/exe");
+    crash_bias = crash_symbols_bias();
     // backtrace() loads libgcc the first time: do that now, not in the handler
     void *prime[4];
     backtrace(prime, 4);

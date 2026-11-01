@@ -875,6 +875,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "after five quick changes the last script (a) started and no load is pending" 'grep -aq "PROBE last.false.rapid_a" "$RLOG" && [ "$(grep -a "PROBE init" "$RLOG" | tail -n 3 | grep -c "init a")" -ge 1 ]'
             chk "after devices came and went during three more changes the last script (b) is running" 'grep -aq "PROBE last2.false.rapid_b" "$RLOG"'
             chk "no error in the clear or in a device removal (no traceback, no grid.lua / arc.lua error, no failed step)" '! grep -aE "attempt to index|stack traceback|script clear: .* failed|hook: .* failed|remove failed" "$RLOG"'
+            chk "a call through the pointer of a removed grid is ignored and said (no write into freed memory), and the removed device is gone from grid.devices" 'grep -aq "PROBE grid devices after close.true" "$RLOG" && grep -aq "this grid or arc is gone" "$RLOG" && grep -aq "PROBE grid rows of a gone grid.0" "$RLOG"'
             chk "no crash report" '[ -z "$(ls "$RH"/logs/crash 2>/dev/null)" ]'
             return $bad
         }

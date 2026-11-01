@@ -10,6 +10,8 @@ extern "C" {
 
 // handlers for SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL. dir: the folder for the report files (NULL: only stderr)
 extern void crash_report_install(const char *dir);
+// a function to call once after a report is written, before the default action (best effort: it runs under a 3 s alarm). matron uses it to switch the grids' LEDs off
+extern void crash_report_set_hook(void (*fn)(void));
 
 #ifdef __cplusplus
 }

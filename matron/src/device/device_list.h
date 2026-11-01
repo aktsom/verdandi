@@ -2,6 +2,7 @@
 
 #include "device.h"
 #include <lualib.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,6 +11,13 @@ extern "C" {
 extern void dev_list_init(void);
 extern void dev_list_add(device_t type, const char *node, const char *name, lua_State *l);
 extern void dev_list_remove(device_t type, const char *node);
+#ifdef NORNS_LINUX_DESKTOP
+// every grid and arc gets all LEDs off (level maps of zero: the same bytes a script clear writes), each device on a thread of its own, waiting at most timeout_ms for all of them (a stalled port does not hold norns
+// back: libmonome gives up on a write after a second). for the ways norns ends: quit, a signal, a crash (docs/port/KNOWN-ISSUES.md 30). takes no lock: it must work from a signal-safe worker and from a crashed process
+extern void dev_list_monome_all_off(int timeout_ms);
+// is this monome device (a pointer a script holds) still in the list? a removed device is freed: a call through a stale pointer writes into freed memory
+extern bool dev_list_has_monome(struct dev_monome *md);
+#endif
 
 #ifdef __cplusplus
 }

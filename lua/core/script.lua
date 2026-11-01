@@ -40,7 +40,7 @@ Script.clear = function()
   _norns.free_engine()
   if desktop then
     -- whatever was loading is cancelled with its engine: a pending flag left behind would refuse every later engine.load (the next script never started)
-    engine.is_loading = false
+    require('core/engine').is_loading = false -- (the global `engine` is read-only: only the module's own table can be set)
     Script.load_pending, Script.load_metro = nil, nil
   end
 

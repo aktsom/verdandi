@@ -25,6 +25,18 @@ norns.script.load("code/probe/rapid_b.lua")
 _norns.grid_window("arc")
 #sleep 8
 print("PROBE last2", engine.is_loading, norns.state.shortname)
+-- a script that kept a removed grid: the call through the stale pointer must not write into freed memory (matron says it is gone and ignores it)
+stale = nil
+for id, d in pairs(grid.devices) do stale = d.dev end
+print("PROBE stale pointer", stale ~= nil)
+_norns.grid_window("grid")
+#sleep 3
+print("PROBE grid devices after close", next(grid.devices) == nil)
+_norns.grid_all_led(stale, 0, false)
+_norns.grid_set_led(stale, 1, 1, 15, false)
+_norns.monome_refresh(stale)
+print("PROBE grid rows of a gone grid", _norns.grid_rows(stale))
+#sleep 1
 print("PROBE rapid done")
 #xdo key ctrl+q
 #sleep 4

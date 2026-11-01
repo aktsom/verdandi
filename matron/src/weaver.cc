@@ -1870,6 +1870,20 @@ int _midi_clock_receive(lua_State *l) {
     return 0;
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+static bool monome_alive(struct dev_monome *md, const char *fn) {
+    if (md != NULL && dev_list_has_monome(md)) {
+        return true;
+    }
+    static int said = 0;
+    if (said < 5) {
+        said++;
+        fprintf(stderr, "weaver: %s: this grid or arc is gone (a script kept a removed device); the call is ignored\n", fn);
+    }
+    return false;
+}
+#endif
+
 /***
  * grid: set led
  * @function grid_set_led
@@ -1882,6 +1896,13 @@ int _grid_set_led(lua_State *l) {
     lua_check_num_args(5);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_set_led")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int x = (int)luaL_checkinteger(l, 2) - 1; // convert from 1-base
     int y = (int)luaL_checkinteger(l, 3) - 1; // convert from 1-base
     int z = (int)luaL_checkinteger(l, 4);     // don't convert value!
@@ -1895,6 +1916,13 @@ int _arc_set_led(lua_State *l) {
     lua_check_num_args(5);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_arc_set_led")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int n = (int)luaL_checkinteger(l, 2) - 1; // convert from 1-base
     int x = (int)luaL_checkinteger(l, 3) - 1; // convert from 1-base
     int val = (int)luaL_checkinteger(l, 4);   // don't convert value!
@@ -1914,6 +1942,13 @@ int _grid_all_led(lua_State *l) {
     lua_check_num_args(3);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_all_led")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int z = (int)luaL_checkinteger(l, 2); // don't convert value!
     bool rel = lua_toboolean(l, 3);
     dev_monome_all_led(md, z, rel);
@@ -1934,6 +1969,13 @@ int _grid_set_rotation(lua_State *l) {
     lua_check_num_args(2);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_set_rotation")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int z = (int)luaL_checkinteger(l, 2); // don't convert value!
     dev_monome_set_rotation(md, z);
     lua_settop(l, 0);
@@ -1949,6 +1991,13 @@ int _grid_tilt_enable(lua_State *l) {
     lua_check_num_args(2);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_tilt_enable")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int id = (int)luaL_checkinteger(l, 2); // don't convert value!
     dev_monome_tilt_enable(md, id);
     lua_settop(l, 0);
@@ -1963,6 +2012,13 @@ int _grid_tilt_disable(lua_State *l) {
     lua_check_num_args(2);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_tilt_disable")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int id = (int)luaL_checkinteger(l, 2); // don't convert value!
     dev_monome_tilt_disable(md, id);
     lua_settop(l, 0);
@@ -1978,6 +2034,13 @@ int _monome_refresh(lua_State *l) {
     lua_check_num_args(1);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_monome_refresh")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     dev_monome_refresh(md);
     lua_settop(l, 0);
     return 0;
@@ -1992,6 +2055,13 @@ int _monome_intensity(lua_State *l) {
     lua_check_num_args(2);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_monome_intensity")) {
+            lua_settop(l, 0);
+        return 0;
+    }
+#endif
     int i = (int)luaL_checkinteger(l, 2); // don't convert value!
     dev_monome_intensity(md, i);
     lua_settop(l, 0);
@@ -2007,6 +2077,13 @@ int _grid_rows(lua_State *l) {
     lua_check_num_args(1);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_rows")) {
+            lua_pushinteger(l, 0);
+        return 1;
+    }
+#endif
     lua_pushinteger(l, dev_monome_grid_rows(md));
     return 1;
 }
@@ -2020,6 +2097,13 @@ int _grid_cols(lua_State *l) {
     lua_check_num_args(1);
     luaL_checktype(l, 1, LUA_TLIGHTUSERDATA);
     struct dev_monome *md = (dev_monome *)lua_touserdata(l, 1);
+#ifdef NORNS_LINUX_DESKTOP
+    // a grid or arc that is gone (a stale device a script kept: writing to it is a write into freed memory): ignored, said in the log (docs/port/KNOWN-ISSUES.md 28)
+    if (!monome_alive(md, "_grid_cols")) {
+            lua_pushinteger(l, 0);
+        return 1;
+    }
+#endif
     lua_pushinteger(l, dev_monome_grid_cols(md));
     return 1;
 }

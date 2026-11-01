@@ -203,3 +203,60 @@ void dev_list_remove(device_t type, const char *node) {
     dev_list_remove_node(dn, ev);
     pthread_mutex_unlock(&lock);
 }
+
+#ifdef NORNS_LINUX_DESKTOP
+#include <errno.h>
+#include <pthread.h>
+#include <time.h>
+
+static void *monome_off_thread(void *arg) {
+    struct dev_monome *md = (struct dev_monome *)arg;
+    if (md->m == NULL) {
+        return NULL;
+    }
+    dev_monome_all_led(md, 0, false);
+    dev_monome_refresh(md);
+    if (md->type == DEVICE_MONOME_TYPE_GRID) {
+        monome_led_all(md->m, 0); // a grid without levels takes this one
+    }
+    return NULL;
+}
+
+bool dev_list_has_monome(struct dev_monome *md) {
+    pthread_mutex_lock(&lock);
+    bool found = false;
+    for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+        if (dn->d != NULL && &dn->d->monome == md) {
+            found = true;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return found;
+}
+
+void dev_list_monome_all_off(int timeout_ms) {
+    pthread_t th[16];
+    int n = 0;
+    struct timespec dl;
+    clock_gettime(CLOCK_REALTIME, &dl);
+    dl.tv_sec += timeout_ms / 1000;
+    dl.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+    if (dl.tv_nsec >= 1000000000L) {
+        dl.tv_sec++;
+        dl.tv_nsec -= 1000000000L;
+    }
+    for (struct dev_node *dn = dq.head; dn != NULL && n < 16; dn = dn->next) {
+        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MONOME && dn->d->monome.m != NULL) {
+            if (pthread_create(&th[n], NULL, monome_off_thread, &dn->d->monome) == 0) {
+                n++;
+            }
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        if (pthread_timedjoin_np(th[i], NULL, &dl) != 0) {
+            pthread_detach(th[i]); // a device that does not answer: go on without it
+        }
+    }
+}
+#endif
