@@ -8,6 +8,8 @@
 
 local tab = require 'tabutil'
 
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+
 local Engine = {}
 -- ------------------------
 -- static data
@@ -92,12 +94,15 @@ Engine.load = function(name, callback)
   else
     if type(callback) == 'function' then
       _norns.report.did_engine_load = function()	    
+        -- Linux desktop: a report that arrives when no load is pending belongs to a load that was cancelled by a quick script change: the script's init runs once, for the load that is pending
+        if desktop and not Engine.is_loading then return end
         Engine.is_loading = false
         local status = norns.try(callback,"init")
         norns.init_done(status)
       end
     else
       _norns.report.did_engine_load = function()
+        if desktop and not Engine.is_loading then return end
         Engine.is_loading = false
         norns.init_done(true)
       end

@@ -109,13 +109,18 @@ Poll.register = function(data, count)
   Poll.poll_names = {}
   local props
   for i=1,count do
-    props = {
-      id = data[i][1],
-      name = data[i][2]
-    }
-    -- print(props.id, props.name)
-    Poll.poll_names[props.id] = props.name
-    Poll.polls[props.name] = Poll.new(props)
+    -- Linux desktop: the report of an engine that was cancelled in the middle (two quick script changes) can have holes: skip them (docs/port/KNOWN-ISSUES.md 29)
+    if os.getenv("NORNS_PLATFORM") ~= nil and (type(data[i]) ~= "table" or data[i][1] == nil or data[i][2] == nil) then
+      print("poll.register: entry " .. i .. " of " .. tostring(count) .. " is incomplete: skipped")
+    else
+      props = {
+        id = data[i][1],
+        name = data[i][2]
+      }
+      -- print(props.id, props.name)
+      Poll.poll_names[props.id] = props.name
+      Poll.polls[props.name] = Poll.new(props)
+    end
   end
 end
 

@@ -132,6 +132,18 @@ NOW = NOW + 20; if watch_metro then watch_metro.f() end
 check(logged("taking longer than 15 s"), "the metro did not run the check")
 _norns.report.did_engine_load()
 
+-- ---- reports of an engine that was cancelled in the middle (two quick loads): the polls list can have holes; a late report is not run twice
+do
+  local Poll = require 'core/poll'
+  local okp, errp = pcall(Poll.register, {{1, "amp_in_l"}, nil, {3, nil}, {4, "amp_out_l"}}, 4)
+  check(okp, "a polls report with holes raised: " .. tostring(errp))
+  check(Poll.polls["amp_in_l"] ~= nil and Poll.polls["amp_out_l"] ~= nil, "the good entries of a polls report with holes were not registered")
+  reset()
+  Script.load(good_a); _norns.report.did_engine_load(); _norns.report.did_engine_load(); _norns.report.did_engine_load()
+  local inits = 0 for _, v in ipairs(INIT_LOG) do if v == "a" then inits = inits + 1 end end
+  check(inits == 1, "the script's init ran " .. inits .. " times for three reports of one load (late reports of cancelled loads must be ignored)")
+end
+
 print = real_print
 os.execute("rm -rf '" .. tmp .. "'")
 if fails == 0 then print("script clear: all passed") end
