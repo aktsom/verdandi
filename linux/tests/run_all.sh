@@ -844,7 +844,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "the tick is seen: the menu picture differs between ON and OFF" '[ "$(apic menu-on.png)" != "$(apic menu-off.png)" ]'
             chk "after a restart the switch is off and the actions are still set" '[ "$(alg "$ALOG2" "restart state")" = "false 38" ]'
             chk "after a restart the menu shows the tick OFF without a click (the item's tick region looks as in the OFF picture, not as in the ON picture)" 'read dx dy <<< "$(restart_dx)"; [ "$(pcrop menu-restart.png $dx $dy)" = "$(pcrop menu-off.png 0 0)" ] && [ "$(pcrop menu-restart.png $dx $dy)" != "$(pcrop menu-on.png 0 0)" ]'
-            chk "after a restart the pad does nothing while OFF (restart: $(alg "$ALOG2" "restart pad"), unmuted level: $(alg "$ALOG" "mouse mute2"); log: $(grep -a "PROBE restart" "$ALOG2" | tr '\n\t' '  ' | cut -c1-300))" '[ "$(alg "$ALOG2" "restart pad")" = "$(alg "$ALOG" "mouse mute2")" ]'
+            chk "after a restart the pad does nothing while OFF (restart: $(alg "$ALOG2" "restart pad[[:space:]]"), unmuted level: $(alg "$ALOG" "mouse mute2"); log: $(grep -a "PROBE restart" "$ALOG2" | tr '\n\t' '  ' | cut -c1-300))" '[ "$(alg "$ALOG2" "restart pad[[:space:]]")" = "$(alg "$ALOG" "mouse mute2")" ]'
             chk "the menu item turns it on again and the pad mutes" '[ "$(alg "$ALOG2" "restart menu on")" = true ] && [ "$(alg "$ALOG2" "restart pad on")" = "$(alg "$ALOG" "mouse mute1")" ]'
             chk "the capture of the ACTIONS list exists" '[ -s "$AH/actions-list.png" ]'
             return $bad
