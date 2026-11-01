@@ -329,6 +329,12 @@ te.redraw = function()
   screen.level(15)
   screen.move(0,16)
   screen.text(te.heading)
+  if desktop and norns.midimap ~= nil and norns.midimap.entry_controls_mapped ~= nil and norns.midimap.entry_controls_mapped() then
+    screen.level(3) -- a mapped E2, E3, K2 or K3 drives this entry (core/midimap.lua): a small word in the empty corner
+    screen.move(127,8)
+    screen.text_right("MIDI")
+    screen.level(15)
+  end
   screen.move(0,32)
   if desktop then
     screen.text(fitted(te.txt))

@@ -343,6 +343,7 @@ SYSTEM > MIDI MAP (below THEME) lets a MIDI controller turn E1-E3 and press K1-K
 3. To bind a control to the mio only (so that a second controller or the iii grid never interferes), open the control (K3 on its row), choose DEVICE and pick `mio` (it means every port of the interface). The name stays valid across restarts and re-plugging.
 4. Scripts are not changed: they still receive every MIDI message. If a script's own params MAP uses the same CC, the params MAP gets it and the page says so (`!`).
 5. The files are `~/verdandi-home/midimap.conf` and `midimap-presets/`; clean up never touches them.
+6. **Naming a recording with the controller.** While a text entry is open (the tape recording's name after K3 on the TAPE page, a preset name, a number), your mapped **E2** moves through the characters, **E3** switches between the characters and DEL / OK, **K3** adds / deletes / accepts (on the press) and **K2** cancels, as the keyboard and the hardware do. K1, E1, A1-A4 and the MIDI actions are ignored while the entry is open. There is no setting for this; a small `MIDI` in the corner of the entry tells you the mapped controls are live.
 
 Network (RTP-MIDI) controllers arrive through JACK MIDI (`Verdandi:midi_in`, "Verdandi JACK in", all sources one device): use ANY. What to check on your hardware is in `HARDWARE-CHECKLIST.md`, section "MIDI MAP".
 

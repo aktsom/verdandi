@@ -702,13 +702,29 @@ local function act_actions(d, kind, ch, d1, d2)
   end
 end
 
-local function act(d, kind, ch, d1, d2)
-  act_actions(d, kind, ch, d1, d2)
+-- while a text entry is open (a recording's name, a preset name, a number, a colour code) the controls that drive it are the ones the hardware has for it: E2 and E3 (the character, the row), K3 (add, DEL, OK) and
+-- K2 (cancel). K1 (it would toggle the menu under the entry), E1, A1-A4 and the MIDI actions are ignored. a key acts on its press only: the press goes to the entry as a press and its release (OK and cancel act on the
+-- release, upstream), and the real release is not passed on. a key that was already held when the entry opened still gets its release (no stuck key)
+local ENTRY_IDS = {e2 = true, e3 = true, k2 = true, k3 = true}
+
+--- true when a mapped control can drive a text entry (the entry screen says MIDI then)
+function M.entry_controls_mapped()
+  if not M.enabled then return false end
+  for id in pairs(ENTRY_IDS) do
+    local c = S.state.ctl[id]
+    if c ~= nil and c.type ~= "none" and c.num ~= nil then return true end
+  end
+  return false
+end
+
+local function act(d, kind, ch, d1, d2, in_entry)
+  if not in_entry then act_actions(d, kind, ch, d1, d2) end
   local pm = norns ~= nil and norns.pmap ~= nil and norns.pmap.rev or nil
   local params_wins = S.state.on_clash == "params"
   for _, id in ipairs(M.ALL_IDS) do
     local c = S.state.ctl[id]
-    if c.type ~= "none" and c.num == d1 and matches(c, d, ch) then
+    local mine = not in_entry or ENTRY_IDS[id] or (id:sub(1, 1) == "k" and V.key_held(state_of(id).key))
+    if mine and c.type ~= "none" and c.num == d1 and matches(c, d, ch) then
       if kind == 0xB0 and c.type == "cc" then
         local taken = params_wins and pm ~= nil and d.port ~= nil and pm[d.port] ~= nil and pm[d.port][ch] ~= nil and pm[d.port][ch][d1] ~= nil
         if not taken then
@@ -730,14 +746,20 @@ local function act(d, kind, ch, d1, d2)
           else
             local what = V.key_cc(r.key, d2, c.threshold)
             r.dev = d.id
-            if what == "press" then send_key(number_of(id), 1) elseif what == "release" then send_key(number_of(id), 0) end
+            if what == "press" then
+              send_key(number_of(id), 1)
+              if in_entry then send_key(number_of(id), 0); V.key_reset(r.key) end
+            elseif what == "release" then send_key(number_of(id), 0) end
           end
         end
       elseif (kind == 0x90 or kind == 0x80) and c.type == "note" and id:sub(1, 1) == "k" then
         local r = state_of(id)
         local what = V.key_note(r.key, kind == 0x90 and "on" or "off", d2)
         r.dev = d.id
-        if what == "press" then send_key(number_of(id), 1) elseif what == "release" then send_key(number_of(id), 0) end
+        if what == "press" then
+          send_key(number_of(id), 1)
+          if in_entry then send_key(number_of(id), 0); V.key_reset(r.key) end
+        elseif what == "release" then send_key(number_of(id), 0) end
       end
     end
   end
@@ -774,10 +796,9 @@ function M.event(d, data)
     return
   end
   if pmap_learning() then return end
-  -- a text entry is open (a name, a number): the keys and the encoders are its own, not a controller's (a mapped K2 would cancel it, a mapped E would move its cursor, a mapped K1 would close the menu under it)
+  -- a text entry is open (a name, a number): only E2, E3, K2 and K3 act, as the hardware's controls do (see ENTRY_IDS)
   local te = package.loaded['textentry']
-  if te and te.active then return end
-  act(d, kind, ch, d1, d2)
+  act(d, kind, ch, d1, d2, te ~= nil and te.active == true)
 end
 
 return M

@@ -71,9 +71,12 @@ local function world()
       if type(n) ~= "number" or n < 1 or n > 4 or n ~= math.floor(n) or type(t) ~= "number" or t ~= math.floor(t) or t == 0 then w.arc_bad = "arc_turn(" .. tostring(n) .. ", " .. tostring(t) .. ")" end
       if not w.arc_open then w.arc_refused = (w.arc_refused or 0) + 1 return false end
       w.arc_turns = (w.arc_turns or 0) + 1
+      if w.textentry and w.textentry.active then w.arc_bad = "arc_turn(" .. n .. ", " .. t .. ") while a text entry is open" end
       return true
     end,
-    key = function(n, z) if n ~= 1 then _menu.key(n, z) end end, enc = function(n, d) if n ~= 1 then _menu.penc(n, d) end end}
+    -- (K1 and E1 are not the page's here; every call is recorded: MIDI controls during a text entry are checked by what they sent)
+    key = function(n, z) w.sent = w.sent or {}; w.sent[#w.sent + 1] = "key:" .. n .. ":" .. z; if n ~= 1 then _menu.key(n, z) end end,
+    enc = function(n, d) w.sent = w.sent or {}; w.sent[#w.sent + 1] = "enc:" .. n .. ":" .. d; if n ~= 1 then _menu.penc(n, d) end end}
   write("/home/we/keyboard.layout", "us\n")
   _path = {keyboard_layout = "/home/we/keyboard.layout"}
   norns = {none = function() end}
@@ -330,6 +333,19 @@ local function invariants(w)
       if not act_target or w.mm.walk_index() < 1 or w.mm.walk_index() > 14 or w.mm_set.ACTION_IDS[w.mm.walk_index()] ~= L.target then return "walk: the target " .. tostring(L.target) .. " is not action " .. tostring(w.mm.walk_index()) end
     end
     if w.action_bad then return "actions: " .. w.action_bad end
+    -- a text entry is open: K1 and E1 never reach the menu from a MIDI control (the entry's controls are E2, E3, K2, K3); only what was sent since the last check counts
+    do
+      local sent = w.sent or {}
+      local seen = w.sent_seen or 0
+      if #sent < seen then seen = 0 end
+      if w.textentry.active then
+        for i = seen + 1, #sent do
+          if sent[i]:match("^key:1:1") or sent[i]:match("^enc:1:") then return "entry: a MIDI control sent " .. sent[i] .. " while a text entry is open" end
+        end
+      end
+      w.sent_seen = #sent
+      if #sent > 400 then w.sent, w.sent_seen = {}, 0 end
+    end
     if w.menu_tick ~= nil and w.menu_tick ~= (w.mm_set.state.actions_on == true) then return "actions: the window menu's tick (" .. tostring(w.menu_tick) .. ") and the stored switch (" .. tostring(w.mm_set.state.actions_on) .. ") disagree" end
     local h = io.open(map("/home/we/midimap.conf"), "r")
     local conf = h and h:read("a") or ""
@@ -1003,30 +1019,135 @@ do
         is(w.mm_set.state.ctl.a1.num == 56, "CC 56 was set " .. combo .. " (" .. tostring(w.mm_set.state.ctl.a1.num) .. ")")
         is((w.arc_turns or 0) == 0, "typing a number turned the arc " .. combo)
       end
-      -- mapped controls (a Beatstep or any unit) do not touch an entry: K2 would cancel it, E2 and E3 move its cursor
+      -- mapped controls during a text entry (the owner names recordings with a Beatstep Pro): E2 and E3 drive the entry like the arrow keys and the hardware encoders, K3 acts on the press only (add a character,
+      -- DEL, OK: the release is not passed on), K2 cancels as on the hardware, K1 never reaches the menu, E1, the arc, the MIDI actions and everything else are ignored; a release and a delta of 0 never act
       do
-        local w = setup(arc_open, arc_keys)
-        local S = w.mm_set
-        S.set("k2", "type", "cc"); S.set("k2", "num", 85); S.set("e2", "num", 72); S.set("e2", "mode", "rel2c"); S.set("e3", "num", 73); S.set("e3", "mode", "rel2c")
-        S.set("a1", "num", 76); S.set("a1", "mode", "rel2c"); S.set("k3", "type", "cc"); S.set("k3", "num", 86); w.mm.changed()
-        open_midimap(w, 18)
-        tap(w, "RIGHT")
-        tap(w, "A")
-        local te = w.textentry
-        local before = {te.pos, te.row, te.delok, te.txt}
-        for _, m in ipairs({{0xB0, 85, 127}, {0xB0, 85, 0}, {0xB0, 72, 1}, {0xB0, 72, 127}, {0xB0, 73, 1}, {0xB0, 73, 127}, {0xB0, 76, 1}, {0xB0, 86, 127}, {0xB0, 86, 0}}) do
-          w.mm.event(w.devs[1], m)
+        local function mapped(w, k3_note)
+          local S = w.mm_set
+          for id, num in pairs({e1 = 70, e2 = 72, e3 = 73, a1 = 76}) do S.set(id, "type", "cc"); S.set(id, "num", num); S.set(id, "mode", "rel2c") end
+          for id, num in pairs({k1 = 84, k2 = 85, k3 = 86}) do S.set(id, "type", "cc"); S.set(id, "num", num) end
+          if k3_note then S.set("k3", "type", "note"); S.set("k3", "num", 60) end
+          S.assign_action("mix", "note", 36); S.assign_action("tape", "ccbutton", 20)
+          w.mm.changed()
+          w.sent = {}
         end
-        is(te.active, "a mapped K2 or K3 closed the entry " .. combo)
-        is(te.txt == before[4] and te.pos == before[1] and te.row == before[2] and te.delok == before[3], "mapped controls moved the entry (text " .. tostring(te.txt) .. ", pos " .. tostring(te.pos) .. ", row " .. tostring(te.row) .. ") " .. combo)
-        is((w.arc_turns or 0) == 0, "a mapped arc encoder turned while an entry was open " .. combo)
-        tap(w, "B")
-        is(te.txt == "ab", "typing goes on after the controls were moved (got " .. tostring(te.txt) .. ") " .. combo)
-        tap(w, "ENTER")
-        is(S.preset_by_name("ab") ~= nil, "the name was saved " .. combo)
-        -- and when no entry is open they work again
-        w.mm.event(w.devs[1], {0xB0, 76, 1})
-        is((w.arc_turns or 0) == 1 or not arc_open, "the mapped arc encoder works again after the entry " .. combo)
+        local function ev(w, status, d1, d2) w.mm.event(w.devs[1], {status, d1, d2}) end
+        local openers = {
+          preset = function(w) open_midimap(w, 18); tap(w, "RIGHT") end,
+          number = function(w) open_midimap(w, 9); tap(w, "RIGHT"); w.pages.MIDIMAP.dpos = 2; tap(w, "RIGHT") end,
+          hex = function(w) open_entry(w) end,
+          tape = function(w) _menu.set_page("TAPE"); w.pages.TAPE.mode = w.pages.TAPE.constants.TAPE_MODE_REC; tap(w, "RIGHT") end,
+        }
+        for _, kind in ipairs({"preset", "number", "hex", "tape"}) do
+          local tag = kind .. " entry " .. combo
+          do
+            local w0 = setup(arc_open, arc_keys)   -- nothing mapped: no hint (the worlds replace each other's globals: this one is done before the next is made)
+            openers[kind](w0)
+            is(frame_text(w0.shown):find("R:MIDI", 1, true) == nil, "the " .. tag .. " says MIDI with nothing mapped")
+            tap(w0, "ESC")
+          end
+          -- A: E2, E3, K3 (add, DEL, OK), the strays, the releases and the zero deltas
+          local w = setup(arc_open, arc_keys)
+          mapped(w)
+          openers[kind](w)
+          local te = w.textentry
+          is(te.active, "the " .. tag .. " opens")
+          te.row = 0; te.fresh = false; te.txt = ""; te.redraw()
+          local p0 = te.pos
+          is(frame_text(w.shown):find("R:MIDI", 1, true) ~= nil, "the " .. tag .. " does not say that MIDI controls are active")
+          local function state() return te.pos .. "/" .. te.row .. "/" .. te.delok .. "/" .. tostring(te.txt) end
+          local s0 = state()
+          -- everything that stays ignored: E1, K1 (press, release), A1, the actions
+          for _, m in ipairs({{0xB0, 70, 1}, {0xB0, 70, 127}, {0xB0, 84, 127}, {0xB0, 84, 0}, {0xB0, 76, 1}, {0xB0, 76, 127}, {0x90, 36, 100}, {0x80, 36, 0}, {0xB0, 20, 127}, {0xB0, 20, 0}}) do ev(w, m[1], m[2], m[3]) end
+          is(state() == s0, "E1, K1, A1 and the actions changed the " .. tag .. " (" .. s0 .. " -> " .. state() .. ")")
+          is(#w.sent == 0, "E1, K1, A1 or an action reached the menu during the " .. tag .. " (" .. table.concat(w.sent, " ") .. ")")
+          is((w.arc_turns or 0) == 0 and not w.actions_fired, "an arc turn or an action fired during the " .. tag)
+          -- delta 0 and releases do nothing
+          ev(w, 0xB0, 72, 0); ev(w, 0xB0, 73, 0); ev(w, 0xB0, 86, 0); ev(w, 0xB0, 85, 0)
+          is(state() == s0 and #w.sent == 0, "a delta of 0 or a release acted in the " .. tag .. " (" .. state() .. ", sent " .. table.concat(w.sent, " ") .. ")")
+          -- E2 steps the character, E3 switches rows
+          ev(w, 0xB0, 72, 1); is(te.pos == (p0 + 1) % 95, "E2 up did not move to the next character in the " .. tag .. " (" .. te.pos .. " from " .. p0 .. ")")
+          ev(w, 0xB0, 72, 127); is(te.pos == p0, "E2 down did not move back in the " .. tag)
+          ev(w, 0xB0, 73, 1); is(te.row == 1, "E3 up did not switch to the DEL OK row in the " .. tag)
+          ev(w, 0xB0, 72, 127); is(te.delok == 0, "E2 down on the DEL OK row did not choose DEL in the " .. tag)
+          ev(w, 0xB0, 72, 1); is(te.delok == 1, "E2 up on the DEL OK row did not choose OK in the " .. tag)
+          ev(w, 0xB0, 73, 127); is(te.row == 0, "E3 down did not switch back to the characters in the " .. tag)
+          -- K3 adds the selected character on the press; the release adds nothing
+          te.pos = string.byte("4") - 5 - 32; te.redraw()
+          w.sent = {}
+          ev(w, 0xB0, 86, 127)
+          is(te.txt == "4", "K3 pressed did not add the character in the " .. tag .. " (text " .. tostring(te.txt) .. ")")
+          is(table.concat(w.sent, " ") == "key:3:1 key:3:0", "K3 pressed must be a press and its release for the entry, got: " .. table.concat(w.sent, " ") .. " " .. tag)
+          ev(w, 0xB0, 86, 0)
+          is(te.txt == "4" and #w.sent == 2, "the K3 release acted in the " .. tag)
+          ev(w, 0xB0, 86, 127); ev(w, 0xB0, 86, 0)
+          is(te.txt == "44", "a second K3 press did not add another character in the " .. tag .. " (" .. tostring(te.txt) .. ")")
+          -- strays do not touch the typed text
+          for _, m in ipairs({{0xB0, 70, 1}, {0xB0, 84, 127}, {0xB0, 84, 0}, {0xB0, 76, 5}, {0x90, 36, 100}, {0xB0, 20, 127}}) do ev(w, m[1], m[2], m[3]) end
+          is(te.txt == "44" and te.active, "stray E1 / K1 / A1 / action messages changed the typed text of the " .. tag .. " (" .. tostring(te.txt) .. ")")
+          -- DEL removes the last character
+          ev(w, 0xB0, 73, 1); ev(w, 0xB0, 72, 127); ev(w, 0xB0, 86, 127); ev(w, 0xB0, 86, 0)
+          is(te.txt == "4" and te.active, "K3 on DEL did not remove a character in the " .. tag .. " (" .. tostring(te.txt) .. ")")
+          -- OK closes (the entry's callback runs); nothing is sent for the release
+          ev(w, 0xB0, 72, 1); w.sent = {}
+          ev(w, 0xB0, 86, 127)
+          is(not te.active, "K3 on OK did not close the " .. tag)
+          local n_sent = #w.sent
+          ev(w, 0xB0, 86, 0)
+          is(#w.sent == n_sent, "the K3 release after OK sent something (" .. tag .. ")")
+          is(w.te_kbd.code == nil and invariants(w) == nil, "the page is not whole after OK in the " .. tag .. ": " .. tostring(invariants(w)))
+          if kind == "preset" then is(w.mm_set.preset_by_name("44") == nil and w.mm_set.preset_by_name("4") ~= nil, "OK did not save the preset typed with the controls") end
+          -- B: K2 cancels (the release is not passed on); the preset is not saved
+          w = setup(arc_open, arc_keys)
+          mapped(w)
+          openers[kind](w)
+          te = w.textentry
+          te.row = 0; te.fresh = false; te.txt = ""; te.pos = string.byte("7") - 5 - 32; te.redraw()
+          ev(w, 0xB0, 86, 127); ev(w, 0xB0, 86, 0)
+          w.sent = {}
+          ev(w, 0xB0, 85, 127)
+          is(not te.active and table.concat(w.sent, " ") == "key:2:1 key:2:0", "K2 did not cancel the " .. tag .. " as the hardware does (sent " .. table.concat(w.sent, " ") .. ")")
+          ev(w, 0xB0, 85, 0)
+          is(#w.sent == 2, "the K2 release sent something (" .. tag .. ")")
+          if kind == "preset" then is(w.mm_set.preset_by_name("7") == nil, "K2 saved the preset") end
+          is(invariants(w) == nil, "the page is not whole after K2 in the " .. tag .. ": " .. tostring(invariants(w)))
+          -- and with the entry closed the mapped controls are the page's again: E2 moves, K1 is a key
+          w.sent = {}
+          ev(w, 0xB0, 72, 1); ev(w, 0xB0, 84, 127); ev(w, 0xB0, 84, 0)
+          is(table.concat(w.sent, " "):find("enc:2:1", 1, true) and table.concat(w.sent, " "):find("key:1:1", 1, true), "the mapped controls do not work again after the " .. tag .. " (" .. table.concat(w.sent, " ") .. ")")
+        end
+        -- K3 mapped to a note: the note on adds, the note off and velocity 0 do not; K2 mapped to a note cancels
+        do
+          local w = setup(arc_open, arc_keys)
+          mapped(w, true)
+          w.mm_set.set("k2", "type", "note"); w.mm_set.set("k2", "num", 61); w.mm.changed()
+          openers.preset(w)
+          local te = w.textentry
+          te.row = 0; te.fresh = false; te.txt = ""; te.pos = string.byte("5") - 5 - 32; te.redraw()
+          w.sent = {}
+          ev(w, 0x90, 60, 100)
+          is(te.txt == "5" and table.concat(w.sent, " ") == "key:3:1 key:3:0", "a K3 note on did not add the character (" .. tostring(te.txt) .. ", " .. table.concat(w.sent, " ") .. ")")
+          ev(w, 0x80, 60, 0); ev(w, 0x90, 60, 0)
+          is(te.txt == "5" and #w.sent == 2, "a K3 note off or velocity 0 acted in the entry")
+          ev(w, 0x90, 61, 100)
+          is(not te.active, "a K2 note on did not cancel the entry")
+          ev(w, 0x80, 61, 0)
+          is(#w.sent == 4, "the K2 note off sent something")
+        end
+        -- a key held down when the entry opens: its release still reaches the script (no stuck key), a K1 press during the entry never does
+        do
+          local w = setup(arc_open, arc_keys)
+          mapped(w)
+          _menu.set_page("TAPE") -- (the MIDI MAP page would reset the layer's held keys when it opens: the tape page does not)
+          ev(w, 0xB0, 84, 127)
+          w.sent = {}
+          openers.tape(w)
+          ev(w, 0xB0, 84, 0)
+          is(table.concat(w.sent, " ") == "key:1:0", "a K1 held when the entry opened was not released when it was let go (" .. table.concat(w.sent, " ") .. ")")
+          ev(w, 0xB0, 84, 127); ev(w, 0xB0, 84, 0)
+          is(table.concat(w.sent, " ") == "key:1:0", "a K1 pressed during the entry reached the menu (" .. table.concat(w.sent, " ") .. ")")
+          tap(w, "ESC")
+        end
       end
       -- the menu moves on under an open entry (a window button, a page key, a mapped K1): the entry is closed, the handlers are the page's, the tape name entry opens
       for _, how in ipairs({"page", "mode"}) do
