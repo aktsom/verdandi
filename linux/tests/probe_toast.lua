@@ -3,6 +3,7 @@
 #sleep 5
 norns.script.load("code/probe/window_probe.lua")
 #sleep 3
+metro[33]:stop() -- the 3 s poll of the notes would take the note away again (no serialosc here)
 NOTE = "GRID: serialosc has this grid\nStop it: sudo systemctl stop serialosc.service\n(later: sudo systemctl start serialosc.service)"
 _menu.grid_note = NOTE
 _menu.show_note()
