@@ -105,6 +105,9 @@ TEST_CASE("the log line: one line, plain words, the commands, the replug") {
     CHECK(m.find("sudo systemctl start serialosc.service") != std::string::npos);
     CHECK(m.find("replug") != std::string::npos);
     CHECK(m.find("NORNS_SERIALOSC_CHECK=0") != std::string::npos); // how to turn the check off
+    // KNOWN-ISSUES 30: LEDs that stay lit when norns ends can be serialosc's doing; the line says so
+    CHECK(m.find("LEDs") != std::string::npos);
+    CHECK(m.find("lit") != std::string::npos);
 }
 
 TEST_CASE("the note on the device window is short") {

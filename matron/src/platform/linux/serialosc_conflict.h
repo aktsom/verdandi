@@ -88,7 +88,7 @@ inline Conflict find(const std::vector<Proc> &procs, const std::string &device,
 inline std::string message(const std::string &device, const Conflict &c) {
     return "serialosc has this monome device open as well as norns (" + c.name + ", pid " + std::to_string(c.pid) + ", on " +
            device + "): two programs reading one serial port steal each other's bytes, so grid events lag, arrive out of order "
-           "or invalid. to stop serialosc for this session: sudo systemctl stop serialosc.service ; to start it again later: "
+           "or invalid, and LEDs can stay lit after norns ends (norns switches them off, serialosc's own reader may light them again). to stop serialosc for this session: sudo systemctl stop serialosc.service ; to start it again later: "
            "sudo systemctl start serialosc.service . after stopping it, unplug and replug the grid (a replug is needed). "
            "to turn this check off: NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf";
 }

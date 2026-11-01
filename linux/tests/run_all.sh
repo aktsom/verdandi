@@ -856,6 +856,32 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$AH"
     }
     actions_scenario
+    # quick script changes with the virtual grid and arc open and a mapped controller playing (docs/port/KNOWN-ISSUES.md 29): the last script starts every time, no error in the clear or the removal of devices
+    rapid_scenario() {
+        if [ ! -x "$T/midimap_send" ]; then
+            echo "SKIP  window:quick script changes (the JACK sender did not build)"
+            return
+        fi
+        RH="$(mktemp -d)"
+        ln -s "$REPO" "$RH/norns"
+        mkdir -p "$RH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/rapid_a.lua" "$REPO/linux/tests/scripts/rapid_b.lua" "$REPO/linux/tests/scripts/window_probe.lua" "$RH/dust/code/probe/"
+        RLOG="$T/rapid.log"
+        MMS="$T/midimap_send" NORNS_HOME="$RH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_rapid_load.lua" "$RLOG" > /dev/null 2>&1
+        rapid_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1"; bad=1; }; }
+            chk "the probe ran" 'grep -aq "PROBE rapid done" "$RLOG"'
+            chk "after five quick changes the last script (a) started and no load is pending" 'grep -aq "PROBE last.false.rapid_a" "$RLOG" && [ "$(grep -a "PROBE init" "$RLOG" | tail -n 3 | grep -c "init a")" -ge 1 ]'
+            chk "after devices came and went during three more changes the last script (b) is running" 'grep -aq "PROBE last2.false.rapid_b" "$RLOG"'
+            chk "no error in the clear or in a device removal (no traceback, no grid.lua / arc.lua error, no failed step)" '! grep -aE "attempt to index|stack traceback|script clear: .* failed|hook: .* failed|remove failed" "$RLOG"'
+            chk "no crash report" '[ -z "$(ls "$RH"/logs/crash 2>/dev/null)" ]'
+            return $bad
+        }
+        run "window:quick script changes (five loads before the engine of the one before is reported, devices coming and going, a controller playing: the last script starts, no error)" rapid_ok
+        rm -rf "$RH"
+    }
+    rapid_scenario
     # the virtual grid (F6), keys (F7) and arc (F8) windows: the norns window keeps its size and position while they open and close again and again, from the norns window and from their own window, also with the detached
     # screen window open; each closes with the key that opens it (F7 did not close the keys window: its key events never reached norns)
     window_toggle_scenario() {
