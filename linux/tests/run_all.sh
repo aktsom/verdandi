@@ -151,7 +151,7 @@ cp "$T/cst" "$T/cst_stripped" 2> /dev/null && strip "$T/cst_stripped" 2> /dev/nu
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/toast_fit_test.c matron/src/platform/linux/toast_fit.c -o "$T/tft" -lm 2> "$T/tft.err" || cat "$T/tft.err"
 run "c:toast lines (words whole, long words cut, at most three lines, an ellipsis, UTF-8, proportional fonts, a space smaller than a character)" "$T/tft"
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/toast_width_test.c $SKM/device_skin.c $LNM/box_style.c $LNM/box_palette.c $LNM/toast_fit.c $LNM/screen_toast.c -o "$T/twt" $(pkg-config --libs cairo freetype2) -lm 2> "$T/twt.err" || cat "$T/twt.err"
-run "c:no toast leaves its border (31 messages measured with the real fonts: aluminium, PIXEL, RETRO, 8-BIT, 16-BIT with norns.ttf and the built-in font, the screen window at five sizes; at most three lines, inside the room, clear of the controls, nothing drawn outside the pill)" env NORNS_TEST_TTF="$REPO/resources/norns.ttf" "$T/twt"
+run "c:no toast leaves its border (31 messages, five styles, both pixel fonts, the screen window at five sizes)" env NORNS_TEST_TTF="$REPO/resources/norns.ttf" "$T/twt"
 run "c:crash symbols (our static functions found by address in the program's own file, a stripped copy gives no names and no crash)" bash -c "\"$T/cst\" && \"$T/cst_stripped\" stripped"
 run "c:arc keys of the arc window (eight keys and no others, 16 ticks, Shift 4, ramp only if asked, a key up is nothing)" "$T/akc"
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SKM -I $LNM $(pkg-config --cflags cairo freetype2) linux/tests/window_actions_test.c $LNM/window_actions.c -o "$T/wat" 2> "$T/wat.err" || cat "$T/wat.err"
