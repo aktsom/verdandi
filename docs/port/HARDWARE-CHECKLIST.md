@@ -368,3 +368,8 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **Each grid once:** SYSTEM > DEVICES > GRID lists every grid once, with serialosc running and stopped, after a replug and after Verdandi restarts. If a grid still shows twice, send me the lines of `logs/norns.log` that begin `dev_monitor:` and `dev_list_add:`.
 - [ ] **MIDI actions on the wrong pad:** with ASSIGN ALL, hit a pad twice (a bounce) or hit one pad for two actions: the question names both actions. Put two actions on one note by editing `midimap.conf` (or typing a note that is used): the page says `NOTE 36 IS ON MANUAL AND MUTE` when it opens, and both rows have `!`. After learning, does the line name the action and the channel the pad sends on?
 
+## Toast text and its border (KNOWN-ISSUES 33): what only your screen can show
+
+- [ ] **The serialosc note** (start Verdandi with serialosc running): the pill under the buttons shows the three lines inside its border, at the default size, at the smallest window you use, maximised, and on the detached screen window (F9), in the aluminium style and in PIXEL, RETRO, 8-BIT and 16-BIT. On SYSTEM > DEVICES > SERIALOSC every line is whole (nothing cut at the right edge of the screen).
+- [ ] **Other messages:** the ones you see often (a screenshot saved, a GIF saved, "MIDI actions on/off" with Ctrl+Shift+M, "copied" and "saved" in the colour picker, "restored, not saved" after leaving it, an error message) are inside their pill, also with your display scaling (100, 125, 150, 200 percent) and with a recording dot (REC GIF). If one is still cut, send me its words and the window size.
+
