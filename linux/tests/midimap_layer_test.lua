@@ -610,6 +610,55 @@ mm.walk_start(); note_on(2, 1, 50, 100); eq(mm.learn.state, "ask", "walk: asks a
 eq(mm.learn.state, "listen", "walk: no skips this action and goes on"); eq(mm.learn.target, "tape", "walk: with the next one"); eq(S.state.actions.keys.num, 50, "walk: and the other action keeps its note"); eq(S.state.actions.mix.type, "none", "walk: the skipped one stays empty")
 mm.cancel_quiet()
 
+-- the owner's report: a pad opened the manual (the MANUAL action was on the MUTE pad). every way an action gets a note or CC another action has must ask or say so
+-- learn says which action got what, with the channel it came on
+asetup(); mm.start_listen("mute"); note_on(2, 5, 36, 100)
+eq(mm.learn.msg, "MUTE = NOTE 36 CH 5", "learn: the confirmation names the action, the note and the channel")
+asetup(); mm.start_listen("home"); cc(2, 3, 50, 1)
+eq(mm.learn.msg, "HOME = CC 50 CH 3", "learn: a CC names the action, the CC and the channel")
+-- a note another action has asks, in learn
+asetup(function() S.assign_action("manual", "note", 36) end)
+mm.start_listen("mute"); note_on(2, 1, 36, 100)
+eq(mm.learn.state, "ask", "learn: MUTE onto the note MANUAL has asks"); eq(mm.learn.ask.other, "manual", "learn: and names MANUAL")
+check(mm.ask_text():find("MANUAL", 1, true) and mm.ask_text():find("MUTE", 1, true), "learn: the question names both actions (" .. tostring(mm.ask_text()) .. ")")
+mm.answer(false); eq(S.state.actions.manual.num, 36, "learn: no leaves MANUAL on its note"); eq(S.state.actions.mute.type, "none", "learn: and MUTE without one")
+-- the same in ASSIGN ALL: an action that is skipped keeps its note, and the pad of a later action asks about it
+asetup(function() S.assign_action("manual", "note", 36) end)
+mm.walk_start()
+note_on(2, 1, 36, 100)   -- the first target is MIX: MANUAL has this note
+eq(mm.learn.state, "ask", "walk: the note of an action further down the list (not reached yet) asks"); eq(mm.learn.ask.id, "mix", "walk: for MIX"); eq(mm.learn.ask.other, "manual", "walk: about MANUAL")
+mm.answer(false); eq(mm.learn.target, "tape", "walk: no skips MIX and goes on"); eq(S.state.actions.manual.num, 36, "walk: MANUAL still has its note")
+-- a pad that bounces: the second note on for the next target asks about the first
+asetup(); mm.walk_start()
+note_on(2, 1, 40, 100); eq(mm.learn.target, "tape", "walk: MIX took the pad")
+note_on(2, 1, 40, 100); eq(mm.learn.state, "ask", "walk: the same pad again (a bounce) asks, it is not given to TAPE"); eq(mm.learn.ask.other, "mix", "walk: naming MIX")
+mm.answer(false); eq(S.state.actions.mix.num, 40, "walk: MIX keeps the pad")
+-- skipping does not take a note away, and advancing never gives one that is used without asking
+asetup(function() S.assign_action("mute", "note", 50) end)
+mm.walk_start(); for _ = 1, 10 do mm.walk_skip() end
+eq(mm.learn.target, "mute", "walk: at MUTE"); note_on(2, 1, 50, 100)
+eq(S.state.actions.mute.num, 50, "walk: MUTE re-learned on its own note: no question, it is the same action")
+-- a CC another action has asks too
+asetup(function() S.assign_action("tape", "step", 30, {mode = "relob", dir = "up"}) end)
+mm.start_listen("home"); cc(2, 1, 30, 65)
+eq(mm.learn.state, "ask", "learn: a CC another action has asks")
+mm.answer(true); eq(S.state.actions.tape.type, "none", "learn: yes clears the other action"); eq(S.state.actions.home.num, 30, "learn: and HOME has the CC")
+-- a file or preset with two actions on one note: a notice, in the log and on the screen, once, naming both
+asetup(function() S.assign_action("mute", "note", 36); S.assign_action("manual", "note", 36) end)
+printed = {}; reset_out()
+mm.load()
+check(mm.load_notice ~= nil and mm.load_notice:find("MUTE", 1, true) and mm.load_notice:find("MANUAL", 1, true) and mm.load_notice:find("NOTE 36", 1, true), "load: a notice names both actions and the note (" .. tostring(mm.load_notice) .. ")")
+check(table.concat(out, " "):find("toast:", 1, true) and table.concat(out, " "):find("MANUAL", 1, true), "load: the notice is on the screen")
+check(logged("MANUAL"), "load: and in the log")
+asetup(function() S.assign_action("mute", "note", 36); S.assign_action("manual", "note", 37) end)
+mm.load(); eq(mm.load_notice, nil, "load: no notice when nothing is shared")
+-- two actions with the same note on different devices or channels do not share it
+asetup(function() S.assign_action("mute", "note", 36); S.assign_action("manual", "note", 36); S.set_action("mute", "ch", 1); S.set_action("manual", "ch", 2) end)
+mm.load(); eq(mm.load_notice, nil, "load: the same note on two channels is not shared")
+-- an action and a key on one note
+asetup(function() S.assign_action("mute", "note", 36); S.set("k1", "type", "note"); S.set("k1", "num", 36) end)
+mm.load(); check(mm.load_notice and mm.load_notice:find("K1", 1, true) and mm.load_notice:find("MUTE", 1, true), "load: an action and a key on one note are named too")
+
 -- clear
 asetup(function() S.assign_action("mix", "note", 36) end)
 mm.clear("mix"); eq(S.state.actions.mix.type, "none", "clear works for an action id")

@@ -125,6 +125,13 @@ function M.load()
   seen_version = S.version
   push_arc_config()
   push_menu()
+  -- two controls or actions on one message in the file: said once in the log and on the screen (a change of the text says it again)
+  M.load_notice = M.overlap_notice()
+  if M.load_notice and M.load_notice ~= M.last_notice then
+    M.log("two things answer to one message: " .. M.load_notice)
+    toast("MIDI MAP: " .. M.load_notice)
+  end
+  M.last_notice = M.load_notice
 end
 
 --- the master switch of the actions (the page row): saved at once, the window menu's tick follows
@@ -274,6 +281,42 @@ function M.overlaps()
     end
   end
   return out
+end
+
+--- what one control or action answers to: "NOTE 36" or "CC 30", or nil
+local function message_text(id)
+  local c = S.state.ctl[id] or S.state.actions[id]
+  if c == nil or c.type == "none" or c.num == nil then return nil end
+  return (c.type == "note" and "NOTE " or "CC ") .. c.num
+end
+
+--- the sentence for one control or action that shares its message with another ("NOTE 36 IS ON MUTE AND MANUAL"), or nil
+function M.overlap_text(id)
+  local other = M.overlaps()[id]
+  if other == nil then return nil end
+  local a, b = id, other
+  if a > b then a, b = b, a end
+  return string.format("%s IS ON %s AND %s", message_text(id) or "?", a:upper(), b:upper())
+end
+
+--- a plain sentence when two controls or actions answer to one message ("NOTE 36 IS ON MUTE AND MANUAL"), else nil. every pair is looked at: a file, a preset or a changed
+--- device or channel can make them share a message without the question that learn asks (the owner's pad that opened the manual: MANUAL was on the MUTE pad)
+function M.overlap_notice()
+  local seen, list = {}, {}
+  for id, other in pairs(M.overlaps()) do
+    local a, b = id, other
+    if a > b then a, b = b, a end
+    if not seen[a .. "|" .. b] then
+      seen[a .. "|" .. b] = true
+      list[#list + 1] = {a = a, b = b}
+    end
+  end
+  if #list == 0 then return nil end
+  table.sort(list, function(x, y) return x.a .. x.b < y.a .. y.b end)
+  local first = list[1]
+  local text = string.format("%s IS ON %s AND %s", message_text(first.a) or "?", first.a:upper(), first.b:upper())
+  if #list > 1 then text = text .. " +" .. (#list - 1) .. " MORE" end
+  return text
 end
 
 -- ---------------------------------------------------------------- WATCH: which relative format does a unit send?
@@ -480,7 +523,7 @@ local function assigned(id, what)
 end
 
 --- a learned note or CC goes to an action (a CC always makes an encoder step in the format of the last encoder or arc mapping; the direction of the first click is the direction), then the walk goes on
-local function finish_action(id, type_, num, first)
+local function finish_action(id, type_, num, first, ch)
   local L = M.learn
   local ok
   if type_ == "note" then
@@ -490,7 +533,7 @@ local function finish_action(id, type_, num, first)
     ok = S.assign_action(id, "step", num, {mode = mode, dir = V.rel_decode(mode, first) < 0 and "down" or "up"})
   end
   M.guess[id] = nil
-  local text = id:upper() .. " = " .. (type_ == "note" and "NOTE " or "CC ") .. num
+  local text = id:upper() .. " = " .. (type_ == "note" and "NOTE " or "CC ") .. num .. (ch and (" CH " .. ch) or "")
   if not ok then text = id:upper() .. ": NOT SET" end
   if walk then
     walk_advance(text, ok)
@@ -502,11 +545,11 @@ local function finish_action(id, type_, num, first)
 end
 
 --- the learned message goes to the control; if another control already answers to it the question is asked first (K3 yes / K2 no on the page, M.answer)
-local function take(id, type_, num, first)
+local function take(id, type_, num, first, ch)
   local other = M.find_overlap(id, type_, num, "ANY", 0)
   if other then
     local L = M.learn
-    L.state, L.ask, L.deadline = "ask", {id = id, other = other, type = type_, num = num, first = first}, M.clock() + M.TIMEOUT
+    L.state, L.ask, L.deadline = "ask", {id = id, other = other, type = type_, num = num, first = first, ch = ch}, M.clock() + M.TIMEOUT
     window(0, 2, id)
     L.msg = nil
     notify()
@@ -532,7 +575,7 @@ function M.answer(yes)
   L.ask = nil
   local id = a.id
   if is_action(id) then
-    finish_action(id, a.type, a.num, a.first)
+    finish_action(id, a.type, a.num, a.first, a.ch)
     return
   end
   S.assign(id, a.type, a.num)
@@ -556,9 +599,9 @@ local function learn_event(d, kind, ch, d1, d2)
     local id = L.target
     if is_action(id) then
       if kind == 0x90 and d2 > 0 then
-        if take(id, "note", d1) then finish_action(id, "note", d1) end
+        if take(id, "note", d1, nil, ch) then finish_action(id, "note", d1, nil, ch) end
       elseif kind == 0xB0 and d2 > 0 then
-        if take(id, "cc", d1, d2) then finish_action(id, "cc", d1, d2) end
+        if take(id, "cc", d1, d2, ch) then finish_action(id, "cc", d1, d2, ch) end
       end
       return
     end

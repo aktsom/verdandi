@@ -350,6 +350,8 @@ end
 local function after_preset()
   local list = mm.clashes()
   if #list > 0 then m.msg = mm.clash_short(list[1]) end
+  local t = mm.overlap_notice() -- a preset can put two things on one message
+  if t then m.msg = t end
 end
 
 local function key_rows(n)
@@ -417,6 +419,7 @@ local function key_detail(n)
     local list = m.device_choices()
     local i = device_index(list, S.state.ctl[m.ctl]) % #list + 1
     S.set(m.ctl, "dev", list[i].value)
+    m.msg = mm.overlap_text(m.ctl)
   end
 end
 
@@ -458,6 +461,7 @@ local function key_aview(n)
     local list = m.device_choices()
     local i = device_index(list, a) % #list + 1
     S.set_action(m.act, "dev", list[i].value)
+    m.msg = mm.overlap_text(m.act)
   end
 end
 
@@ -521,7 +525,16 @@ local function key_raw(n, z)
   clamp_rows()
 end
 
+local enc_detail_raw
 local function enc_detail(n, delta)
+  enc_detail_raw(n, delta)
+  if n == 3 and delta ~= 0 and m.msg == nil and m.ctl then
+    local t = mm.overlap_text(m.ctl)
+    if t then m.msg = t end
+  end
+end
+
+enc_detail_raw = function(n, delta)
   local id = m.ctl
   local c = S.state.ctl[id]
   if n == 2 then
@@ -557,7 +570,17 @@ local function enc_detail(n, delta)
   end
 end
 
+local enc_aview_raw
 local function enc_aview(n, delta)
+  enc_aview_raw(n, delta)
+  -- a change that makes two actions or controls answer to one message says so at once (the E3 steps cannot ask a question)
+  if n == 3 and delta ~= 0 and m.msg == nil and m.act then
+    local t = mm.overlap_text(m.act)
+    if t then m.msg = t end
+  end
+end
+
+enc_aview_raw = function(n, delta)
   local id = m.act
   local a = S.state.actions[id]
   if n == 2 then
@@ -837,7 +860,11 @@ local function redraw_raw()
     end
     scrollbar(m.atop, #rows)
     local sel = rows[m.apos] and rows[m.apos]:lower()
+    local a = sel and S.state.actions[sel]
     if sel and overlap[sel] and L.state == "idle" then hint(string.format("ALSO %s", overlap[sel]:upper()))
+    elseif a and a.type ~= "none" and a.num ~= nil and L.state == "idle" then
+      -- the line under the list: which action has which message (a pad that opened the wrong thing: the name next to the message)
+      hint(string.format("%s = %s%s", sel:upper(), (a.type == "note" and "NOTE " or "CC ") .. a.num, a.ch ~= 0 and (" CH " .. a.ch) or ""))
     else hint("K3 LEARN  E3 < CLEAR  VIEW >") end
   elseif m.mode == "aview" then
     clamp_detail()

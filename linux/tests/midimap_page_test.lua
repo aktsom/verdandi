@@ -401,6 +401,38 @@ press(2); eq(mm.walk_index(), nil, "K2 stops the walk"); eq(S.state.actions.mix.
 -- CLEAR ALL asks once
 S.assign_action("tape", "note", 42); page.apos = 16; page.redraw(); press(3); eq(page.mode, "confirm", "CLEAR ALL asks"); check(drawn("CLEAR ALL"), "naming it"); press(2); eq(S.state.actions.mix.num, 41, "no keeps everything"); eq(page.mode, "actions", "and goes back to the list")
 page.apos = 16; press(3); press(3); eq(S.count_actions(), 0, "yes clears every action"); eq(page.mode, "actions", "and goes back to the list")
+-- the owner's pad that opened the manual: the list says which action has which message, a change that makes two things share one says so, a file with a shared message says so
+afresh(); S.assign_action("mute", "note", 36); S.assign_action("manual", "note", 37)
+page.pos = 13; press(3)
+local ai = 1 for i, r in ipairs(page.arows()) do if r == "MUTE" then ai = i end end
+page.apos = ai; page.redraw()
+check(drawn("MUTE") and drawn("NOTE 36"), "the list shows the name and its message on one row")
+check(drawn("MUTE = NOTE 36"), "the line under the list names the selected action and its message")
+S.set_action("mute", "ch", 3); page.redraw(); check(drawn("MUTE = NOTE 36 CH 3"), "and the channel when it is one")
+S.set_action("mute", "ch", 0)
+-- E3 on NUMBER stepping onto the note another action has: said at once
+turn(3, 1); eq(page.mode, "aview", "E3 right opens the view of MUTE")
+page.dpos = 3; page.redraw()
+turn(3, 1); eq(S.state.actions.mute.num, 37, "E3 on NUMBER stepped to 37")
+check(drawn("NOTE 37 IS ON MANUAL AND MUTE") or drawn("NOTE 37 IS ON MUTE AND MANUAL"), "stepping onto the note of MANUAL says so (" .. table.concat(texts(), " | "):sub(1, 200) .. ")")
+turn(3, 1); check(not drawn("IS ON"), "stepping on to 38 says nothing")
+-- CHANNEL ANY makes two of them share a message: said
+S.set_action("manual", "num", 38); S.set_action("manual", "ch", 2); S.set_action("mute", "ch", 2)
+page.redraw(); page.dpos = 5; page.redraw()
+turn(3, -1); check(S.state.actions.mute.ch == 1, "(channel 1)"); turn(3, -1)
+eq(S.state.actions.mute.ch, 0, "CHANNEL stepped to ANY")
+check(drawn("NOTE 38 IS ON"), "making MUTE answer on any channel, where MANUAL has the same note on channel 2, says so")
+press(2); press(2)
+-- applying a preset or opening the page with two things on one message says so
+afresh(); S.assign_action("mute", "note", 36); S.assign_action("manual", "note", 36)
+page.deinit(); page.init(); page.redraw()
+check(sent_has and true or true, "(sent)")
+check(table.concat(sent, " "):find("toast:MIDI MAP: NOTE 36 IS ON MANUAL AND MUTE", 1, true) ~= nil, "opening the page says that two actions share a note (" .. table.concat(sent, " | "):sub(1, 200) .. ")")
+page.pos = 13; page.redraw(); press(3)
+check(page.mode == "actions", "the list opens")
+ai = 1 for i, r in ipairs(page.arows()) do if r == "MUTE" then ai = i end end
+page.apos = ai; page.redraw(); check(drawn("!"), "and marks the action with !"); check(drawn("ALSO MANUAL"), "and says with which")
+press(2)
 -- an error in a handler is visible
 local real = mm.set_actions
 mm.set_actions = function() error("boom") end
