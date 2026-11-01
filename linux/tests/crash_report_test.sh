@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     return 0;
 }
 SRC
-g++ -g -rdynamic -O0 -I"$P" "$T/c.cc" "$P/crash_report.cc" -o "$T/c" -lpthread || { echo "FAIL: build"; exit 1; }
+g++ -g -rdynamic -O0 -I"$P" "$T/c.cc" "$P/crash_report.cc" -x c "$P/crash_symbols.c" -x c++ -o "$T/c" -lpthread || { echo "FAIL: build"; exit 1; }
 fail=0
 bad() { echo "FAIL: $*"; fail=1; }
 mkdir -p "$T/crash"
@@ -47,6 +47,6 @@ mkdir -p "$T/quiet"; cat > "$T/q.cc" <<'SRC'
 #include "crash_report.h"
 int main(int argc, char **argv) { crash_report_install(argv[1]); return 0; }
 SRC
-g++ -I"$P" "$T/q.cc" "$P/crash_report.cc" -o "$T/q" -lpthread && "$T/q" "$T/quiet/c" && [ -d "$T/quiet/c" ] && [ -z "$(ls "$T/quiet/c")" ] || bad "a start that does not crash made a file"
+g++ -I"$P" "$T/q.cc" "$P/crash_report.cc" -x c "$P/crash_symbols.c" -x c++ -o "$T/q" -lpthread && "$T/q" "$T/quiet/c" && [ -d "$T/quiet/c" ] && [ -z "$(ls "$T/quiet/c")" ] || bad "a start that does not crash made a file"
 [ $fail -eq 0 ] && echo "crash_report_test: all passed"
 exit $fail
