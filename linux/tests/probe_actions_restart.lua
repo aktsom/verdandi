@@ -20,7 +20,7 @@ print("PROBE restart state", S.state.actions_on, S.state.actions.mute.num)
 #sleep 0.5
 #sh "$MMS" 90:26:64 80:26:00 > "$MARKS.r1" 2>&1
 #sleep 1.5
-print("PROBE restart pad", lvl())
+print("PROBE restart pad off", lvl())
 #xdo key F10
 #sleep 0.5
 #xdo key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
