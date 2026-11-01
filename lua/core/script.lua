@@ -6,11 +6,43 @@ local hook = require 'core/hook'
 
 local Script = {}
 
+-- Linux desktop (docs/port/KNOWN-ISSUES.md 29): a clear that cannot be stopped by one failing step, mod cleanup hooks only for a script that was started, a load that is waiting for its engine is
+-- cancelled by the next clear, and a load that takes more than 15 s says so. everything else is upstream's code
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+Script.WATCHDOG_SECONDS = 15
+Script.mods_armed = false -- a script reached its pre_init hooks since the last cleanup hooks ran
+Script.load_pending = nil -- {engine = name, t = the time the load began, warned = bool} while an engine load is waiting
+
+local function try(name, f)
+  if not desktop then return f() end
+  local ok, err = pcall(f)
+  if not ok then print("### script clear: " .. name .. " failed: " .. tostring(err)) end
+end
+
+--- a load that is still waiting for its engine: one line, once, with what it waits for
+Script.check_load = function()
+  local p = Script.load_pending
+  if p == nil or p.warned or util.time() - p.t < Script.WATCHDOG_SECONDS then return end
+  p.warned = true
+  print("### script load is taking longer than " .. Script.WATCHDOG_SECONDS .. " s: still waiting for engine " .. tostring(p.engine)
+    .. " (sclang busy or not answering? see logs/sclang.log)")
+end
+
+local function load_done()
+  Script.load_pending = nil
+  if Script.load_metro then pcall(function() Script.load_metro:stop() end) Script.load_metro = nil end
+end
+
 --- reset script environment.
 -- ie redirect draw, key, enc functions, stop timers, clear engine, etc.
 Script.clear = function()
   print("# script clear")
   _norns.free_engine()
+  if desktop then
+    -- whatever was loading is cancelled with its engine: a pending flag left behind would refuse every later engine.load (the next script never started)
+    engine.is_loading = false
+    Script.load_pending, Script.load_metro = nil, nil
+  end
 
   if cleanup ~= nil then
     local ok, err
@@ -20,8 +52,11 @@ Script.clear = function()
     end
   end
 
-  -- allow mods to do cleanup
-  hook.script_post_cleanup()
+  -- allow mods to do cleanup (desktop: only for a script that was started: the clear after a failed load must not run them again against parameters the first clear removed)
+  if not desktop or Script.mods_armed then
+    Script.mods_armed = false
+    try("mod cleanup hooks", function() hook.script_post_cleanup() end)
+  end
 
   -- unload asl package entry so `require 'asl'` works
   -- todo(pq): why is this not needed generally (e.g., for 'ui', 'util', etc.)?
@@ -30,7 +65,7 @@ Script.clear = function()
   end
 
   if norns.lfo ~= nil then
-    norns.lfo.lattice:destroy()
+    try("lfo", function() norns.lfo.lattice:destroy() end)
     norns.lfo = nil
   end
 
@@ -63,46 +98,47 @@ Script.clear = function()
   enc = norns.none
 
   -- reset encoders
-  norns.enc.accel(0,true)
-  norns.enc.sens(0,2)
+  try("encoders", function() norns.enc.accel(0,true) norns.enc.sens(0,2) end)
 
   -- clear, redirect, and reset devices
-  grid.cleanup()
-  arc.cleanup()
-  midi.cleanup()
-  hid.cleanup()
-  osc.cleanup()
+  try("grid", function() grid.cleanup() end)
+  try("arc", function() arc.cleanup() end)
+  try("midi", function() midi.cleanup() end)
+  try("hid", function() hid.cleanup() end)
+  try("osc", function() osc.cleanup() end)
 
   -- stop all timers
-  metro.free_all()
+  try("metros", function() metro.free_all() end)
 
   -- stop clock
-  clock.cleanup()
+  try("clock", function() clock.cleanup() end)
 
   -- stop all polls and clear callbacks
-  poll.clear_all()
+  try("polls", function() poll.clear_all() end)
 
   -- clear engine
   engine.name = nil
 
   -- clear softcut
-  softcut.reset()
+  try("softcut", function() softcut.reset() end)
 
   -- restore default audio routing
-  if audio.routing_is_altered() then
-    print("# restoring default audio routing")
-    audio.routing_default()
-  end
+  try("audio routing", function()
+    if audio.routing_is_altered() then
+      print("# restoring default audio routing")
+      audio.routing_default()
+    end
+  end)
 
   -- clear init
   init = norns.none
 
   -- clear crow functions
-  norns.crow.init()
+  try("crow", function() norns.crow.init() end)
 
   -- clear HID device handlers
-  keyboard.clear()
-  gamepad.clear()
+  try("keyboard", function() keyboard.clear() end)
+  try("gamepad", function() gamepad.clear() end)
 
   -- clear last run
   norns.state.script = ''
@@ -114,17 +150,19 @@ Script.clear = function()
   norns.version.required = nil
 
   -- clear params
-  params:clear()
-  norns.pmap.clear()
-  -- add audio menu
-  audio.add_params()
-  -- add clock menu
-  clock.add_params()
-  -- re-enable crow clock if needed
-  if params:string("clock_source") == "crow" then
-    crow.input[1].change = function() end
-    crow.input[1].mode("change",2,0.1,"rising")
-  end
+  try("params", function()
+    params:clear()
+    norns.pmap.clear()
+    -- add audio menu
+    audio.add_params()
+    -- add clock menu
+    clock.add_params()
+    -- re-enable crow clock if needed
+    if params:string("clock_source") == "crow" then
+      crow.input[1].change = function() end
+      crow.input[1].mode("change",2,0.1,"rising")
+    end
+  end)
 
   -- reset PLAY mode screen settings
   local status = norns.menu.status()
@@ -236,13 +274,27 @@ Script.run = function()
   end
   -- allow mods to do initialization
   hook.script_pre_init()
+  Script.mods_armed = true
 
   print("# script run")
-  if engine.name ~= nil then
-    print("loading engine: " .. engine.name)
-    engine.load(engine.name, Script.init)
+  local name = engine.name ~= nil and engine.name or "None"
+  if engine.name ~= nil then print("loading engine: " .. engine.name) end
+  if desktop then
+    Script.load_pending = {engine = name, t = util.time(), warned = false}
+    if metro and metro.init then
+      local ok, m = pcall(metro.init, function() Script.check_load() end, 5, -1)
+      if ok and m then Script.load_metro = m; m:start() end
+    end
+    local started = engine.load(name, function()
+      load_done()
+      Script.init()
+    end)
+    if not started then
+      print("### engine " .. name .. " was not loaded (a load is pending, or the engine is not known): the script does not start")
+      load_done()
+    end
   else
-    engine.load("None", Script.init)
+    engine.load(name, Script.init)
   end
   norns.pmap.read() -- load parameter map
 end

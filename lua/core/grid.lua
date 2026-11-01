@@ -199,9 +199,22 @@ _norns.grid.add = function(id, serial, name, dev)
 end
 
 -- grid remove
+-- Linux desktop: a device that no vport holds (a fifth grid, a virtual grid, one that is not connected) has no port: upstream indexes the vport anyway and raises, the entry stays and the clear that follows
+-- works on a half-removed device (docs/port/KNOWN-ISSUES.md 28). here the callbacks run under pcall (the error is logged) and the device always goes
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
 _norns.grid.remove = function(id)
   local g = Grid.devices[id]
-  if g then
+  if g and desktop then
+    local vp = g.port and Grid.vports[g.port]
+    if vp and vp.remove then
+      local ok, err = pcall(vp.remove)
+      if not ok then print("grid: remove callback of port " .. tostring(g.port) .. " failed: " .. tostring(err)) end
+    end
+    if Grid.remove then
+      local ok, err = pcall(Grid.remove, Grid.devices[id])
+      if not ok then print("grid.remove failed: " .. tostring(err)) end
+    end
+  elseif g then
     if Grid.vports[g.port].remove then
       Grid.vports[g.port].remove()
     end

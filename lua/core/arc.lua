@@ -210,9 +210,22 @@ _norns.arc.add = function(id, serial, name, dev)
   if Arc.add ~= nil then Arc.add(g) end
 end
 
+-- Linux desktop: a device that no vport holds (a fifth grid, a virtual grid, one that is not connected) has no port: upstream indexes the vport anyway and raises, the entry stays and the clear that follows
+-- works on a half-removed device (docs/port/KNOWN-ISSUES.md 28). here the callbacks run under pcall (the error is logged) and the device always goes
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
 _norns.arc.remove = function(id)
   local g = Arc.devices[id]
-  if g then
+  if g and desktop then
+    local vp = g.port and Arc.vports[g.port]
+    if vp and vp.remove then
+      local ok, err = pcall(vp.remove)
+      if not ok then print("arc: remove callback of port " .. tostring(g.port) .. " failed: " .. tostring(err)) end
+    end
+    if Arc.remove then
+      local ok, err = pcall(Arc.remove, Arc.devices[id])
+      if not ok then print("arc.remove failed: " .. tostring(err)) end
+    end
+  elseif g then
     if Arc.vports[g.port].remove then
       Arc.vports[g.port].remove()
     end
