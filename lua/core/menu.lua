@@ -219,9 +219,18 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 
 -- the standing note on the device window (Linux): one at a time, the most urgent first: the sink monitor may feed back, the MAIDEN button has no maiden to open (a few seconds), a SuperCollider
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
+-- the window's pill has one line: the serialosc note (three lines: what, how to stop it, how to start it again) is shown as its first line and the stop command; the norns screen has the whole guide
+-- (SYSTEM > DEVICES > SERIALOSC)
+local function note_line(t)
+  if t == nil then return nil end
+  local first, stop = t:match("^([^\n]*)\n[^:\n]*: ([^\n]*)")
+  if first and stop then return first .. ". Stop: " .. stop end
+  return t
+end
+
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or note_line(_menu.grid_note) or _menu.audio_note or "")
 end
 
 local function show_input()

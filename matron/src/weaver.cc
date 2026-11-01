@@ -2494,7 +2494,7 @@ void w_handle_monome_add(void *mdev) {
     int id = md->dev.id;
 #ifdef NORNS_LINUX_DESKTOP
     // another process (serialosc) on this grid's serial port? one log line, a note on the device window
-    serialosc_device_added(id, md->dev.path);
+    serialosc_device_added(id, md->dev.path, md->dev.serial);
     {
         lua_getglobal(lvm, "_norns");
         lua_getfield(lvm, -1, "grid_conflict_changed");
@@ -2519,6 +2519,17 @@ void w_handle_monome_add(void *mdev) {
 void w_handle_monome_remove(int id) {
 #ifdef NORNS_LINUX_DESKTOP
     serialosc_device_removed(id);
+    {
+        // the note of serialosc follows the device list: looked at again now
+        lua_getglobal(lvm, "_norns");
+        lua_getfield(lvm, -1, "grid_conflict_changed");
+        lua_remove(lvm, -2);
+        if (lua_isfunction(lvm, -1)) {
+            l_report(lvm, l_docall(lvm, 0, 0));
+        } else {
+            lua_pop(lvm, 1);
+        }
+    }
 #endif
     _push_norns_func("monome", "remove");
     lua_pushinteger(lvm, id + 1); // convert to 1-base
@@ -4056,7 +4067,7 @@ int _plugin_note_text(lua_State *l) {
  * @treturn string note
  */
 int _serialosc_check(lua_State *l) {
-    serialosc_device_added(-1000, luaL_checkstring(l, 1));
+    serialosc_device_added(-1000, luaL_checkstring(l, 1), NULL);
     return _grid_conflict_text(l);
 }
 

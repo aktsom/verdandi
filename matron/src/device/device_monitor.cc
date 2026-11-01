@@ -21,6 +21,9 @@
 #include "device_list.h"
 #include "device_monitor.h"
 #include "device_monome.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "device_dedupe.h"
+#endif
 
 #include "events.h"
 #ifdef NORNS_LINUX_DESKTOP
@@ -201,11 +204,21 @@ void *watch_loop(void *p) {
                 if (dev) {
                     const char *action = udev_device_get_action(dev);
                     if (action != NULL) {
+#ifdef NORNS_LINUX_DESKTOP
+                        // only "add" is a new device: a "change" (serialosc's reader opening the port, ModemManager, a udev rule) or "bind" made the same grid a second device
+                        // (device_dedupe.h, docs/port/KNOWN-ISSUES.md 31)
+                        if (dev_action_is_remove(action)) {
+                            rm_dev(dev, fidx);
+                        } else if (dev_action_is_add(action)) {
+                            add_dev(dev, fidx);
+                        }
+#else
                         if (strcmp(action, "remove") == 0) {
                             rm_dev(dev, fidx);
                         } else {
                             add_dev(dev, fidx);
                         }
+#endif
                     } else {
                         fprintf(stderr, "dev_monitor error: unknown device action\n");
                     }

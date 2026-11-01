@@ -93,9 +93,50 @@ inline std::string message(const std::string &device, const Conflict &c) {
            "to turn this check off: NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf";
 }
 
-// the standing note on the device window
+// the log line when serialosc runs and has a grid that norns may not even have opened (docs/port/KNOWN-ISSUES.md 31): what happens, what to do, how to turn the check off
+inline std::string message_running(const std::string &held) {
+    return std::string("serialosc is running and has a monome grid or arc") + (held.empty() ? "" : " (" + held + ")") +
+           ": a serial port that serialosc reads cannot be shared with norns: norns may not see the grid at all, or it appears twice, and events lag or arrive out of order, "
+           "and its LEDs can stay lit after norns ends. to stop serialosc for this session: sudo systemctl stop serialosc.service ; to start it again later: "
+           "sudo systemctl start serialosc.service . after stopping it, unplug and replug the grid (a replug is needed). "
+           "to turn this check off: NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf";
+}
+
+// the standing note: plain words and a short guide, three lines (the window's pill and the norns screen both wrap at these breaks)
 inline const char *note(void) {
-    return "GRID: serialosc has this grid, see log";
+    return "GRID: serialosc has this grid\n"
+           "Stop it: sudo systemctl stop serialosc.service\n"
+           "(later: sudo systemctl start serialosc.service)";
+}
+
+// does serialosc run, and does it have a grid? (docs/port/KNOWN-ISSUES.md 31) the processes (serialoscd, serialosc-detector, serialosc-device), the systemd unit and what is plugged in; norns having
+// the grid open is not needed: serialosc's reader can keep norns from opening a grid at all (and then no grid appears in norns)
+struct Status {
+    bool running;       // any serialosc process, or the unit is active
+    int device_procs;   // serialosc-device processes: each one has a grid
+    bool show;          // the note is due
+};
+
+inline Status assess(const std::vector<Proc> &procs, bool unit_active, bool grid_open, bool grid_nodes, bool duplicate) {
+    Status st{false, 0, false};
+    for (const auto &p : procs) {
+        if (isSerialoscName(p)) {
+            st.running = true;
+        }
+        if (isDeviceProcess(p)) {
+            st.device_procs++;
+        }
+    }
+    if (unit_active) {
+        st.running = true;
+    }
+    st.show = st.running && (st.device_procs > 0 || grid_open || grid_nodes || duplicate);
+    return st;
+}
+
+// two spellings of one device node
+inline bool same_device(const std::function<std::string(const std::string &)> &resolve, const std::string &a, const std::string &b) {
+    return !a.empty() && resolve(a) == resolve(b);
 }
 
 // NORNS_SERIALOSC_CHECK / audio.conf serialosc_check: 0, off, false, no (any case) turn the check off

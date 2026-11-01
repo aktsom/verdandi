@@ -9,6 +9,45 @@ local m = {
 
 m.len = #m.list
 
+-- Linux desktop: while serialosc has the grid (the note of lua/core/menu.lua) there is one more entry, with the guide in short lines and the stop without a terminal (docs/port/KNOWN-ISSUES.md 31)
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+local BASE_LIST = {"midi", "grid", "arc", "hid", "keyboard layout"}
+
+local function sync_list()
+  if not desktop then return end
+  local want = {table.unpack(BASE_LIST)}
+  if _menu.grid_note then want[#want + 1] = "serialosc" end
+  if #want ~= #m.list then
+    m.list = want
+    if m.mode == "type" then
+      m.len = #m.list
+      if m.pos > m.len then m.pos = m.len end
+    end
+  end
+  -- serialosc is gone: leave its pages
+  if not _menu.grid_note and (m.mode == "serialosc" or m.mode == "confirm_serialosc") then
+    m.mode = "type"
+    m.len = #m.list
+    m.pos = math.min(m.pos, m.len)
+    if m.pos < 1 then m.pos = 1 end
+  end
+end
+
+-- words to lines of at most `width` characters
+local function wrap(text, width)
+  local out = {}
+  for para in (text .. "\n"):gmatch("(.-)\n") do
+    local line = ""
+    for word in para:gmatch("%S+") do
+      if #line == 0 then line = word
+      elseif #line + 1 + #word <= width then line = line .. " " .. word
+      else out[#out + 1] = line; line = word end
+    end
+    if #line > 0 then out[#out + 1] = line end
+  end
+  return out
+end
+
 function m.refresh()
   m.options = {
     midi = {"none"},
@@ -22,11 +61,19 @@ function m.refresh()
   for _, device in pairs(midi.devices) do
     table.insert(m.options.midi, device.name)
   end
+  -- Linux desktop: a name is listed once (the same grid twice came from a device event that was treated as a new device: docs/port/KNOWN-ISSUES.md 31)
+  local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+  local function add_unique(list, name)
+    if desktop then
+      for _, n in ipairs(list) do if n == name then return end end
+    end
+    table.insert(list, name)
+  end
   for _, device in pairs(grid.devices) do
-    table.insert(m.options.grid, device.name)
+    add_unique(m.options.grid, device.name)
   end
   for _, device in pairs(arc.devices) do
-    table.insert(m.options.arc, device.name)
+    add_unique(m.options.arc, device.name)
   end
   for _, device in pairs(hid.devices) do
     table.insert(m.options.hid, device.name)
@@ -54,12 +101,37 @@ local function check_and_rename(dev_type,pos,name)
 end
 
 m.key = function(n,z)
+  sync_list()
+  if m.mode == "serialosc" then
+    if z ~= 1 then return end
+    if n == 2 then m.mode = "type"; m.len = #m.list; m.pos = #m.list; m.result = nil
+    elseif n == 3 then m.mode = "confirm_serialosc" end
+    _menu.redraw()
+    return
+  elseif m.mode == "confirm_serialosc" then
+    if z ~= 1 then return end
+    if n == 2 then
+      m.mode = "serialosc"
+    elseif n == 3 then
+      local S = require 'core/serialosc_stop'
+      if S.stop() then m.result = wrap("STOPPED. UNPLUG AND REPLUG THE GRID.", 25)
+      else m.result = wrap("FAILED: NEEDS A PASSWORD. TYPE IN A TERMINAL:\n" .. S.COMMAND, 25) end
+      m.mode = "serialosc"
+    end
+    _menu.redraw()
+    return
+  end
   if m.mode == "type" then
     if n==2 and z==1 then
       _menu.set_page("SYSTEM")
     elseif n==3 and z==1 then
       m.section = m.list[m.pos]
-      if m.section == "keyboard layout" then
+      if m.section == "serialosc" then
+        m.mode = "serialosc"
+        m.result = nil
+        _menu.redraw()
+        return
+      elseif m.section == "keyboard layout" then
         m.refresh()
         m.mode = "select"
         m.len = #m.options[m.section]
@@ -136,6 +208,8 @@ m.key = function(n,z)
 end
 
 m.enc = function(n,delta)
+  sync_list()
+  if m.mode == "serialosc" or m.mode == "confirm_serialosc" then return end
   if n==2 then
     prev_pos = m.pos
     m.pos = util.clamp(m.pos + delta, 1, m.len)
@@ -175,7 +249,34 @@ local function redraw_select(do_show_all_if_fit, do_uppercase)
   screen.update()
 end
 
+local function redraw_serialosc()
+  screen.clear()
+  screen.aa(0)
+  screen.level(15)
+  screen.move(0, 8)
+  screen.text("SERIALOSC")
+  local S = require 'core/serialosc_stop'
+  if m.mode == "confirm_serialosc" then
+    local l = {"STOP SERIALOSC?", "OTHER PROGRAMS LOSE", "THEIR GRIDS UNTIL IT", "STARTS AGAIN."}
+    for i, t in ipairs(l) do screen.level(i == 1 and 15 or 6); screen.move(0, 8 + 10 * i); screen.text(t) end
+    screen.level(4); screen.move(0, 62); screen.text("K3 YES  K2 NO")
+  else
+    local y = 18
+    screen.level(6)
+    for _, t in ipairs(m.result or wrap(_menu.grid_note or "", 25)) do
+      if y <= 52 then screen.move(0, y); screen.text(t); y = y + 8 end
+    end
+    screen.level(4); screen.move(0, 62); screen.text("K3 STOP IT  K2 BACK")
+  end
+  screen.update()
+end
+
 m.redraw = function()
+  sync_list()
+  if m.mode == "serialosc" or m.mode == "confirm_serialosc" then
+    redraw_serialosc()
+    return
+  end
   if m.mode == "select" then
     local do_show_all_if_fit = false
     local do_uppercase = (m.section == "keyboard layout")
@@ -254,6 +355,8 @@ end
 m.init = function()
   m.pos = 1
   m.mode = "type"
+  m.result = nil
+  sync_list()
   m.len = #m.list
 end
 

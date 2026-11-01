@@ -17,5 +17,12 @@ export FAKE="$T/fake" DEVTTY="$T/dev/ttyACM3" DEVLINK="$T/dev/serial/by-id/usb-m
 [ "${2:-}" = disabled ] && export NORNS_SERIALOSC_CHECK=0
 jackd -r -d dummy -r 48000 -p 1024 -C 0 -P 0 < /dev/null > "$T/jackd.log" 2>&1 &
 for _ in $(seq 50); do jack_lsp > /dev/null 2>&1 && break; sleep 0.2; done
-NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_serialosc.lua" "$LOG" > /dev/null 2>&1
+PROBE="$REPO/linux/tests/probe_serialosc.lua"
+if [ "${2:-}" = unopened ]; then
+    # serialosc holds grids norns never opened; the unit and a plugged-in grid are files here (NORNS_SERIALOSC_UNIT_FILE, NORNS_SERIALOSC_BYID_DIR)
+    PROBE="$REPO/linux/tests/probe_serialosc_unopened.lua"
+    export UNITFILE="$T/unit.procs" BYID="$T/byid" NORNS_SERIALOSC_UNIT_FILE="$T/unit.procs" NORNS_SERIALOSC_BYID_DIR="$T/byid"
+    : > "$UNITFILE"
+fi
+NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$PROBE" "$LOG" > /dev/null 2>&1
 exit 0

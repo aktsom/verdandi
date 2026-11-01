@@ -10,10 +10,10 @@ extern "C" {
 #endif
 
 // a device was opened (id: its norns device id) / is gone. added: checks at once and logs a conflict, once
-extern void serialosc_device_added(int id, const char *path);
+extern void serialosc_device_added(int id, const char *path, const char *serial);
 extern void serialosc_device_removed(int id);
 
-// the note for the device window if some open device has a serialosc process on it right now, else NULL. looks again each call
+// the note (three lines, serialosc_conflict.h) if serialosc runs and has a grid, whether or not norns has it open, else NULL. looks again each call: processes, systemd unit, devices
 extern const char *serialosc_conflict_text(void);
 
 #ifdef __cplusplus

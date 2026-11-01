@@ -12,8 +12,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <string>
@@ -26,11 +29,12 @@ namespace {
 
 struct Dev {
     std::string path;
-    bool conflicted = false;
+    std::string serial;
 };
 
 std::mutex mtx;
 std::map<int, Dev> devs;
+bool shown = false; // the note is on (one log line per episode)
 
 std::string resolve(const std::string &p) {
     char buf[PATH_MAX];
@@ -95,39 +99,105 @@ std::vector<serialosc::Proc> read_procs(void) {
     return out;
 }
 
-// look at every device norns has open; log a conflict once per episode. mtx held. true if any conflict
-bool scan(void) {
-    if (devs.empty() || !serialosc::enabled(getenv("NORNS_SERIALOSC_CHECK"))) {
-        for (auto &kv : devs) {
-            kv.second.conflicted = false;
+// is serialosc.service running? a cgroup that has processes: where systemd keeps them (v2, then v1). NORNS_SERIALOSC_UNIT_FILE names another file (the tests): non-empty = active
+bool unit_active(void) {
+    const char *over = getenv("NORNS_SERIALOSC_UNIT_FILE");
+    const char *files[] = {"/sys/fs/cgroup/system.slice/serialosc.service/cgroup.procs", "/sys/fs/cgroup/systemd/system.slice/serialosc.service/cgroup.procs"};
+    for (int i = 0; i < 3; i++) {
+        const char *f = i == 0 ? over : files[i - 1];
+        if (f == NULL) {
+            continue;
         }
+        FILE *fp = fopen(f, "r");
+        if (fp != NULL) {
+            int c = fgetc(fp);
+            fclose(fp);
+            if (c != EOF && c != '\n') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// is a monome grid or arc plugged in, whether or not norns could open it? udev's by-id names (usb-monome_*); NORNS_SERIALOSC_BYID_DIR names another folder (the tests)
+bool monome_nodes(void) {
+    const char *dir = getenv("NORNS_SERIALOSC_BYID_DIR");
+    DIR *d = opendir(dir != NULL ? dir : "/dev/serial/by-id");
+    bool found = false;
+    while (d != NULL) {
+        struct dirent *e = readdir(d);
+        if (e == NULL) {
+            break;
+        }
+        if (strncasecmp(e->d_name, "usb-monome", 10) == 0) {
+            found = true;
+            break;
+        }
+    }
+    if (d != NULL) {
+        closedir(d);
+    }
+    return found;
+}
+
+// the same grid listed twice (the same node, or the same serial): then the note is due too
+bool duplicates(void) {
+    for (auto a = devs.begin(); a != devs.end(); ++a) {
+        for (auto b = std::next(a); b != devs.end(); ++b) {
+            if (serialosc::same_device(resolve, a->second.path, b->second.path) || (!a->second.serial.empty() && a->second.serial == b->second.serial)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// is the note due now? looked at from the processes, the unit and the devices every time (a grid plugged in later, serialosc started or stopped: no state to go stale). one log line per
+// episode. mtx held
+bool scan(void) {
+    if (!serialosc::enabled(getenv("NORNS_SERIALOSC_CHECK"))) {
+        shown = false;
         return false;
     }
     std::vector<serialosc::Proc> procs = read_procs();
-    bool any = false;
-    for (auto &kv : devs) {
-        auto c = serialosc::find(procs, kv.second.path, resolve, (int)getpid());
-        if (c.found) {
-            any = true;
-            if (!kv.second.conflicted) {
-                fprintf(stderr, "serialosc: %s\n", serialosc::message(kv.second.path, c).c_str());
+    serialosc::Status st = serialosc::assess(procs, unit_active(), !devs.empty(), monome_nodes(), duplicates());
+    if (st.show && !shown) {
+        std::string held;
+        for (const auto &p : procs) {
+            if (serialosc::isDeviceProcess(p) && !p.args.empty()) {
+                held += " " + p.args.back() + " (pid " + std::to_string(p.pid) + ")";
             }
         }
-        kv.second.conflicted = c.found;
+        serialosc::Conflict c{false, 0, "", ""};
+        for (const auto &kv : devs) {
+            auto f = serialosc::find(procs, kv.second.path, resolve, (int)getpid());
+            if (f.found) {
+                c = f;
+                break;
+            }
+        }
+        if (c.found) {
+            fprintf(stderr, "serialosc: %s\n", serialosc::message(devs.empty() ? "a grid" : devs.begin()->second.path, c).c_str());
+        } else {
+            std::string h = held.empty() ? "" : "serialosc-device has:" + held;
+            fprintf(stderr, "serialosc: %s\n", serialosc::message_running(h).c_str());
+        }
     }
-    return any;
+    shown = st.show;
+    return st.show;
 }
 
 } // namespace
 
 extern "C" {
 
-void serialosc_device_added(int id, const char *path) {
+void serialosc_device_added(int id, const char *path, const char *serial) {
     if (path == NULL) {
         return;
     }
     std::lock_guard<std::mutex> l(mtx);
-    devs[id] = Dev{path, false};
+    devs[id] = Dev{path, serial != NULL ? serial : ""};
     scan();
 }
 

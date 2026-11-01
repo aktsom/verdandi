@@ -8,6 +8,9 @@
 #include "device_list.h"
 #include "device_midi.h"
 #include "events.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "device_dedupe.h"
+#endif
 
 static int id = 0;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -88,6 +91,24 @@ void dev_list_add(device_t type, const char *path, const char *name, lua_State *
     if (type < 0) {
         return;
     }
+#ifdef NORNS_LINUX_DESKTOP
+    // a device node that is already listed is not added again (a repeated event, a rescan): one grid, one entry (device_dedupe.h, docs/port/KNOWN-ISSUES.md 31). MIDI keeps its several ports per path
+    if (type == DEV_TYPE_MONOME || type == DEV_TYPE_HID || type == DEV_TYPE_CROW || type == DEV_TYPE_SERIAL) {
+        pthread_mutex_lock(&lock);
+        bool known = false;
+        for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+            if (dn->d != NULL && dn->d->base.type == type && dev_same_node(path, dn->d->base.path)) {
+                known = true;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+        if (known) {
+            fprintf(stderr, "dev_list_add: %s is listed already: not added again\n", path != NULL ? path : "?");
+            return;
+        }
+    }
+#endif
 
     union event_data *ev;
     union dev *d;

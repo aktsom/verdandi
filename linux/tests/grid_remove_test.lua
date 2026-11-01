@@ -60,6 +60,21 @@ _norns.arc.add(30, "a30", "monome arc", {})
 Arc.remove = function() error("boom in Arc.remove") end
 check(pcall(_norns.arc.remove, 30) and Arc.devices[30] == nil, "a raising Arc.remove kept the arc listed")
 
+-- SYSTEM > DEVICES lists a grid name once even when two entries have it (KNOWN-ISSUES 31: the same grid twice)
+do
+  package.loaded['core/keyboard'] = {keymap = {us = {}}, selected_map = "us"}
+  midi = {devices = {}}; hid = {devices = {}}
+  grid = Grid; arc = Arc
+  Grid.devices = {}; Arc.devices = {}
+  Grid.devices[1] = {name = "monome 128 m1000218"}; Grid.devices[2] = {name = "monome 128 m1000218"}; Grid.devices[3] = {name = "monome 256 m2000001"}
+  local page = dofile("lua/core/menu/devices.lua")
+  page.refresh()
+  local seen, dup = {}, false
+  for _, n in ipairs(page.options.grid) do if seen[n] then dup = true end seen[n] = true end
+  check(not dup, "the grid list of SYSTEM > DEVICES has the same name twice: " .. table.concat(page.options.grid, ", "))
+  check(#page.options.grid == 3, "the grid list is none and the two grids (" .. #page.options.grid .. ")")
+end
+
 -- the monome dispatcher of startup.lua (arc or grid by what is registered)
 print = real_print
 if fails == 0 then print("grid remove: all passed") end

@@ -404,19 +404,30 @@ serialosc_unit_ok() {
     "$T/serialosc_conflict_test"
 }
 run "serialosc:conflict logic (process lists as data)" serialosc_unit_ok
+dedupe_unit_ok() {
+    g++ -std=c++14 -I third-party/doctest -I matron/src linux/tests/device_dedupe_test.cpp -o "$T/device_dedupe_test" || return 1
+    "$T/device_dedupe_test"
+}
+run "devices:only a udev add is a new device, a node already listed is not added again (the same grid twice)" dedupe_unit_ok
+run "lua:SYSTEM > DEVICES with serialosc (a SERIALOSC entry while the note is on, the guide in short lines, a question before it stops anything, a refusal shows the command)" env NORNS_PLATFORM=linux lua5.3 linux/tests/devices_serialosc_test.lua
+mkdir -p "$T/stubsc"
+printf '#!/bin/sh\necho "$@" >> "$STUB_LOG"\n[ "$STUB_RC" = 0 ] && exit 0 || exit 1\n' > "$T/stubsc/systemctl"
+chmod +x "$T/stubsc/systemctl"
+run "lua:stopping serialosc without a terminal (systemctl --no-ask-password stop, a stub: success and refusal)" bash -c "STUB_RC=0 STUB_LOG=$T/stub1.log PATH=$T/stubsc:\$PATH NORNS_PLATFORM=linux lua5.3 linux/tests/serialosc_stop_test.lua yes && STUB_RC=1 STUB_LOG=$T/stub2.log PATH=$T/stubsc:\$PATH NORNS_PLATFORM=linux lua5.3 linux/tests/serialosc_stop_test.lua no"
 if command -v jackd > /dev/null; then
     SLOG="$T/serialosc.log"
     "$REPO/linux/tests/serialosc_test.sh" "$SLOG" > /dev/null 2>&1
     serialosc_ok() {
         local bad=0
-        grep -aq "PROBE check without a device process.nil\|PROBE check without a device process$" "$SLOG" || { echo "serialoscd and the detector alone were reported"; bad=1; }
-        grep -aq "PROBE note 1.nil" "$SLOG" || { echo "a note without a conflict"; bad=1; }
+        grep -aq "PROBE check without a device process.GRID: serialosc has this grid" "$SLOG" || { echo "serialoscd and the detector with a grid that norns has open were not reported"; bad=1; }
+        grep -aq "PROBE note 1.nil" "$SLOG" || { echo "a note without a grid and without serialosc"; bad=1; }
         grep -aq "PROBE text 2.*serialosc has this grid" "$SLOG" || { echo "the conflict was not found: $(grep -a 'PROBE text 2' "$SLOG")"; bad=1; }
         grep -aq "PROBE note 2.*serialosc has this grid" "$SLOG" || { echo "no note on the device window: $(grep -a 'PROBE note 2' "$SLOG")"; bad=1; }
-        [ "$(grep -ac "serialosc: .*sudo systemctl stop serialosc.service" "$SLOG")" = 1 ] || { echo "the log line must appear exactly once, found $(grep -ac "sudo systemctl stop serialosc.service" "$SLOG")"; bad=1; }
+        [ "$(grep -ac "serialosc: .*sudo systemctl stop serialosc.service" "$SLOG")" = 1 ] || { echo "the log line must appear exactly once, found $(grep -ac "serialosc: .*sudo systemctl stop serialosc.service" "$SLOG")"; bad=1; }
         grep -aq "sudo systemctl start serialosc.service" "$SLOG" || { echo "the log line lacks the start command"; bad=1; }
-        grep -aq "PROBE text 3.nil" "$SLOG" || { echo "the conflict is still reported after the process ended"; bad=1; }
-        grep -aq "PROBE note 3.nil" "$SLOG" || { echo "the note stayed after the conflict was gone"; bad=1; }
+        grep -aq "PROBE note 3.GRID: serialosc has this grid" "$SLOG" || { echo "the note went when only serialosc-device ended (serialoscd still runs)"; bad=1; }
+        grep -aq "PROBE text 4.nil" "$SLOG" || { echo "the note is still reported after serialosc ended"; bad=1; }
+        grep -aq "PROBE note 4.nil" "$SLOG" || { echo "the note stayed after serialosc was gone"; bad=1; }
         return $bad
     }
     run "serialosc:fake serialosc-device on the grid: one log line, a note, gone when it goes" serialosc_ok
@@ -426,6 +437,21 @@ if command -v jackd > /dev/null; then
         grep -aq "PROBE note 2.nil" "$SLOG2" && ! grep -aq "sudo systemctl stop serialosc.service" "$SLOG2" || { echo "reported although NORNS_SERIALOSC_CHECK=0"; return 1; }
     }
     run "serialosc:NORNS_SERIALOSC_CHECK=0 turns the check off" serialosc_off_ok
+    SLOG3="$T/serialosc-unopened.log"
+    "$REPO/linux/tests/serialosc_test.sh" "$SLOG3" unopened > /dev/null 2>&1
+    serialosc_unopened_ok() {
+        local bad=0
+        grep -aq "PROBE note 0.nil" "$SLOG3" || { echo "a note before serialosc ran"; bad=1; }
+        grep -aq "PROBE note serialosc without a grid.nil" "$SLOG3" || { echo "a note for serialosc without any grid"; bad=1; }
+        grep -aq "PROBE note 1.GRID: serialosc has this grid" "$SLOG3" || { echo "no note for serialosc-device processes that norns never opened: $(grep -a 'PROBE note 1' "$SLOG3")"; bad=1; }
+        grep -aq "Stop it: sudo systemctl stop serialosc.service" "$SLOG3" || { echo "the note has no guide"; bad=1; }
+        grep -aq "PROBE note 2.nil" "$SLOG3" || { echo "the note stayed after the serialosc-device processes ended (serialoscd and the detector still run, no grid is plugged in): $(grep -a -A1 'PROBE note 2' "$SLOG3")"; bad=1; }
+        grep -aq "PROBE note 3.GRID: serialosc has this grid" "$SLOG3" || { echo "no note from the active unit and a plugged-in grid: $(grep -a 'PROBE note 3' "$SLOG3")"; bad=1; }
+        grep -aq "PROBE note 4.nil" "$SLOG3" || { echo "the note stayed after the unit stopped"; bad=1; }
+        [ "$(grep -ac "serialosc: .*sudo systemctl stop serialosc.service" "$SLOG3")" -le 2 ] || { echo "more than one log line per episode"; bad=1; }
+        return $bad
+    }
+    run "serialosc:serialosc holds grids that norns never opened: the note shows, from the processes and from the unit, and goes by itself" serialosc_unopened_ok
 fi
 
 # SuperCollider plug-ins built for another machine than this one (a script's installer fetched a Raspberry Pi bundle: scsynth stops at the first

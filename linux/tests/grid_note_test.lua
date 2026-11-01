@@ -16,8 +16,8 @@ _menu.audio_note, _menu.grid_note, _menu.plugin_note, _menu.input = nil, nil, ni
 check(shown() == "", "nothing to say: no note")
 _menu.audio_note = "AUDIO: not connected, see SYSTEM > AUDIO"
 check(shown() == _menu.audio_note, "the audio note alone")
-_menu.grid_note = "GRID: serialosc has this grid, see log"
-check(shown() == _menu.grid_note, "the grid note comes before the audio note")
+_menu.grid_note = "GRID: serialosc has this grid\nStop it: sudo systemctl stop serialosc.service\n(later: sudo systemctl start serialosc.service)"
+check(shown() == "GRID: serialosc has this grid. Stop: sudo systemctl stop serialosc.service", "the grid note comes before the audio note, on one line with the stop command (the pill has one line): " .. tostring(shown()))
 _menu.input = "monitor"
 check(shown():find("feedback"), "the sink monitor warning comes before both")
 _menu.input = "mic"
@@ -27,7 +27,7 @@ _menu.input = "monitor"
 check(shown():find("feedback"), "the sink monitor warning still comes first")
 _menu.input = "mic"
 _menu.plugin_note = nil
-check(shown() == _menu.grid_note, "the plug-in note gone: the grid note again")
+check(shown() == "GRID: serialosc has this grid. Stop: sudo systemctl stop serialosc.service", "the plug-in note gone: the grid note again")
 _menu.grid_note = nil
 check(shown() == _menu.audio_note, "the grid note gone: the audio note again")
 _menu.audio_note = nil
