@@ -51,6 +51,26 @@ int main(void) {
     { uint8_t d[MIDI_FRAME_MAX * 2 + 10]; d[0] = 0xf0; for (size_t i = 1; i < sizeof d - 1; i++) d[i] = 1; d[sizeof d - 1] = 0xf7;
       got_t g = run(d, sizeof d); size_t total = 0; int ok = g.n >= 3; for (int i = 0; i < g.n; i++) { total += g.len[i]; if (g.len[i] > MIDI_FRAME_MAX) ok = 0; }
       CHECK(ok && total == sizeof d, "a very long sysex is cut into events of at most MIDI_FRAME_MAX bytes, none lost"); }
+    // the per-cycle budget of the JACK output: PipeWire's JACK layer turns the events of a port into pods in a 32768-byte scratch and copies "the size it built" even when that is more (pipewire-jack 1.0.5
+    // convert_from_midi + process_empty: the crash of the installed package, SIGSEGV in memcpy of 57712 bytes). a pod costs 16 bytes of control and the data padded to 8, the sequence 16 more
+    CHECK(MIDI_OUT_POD_SCRATCH == 32768, "the scratch of PipeWire's JACK layer is 8192 floats");
+    CHECK(MIDI_OUT_POD_BUDGET + 16 + 8 * 64 < MIDI_OUT_POD_SCRATCH, "the budget leaves room for the sequence header and a safety margin");
+    CHECK(midi_out_cost(1) >= 24 && midi_out_cost(3) >= 24 && midi_out_cost(8) >= 24 && midi_out_cost(9) >= 32, "a pod costs at least 16 + the data padded to 8");
+    CHECK(midi_out_cost(512) >= 16 + 512, "a long message costs its length and the control");
+    {   // a cycle of nothing but clock ticks (what the crash had): how many fit, and the bytes they would take as pods stay under the scratch
+        size_t used = 0; int n = 0;
+        while (midi_out_fits(used, n, 1)) { used += midi_out_cost(1); n++; }
+        CHECK(n > 100 && n <= MIDI_OUT_MAX_EVENTS, "a cycle takes some hundreds of clock ticks, never more than MIDI_OUT_MAX_EVENTS");
+        CHECK(16 + (size_t)n * (16 + 8) < MIDI_OUT_POD_SCRATCH, "and as pods they are far below the scratch");
+        used = 0; n = 0;
+        while (midi_out_fits(used, n, 3)) { used += midi_out_cost(3); n++; }
+        CHECK(16 + (size_t)n * (16 + 8) < MIDI_OUT_POD_SCRATCH, "also for three-byte messages");
+        used = 0; n = 0;
+        while (midi_out_fits(used, n, 512)) { used += midi_out_cost(512); n++; }
+        CHECK(n >= 1 && 16 + (size_t)n * (16 + 512) < MIDI_OUT_POD_SCRATCH, "and for long ones, at least one fits");
+        CHECK(!midi_out_fits(MIDI_OUT_POD_BUDGET, 0, 1) && !midi_out_fits(0, MIDI_OUT_MAX_EVENTS, 1), "a full budget and a full count take nothing more");
+        CHECK(midi_out_fits(0, 0, MIDI_FRAME_MAX), "an empty cycle takes the biggest message");
+    }
     if (fails) { printf("midi_frame_test: %d failed\n", fails); return 1; }
     printf("midi_frame_test: all passed\n");
     return 0;

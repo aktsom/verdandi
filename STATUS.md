@@ -383,3 +383,8 @@ Decisions (owner): option D (one instance with a clear message, a settable bridg
 - **Fixed (desktop only):** the bare `clock_midi_out` option is back, hidden, in sync with the slots both ways (`lua/core/clock.lua`, names in `lua/core/midi.lua`); errors in script grid key handlers are logged with the traceback and shown on the window (`lua/core/grid.lua`, `_menu.handler_error` in `lua/core/menu.lua`).
 - **Tests first:** `clock_midi_out_test.lua`, `grid_key_guard_test.lua`, `cc2_clock_test.sh` (+ `probe_cc2_clock.lua`; skipped without a clone or network); the manual has one more troubleshooting row.
 - **Not shown:** that the nil at `cheat_codes_2.lua:4760` has the same cause (not reproduced; it comes from a metro, not a key handler); behaviour of a real norns on 2.9 with the script; a real grid.
+
+## Crash in PipeWire's libjack with Verdandi:midi_out (KNOWN-ISSUES 35)
+- **Cause:** pipewire-jack 1.0.5 converts a cycle's output events into pods in a 32 768-byte scratch and copies the *counted* size, also when it is larger: our callback filled the JACK port buffer (about 4000 small events), so a burst crashed it. Reproduced headless under `pw-jack` with the same offsets and a 57 712-byte memcpy.
+- **Fixed:** at most 1000 events and 24 000 bytes of pods per cycle, the rest waits in the queue; drops are counted and said at most every 10 s from outside the callback. `midi_in` read for the same fault: nothing found.
+- **Tests first:** `jack_midi_out_stress.cc` under PipeWire's JACK layer and jackd in `run_all.sh`, budget checks in `midi_frame_test.c`.

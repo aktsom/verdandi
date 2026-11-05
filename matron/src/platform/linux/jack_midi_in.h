@@ -10,7 +10,9 @@
  * input: the process callback only copies events into a lock-free queue; a reader thread writes the bytes into a pipe
  * that the device reads with the same parser as every other MIDI device (device_midi.cc, `from_pipe`).
  * output: what a script sends is cut into whole messages (midi_frame.h) and put into a second lock-free queue with the JACK frame time of the send;
- * the process callback writes them into the port buffer one period later at the same distances (no allocation, no lock, no waiting there).
+ * the process callback writes them into the port buffer one period later at the same distances (no allocation, no lock, no waiting there), at most MIDI_OUT_MAX_EVENTS events and
+ * MIDI_OUT_POD_BUDGET bytes of pods per cycle (midi_frame.h: PipeWire's JACK layer reads past its scratch buffer when a cycle holds more); the rest waits in the queue, what the queue cannot hold is
+ * dropped, counted and said in the log (at most every 10 seconds, from a script's thread, never from the real-time thread).
  * nothing is connected automatically unless audio.conf says so (midi_in_from, midi_out_to): the ports show up in jack_lsp, qpwgraph, Helvum, Reaper.
  * NORNS_JACK_MIDI=0 turns both off.
  */

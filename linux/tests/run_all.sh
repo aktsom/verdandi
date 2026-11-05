@@ -622,6 +622,31 @@ if command -v jackd > /dev/null; then
     done
 fi
 
+# the JACK MIDI output under stress, on PipeWire's JACK layer (pw-jack, a private PipeWire without a sound card) and on jackd: dense notes, 2000-tick clock bursts, sysex of 100 to 20000 bytes, garbage, four senders,
+# a client that connects, listens, disconnects and closes all the time. before the fix this was a SIGSEGV in PipeWire's libjack (the crash report of the installed package, KNOWN-ISSUES 35)
+if command -v pw-jack > /dev/null && command -v pipewire > /dev/null && command -v jackd > /dev/null &&
+    c++ -g -std=c++14 -I "$REPO/matron/src" -I "$REPO/matron/src/platform/linux" -I "$REPO/matron/src/device" -I "$REPO/third-party/readerwriterqueue" $(pkg-config --cflags libevdev libudev alsa lua5.3) \
+        "$REPO/linux/tests/jack_midi_out_stress.cc" -o "$T/jack_midi_out_stress" $(pkg-config --cflags --libs jack lua5.3) -lpthread 2> "$T/stress-build.log"; then
+    PWRT="$(mktemp -d)"
+    chmod 700 "$PWRT"
+    XDG_RUNTIME_DIR="$PWRT" pipewire > "$T/stress-pipewire.log" 2>&1 &
+    PW_PID=$!
+    sleep 2
+    run "midi:the JACK MIDI output under stress on PipeWire's JACK layer (bursts, long sysex, a client connecting and disconnecting; no crash, no hang)" env XDG_RUNTIME_DIR="$PWRT" timeout 120 pw-jack "$T/jack_midi_out_stress" 8
+    kill "$PW_PID" 2> /dev/null
+    wait "$PW_PID" 2> /dev/null
+    rm -rf "$PWRT"
+    pkill -x jackd 2> /dev/null
+    jackd -r -d dummy -r 48000 -p 1024 -C 0 -P 0 < /dev/null > "$T/stress-jackd.log" 2>&1 &
+    JK_PID=$!
+    for _ in $(seq 50); do jack_lsp > /dev/null 2>&1 && break; sleep 0.2; done
+    run "midi:the JACK MIDI output under stress on jackd" timeout 120 "$T/jack_midi_out_stress" 8
+    kill "$JK_PID" 2> /dev/null
+    wait "$JK_PID" 2> /dev/null
+else
+    echo "SKIP  midi:jack midi out stress (no pipewire, pw-jack or jackd, or it does not build)"
+fi
+
 # the optional output auto-connect (midi_out_to= in audio.conf, or NORNS_MIDI_OUT_TO): Verdandi:midi_out is linked to the MIDI inputs that match a prefix, a link cut behind norns' back is made again,
 # a client that appears later is linked, an input that does not match is not
 if command -v jackd > /dev/null && [ -x "$T/jack_midi_out_test" ]; then

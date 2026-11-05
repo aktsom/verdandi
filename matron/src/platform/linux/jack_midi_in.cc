@@ -54,7 +54,8 @@ jack_port_t *out_port = NULL;
 moodycamel::ReaderWriterQueue<out_msg_t> out_queue(OUT_ENTRIES); // the capacity is made here, at start: enqueue by try_enqueue and dequeue never allocate
 std::atomic_flag out_lock = ATOMIC_FLAG_INIT; // the senders (script thread, clock thread) take turns; the real-time thread never touches it
 std::atomic<unsigned> out_dropped{0};
-std::atomic<bool> out_dropped_said{false};
+std::atomic<long long> last_report_ms{0};
+std::atomic<int> out_last_error{0}; // the last error code of jack_midi_event_write that was not "full" (for the log line)
 moodycamel::ReaderWriterQueue<chunk_t> queue(QUEUE_ENTRIES);
 sem_t wake;
 std::atomic<bool> stopping{false};
@@ -98,10 +99,15 @@ int process(jack_nframes_t nframes, void *) {
         jack_midi_clear_buffer(obuf);
         size_t biggest = jack_midi_max_event_size(obuf);
         int32_t last = 0;
+        size_t used = 0; // what the events of this cycle take of the budget of midi_frame.h (PipeWire's JACK layer cannot take more: a crash past it)
+        int written = 0;
         for (;;) {
             out_msg_t *m = out_queue.peek();
             if (m == NULL) {
                 break;
+            }
+            if (!midi_out_fits(used, written, m->len)) {
+                break; // enough for this cycle: the rest waits in the queue for the next one
             }
             if (m->len > biggest) { // cannot ever fit: dropped, not allowed to block what comes after
                 out_dropped.fetch_add(1, std::memory_order_relaxed);
@@ -121,8 +127,11 @@ int process(jack_nframes_t nframes, void *) {
             }
             if (r != 0) {
                 out_dropped.fetch_add(1, std::memory_order_relaxed);
+                out_last_error.store(r, std::memory_order_relaxed);
             } else {
                 last = off;
+                used += midi_out_cost(m->len);
+                written++;
             }
             out_queue.pop();
         }
@@ -139,6 +148,26 @@ void out_emit(const uint8_t *msg, size_t len, void *frame) {
     if (!out_queue.try_enqueue(m)) {
         out_dropped.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+// dropped events are counted where they happen (the real-time thread must not print) and said here, from a script's thread or the reader thread, at most every 10 seconds, with the totals since the last line
+void report_drops(void) {
+    if (out_dropped.load(std::memory_order_relaxed) == 0 && dropped.load(std::memory_order_relaxed) == 0) {
+        return;
+    }
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    long long now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    long long last = last_report_ms.load();
+    if (last != 0 && now - last < 10000) {
+        return;
+    }
+    if (!last_report_ms.compare_exchange_strong(last, now)) {
+        return;
+    }
+    unsigned o = out_dropped.exchange(0), i = dropped.exchange(0);
+    fprintf(stderr, "jack_midi: events dropped since the last line: %u of the output (more sent than the JACK cycles could take, or one that the port refused: last error %d), %u of the input (norns was too slow to read them); said at most every 10 s\n", o,
+            out_last_error.load(std::memory_order_relaxed), i);
 }
 
 void *reader_thread(void *) {
@@ -180,18 +209,7 @@ void *reader_thread(void *) {
                 done += n;
             }
         }
-        unsigned d = dropped.exchange(0);
-        if (d > 0) {
-            fprintf(stderr, "jack_midi_in: queue full, dropped %u events\n", d);
-        }
-    }
-}
-
-// the output counts are looked at here (the real-time thread must not print)
-void out_report(void) {
-    unsigned d = out_dropped.exchange(0);
-    if (d > 0 && !out_dropped_said.exchange(true)) {
-        fprintf(stderr, "jack_midi_out: %u messages dropped (the queue was full or a message was too big for the port): said once\n", d);
+        report_drops();
     }
 }
 
@@ -267,6 +285,6 @@ long jack_midi_out_send(const uint8_t *data, size_t n) {
     }
     midi_frame_split(data, n, out_emit, &frame);
     out_lock.clear(std::memory_order_release);
-    out_report();
+    report_drops();
     return (long)n;
 }

@@ -94,3 +94,23 @@ static inline void midi_frame_split(const uint8_t *data, size_t n, midi_frame_em
     }
     if (in_sysex && have > 0) emit(buf, have, ctx); // an open sysex is sent as it is; a cut-off channel message is dropped
 }
+
+/*
+ * the per-cycle budget of the JACK MIDI output. PipeWire's JACK layer (pipewire-jack 1.0.5, and what the installed package ran under) converts the events of an output port into SPA pods in a
+ * thread-local scratch of MIDI_OUT_POD_SCRATCH bytes and then copies as many bytes as the pod builder *counted*, also when that is more than the scratch: a cycle with a few thousand events reads past it
+ * (SIGSEGV in memcpy). jackd has no such limit but its port buffer is full much earlier than ever matters. so a cycle writes at most MIDI_OUT_MAX_EVENTS events and MIDI_OUT_POD_BUDGET bytes of pods
+ * (16 of control and the data padded to 8 per event, plus margin); what does not fit stays in the queue for the next cycle (a real MIDI cable carries about 1000 messages a second: this is 35 000)
+ */
+#define MIDI_OUT_POD_SCRATCH 32768
+#define MIDI_OUT_POD_BUDGET 24000
+#define MIDI_OUT_MAX_EVENTS 1000
+
+// what one event of `len` bytes takes of the budget (a margin of 8 bytes is in it)
+static inline size_t midi_out_cost(size_t len) {
+    return 24 + ((len + 7) & ~(size_t)7);
+}
+
+// does one more event of `len` bytes fit after `used` bytes and `count` events in this cycle?
+static inline int midi_out_fits(size_t used, int count, size_t len) {
+    return count < MIDI_OUT_MAX_EVENTS && used + midi_out_cost(len) <= MIDI_OUT_POD_BUDGET;
+}
