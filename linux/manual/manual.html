@@ -283,6 +283,7 @@
 <tr><td>The maiden page says &ldquo;not connected to norns&rdquo;</td><td>norns was started with <code>--terminal</code>: matron&rsquo;s prompt is your terminal then, and nothing listens on port 5555 for maiden&rsquo;s console. Start without it</td></tr>
 <tr><td>&ldquo;maiden is not running&rdquo; / port 5000 in use</td><td>start with <code>NORNS_MAIDEN_PORT=5001 verdandi</code></td></tr>
 <tr><td>A script says <code>sudo</code> or <code>apt</code> is needed, or asks for a Raspberry Pi tool</td><td>only <code>sudo systemctl restart norns-...</code> is answered (norns restarts); other Raspberry Pi commands fail or do nothing</td></tr>
+<tr><td>&ldquo;ERROR grid key: &hellip;&rdquo; on the window</td><td>a script&rsquo;s own grid key handler failed. norns goes on and the log has the line <code>grid key handler error</code> with the file, the line and the traceback. If pads stay silent, load the script again, and send the log to the script&rsquo;s author</td></tr>
 <tr><td>The first start is slow</td><td>SuperCollider starts and reports its engines before scripts load</td></tr>
 </table>
 <p>To clear old logs and files see SYSTEM &gt; CLEAN UP. Not yet tested on real hardware in every setup: sound cards, grids, arcs and crow, Wayland: <code>docs/port/HARDWARE-CHECKLIST.md</code> lists what is checked.</p>

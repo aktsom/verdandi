@@ -411,6 +411,7 @@ function Midi.update_connected_state()
       end
     end
   end
+  if clock and clock.refresh_midi_out_options then clock.refresh_midi_out_options() end -- Linux desktop: the names of the legacy clock_midi_out option
   _menu.rebuild_params()
 end
 

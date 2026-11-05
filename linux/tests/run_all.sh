@@ -130,6 +130,8 @@ run "c:clipboard classifier and the real SDL clipboard round trip (valid, empty,
 run "lua:renames (SCREEN and THEME in the list, the manual and RUN-ON-LAPTOP.md; ids, aliases and files unchanged; the device list as before)" env NORNS_PLATFORM=linux lua5.3 linux/tests/rename_test.lua
 run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
+run "lua:clock params on the desktop (the bare clock_midi_out option of norns up to 2.7.3 next to the toggles clock_midi_out_1..16, kept in sync; the device unchanged)" bash -c "cd '$REPO' && NORNS_PLATFORM=linux lua5.3 linux/tests/clock_midi_out_test.lua && lua5.3 linux/tests/clock_midi_out_test.lua"
+run "lua:an error in a script's grid key handler (logged with the traceback, shown on the window, the other handler runs, norns goes on; the device unchanged)" bash -c "cd '$REPO' && NORNS_PLATFORM=linux lua5.3 linux/tests/grid_key_guard_test.lua && lua5.3 linux/tests/grid_key_guard_test.lua"
 run "c:midi frame (a script's bytes cut into whole MIDI messages for the JACK output)" bash -c "cc -std=gnu11 -Wall -I '$REPO/matron/src/platform/linux' '$REPO/linux/tests/midi_frame_test.c' -o '$T/midi_frame_test' && '$T/midi_frame_test'"
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "lua:screen presets" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_screen_test.lua
@@ -276,6 +278,29 @@ if cc -std=gnu11 "$REPO/linux/tests/jack_midi_out_test.c" -o "$T/jack_midi_out_t
     run "midi:the virtual MIDI device sends through JACK MIDI (Verdandi:midi_out: notes, cc, program change, pitch bend, pressure, sysex, transport, clock spacing; silence when nothing is sent)" jackmidiout_ok
 else
     echo "SKIP  midi:jack midi out (no jack headers)"
+fi
+
+# Cheat Codes 2 in the real norns (needs a clone of the script with its nb submodule: CC2_DIR, or the network): a pattern recording ends without "invalid paramset index: clock_midi_out",
+# the script's own reads and sets of the bare clock_midi_out work, an error in a grid key handler is on the window. skipped when the script cannot be had
+CCLOG="$T/cc2clock.log"
+"$REPO/linux/tests/cc2_clock_test.sh" "$CCLOG" > /dev/null 2>&1
+if [ $? -eq 2 ]; then
+    echo "SKIP  script:Cheat Codes 2 ends a pattern recording (no clone: set CC2_DIR or allow github.com)"
+else
+    cc2_ok() {
+        local bad=0
+        chk() { grep -aq "$2" "$CCLOG" || { echo "missing: $1"; bad=1; }; }
+        chk "the script loaded" "PROBE cc2 loaded.true.true"
+        chk "the recording ended without an error (the handler of the grid pattern key)" "PROBE handler.true"
+        grep -aq "invalid paramset index" "$CCLOG" && { echo "invalid paramset index in the log"; bad=1; }
+        chk "the redraw of the grid works afterwards" "PROBE redraw after.true"
+        chk "the script's read of the bare id" "PROBE bare reads.3"
+        chk "the script's set of the bare id switched the slot off" "PROBE slot 2 after.0.1"
+        chk "a grid key error is not fatal" "PROBE grid key.true"
+        chk "and is on the window" "PROBE note.ERROR grid key.*boom in a grid key"
+        return $bad
+    }
+    run "script:Cheat Codes 2 ends a pattern recording (clock_midi_out compatible), a grid key error shows" cc2_ok
 fi
 
 # SYSTEM > AUDIO per audio server mode (own jackd, PipeWire, a server we do not own, the macOS default)

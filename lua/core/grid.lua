@@ -226,17 +226,29 @@ _norns.grid.remove = function(id)
   Grid.update_devices()
 end
 
+-- Linux desktop: an error in a script's key handler (g.key or the vport's key) was only a line in the log, from a key press that then did nothing more (Cheat Codes 2: a pattern recording ended in an
+-- error and the pads were silent afterwards). now it is logged with its traceback, shown on the window for a few seconds (_menu.handler_error, as for the menu's handlers), and the other handler of the
+-- same press still runs. on the device the handlers are called as before
+local guard_keys = os.getenv("NORNS_PLATFORM") ~= nil
+local function guarded_key(what, fn, x, y, s)
+  if not guard_keys then return fn(x, y, s) end
+  local ok, err = xpcall(fn, function(e) return tostring(e) .. "\n" .. debug.traceback("", 2) end, x, y, s)
+  if ok then return end
+  print(what .. " handler error: " .. tostring(err))
+  if _menu and _menu.handler_error then pcall(_menu.handler_error, what, err) end
+end
+
 -- redefine global grid key input handler
 _norns.grid.key = function(id, x, y, s)
   local g = Grid.devices[id]
   if g ~= nil then
     if g.key ~= nil then
-      g.key(x, y, s)
+      guarded_key("grid key", g.key, x, y, s)
     end
 
     if g.port then
       if Grid.vports[g.port].key then
-        Grid.vports[g.port].key(x, y, s)
+        guarded_key("grid key", Grid.vports[g.port].key, x, y, s)
       end
     end
   else

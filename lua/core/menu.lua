@@ -127,6 +127,17 @@ end
 -- message stands on the device window for a few seconds (the note of show_note). on the device the handlers are called as before
 local handler_guard = os.getenv("NORNS_PLATFORM") ~= nil
 
+-- the note on the window for an error in a handler (a few seconds): also for the script's grid key handlers (core/grid.lua)
+function _menu.handler_error(what, err)
+  if type(err) ~= "string" then err = tostring(err) end
+  local first = err:match("^[^\n]*") or err
+  local short = first:gsub("^.-([%w_]+%.lua:%d+:)", "%1"):gsub("%s+", " ")
+  _menu.error_note = ("ERROR " .. what .. ": " .. short):sub(1, 78)
+  _menu.error_note_until = util.time() + 8
+  if _menu.show_note then _menu.show_note() end
+  if _menu.mode and _menu.redraw then pcall(_menu.redraw) end
+end
+
 local function call_handler(what, fn, ...)
   if not handler_guard then return fn(...) end
   local res = table.pack(pcall(fn, ...))
@@ -134,11 +145,7 @@ local function call_handler(what, fn, ...)
   local err = res[2]
   if type(err) ~= "string" then err = tostring(err) end
   print("menu " .. what .. " handler error: " .. err)
-  local short = err:gsub("^.-([%w_]+%.lua:%d+:)", "%1"):gsub("%s+", " ")
-  _menu.error_note = ("ERROR " .. what .. ": " .. short):sub(1, 78)
-  _menu.error_note_until = util.time() + 8
-  if _menu.show_note then _menu.show_note() end
-  if _menu.mode and _menu.redraw then pcall(_menu.redraw) end
+  _menu.handler_error(what, err)
 end
 -- END handler guard
 

@@ -212,9 +212,34 @@ _norns.clock.stop = function()
 end
 
 
+-- Linux desktop: scripts written for norns up to 2.7.3 (Cheat Codes 2 is one) read the option param "clock_midi_out" (1 = off, n + 1 = MIDI vport n); norns 2.7.4 and on have the
+-- toggles clock_midi_out_1 .. 16 instead and no bare id, so such a script stopped with "invalid paramset index: clock_midi_out" (from the key handler of a pattern recording).
+-- on the desktop both exist and agree: the bare one is hidden in PARAMS > CLOCK, shows the lowest slot that is on (1 when none is), and setting it turns that one slot on and every other off,
+-- as the old param did. on the device (no NORNS_PLATFORM) nothing is added.
+local legacy_midi_out = os.getenv("NORNS_PLATFORM") ~= nil
+local legacy_syncing = false
+
+local function midi_out_option_names()
+  local names = {"off"}
+  for i = 1, 16 do
+    local n = midi.vports[i].name
+    local short = string.len(n) < 12 and n or util.acronym(n)
+    names[i + 1] = "port " .. i .. (n ~= "none" and (": " .. short) or "")
+  end
+  return names
+end
+
+--- Linux desktop: the names of the options of the bare clock_midi_out follow the MIDI ports ("port 2: OP-Z")
+function clock.refresh_midi_out_options()
+  if not legacy_midi_out or params == nil or params.lookup == nil or params.lookup["clock_midi_out"] == nil then return end
+  local o = params:lookup_param("clock_midi_out")
+  local names = midi_out_option_names()
+  for k = 1, #names do o.options[k] = names[k] end
+end
+
 function clock.add_params()
   local send_midi_clock = {}
-  params:add_group("CLOCK", 29)
+  params:add_group("CLOCK", legacy_midi_out and 30 or 29)
 
   params:add_option("clock_source", "source", {"internal", "midi", "link", "crow"},
     norns.state.clock.source)
@@ -279,6 +304,14 @@ function clock.add_params()
           end
         end
         norns.state.clock.midi_out[i] = x
+        if legacy_midi_out and not legacy_syncing then
+          -- the bare clock_midi_out follows: the lowest slot that is on (1 = none). set silently: its own action would turn the other slots off
+          local lowest = 0
+          for k = 1, 16 do
+            if norns.state.clock.midi_out[k] == 1 then lowest = k break end
+          end
+          if params.lookup["clock_midi_out"] ~= nil then params:set("clock_midi_out", lowest + 1, true) end
+        end
       end
     )
     if short_name ~= "none" and midi.vports[i].connected then
@@ -287,6 +320,25 @@ function clock.add_params()
       params:hide("clock_midi_out_"..i)
     end
     params:set_save("clock_midi_out_"..i, false)
+  end
+
+  if legacy_midi_out then
+    local first = 0
+    for k = 1, 16 do
+      if norns.state.clock.midi_out[k] == 1 then first = k break end
+    end
+    params:add_option("clock_midi_out", "midi out", midi_out_option_names(), first + 1)
+    params:set_action("clock_midi_out", function(x)
+      if legacy_syncing then return end
+      legacy_syncing = true
+      for k = 1, 16 do
+        local want = (x == k + 1) and 1 or 0
+        if params:get("clock_midi_out_" .. k) ~= want then params:set("clock_midi_out_" .. k, want) end
+      end
+      legacy_syncing = false
+    end)
+    params:set_save("clock_midi_out", false)
+    params:hide("clock_midi_out")
   end
 
   params:add_separator("midi_clock_in_separator", "midi clock in")
