@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "platform/linux/aseq_out.h"
 #include "platform/linux/jack_midi_in.h"
 #include "platform/linux/keys_midi.h"
 #endif
@@ -425,8 +426,13 @@ ssize_t dev_midi_send(void *self, uint8_t *data, size_t n) {
     struct dev_midi *midi = (struct dev_midi *)self;
 #ifdef NORNS_LINUX_DESKTOP
     if (midi->from_pipe) {
-        // the JACK device ("virtual"): the JACK port Verdandi:midi_out; the keys window has no output
-        return midi->jack_out ? (ssize_t)jack_midi_out_send(data, n) : -1;
+        // the JACK device ("virtual"): the JACK port Verdandi:midi_out and the ALSA sequencer port "Verdandi out" (either may be missing); the keys window has no output
+        if (!midi->jack_out) {
+            return -1;
+        }
+        long j = jack_midi_out_send(data, n);
+        long a = aseq_out_send(data, n);
+        return (j >= 0 || a >= 0) ? (ssize_t)n : -1;
     }
 #endif
     if (midi->handle_out == NULL) {

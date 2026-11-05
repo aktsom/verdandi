@@ -622,6 +622,34 @@ if command -v jackd > /dev/null; then
     done
 fi
 
+# the virtual MIDI device as an ALSA sequencer port (client "Verdandi", port "Verdandi out"): the sequencer output logic with a fake sequencer (always), the real client without a kernel sequencer (says no, no crash) and,
+# where /dev/snd/seq exists (a laptop: not the CI containers), an aseqdump-style receiver that gets what a script sends, in order, and nothing when nothing is sent (KNOWN-ISSUES: the feature needs the owner's check)
+run "c:alsa sequencer output (bytes to events, order, bounded, drops counted and said every 10 s, a full or failing sequencer, the worker)" bash -c "cd '$REPO' && g++ -std=c++14 -I third-party/doctest -I third-party/readerwriterqueue -I matron/src/platform/linux linux/tests/aseq_pump_test.cpp -o '$T/aseq_pump_test' -lasound -lpthread && '$T/aseq_pump_test'"
+run "c:alsa sequencer client (off by NORNS_ALSA_MIDI=0, without a kernel sequencer, with one)" bash -c "cd '$REPO' && g++ -std=c++14 -I third-party/doctest -I third-party/readerwriterqueue -I matron/src -I matron/src/platform/linux linux/tests/aseq_out_test.cpp matron/src/platform/linux/aseq_out.cc -o '$T/aseq_out_test' -lasound -lpthread && '$T/aseq_out_test'"
+if [ -e /dev/snd/seq ] && cc -std=gnu11 "$REPO/linux/tests/aseq_dump_test.c" -o "$T/aseq_dump_test" -lasound 2> /dev/null; then
+    JH3="$(mktemp -d)"
+    ln -s "$REPO" "$JH3/norns"
+    ALOG="$T/aseqout.log"
+    ASEQ="$T/aseq_dump_test" NORNS_HOME="$JH3" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_aseq_out.lua" "$ALOG" > /dev/null 2>&1
+    aseqout_ok() {
+        local bad=0 cap="$JH3/probe.marks.cap"
+        grep -aq "PROBE jackmidi out done" "$ALOG" || { echo "the probe did not finish (norns did not mind the sends)"; bad=1; }
+        grep -aq "aseq_dump_test: subscribed" "$cap" || { echo "the client Verdandi with the port Verdandi out was not found or could not be subscribed"; bad=1; }
+        local want got nclock
+        want="$(awk -F'\t' '$1 == "PROBE sent" { print $2 }' "$ALOG" | tr -d '\r')"
+        got="$(grep -a '^EV ' "$cap" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s (i > 3 ? " " : "") $i; if (s != "f8") print s }')"
+        [ "$want" = "$got" ] || { echo "what arrived is not what was sent, in order. sent: $(echo $want | tr '\n' '|') arrived: $(echo $got | tr '\n' '|')"; bad=1; }
+        nclock="$(grep -ac '^EV [0-9.]* f8$' "$cap")"
+        [ "$nclock" = 24 ] || { echo "24 clock ticks expected, got $nclock"; bad=1; }
+        [ "$(grep -ac '^EV ' "$cap")" = "$(( $(echo "$want" | wc -l) + 24 ))" ] || { echo "the number of events is not the number sent"; bad=1; }
+        grep -aq "listening, not subscribed" "$JH3/probe.marks.nolink" && grep -aq "done 0 events" "$JH3/probe.marks.nolink" || { echo "a listener that is not subscribed must get nothing"; bad=1; }
+        return $bad
+    }
+    run "midi:the virtual MIDI device sends to the ALSA sequencer port Verdandi out (notes, cc, clock, start/stop, sysex in order, silence when nothing is sent)" aseqout_ok
+else
+    echo "SKIP  midi:alsa sequencer output end to end (no /dev/snd/seq here: the owner's check is in HARDWARE-CHECKLIST.md)"
+fi
+
 # the JACK MIDI output under stress, on PipeWire's JACK layer (pw-jack, a private PipeWire without a sound card) and on jackd: dense notes, 2000-tick clock bursts, sysex of 100 to 20000 bytes, garbage, four senders,
 # a client that connects, listens, disconnects and closes all the time. before the fix this was a SIGSEGV in PipeWire's libjack (the crash report of the installed package, KNOWN-ISSUES 35)
 if command -v pw-jack > /dev/null && command -v pipewire > /dev/null && command -v jackd > /dev/null &&

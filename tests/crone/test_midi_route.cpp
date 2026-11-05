@@ -168,3 +168,26 @@ TEST_CASE("sinks: never norns' own clients, never Midi Through, never norns' own
     REQUIRE(w.size() == 1);
     CHECK(w[0] == "Midi-Bridge:Client-20 Synth:(playback_0)");
 }
+
+// norns' own ALSA sequencer client "Verdandi" (the port "Verdandi out" of the virtual MIDI device): a bridge (PipeWire's Midi-Bridge, a2jmidid) shows it as a JACK port, and linking it
+// back into Verdandi:midi_in (or Verdandi:midi_out into it) would be a feedback loop: it is one of norns' own ALSA clients (found by its process id) and is never linked
+TEST_CASE("norns' own ALSA client Verdandi: its bridge port is never linked to midi_in") {
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Verdandi:Verdandi out (capture_0)"), out("a2j:Verdandi [129] (capture): Verdandi out"), out("Midi-Bridge:Reaper:Reaper (capture_0)")};
+    auto w = wanted(ports, parsePrefixes("Midi-Bridge:;a2j:"), std::vector<std::string>{"Verdandi", "Client-129"});
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Reaper:Reaper (capture_0)");
+}
+
+TEST_CASE("norns' own ALSA client Verdandi: nothing is linked from midi_out to its bridge port either") {
+    std::vector<MidiPort> ports = {in("Midi-Bridge:Verdandi:Verdandi out (playback_0)"), in("Midi-Bridge:Reaper:Reaper (playback_0)")};
+    auto w = wantedSinks(ports, parsePrefixes("Midi-Bridge:"), std::vector<std::string>{"Verdandi"});
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Reaper:Reaper (playback_0)");
+}
+
+TEST_CASE("ownAlsaNames finds the client the thread that made it belongs to norns") {
+    std::vector<AlsaClient> clients = {{128, "Verdandi", 4243}, {129, "Reaper", 9000}};
+    auto names = ownAlsaNames(clients, std::set<int>{4242, 4243});
+    CHECK(std::find(names.begin(), names.end(), "Verdandi") != names.end());
+    CHECK(std::find(names.begin(), names.end(), "Reaper") == names.end());
+}

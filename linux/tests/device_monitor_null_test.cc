@@ -62,6 +62,7 @@ static union event_data fake_ev;
 union event_data *event_data_new(event_t) { memset(&fake_ev, 0, sizeof fake_ev); return &fake_ev; }
 void event_post(union event_data *ev) { if (ev->serial_config.name == NULL) serial_name_null = true; }
 int jack_midi_in_start(void) { return -1; }
+int aseq_out_start(void) { return -1; }
 
 static int failures;
 #define CASE(name, ...)                                                                        \

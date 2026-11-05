@@ -424,6 +424,9 @@ NORNS_MIDI_IN_FROM="${NORNS_MIDI_IN_FROM:-$(conf_get midi_in_from)}"
 export NORNS_MIDI_IN_FROM
 NORNS_MIDI_OUT_TO="${NORNS_MIDI_OUT_TO:-$(conf_get midi_out_to)}"
 export NORNS_MIDI_OUT_TO
+# the virtual MIDI device as an ALSA sequencer port ("Verdandi out"): on unless NORNS_ALSA_MIDI=0 or alsa_midi=0 in audio.conf
+NORNS_ALSA_MIDI="${NORNS_ALSA_MIDI:-$(conf_get alsa_midi)}"
+export NORNS_ALSA_MIDI
 # serialosc (serialosc-device) on the grid's serial port is reported; NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf turns that off
 NORNS_SERIALOSC_CHECK="${NORNS_SERIALOSC_CHECK:-$(conf_get serialosc_check)}"
 export NORNS_SERIALOSC_CHECK

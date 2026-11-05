@@ -28,6 +28,7 @@
 #include "events.h"
 #ifdef NORNS_LINUX_DESKTOP
 #include "platform/linux/hid_virtual.h"
+#include "platform/linux/aseq_out.h"
 #include "platform/linux/jack_midi_in.h"
 #endif
 
@@ -145,6 +146,9 @@ int dev_monitor_scan(void) {
     // it is the "virtual" device (in and out); without it (no JACK MIDI: NORNS_JACK_MIDI=0) the ALSA virtual port of upstream is the "virtual" device, as before
     if (jack_midi_in_start() != 0) {
         dev_list_add(DEV_TYPE_MIDI_VIRTUAL, NULL, "virtual", NULL);
+    } else {
+        // the same device is also a native ALSA sequencer port, "Verdandi out" (DAWs that read ALSA MIDI only): platform/linux/aseq_out.cc, NORNS_ALSA_MIDI=0 turns it off
+        aseq_out_start();
     }
 #endif
 

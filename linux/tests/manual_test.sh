@@ -58,7 +58,7 @@ have = {sid: c for c, sid in blocks}
 res("every section has a sources comment above it", all(s in have and "sources:" in have[s] for s in want), ", ".join(s for s in want if s not in have or "sources:" not in have[s]))
 
 # the virtual MIDI device and its two JACK ports are in the manual
-for what, pat in (("the virtual device", r"<strong>virtual</strong>"), ("Verdandi:midi_in", r"Verdandi:midi_in"), ("Verdandi:midi_out", r"Verdandi:midi_out"), ("midi_out_to", r"<code>midi_out_to</code>")):
+for what, pat in (("the virtual device", r"<strong>virtual</strong>"), ("Verdandi:midi_in", r"Verdandi:midi_in"), ("Verdandi:midi_out", r"Verdandi:midi_out"), ("midi_out_to", r"<code>midi_out_to</code>"), ("the ALSA port Verdandi out", r"<strong>Verdandi out</strong>"), ("alsa_midi", r"<code>alsa_midi</code>")):
     res("manual: " + what, re.search(pat, text) is not None)
 # the troubleshooting section
 m = re.search(r'<section id="trouble">(.*?)</section>', text, re.S)
@@ -136,7 +136,7 @@ code = re.findall(r"<code>(.*?)</code>", text, re.S)
 env = sorted(set(re.findall(r"\b(NORNS_[A-Z_]+|WS_WRAPPER_[A-Z_]+|PIPEWIRE_QUANTUM|XDG_PICTURES_DIR)\b", " ".join(code))))
 missing = [e for e in env if e not in src]
 res("every environment variable named (%d) is in the source" % len(env), not missing, ", ".join(missing))
-keys = ["in_ports", "out_ports", "input", "output", "rate", "period", "sys_monitor", "midi_in_from", "midi_out_to", "plugin_check", "serialosc_check"]
+keys = ["in_ports", "out_ports", "input", "output", "rate", "period", "sys_monitor", "midi_in_from", "midi_out_to", "alsa_midi", "plugin_check", "serialosc_check"]
 nokey = [k for k in keys if ("conf_get " + k) not in src and (k + "=") not in src]
 res("every audio.conf key in the table is read or written by the code", not nokey, ", ".join(nokey))
 paths = sorted(set(c for c in code if re.match(r"(linux|docs|matron|lua|macos|ws-wrapper|maiden-repl)/[A-Za-z0-9_./*-]+$", c) and "*" not in c and "&" not in c))
