@@ -7,8 +7,8 @@
 <!--
   The MANUAL button of the window opens this file (linux/norns.sh sets NORNS_MANUAL to it).
   Rule for this text: only behavior that is built in this repository and covered by a test or by the code named in the
-  "sources" comment above each section. Tests are in linux/tests/ (run_all.sh); the checks of this file are linux/tests/manual_test.sh.
-  Things that need real hardware are marked as such and listed in docs/port/HARDWARE-CHECKLIST.md.
+  "sources" comment above each section. Tests are in linux/tests/ (run_all.sh); the checks of this file are linux/tests/manual_test.sh
+  (sections, removed names, one entry for every SYSTEM page and every shortcut the code handles). What could not be verified is in docs/port/manual-audit.md.
   No external resources: no scripts, no fonts, no images from the web.
 -->
 <style>
@@ -32,6 +32,8 @@
   .lead { color: var(--muted); margin: 0 0 1.2rem; }
   .note { background: var(--warn-bg); border-left: 4px solid var(--warn-rule); padding: .5rem .8rem; margin: 1rem 0; }
   nav ol { columns: 2; padding-left: 1.4rem; }
+  @page { margin: 14mm; }
+  @media print { body { font-size: 9.5pt; line-height: 1.4; max-width: none; padding: 0; } h1 { font-size: 1.5rem; } h2 { font-size: 1.15rem; margin-top: 1.4rem; page-break-after: avoid; } h3 { page-break-after: avoid; } th, td { padding: .2rem .4rem; } tr, pre { page-break-inside: avoid; } nav { display: none; } p { margin: .4rem 0; } }
   @media (max-width: 38rem) { nav ol { columns: 1; } }
   nav li { margin: .15rem 0; }
 </style>
@@ -39,412 +41,256 @@
 <body>
 
 <h1>Verdandi Linux</h1>
-<p class="lead">norns running natively on a Linux desktop. This manual describes what is built and tested in this repository, and says where something has only been tried on the computer of the project's owner or not at all.</p>
+<p class="lead">norns on a Linux desktop: the norns software in a window, with sound, MIDI, grids, arcs and the maiden script editor.</p>
 
 <nav aria-label="Contents">
 <ol>
-  <li><a href="#what-this-is">What this is</a></li>
-  <li><a href="#install">Installing and building</a></li>
-  <li><a href="#first-start">Starting it</a></li>
+  <li><a href="#quickstart">Quick start</a></li>
   <li><a href="#window">The window</a></li>
-  <li><a href="#audio">Audio</a></li>
-  <li><a href="#midi-grid">MIDI, grid, arc</a></li>
-  <li><a href="#maiden">maiden and the script catalog</a></li>
-  <li><a href="#scripts">Scripts</a></li>
-  <li><a href="#files">Files and logs</a></li>
-  <li><a href="#settings">Settings</a></li>
-  <li><a href="#troubleshooting">Troubleshooting</a></li>
-  <li><a href="#differences">Differences from the device</a></li>
-  <li><a href="#limitations">Known limitations</a></li>
-  <li><a href="#licenses">Source and licenses</a></li>
+  <li><a href="#home">HOME: scripts and maiden</a></li>
+  <li><a href="#system">SYSTEM pages</a></li>
+  <li><a href="#sound-midi">Sound, MIDI and grids</a></li>
+  <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+  <li><a href="#files">Settings and files</a></li>
+  <li><a href="#trouble">If something goes wrong</a></li>
+  <li><a href="#licenses">Source and licences</a></li>
 </ol>
 </nav>
 
-<!-- sources: docs/port/RUN-ON-LAPTOP.md (header), docs/port/phase-1.md, linux/norns.sh header; tests: run_all.sh boot:headless -->
-<section id="what-this-is">
-<h2>1. What this is</h2>
-<p>Verdandi Linux is the Linux version of Verdandi: the norns software (matron, crone with softcut, SuperCollider, maiden) running as an application on a desktop computer. From here on this manual says just &ldquo;Verdandi&rdquo;. It shows the device as a window, with its screen, three keys and three encoders (K1&ndash;K3, E1&ndash;E3) and a row of buttons above it. It can open a virtual grid, a virtual arc and a virtual keyboard, talks to real grids, arcs, crow and MIDI devices over USB, and uses JACK or PipeWire for sound.</p>
-<p>It is not a Raspberry Pi: the operating system owns WiFi, updates and power (see <a href="#differences">section 12</a>).</p>
-<p>Tested: the automated tests run on Ubuntu 24.04 in a container without a sound card (a dummy JACK driver, fake sound cards, a virtual X server). The owner also ran it on Linux Mint 22.2 with PipeWire and reported results that led to the fixes described here. Anything that needs a real sound card, a real grid or arc, or a real browser session is listed in <code>docs/port/HARDWARE-CHECKLIST.md</code>.</p>
-</section>
-
-<!-- sources: docs/port/RUN-ON-LAPTOP.md sections 1-2; linux/setup-deps.sh; linux/build.sh; linux/maiden-build.sh; docs/port/DEPS.md -->
-<section id="install">
-<h2>2. Installing and building</h2>
-<p>Ubuntu 24.04 and derivatives with apt. Linux Mint 22 is Ubuntu 24.04 underneath; Debian and others are untested (package names may differ).</p>
-<pre><code>mkdir -p ~/verdandi-home
-git clone -b linux-port &lt;url of this repository&gt; ~/verdandi-home/norns
-cd ~/verdandi-home/norns
-linux/setup-deps.sh     # needs sudo, read it first
-linux/build.sh          # result: build/norns/norns
-linux/tests/run_all.sh  # optional: the tests that need no hardware</code></pre>
-<ul>
-  <li><code>linux/setup-deps.sh</code> installs the build and run packages with apt (this uses <code>sudo</code>), builds libmonome 1.4.9 with this repository's patch (virtual grid and arc) into <code>/usr/local</code>, and installs waf 2.1.9 into <code>~/.local/share/waf</code> (no sudo, owned by you). It does not need a <code>python</code> command, only <code>python3</code>.</li>
-  <li>It then builds <strong>maiden</strong> (the web editor and script catalog) as you, not as root, with <code>linux/maiden-build.sh</code>: the Go toolchain from apt, node 16.20.2 downloaded into a temporary folder (checksum checked, deleted afterwards), into <code>~/verdandi-home/maiden</code>. This needs the network and a few minutes. <code>NORNS_NO_MAIDEN=1</code> skips it. If it fails, the script prints a warning and everything else still works; run <code>linux/maiden-build.sh</code> again later.</li>
-  <li><code>linux/build.sh</code> compiles norns with waf (desktop build) and builds two small tools, <code>build/linux/audio_devices</code> and <code>build/linux/plugin_arch_check</code>. If maiden is missing or its patches changed it builds maiden too.</li>
-</ul>
-<p>The licenses of what is built are in <code>docs/port/DEPS.md</code>.</p>
-</section>
-
-<!-- sources: linux/norns.sh (header and body); docs/port/RUN-ON-LAPTOP.md section 1; tests: launcher_test.sh, maiden_launcher_test.sh, run_all boot:headless -->
-<section id="first-start">
-<h2>3. Starting it</h2>
-<pre><code>cd ~/verdandi-home/norns
-linux/norns.sh              # matron's log in ~/verdandi-home/logs/norns.log; maiden's norns console works
-linux/norns.sh --terminal   # matron's Lua prompt and log in this terminal</code></pre>
-<p>The launcher uses the folder <em>above</em> the repository as the <strong>norns home</strong> (like <code>/home/we</code> on the device): <code>dust/</code> (scripts, audio, data), <code>matronrc.lua</code>, the logs and <code>audio.conf</code> live there, and <code>HOME</code> is set to it while norns runs. Another folder: <code>NORNS_HOME=/some/folder linux/norns.sh</code>; it must contain <code>norns</code> (a link or the clone).</p>
-<p>What the launcher does, in order:</p>
+<!-- sources: linux/package.sh (the .deb, /usr/bin/verdandi, the menu entry), linux/norns.sh (installed mode, home), lua/core/keyboard.lua, lua/core/menu.lua (panels), docs/port/packaging.md, docs/port/RUN-ON-LAPTOP.md;
+     tests: package_test.sh, launcher_test.sh, keyboard_hardware_test.lua, run_all boot:headless -->
+<section id="quickstart">
+<h2>Quick start</h2>
+<p><strong>Install.</strong> Ubuntu 24.04 and Linux Mint 22 (amd64): <code>sudo apt install ./verdandi_*.deb</code>. That adds <strong>Verdandi Linux</strong> to the application menu and a <code>verdandi</code> command. To build it yourself, see <code>docs/port/RUN-ON-LAPTOP.md</code>. To update, install the newer package the same way.</p>
+<p><strong>First run.</strong> Start it from the application menu (or run <code>verdandi</code>). A window opens with the norns screen, three keys and three encoders. Your files live in <code>~/Verdandi</code> (scripts and audio in <code>~/Verdandi/dust</code>); nothing is written anywhere else. Sound goes to the desktop&rsquo;s default card (PipeWire or JACK). To try it without sound: <code>NORNS_JACK_DRIVER=dummy verdandi</code>.</p>
+<p><strong>The five things everyone needs</strong></p>
 <ol>
-  <li>Chooses the audio server: a JACK server that already answers is used; otherwise, if PipeWire runs, the launcher starts itself again under <code>pw-jack</code> and says so; otherwise it starts its own <code>jackd</code>. See <a href="#audio">section 5</a>.</li>
-  <li>Creates <code>dust/code</code>, <code>dust/audio</code>, <code>dust/data</code>, <code>matronrc.lua</code> (the window as screen) and the SuperCollider configuration for the norns home, if they are missing.</li>
-  <li>Runs the plug-in architecture check (<a href="#scripts">section 8</a>), then starts norns (matron, crone, softcut) and sclang.</li>
-  <li>Starts maiden if it is built (<a href="#maiden">section 7</a>), and prints the address.</li>
+  <li><strong>Keys.</strong> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> are K1 K2 K3; <kbd>Q</kbd><kbd>W</kbd> <kbd>A</kbd><kbd>S</kbd> <kbd>Z</kbd><kbd>X</kbd> turn E1 E2 E3 left and right (<kbd>Shift</kbd> = 5 steps). <kbd>F1</kbd>&ndash;<kbd>F4</kbd> open MIX, TAPE, HOME and PARAMS; <kbd>F5</kbd> opens and closes the menu. Or click and drag with the mouse.</li>
+  <li><strong>A script.</strong> HOME &gt; SELECT lists what is in <code>~/Verdandi/dust/code</code>. Put scripts there, drop files on the window, or install from the catalog with the <strong>MAIDEN</strong> button.</li>
+  <li><strong>Sound in.</strong> The <strong>MIC</strong> button cycles MIC (the card&rsquo;s input), SYS (every other application) and OFF.</li>
+  <li><strong>Everything else is one right-click away.</strong> The right-click menu (or <kbd>F10</kbd>) holds import, screenshot, GIF, mute and the virtual grid, arc and keyboard (<kbd>F6</kbd> <kbd>F7</kbd> <kbd>F8</kbd>). The look of the screen and the box is HOME &gt; SYSTEM &gt; SCREEN and THEME.</li>
+  <li><strong>If it does not work</strong>, read <a href="#trouble">If something goes wrong</a>: the logs are in <code>~/Verdandi/logs</code>.</li>
 </ol>
-<p><strong>Starting it a second time</strong> (from the application menu, the <code>verdandi</code> command, or the launcher again) does not start a second copy: it asks the running Verdandi to bring its window to the front (restored if it was minimised, on its own desktop if your window manager allows it; the screen window too, if the screen is detached) and shows no dialog when that worked. Nothing of the running Verdandi is touched (its logs, settings and scripts stay as they are). If there is no window to bring (Verdandi still starting, running without a window, or an older build that does not answer), you get one dialog sentence saying why. On Wayland the desktop decides whether a window may jump to the front; it may only be marked in the panel. Close the window or press <kbd>Ctrl</kbd>+<kbd>Q</kbd> in it to quit; in the terminal <kbd>Ctrl</kbd>+<kbd>C</kbd> also stops it, and everything the launcher started stops with it, maiden included.</p>
-<p>First run without sound: <code>NORNS_JACK_DRIVER=dummy linux/norns.sh --terminal</code> starts its own silent JACK server, so nothing depends on PipeWire.</p>
-<p><code>--terminal</code> and maiden's norns console exclude each other, see <a href="#limitations">section 13</a>.</p>
 </section>
 
-<!-- sources: matron/src/platform/macos/window_keys.c, lua/core/keyboard.lua, lua/core/menu.lua (window_button), matron/src/platform/linux/desktop_shell_linux.cc (menu), sdl_bridge.cc (buttons, capture_path),
-     readme-macos.md (shared window code); lua/core/ui_settings.lua, lua/core/menu/ui.lua, matron/src/platform/macos/ui_look.c (SYSTEM > SCREEN, page id UI), docs/port/ui-settings-plan.md, docs/port/colour-picker-plan.md;
-     tests: window:* in run_all.sh, keyboard_hardware_test.lua, menu_skin_test.c, manual_button_test.sh, maiden_button_test.sh, ui_settings_test.lua, ui_look_test.c -->
+<!-- sources: matron/src/platform/macos/sdl_bridge.cc (window, buttons, mouse, drop), matron/src/platform/macos/window_keys.c, matron/src/platform/linux/desktop_shell_linux.cc (menu_build), screen_window.cc, screen_window_conf.c, lua/core/menu.lua;
+     tests: window:* in run_all.sh, menu_skin_test.c, manual_button_test.sh, maiden_button_test.sh, detach scenario, window_toggle_scenario -->
 <section id="window">
-<h2>4. The window</h2>
-<p>The window is the norns screen on a drawing of the device. It can be resized. Closing it ends norns.</p>
-
-<h3>Keyboard</h3>
-<p>While the window has the focus, and wherever nothing else wants the keys (in the menu, and in every script that does not read the keyboard itself):</p>
+<h2>The window</h2>
+<p>The window is the norns screen on a drawing of the device. Resize it as you like; closing it ends norns. Mouse: click a key to press it, drag a knob (up or right turns it clockwise) or scroll over it; the wheel elsewhere turns the nearest knob.</p>
 <table>
-<tr><th>keys</th><th>norns</th></tr>
-<tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>K1 K2 K3 (held while held)</td></tr>
-<tr><td><kbd>Q</kbd> / <kbd>W</kbd></td><td>E1 left / right</td></tr>
-<tr><td><kbd>A</kbd> / <kbd>S</kbd></td><td>E2 left / right (in scripts also <kbd>&uarr;</kbd> / <kbd>&darr;</kbd>)</td></tr>
-<tr><td><kbd>Z</kbd> / <kbd>X</kbd></td><td>E3 left / right (in scripts also <kbd>&larr;</kbd> / <kbd>&rarr;</kbd>)</td></tr>
-<tr><td><kbd>Shift</kbd> added</td><td>5 steps at a time</td></tr>
-<tr><td><kbd>F1</kbd>&ndash;<kbd>F4</kbd>, <kbd>F5</kbd></td><td>the menu pages; F5 opens and closes the menu</td></tr>
-<tr><td><kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd></td><td>the virtual grid / keyboard / arc windows: each opens and closes with its own key, from any of the windows (also from the keyboard window). The norns window keeps its size and position; the device windows go beside, below or above it (or, on a small screen, over its lower edge) and can be dragged anywhere</td></tr>
-<tr><td><kbd>5</kbd> <kbd>6</kbd>, <kbd>T</kbd> <kbd>Y</kbd>, <kbd>G</kbd> <kbd>H</kbd>, <kbd>B</kbd> <kbd>N</kbd></td><td>the four encoders of the <a href="#midi-arc">virtual arc</a>, left / right: one press is 16 ticks (one LED of the ring), <kbd>Shift</kbd> 4, holding repeats. Always in the arc window; in the other windows only while the arc window is open, a script is running (not the menu) and nothing else reads the keyboard</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>mute: the output off and back, from the box window and the screen window, with the row of page buttons shown or hidden. It is taken by Verdandi before a script sees it (<code>verdandi scan-fkeys</code> lists scripts that test <code>keyboard.ctrl()</code> and name the letter M)</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></td><td>the <a href="#midi-actions">MIDI actions</a> on and off (the master switch), from the box window and the screen window, with the message &ldquo;MIDI actions on&rdquo; / &ldquo;off&rdquo;. Taken by Verdandi before a script sees it</td></tr>
-<tr><td><kbd>F9</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd></td><td>the screen window: detach the screen or bring it back (<kbd>F9</kbd>, from any window), fullscreen on and off (<kbd>F11</kbd>, in the screen window), its title bar on and off (<kbd>Shift</kbd>+<kbd>F11</kbd>). A script that reads these keys itself does not get them on the Linux desktop (<code>verdandi scan-fkeys</code> lists which of yours name them)</td></tr>
+<tr><th>button (above the device)</th><th>does</th></tr>
+<tr><td>MIX, TAPE, HOME, PARAMS</td><td>open that menu page; clicking the page that is up goes back to the script</td></tr>
+<tr><td>MIC</td><td>input: MIC, then SYS, then OFF (see <a href="#sound-midi">Sound, MIDI and grids</a>)</td></tr>
+<tr><td>GRID, ARC, KEYS</td><td>open or close the virtual grid, arc and keyboard windows</td></tr>
+<tr><td>MAIDEN, MANUAL</td><td>open the script editor and this manual in your browser (a note in the window says so if maiden is not running or the manual is missing)</td></tr>
+<tr><td>MUTE</td><td>output off and back, at the level you had; the light is on while muted</td></tr>
 </table>
-<p>Scripts that read the keyboard themselves (<code>keyboard.code</code> / <code>keyboard.char</code>) get the keyboard. For those, <kbd>Alt</kbd> plus the keys above always works as K and E, and <kbd>Alt</kbd>+<kbd>Esc</kbd> switches the hardware keys on or off by force. The automatic part is <code>lua/core/keyboard.lua</code>; the launcher sets <code>NORNS_HARDWARE_KEYS=1</code> for it (it is off on the device).</p>
+<p>The output level is on the MIX page (<kbd>E2</kbd>) and under PARAMS &gt; EDIT &gt; LEVELS. Hide the row of buttons with the right-click item &ldquo;Show the page buttons&rdquo;; the keys keep working, and a small MUTE button stays while muted.</p>
 
-<h3>Mouse</h3>
-<p>Click a key to press it. Drag a knob (up or right turns it clockwise) or scroll over it; the wheel elsewhere turns the nearest knob. There is no output slider on the window: the output level is on the MIX page (E2 changes it; with the mouse on the screen, the OUT column: drag or scroll over it, double-click for 0 dB) and under PARAMS &gt; EDIT &gt; LEVELS. The MUTE button, the last button of the row above the device, switches the output off and back; its light is on while muted. <kbd>Ctrl</kbd>+<kbd>M</kbd> and the menu item &ldquo;Mute output&rdquo; do the same; with the row of buttons hidden (below) a small MUTE button stays on the box while the output is muted, and clicking it unmutes. On the MIX page the mouse works on the screen itself.</p>
-
-<h3>The buttons above the device</h3>
-<p>These are not on the hardware. MIX, TAPE, HOME and PARAMS open the menu pages (clicking the page that is up goes back to the script). MIC goes through the audio inputs (see <a href="#audio">section 5</a>). GRID, ARC and KEYS open the virtual windows. MAIDEN opens the maiden page in your browser; if nothing answers on maiden's port the window shows a note ("maiden is not running, see log") instead, and if the page opens but there is no norns console (the <code>--terminal</code> case) the note says so. MANUAL opens this page; if the file is missing the window says "manual not found: linux/manual/manual.html". MUTE (right end of the row) switches the sound output off and on again; it keeps the level you had and gives it back, and its light shows that the output is muted.</p>
-
-<h3>SYSTEM &gt; SCREEN: presets, colour, brightness, contrast</h3>
-<p>HOME &gt; SYSTEM &gt; SCREEN (below AUDIO; it was called UI in earlier versions) sets how the screen looks in the window, and works like THEME. <kbd>E2</kbd> chooses the row, <kbd>E3</kbd> (or the mouse wheel over it) changes the value, <kbd>K3</kbd> opens or acts, <kbd>K2</kbd> goes back. A change shows at once and is kept for the next start. Below the rows a bar of the 16 grey levels shows how the screen looks now.</p>
-<table>
-<tr><th>row</th><th>values</th><th>does</th></tr>
-<tr><td>PRESET</td><td>WHITE, YELLOW, PINK, then your own (marked <code>*</code>), or CUSTOM</td><td><kbd>E3</kbd> steps through the presets; <kbd>K3</kbd> opens the list (your own come after &ldquo;MY PRESETS&rdquo;, the one in use says &ldquo;in use&rdquo;). A preset is the <strong>colour of the screen only</strong>: BRIGHTNESS and CONTRAST keep their values when you choose one. After you change the colour the name shows a <code>~</code> (YELLOW<code>~</code>: changed since); CUSTOM means a colour that is not saved under a name. Choosing a preset never changes the box style or the THEME colours</td></tr>
-<tr><td>COLOUR</td><td>any colour, shown as <code>#RRGGBB</code></td><td><kbd>K3</kbd> opens the <a href="#picker">colour picker</a> (HUE, SATURATION, BRIGHTNESS, HEX, as for THEME): the screen shows the colour you are choosing while it is open; <kbd>K3</kbd> keeps it, <kbd>K2</kbd> gives the old one back. <kbd>Ctrl+C</kbd> on this row copies the code, <kbd>Ctrl+V</kbd> pastes one and keeps it. A very dark colour is raised to full value so that it cannot hide the screen</td></tr>
-<tr><td>BRIGHTNESS</td><td>0.1 to 1 in steps of 0.1, default 1</td><td>dims the whole screen; the low steps are lifted a little so that 0.1 is dim but still readable</td></tr>
-<tr><td>CONTRAST</td><td>0 to 1 in steps of 0.1, default 0.5</td><td>lifts the dim grey levels: the levels many scripts use for waveforms and labels are nearly black on a computer screen, CONTRAST makes them lighter (higher number = lighter dim greys; 0 is the plain, linear mapping of the first versions, 1 the strongest lift). It changes how every script looks and how screenshots and GIFs look: they match the window, not exactly a norns</td></tr>
-<tr><td>SAVE</td><td>a name</td><td><kbd>K3</kbd> asks for a name (letters, digits, space, <code>- _ .</code>, up to 18 characters) and saves the current colour as a preset of your own; an existing name asks before it is overwritten; WHITE, YELLOW, PINK and CUSTOM cannot be used</td></tr>
-<tr><td>DELETE</td><td>the preset in use</td><td>only while one of your own presets is in use; <kbd>K3</kbd> asks once (<kbd>K3</kbd> yes, <kbd>K2</kbd> no). The built-in presets cannot be deleted. The colour stays on the screen and the row reads CUSTOM</td></tr>
-</table>
-<p>The settings are in <code>ui.conf</code> in the norns home (<code>brightness=</code>, <code>preset=</code>, <code>tint=</code>, <code>contrast=</code>, <code>file_dialog=</code>); it can be edited by hand. Your presets are one small file each in <code>screen-presets/</code> in the norns home (<code>name.screen</code>: <code>verdandi-screen=1</code>, <code>name=</code>, <code>colour=RRGGBB</code>, at most 64 files); a damaged file is ignored with a line in <code>logs/norns.log</code>. An older <code>ui.conf</code> still loads: <code>colour=white|yellow|pink</code> is the preset of that name, <code>colour=custom</code> with <code>custom=</code> is the current colour as an unsaved CUSTOM (save it under a name if you want to keep it), and <code>greys=</code> is converted to CONTRAST; the file is written in the new form at the next change. A missing file means WHITE, brightness 1, contrast 0.5; a bad value falls back to its own default with a line in <code>logs/norns.log</code>; unknown keys are ignored. The recording of a script&rsquo;s own PNG (<code>screen.export_png</code>) is not changed by these settings.</p>
-
-<h3>SYSTEM &gt; THEME: the look of the box</h3>
-<p>HOME &gt; SYSTEM &gt; THEME (below SCREEN; it was called BOX in earlier versions) sets how the box looks: a style, five colours, and looks of your own. <kbd>E2</kbd> chooses the row, <kbd>E3</kbd> changes the value, <kbd>K3</kbd> opens or acts, <kbd>K2</kbd> goes back. A change shows at once and is kept for the next start. The page has six rows on the screen and scrolls.</p>
-<table>
-<tr><th>row</th><th>does</th></tr>
-<tr><td>STYLE</td><td><strong>ALUMINIUM</strong> (the default: the brushed aluminium box as before) or <strong>PIXEL</strong> (hard-edged blocks, matt, a pixel font; keys are big rounded squares). STYLE changes only the style: the five colours stay as they are, so any look can be worn on either style.</td></tr>
-<tr><td>PIXEL LOOK</td><td>only while STYLE is PIXEL (otherwise the row is dim and says &ldquo;needs STYLE PIXEL&rdquo;): <strong>PIXEL</strong> (the look described above, never changed), <strong>RETRO</strong> (chunkier 4-unit blocks, hard outlines, drop shadows on buttons and keys, stepped round encoders with a pixel highlight, a calm dithered band at the top and bottom of the box, a very faint speckle and a small grille), <strong>8-BIT</strong> (the same chunky blocks, plain: no speckle, no grille, no text shadow) or <strong>16-BIT</strong> (finer 3-unit blocks with more shading by dither: keys and encoders are shaded with a dither pattern, a faint scanline hint). <kbd>E3</kbd> steps through them, <kbd>K3</kbd> goes to the next one and round. It is independent of PRESET and of the colours: every look works with every colour, the built-in looks and your own, and the colour picker changes them live in every look. The box in RETRO and 8-BIT is 2 units taller than in PIXEL and the buttons are 72 units wide; their hit areas follow the drawing. The labels on the buttons keep their small size (they cannot be as chunky as the blocks).</td></tr>
-<tr><td>PRESET</td><td>the look in use. <kbd>E3</kbd> steps through the looks; <kbd>K3</kbd> opens the list: the built-in looks <strong>DARK</strong>, <strong>LIGHT</strong>, <strong>COLOUR</strong> and <strong>MAC</strong> (the colours of the Mac app&rsquo;s box), then, after &ldquo;- MY PRESETS -&rdquo;, your own, each marked with a <strong>*</strong>. A look is the five colours: choosing one sets the colours and never the style (use STYLE for that). <code>NAME~</code> means the colours were changed since; <code>CUSTOM</code> means no look.</td></tr>
-<tr><td>BOX, KEYS, ENCODERS, BUTTONS, FONT</td><td>the five colours, for whichever style is selected. <kbd>K3</kbd> opens the <a href="#picker">colour picker</a> (the same as SCREEN&rsquo;s COLOUR row): the box, keys, encoders, buttons or font change live while it is open, <kbd>K3</kbd> keeps the colour, <kbd>K2</kbd> gives the old one back. <kbd>Ctrl+C</kbd> on a colour row copies its code, <kbd>Ctrl+V</kbd> pastes a code and keeps it. A hard-to-read pair of FONT and BUTTONS is accepted with a warning. Changing one colour never changes the style. In the aluminium style the colours tint the brushed metal; a part left at its default is drawn exactly as before.</td></tr>
-<tr><td>SAVE</td><td><kbd>K3</kbd> asks for a name and keeps the five colours as a look of your own (the style is not part of it) (1 to 18 letters, digits, spaces, <code>-</code> <code>_</code> <code>.</code>; no path characters; not a built-in name). A name that exists asks &ldquo;OVERWRITE &hellip;?&rdquo; first. Each look is one small file, <code>box-presets/&lt;name&gt;.box</code> in the norns home, so it can be copied to another computer; a damaged file is ignored with a line in <code>logs/norns.log</code>. Up to 64.</td></tr>
-<tr><td>DELETE</td><td>only while one of your own looks is in use. <kbd>K3</kbd> asks once. The colours stay on the box and the look reads CUSTOM. The built-in looks can never be changed or deleted.</td></tr>
-</table>
-<p>The settings are in <code>box.conf</code> in the norns home (<code>style=</code>, <code>pixel_look=</code> (<code>pixel</code>, <code>retro</code>, <code>8-bit</code> or <code>16-bit</code>), <code>preset=</code>, <code>box=</code>, <code>keys=</code>, <code>encoders=</code>, <code>buttons=</code>, <code>font=</code>, <code>show_buttons=</code>); it can be edited by hand. A missing file means the aluminium style with its own colours; a bad value falls back to its default with a line in <code>logs/norns.log</code>. The pixel style uses the screen&rsquo;s font (<code>resources/norns.ttf</code>) for the button labels, and a built-in small font if that file is not found.</p>
-<h3 id="picker">The colour picker</h3>
-<p>It opens when you press <kbd>K3</kbd> (or <kbd>Enter</kbd>, or the right arrow) on a colour row of THEME (BOX, KEYS, ENCODERS, BUTTONS, FONT) or on SCREEN&rsquo;s COLOUR row, and it is a page of the norns screen like any other: rows <strong>HUE</strong>, <strong>SATURATION</strong>, <strong>BRIGHTNESS</strong> and <strong>HEX</strong>, each with a small bar and its value. Every change shows at once on the box (or the screen) and nothing is written until you keep it.</p>
-<table>
-<tr><th>key</th><th>does</th></tr>
-<tr><td><kbd>Up</kbd> / <kbd>Down</kbd>, <kbd>E2</kbd></td><td>choose the row</td></tr>
-<tr><td><kbd>Left</kbd> / <kbd>Right</kbd>, <kbd>-</kbd> / <kbd>=</kbd>, <kbd>E3</kbd></td><td>change the row by a step: 5 degrees of hue, 5 percent of saturation or brightness. <kbd>Shift</kbd> makes it five steps, <kbd>Ctrl</kbd> a fine step of 1. Holding a value key repeats it; letting go changes nothing. The mouse wheel over E3 works too. The values stop at both ends</td></tr>
-<tr><td><kbd>PageUp</kbd> / <kbd>PageDown</kbd>, <kbd>Home</kbd> / <kbd>End</kbd></td><td>five steps; the smallest and the largest value of the row</td></tr>
-<tr><td><kbd>K3</kbd> (<kbd>Enter</kbd>)</td><td>keep the colour and save it: the page you came from says &ldquo;saved #3B6EA8&rdquo; until the next key (on the HEX row K3 opens the text entry instead). The picker&rsquo;s last line reminds you: K3 keeps, K2 cancels</td></tr>
-<tr><td><kbd>K2</kbd> (<kbd>Esc</kbd>)</td><td>give the old colour back; the page says &ldquo;restored&rdquo;</td></tr>
-<tr><td><kbd>F1</kbd> to <kbd>F4</kbd>, any other way out</td><td>a change you had not kept is given back and the box shows &ldquo;restored, not saved&rdquo; for a few seconds</td></tr>
-<tr><td>on the <strong>HEX</strong> row: <kbd>Left</kbd> / <kbd>Right</kbd>, <kbd>-</kbd> / <kbd>=</kbd>, <kbd>E3</kbd></td><td>make the code lighter or darker (the brightness) by the same steps, without opening the text entry</td></tr>
-<tr><td><kbd>H</kbd></td><td>type a code in the text entry (3 or 6 digits, with or without #); the rows follow what you typed</td></tr>
-<tr><td><kbd>C</kbd></td><td>centre: hue 180, saturation 50, brightness 50 (<code>#408080</code>)</td></tr>
-<tr><td><kbd>R</kbd></td><td>back to the colour the picker opened with</td></tr>
-<tr><td><kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd></td><td>copy the code (<code>#3B6EA8</code>) to the system clipboard; paste one. A pasted code can have 3 or 6 digits, with or without #. Anything else (text, an empty or very long clipboard, a binary one) is refused with a short message and nothing changes</td></tr>
-</table>
-<p>Opening on a colour that is set puts the rows where that colour is, so nothing changes until you move one. A grey, white or black has no hue: the picker keeps the last hue it had, so raising the saturation again does not jump. In the text entry the arrows move through the characters (left and right choose a character, up and down switch between the characters and DEL / OK) and <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> copy and paste the code.</p>
-<p>The clipboard is the system one: it works with X11 and, in a Wayland session, while the window has the keyboard focus; the code stays on it after Verdandi is closed only if your desktop has a clipboard manager (a normal X11 or Wayland limit).</p>
-<h3>Hiding the row of buttons</h3>
-<p>The right-click item <strong>Show the page buttons</strong> (ticked by default) hides or shows the row above the device, in both styles. Hidden, the buttons are not drawn and cannot be clicked, nothing else moves and the window keeps its size. Their keys keep working: <kbd>F1</kbd>&ndash;<kbd>F4</kbd> open the pages, <kbd>F5</kbd> the menu, <kbd>F6</kbd>&ndash;<kbd>F8</kbd> the virtual windows; MAIDEN and MANUAL are menu items (&ldquo;Open maiden&rdquo;, &ldquo;Open the manual&rdquo;), and the input is in the menu as before.</p>
 <h3>The screen in its own window</h3>
-<p><kbd>F9</kbd> or the menu item &ldquo;Screen in its own window&rdquo; (in the right-click menu) pops the screen out into a second window called &ldquo;Verdandi screen&rdquo;: only the picture, live, with the brightness, colour and contrast of SYSTEM &gt; SCREEN, and no box around it, but with the same black margin the box&rsquo;s bezel has (4.30 percent of the picture&rsquo;s width at each side, 7.29 percent of its height above and below), at every size and in fullscreen. Resize it as you like: when the picture at a whole multiple of 128 &times; 64 plus its margin is exactly the window (556 &times; 294 is 4&times;, 695 &times; 367 is 5&times;, 1112 &times; 587 is 8&times;; each multiple is 139 &times; 73.3 pixels) every screen pixel is a flat square; between those sizes the picture is enlarged to a whole multiple first and then scaled, so pixels stay as sharp as they can be, with black bars when the window is not that shape (a full-screen 1920 &times; 1080 is not an exact multiple, so it is in between). Screenshots and GIFs are the picture only, without the margin. <kbd>F11</kbd> (or a double click) is fullscreen; <kbd>Shift</kbd>+<kbd>F11</kbd> takes the title bar away (then drag the picture to move the window, and its edges to resize it).</p>
-<p>While the screen is out, the main window keeps all its controls and shows a dark panel where the screen was: <em>The screen is in its own window. Click here or press F9 to bring it back.</em> Click it, press <kbd>F9</kbd> (or use the menu item again), or close the screen window to bring the screen back. There is no button for this on the box. <strong>Closing the main window quits norns</strong>, with the screen window open or not. The keyboard works in the screen window exactly as in the main window (K1&ndash;K3, encoders, <kbd>F1</kbd>&ndash;<kbd>F8</kbd>, <kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd>); <kbd>F10</kbd> there brings the main window forward and opens its menu. The mouse over the picture does nothing (only the window itself: move, resize, fullscreen). Screenshots and GIFs are the same in both modes; their messages show in both windows. The virtual grid, arc and keyboard windows, real grids, arcs and MIDI devices are not affected by which window shows the screen.</p>
-<p>Size, place, fullscreen, frame and whether the screen was out are remembered in <code>screen-window.conf</code> in the norns home (plain <code>key=value</code> lines, written by Verdandi: <code>detached</code>, <code>x</code>, <code>y</code>, <code>w</code>, <code>h</code>, <code>fullscreen</code>, <code>border</code>); a damaged value is replaced by its default with a line in <code>logs/norns.log</code>, and a saved place that is no longer on any display is forgotten. On Wayland the desktop may ignore the saved place.</p>
-<h3>The right-click menu</h3>
+<p><kbd>F9</kbd> (or the menu item &ldquo;Screen in its own window&rdquo;) pops the screen out into a second window with only the picture, live, with the look of SYSTEM &gt; SCREEN. <kbd>F11</kbd> or a double click makes it fullscreen; <kbd>Shift</kbd>+<kbd>F11</kbd> takes its title bar away (then drag the picture to move the window, its edges to resize it). Size, place, fullscreen and frame are remembered. The box shows a panel while the screen is out: click it, press <kbd>F9</kbd>, or close the screen window to bring the screen back. The keyboard works in both windows. Closing the main window quits norns.</p>
+
+<h3>The right-click menu (<kbd>F10</kbd> opens it from the keyboard)</h3>
 <table>
 <tr><th>item</th><th>does</th></tr>
-<tr><td>Import files&hellip; (<kbd>Ctrl</kbd>+<kbd>O</kbd>), Import folder&hellip;</td><td>puts audio and scripts into dust through a file dialog (zenity, or the desktop's file portal); the same happens when you drop files on the window</td></tr>
-<tr><td>Show the page buttons</td><td>ticked: the row of buttons above the device is drawn; unticked: hidden (see above). It applies at once and is remembered (<code>show_buttons=</code> in <code>box.conf</code>).</td></tr>
-<tr><td>Open the file dialog when a script loads a file</td><td>off by default: a script that asks for a file (a sample, a preset) shows norns&rsquo;s own browser on the screen, which you drive with the keys, as on the hardware, and no window opens over it. Tick this to get the desktop&rsquo;s file dialog as well, next to the browser; a file chosen there reaches the script the same way, and cancelling it leaves the browser as it was. It applies at once and is remembered (<code>file_dialog=</code> in <code>ui.conf</code>). Import files and Import folder always use the dialog.</td></tr>
-<tr><td>Copy samples into dust</td><td>audio is linked by default (the original stays where it is, the link is in <code>dust/audio/mac</code>, the folder name is shared with the Mac version); with this switched on, or with <kbd>Shift</kbd> held while dropping, it is copied into <code>dust/audio</code>. Script folders are copied into <code>dust/code</code>. Nothing is overwritten: a name that exists gets " 2", " 3"&hellip;</td></tr>
-<tr><td>Show dust folder, Show tape folder</td><td>opens the folder with <code>xdg-open</code></td></tr>
-<tr><td>Screenshot (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>), Record GIF</td><td>a PNG of the screen at 4&times; (or a GIF of up to 60 seconds) named <code>Verdandi YYYY-MM-DD at HH.MM.SS</code>, saved to your Pictures folder (<code>XDG_PICTURES_DIR</code>, or <code>~/Pictures</code>) if it exists, otherwise into dust; the window says where</td></tr>
-<tr><td>Virtual grid, arc, keyboard</td><td>as the buttons and <kbd>F6</kbd>&ndash;<kbd>F8</kbd></td></tr>
-<tr><td>Screen in its own window (<kbd>F9</kbd>)</td><td>ticked while the screen is out, see above</td></tr>
-<tr><td>Open maiden, Open the manual</td><td>the same as the MAIDEN and MANUAL buttons, for when the row is hidden</td></tr>
-<tr><td>Mute output (<kbd>Ctrl</kbd>+<kbd>M</kbd>)</td><td>ticked while the output is muted; the same as the MUTE button</td></tr>
-<tr><td>MIDI actions enabled (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>)</td><td>ticked while the MIDI actions are on (saved in <code>midimap.conf</code>)</td></tr>
-<tr><td>Input: &hellip;</td><td>microphone, all apps, a single app, off (see <a href="#audio">section 5</a>)</td></tr>
-<tr><td>Quit (<kbd>Ctrl</kbd>+<kbd>Q</kbd>)</td><td>ends norns</td></tr>
+<tr><td>Import files, Import folder</td><td>put audio and scripts into <code>dust</code> through a file dialog; dropping files on the window does the same. Audio is linked by default, copied with &ldquo;Copy samples into dust&rdquo; or with <kbd>Shift</kbd> held while dropping; nothing is overwritten</td></tr>
+<tr><td>Open the file dialog when a script loads a file</td><td>off: a script that asks for a file shows norns&rsquo;s own browser on the screen. On: the desktop&rsquo;s file dialog opens as well</td></tr>
+<tr><td>Show the page buttons</td><td>show or hide the row of buttons</td></tr>
+<tr><td>Show dust folder, Show tape folder</td><td>open the folder in your file manager</td></tr>
+<tr><td>Screenshot, Record GIF</td><td>a PNG of the screen (4 times size) or a GIF of up to 60 seconds, saved to <code>~/Pictures</code> (or into dust if there is none); the window says where. They match the window&rsquo;s brightness, colour and contrast</td></tr>
+<tr><td>Virtual grid, arc, keyboard, Screen in its own window</td><td>as the buttons and <kbd>F6</kbd> <kbd>F8</kbd> <kbd>F7</kbd> <kbd>F9</kbd></td></tr>
+<tr><td>Open maiden, Open the manual</td><td>as the buttons, for when the row is hidden</td></tr>
+<tr><td>Mute output, MIDI actions enabled</td><td>ticked while on (<kbd>Ctrl</kbd>+<kbd>M</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>)</td></tr>
+<tr><td>Input: &hellip;</td><td>microphone, all apps, one application, off</td></tr>
+<tr><td>Quit</td><td>ends norns</td></tr>
 </table>
+<p>Scripts that read the keyboard themselves get the keyboard; for them <kbd>Alt</kbd> plus the keys of the quick start still works as K and E, and <kbd>Alt</kbd>+<kbd>Esc</kbd> switches that on and off. <code>verdandi scan-fkeys</code> lists scripts of yours that use keys Verdandi takes (<kbd>F9</kbd>, <kbd>F11</kbd>, <kbd>Ctrl</kbd>+<kbd>M</kbd>, the arc keys).</p>
 </section>
 
-<!-- sources: linux/norns.sh (decide_server, read_audio_conf, decide_devices, decide_rate); crone/src/PortSelect.h; lua/core/menu.lua (set_input, show_note), lua/core/menu/audio.lua;
-     docs/port/phase-3.md; KNOWN-ISSUES.md items 6, 7; tests: launcher_test.sh, audio_ports_test.sh, input_test.sh, input_monitor_test.lua, clock_rate_test.sh, audio_page_test.lua -->
-<section id="audio">
-<h2>5. Audio</h2>
-<h3>Which audio server</h3>
-<p>norns talks JACK. Setting <code>NORNS_AUDIO_SERVER</code>: <code>auto</code> (the default) uses a JACK server that answers; if none does and PipeWire runs, the launcher starts itself again under <code>pw-jack</code> (needs <code>pipewire-jack</code>); otherwise it starts its own <code>jackd</code>. <code>jackd</code> always starts its own, <code>pipewire</code> always uses <code>pw-jack</code>. Giving <code>NORNS_JACK_DRIVER</code> (for example <code>dummy</code>, for silence) also means its own <code>jackd</code>. The line <code>norns.sh: audio server: &hellip;</code> says what was chosen. If PipeWire holds the sound card, the default <code>alsa</code> driver of its own <code>jackd</code> fails because the card is busy: use PipeWire through <code>pw-jack</code>, or the <code>dummy</code> driver.</p>
-
-<h3>Which sound card</h3>
-<p>Under PipeWire norns plays to the default sink and listens to the default source of the desktop, read when norns starts. To pin a card put <code>out_ports=</code> and/or <code>in_ports=</code> (the start of the client name <code>pw-jack jack_lsp</code> shows before the colon) in <code>audio.conf</code> in the norns home, or set <code>NORNS_OUT_PORTS</code> / <code>NORNS_IN_PORTS</code> (the environment wins). crone picks one card only (never ports of two cards, and never MIDI or sink-monitor ports). A name that matches nothing falls back to the default card and says so. If no card is found norns starts anyway, unconnected: the window shows &ldquo;AUDIO: not connected, see SYSTEM &gt; AUDIO&rdquo;.</p>
-
-<h3>SYSTEM &gt; AUDIO</h3>
-<p>Shows what is connected. Under PipeWire the rate is PipeWire's and cannot be changed here; BUFFER is an experimental request (<code>PIPEWIRE_QUANTUM</code>, which PipeWire may refuse). With its own <code>jackd</code> the page changes input and output devices, rate and period; they are kept in <code>audio.conf</code> (<code>input</code>, <code>output</code>, <code>rate</code>, <code>period</code>) and APPLY restarts norns.</p>
-
-<h3>The input: MIC, SYS, APP, OFF</h3>
-<p>The MIC button goes MIC &rarr; SYS &rarr; OFF; the right-click menu also lists single applications.</p>
-<table>
-<tr><th>mode</th><th>what norns hears</th></tr>
-<tr><td>MIC</td><td>the capture ports of the card norns chose</td></tr>
-<tr><td>SYS</td><td>the sound of every application <em>except norns</em> (each PipeWire stream appears as a JACK client named after the application). Applications that start later join by themselves. Streams of capture devices (<code>monitor</code>, <code>capture</code> names) are not taken as applications. norns' own output is never in SYS, so it cannot feed back. While SYS or APP is on, the applications keep playing directly and norns' input monitor is off.</td></tr>
-<tr><td>APP</td><td>one application from the right-click menu</td></tr>
-<tr><td>OFF</td><td>nothing is connected</td></tr>
-</table>
-<p>An extra, off by default: &ldquo;sink monitor&rdquo; (everything the sound card plays, norns included, so it can feed back) appears only with <code>sys_monitor=1</code> in <code>audio.conf</code> or <code>NORNS_SYS_MONITOR=1</code>; while it is on the window shows a warning. With MIC on and speakers, a script that plays its input can feed back acoustically: keep the volume low or use headphones. The choice is kept for the next start.</p>
-
-<h3>The clock</h3>
-<p>The internal clock reads JACK's frame time. Under PipeWire with WirePlumber that time's base can jump when applications are linked into norns; the clock follows backward jumps (fixed; tested with a fake graph and a PipeWire-like setup). A forward jump after the start is still accepted and can make something waiting on <code>clock.sync</code> fire in a burst once (<a href="#limitations">section 13</a>). <code>NORNS_CLOCK_DEBUG=1</code> logs jumps of more than a second.</p>
+<!-- sources: lua/core/menu/home.lua, select.lua, sleep.lua, mods.lua; docs/port/phase-4-maiden.md; linux/norns.sh (maiden); lua/core/virtual_home.lua; linux/shims/*;
+     tests: maiden_test.sh, maiden_launcher_test.sh, maiden_install_test.sh, mods_test.lua, virtual_home_test.lua, shim_test.sh -->
+<section id="home">
+<h2>HOME: scripts and maiden</h2>
+<p>HOME has SELECT (choose a script), SYSTEM and SLEEP (quits norns; it does not power off the computer). Scripts live in <code>dust/code/&lt;name&gt;/&lt;name&gt;.lua</code>. Scripts see the device&rsquo;s paths (<code>/home/we/...</code>); Verdandi maps them to your folder.</p>
+<p><strong>maiden</strong> is the web editor and script catalog: it opens at <code>http://127.0.0.1:5000/maiden</code> with the MAIDEN button, shows the files of <code>dust</code>, the norns and SuperCollider consoles, and installs and updates scripts. It answers on your own computer only. If port 5000 is taken, start with <code>NORNS_MAIDEN_PORT=5001 verdandi</code>.</p>
+<p><strong>Mods</strong> are folders <code>dust/code/&lt;name&gt;/</code> with a <code>lib/mod.lua</code>; enable them under SYSTEM &gt; MODS and restart. Commands a script runs through <code>sudo systemctl restart norns-...</code> are answered by restarting norns; other <code>sudo</code> commands fail at once instead of asking for a password.</p>
 </section>
 
-<!-- sources: docs/port/phase-3.md (JACK MIDI clock, auto-connect), KNOWN-ISSUES.md (serialosc), matron/src/platform/linux/serialosc_conflict.*, midi_autoconnect.cc, jack_midi_in.cc;
-     tests: jack_midi_clock_test.c, midi_autoconnect_test.sh, serialosc_test.sh, serialosc_conflict_test.cpp, vgrid_test.c, devices_midi_test.lua;
-     MIDI MAP and the arc: docs/port/midi-map-plan.md, docs/port/arc-plan.md, lua/core/midimap.lua, matron/src/platform/linux/arc_keys.c, extras_layout.c, midimap_value.lua, midimap_settings.lua, lua/core/menu/midimap.lua; MIDI actions: docs/port/midi-actions-plan.md, matron/src/platform/linux/window_actions.c, desktop_shell_linux.cc; tests: window_actions_test.c, probe_actions.lua (actions_scenario), midimap_value_test.lua, midimap_settings_test.lua, midimap_layer_test.lua, midimap_page_test.lua, midimap_hit_test.c, arc_keys_test.lua, arc_keys_c_test.c, extras_layout_test.c, menu_stress_test.lua, run_all.sh midimap_scenario, window_toggle_scenario, arc_scenario -->
-<section id="midi-grid">
-<h2>6. MIDI, grid, arc</h2>
-<ul>
-  <li><strong>USB devices:</strong> real MIDI devices, grids, arcs and crow are found through udev, as upstream. The tests use virtual ones; real grids and arcs need your hardware.</li>
-  <li><strong>The virtual windows:</strong> GRID (64, 128 or 256 keys, switch under the window), ARC and KEYS. The virtual grid and arc are a pseudo-terminal that libmonome opens like a USB device (this is what the libmonome patch is for). KEYS is a MIDI device named &ldquo;norns keys&rdquo; that norns sees; where the ALSA sequencer is available it is also an ALSA MIDI port of that name that other programs can connect to.</li>
-  <li><strong>MIDI clock and notes from a DAW:</strong> norns has a JACK MIDI input port <code>Verdandi:midi_in</code> (device &ldquo;Verdandi JACK in&rdquo;). Connect your DAW's MIDI output to it (under PipeWire a <code>Midi-Bridge</code> port) with <code>pw-jack jack_connect</code> or a patchbay, and set <code>clock_source</code> to midi in PARAMS &gt; CLOCK. Tested with a JACK client playing 120 BPM clock, start, stop, continue and song position.</li>
-  <li><strong>Optional auto-connect:</strong> <code>midi_in_from=</code> in <code>audio.conf</code> (or <code>NORNS_MIDI_IN_FROM</code>) lists the start of port names to link to <code>Verdandi:midi_in</code>, separated by <code>;</code>, with <code>*</code> for a changing number (for example <code>Midi-Bridge:Client-* Virtual RawMIDI</code>). norns checks every 2 seconds and links again if a link is cut. Its own MIDI ports and <code>Midi Through</code> are never linked. Off without the line. SYSTEM &gt; DEVICES &gt; MIDI shows how many are linked.</li>
-  <li><strong>serialosc and a real grid:</strong> if serialosc runs as a system service it opens the grid's serial port at the same time as norns, and two programs reading one stream make grid events lag or arrive wrong. norns looks every 3 seconds, and when a grid or arc is plugged in or removed, at the <em>processes</em> (<code>serialoscd</code>, <code>serialosc-detector</code>, <code>serialosc-device</code>), at the systemd unit and at what is plugged in &mdash; not only at the grids norns managed to open: a serialosc that holds the port can keep norns from opening the grid at all (then no grid appears in norns) or make it appear twice. While serialosc runs and a grid is there, the window shows the note (three lines: &ldquo;GRID: serialosc has this grid&rdquo;, the stop command, the start command for later; the pill sizes itself to its text and wraps, at most three lines, in every style) and goes by itself when serialosc stops; the log has one line per episode with the commands (replug the grid after stopping it). <strong>SYSTEM &gt; DEVICES</strong> has an extra entry <strong>SERIALOSC</strong> while the note is on: the guide in short lines, and <kbd>K3</kbd> (after one question) stops serialosc without a terminal if your system allows it (<code>systemctl --no-ask-password</code>); if it wants a password the screen shows the command to type. Nothing is stopped without that question. <code>NORNS_SERIALOSC_CHECK=0</code> or <code>serialosc_check=0</code> turns it off. norns does not use serialosc's OSC route.</li>
-</ul>
+<!-- sources: lua/core/menu/system.lua (the list), devices.lua, audio.lua, mods.lua, ui.lua, box.lua, picker.lua, midimap.lua, cleanup.lua, reset.lua, restart.lua; lua/core/ui_settings.lua, box_settings.lua; docs/port/ui-settings-plan.md, box-style-plan.md, colour-picker-plan.md, midi-map-plan.md, midi-actions-plan.md, arc-plan.md;
+     tests: ui_screen_test.lua, ui_settings_test.lua, ui_keys_test.lua, box_page_test.lua, box_settings_test.lua, textentry_test.lua, midimap_page_test.lua, midimap_settings_test.lua, cleanup_page_test.lua, audio_page_test.lua, mods_test.lua, menu_stress_test.lua -->
+<section id="system">
+<h2>SYSTEM pages</h2>
+<p>HOME &gt; SYSTEM lists, in this order: DEVICES, AUDIO, MODS, SCREEN, THEME, MIDI MAP, CLEAN UP, RESET, RESTART. WIFI, UPDATE and the password are left to the operating system. On every page <kbd>E2</kbd> chooses a row, <kbd>E3</kbd> changes it, <kbd>K3</kbd> opens or acts, <kbd>K2</kbd> goes back. Changes show at once and are kept.</p>
 
-<h3 id="midi-map">SYSTEM &gt; MIDI MAP: MIDI controls for E1&ndash;E3 and K1&ndash;K3</h3>
-<p>HOME &gt; SYSTEM &gt; MIDI MAP (below THEME) lets knobs, encoders and buttons of a MIDI controller turn <strong>E1, E2, E3</strong> and press <strong>K1, K2, K3</strong> of the norns screen. The window shows the key lighting up and the knob turning. The page buttons and MUTE are the <a href="#midi-actions">MIDI actions</a> below. <kbd>E2</kbd> chooses the row, <kbd>E3</kbd> changes the value, <kbd>K3</kbd> opens or acts, <kbd>K2</kbd> goes back (and cancels a learn).</p>
-<p><strong>The short way:</strong> choose the <strong>LEARN</strong> row and press <kbd>K3</kbd>; the screen says &ldquo;CLICK A CONTROL&rdquo;, and the six controls light up in turn in the window. Click E1, E2, E3, K1, K2 or K3 in the window (the click only chooses, nothing is turned or pressed), then move the knob or press the button on your controller. The first control change (for a key also a note) is taken, the row shows it, and an encoder asks you to <em>turn it both ways</em> so that it can suggest its format. Leave it alone for 15 seconds, press <kbd>K2</kbd> (or <kbd>Esc</kbd>), or leave the page, and the learn stops without changing anything. A learn is only ever started from this page.</p>
+<h3 id="sys-devices">SYSTEM &gt; DEVICES</h3>
+<p>The MIDI, grid, arc and HID devices norns sees, and the keyboard layout. MIDI shows how many ports are auto-linked (see Sound, MIDI and grids). While serialosc is running with a grid plugged in, a SERIALOSC entry appears with the short guide (see <a href="#trouble">If something goes wrong</a>).</p>
+
+<h3 id="sys-audio">SYSTEM &gt; AUDIO</h3>
+<p>Shows what is connected: INPUT, OUTPUT, RATE, BUFFER. With PipeWire the system owns card and rate; BUFFER is only a request PipeWire may refuse. With norns&rsquo;s own <code>jackd</code> the rows change the devices, rate and period, and APPLY restarts norns. With a JACK server you started yourself the page is read-only.</p>
+
+<h3 id="sys-mods">SYSTEM &gt; MODS</h3>
+<p>Every mod found in <code>dust/code</code>. <kbd>E3</kbd> right enables, left disables; restart norns (SYSTEM &gt; RESTART) to load or unload. A mod with an error is skipped and named in the log; the rest still load.</p>
+
+<h3 id="sys-screen">SYSTEM &gt; SCREEN</h3>
+<p>How the screen looks in the window; a bar of the 16 grey levels shows the result.</p>
 <table>
 <tr><th>row</th><th>does</th></tr>
-<tr><td>PRESET</td><td><kbd>E3</kbd> browses, <kbd>K3</kbd> applies: <strong>NONE</strong> (clears all six), <strong>PUSH 2 (UNVERIFIED)</strong> and <strong>GENERIC REL 2S</strong>, then your own (marked <code>*</code>). A preset sets the six mappings, for any device and any channel; it never names a device. The PUSH 2 numbers (E1&ndash;E3 = CC 71&ndash;73, K1&ndash;K3 = CC 102&ndash;104, relative) are from memory of the vendor&rsquo;s document and were not checked on a Push 2: check them with a MIDI monitor, or use LEARN.</td></tr>
-<tr><td>LEARN</td><td>see above</td></tr>
-<tr><td>E1 E2 E3 K1 K2 K3</td><td>what each control answers to, for example <code>CC71 REL 2S</code> or <code>NOTE 36</code>; <code>?</code> after the format means it was only a suggestion, <code>!</code> means the CC is also in the params MAP of the loaded script. <kbd>K3</kbd> opens the control&rsquo;s own view.</td></tr>
-<tr><td>ON CLASH</td><td><strong>PARAMS MAP</strong> (the default) or <strong>BOTH</strong>, see below</td></tr>
-<tr><td>SAVE AS / DELETE</td><td>keep the six mappings as a preset of your own (1 to 18 letters, digits, spaces, <code>-</code> <code>_</code> <code>.</code>), or delete one; as on THEME</td></tr>
+<tr><td>PRESET</td><td><kbd>E3</kbd> steps through WHITE, YELLOW, PINK, then your own (marked <code>*</code>); <kbd>K3</kbd> opens the list. A preset is the colour only: BRIGHTNESS and CONTRAST keep their values, and the box and its THEME are untouched. <code>NAME~</code> means the colour changed since; CUSTOM is a colour that has no name</td></tr>
+<tr><td>COLOUR</td><td><kbd>K3</kbd> opens the <a href="#picker">colour picker</a> with live preview; <kbd>Ctrl</kbd>+<kbd>C</kbd> copies the code, <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes one</td></tr>
+<tr><td>BRIGHTNESS</td><td>0.1 to 1 (default 1)</td></tr>
+<tr><td>CONTRAST</td><td>0 to 1 (default 0.5): lifts the dim grey levels that many scripts use for labels and waveforms. It also changes screenshots and GIFs</td></tr>
+<tr><td>SAVE</td><td>asks for a name (up to 18 letters, digits, space, <code>- _ .</code>) and saves the colour as your preset; an existing name asks before overwriting; WHITE, YELLOW, PINK and CUSTOM cannot be used</td></tr>
+<tr><td>DELETE</td><td>only while one of your own presets is in use; asks once. The colour stays and the row reads CUSTOM</td></tr>
 </table>
-<p><strong>A control&rsquo;s view</strong> has: <strong>LEARN</strong> (straight to waiting for the controller), <strong>NUMBER</strong> (<kbd>E3</kbd> steps, <kbd>K3</kbd> types a number from 0 to 127), <strong>DEVICE</strong> (ANY, or one device by name), <strong>CHANNEL</strong> (ANY or 1&ndash;16), for an encoder <strong>MODE</strong> (ABS, REL 2S, REL SIGN, REL OFS) and <strong>SENS</strong> (1 to 9), for a key <strong>TYPE</strong> (CC or NOTE) and, for a CC key, <strong>THRESHOLD</strong>, and <strong>CLEAR</strong>. Every control has its own device and channel, so different controls can come from different controllers.</p>
-<ul>
-  <li><strong>Absolute knobs</strong> (0&ndash;127): norns turns the encoder by how much the value changed, at the default one step for two values; SENS changes that from a quarter to four times. The first message after learn, after a pause of more than 1.5 seconds, or after a jump of more than 40 is only the starting point, so picking a knob up where it is does not jump.</li>
-  <li><strong>Relative encoders</strong> (endless knobs) send small numbers around a centre; three formats exist and the controller&rsquo;s manual says which it uses: <strong>REL 2S</strong> two&rsquo;s complement (1 is up, 127 is down), <strong>REL SIGN</strong> sign and magnitude (1 is up, 65 is down), <strong>REL OFS</strong> offset binary (65 is up, 63 is down). Learn suggests one if you turn the knob both ways; the suggestion carries a <code>?</code> until you set the mode yourself.</li>
-  <li><strong>Keys:</strong> a CC key presses when the value is above THRESHOLD (default 63) and releases when it is 0; a note key presses on note on and releases on note off. <strong>A mapped K1 works like the K1 of the box: a short press opens or closes the menu</strong>, so be careful with it while a script is running.</li>
-  <li>The steps go the same way as the mouse and the keyboard (they pass through norns&rsquo;s encoder processing), so a script&rsquo;s own encoder sensitivity and acceleration apply to them too.</li>
-  <li><strong>Scripts are never touched.</strong> MIDI MAP only listens: every message still reaches the script&rsquo;s own <code>midi</code> handlers, mapped or not. If a script&rsquo;s <em>params MAP</em> (PARAMS &gt; MAP) uses the same device, channel and CC, the <strong>params MAP gets it</strong> and MIDI MAP stays out (ON CLASH = BOTH makes both react). The page warns when you assign such a CC and when a script loads. A script&rsquo;s own <code>midi</code> handler is not visible to MIDI MAP, so if one uses the same CC, both react.</li>
-  <li><strong>ANY device</strong> never takes the iii grid (&ldquo;iii grid&rdquo;, an iii arc) or the KEYS window, so a grid&rsquo;s key presses cannot be mistaken for a controller; choose such a device by name if you want it. A device chosen by name is matched without regard to case and spaces, and the name of an interface means all its ports: a mapping for <code>mio</code> works for <code>mio</code>, <code>mio 1</code> and <code>mio 2</code>, one for <code>mio 2</code> only that port. It survives restarts and plugging the device in again, and shows ABSENT while the device is away. Controllers on one MIDI port are one device to norns: tell them apart by channel and CC number.</li>
-  <li>A controller on another computer (for example an Ableton Push 2 on Windows, through a MIDI interface or a network link) is an ordinary MIDI source: through a USB interface it is that device; through JACK MIDI (<code>Verdandi:midi_in</code>) it is &ldquo;Verdandi JACK in&rdquo;, where all sources are one device, so use ANY.</li>
-  <li><strong>The virtual arc and WATCH:</strong> see <a href="#midi-arc">below</a>.</li>
-  <li><strong>While a text entry is open</strong> (a CC number, a preset name, THEME, SCREEN, the colour picker&rsquo;s code, the tape name) your mapped controls drive it <em>like the keyboard and the hardware</em>, with no setting: a mapped <strong>E2</strong> moves through the characters (or chooses DEL / OK), a mapped <strong>E3</strong> switches between the characters and the DEL / OK row, a mapped <strong>K3</strong> adds the character, deletes, or accepts (on the press; the release does nothing), a mapped <strong>K2</strong> cancels. That is how you can name a recording from a Beatstep Pro. <strong>K1</strong> is ignored (it would toggle the menu under the entry), as are <strong>E1, A1&ndash;A4</strong>, the <a href="#midi-actions">MIDI actions</a> and everything else, so a stray touch cannot change the text. A release and a turn of 0 never act. A small <code>MIDI</code> in the top right corner of the entry says that a mapped control can drive it. The arc window takes none of its keys (5 6 T Y G H B N are typed). If the menu is changed under an open entry (a page button) the entry is closed.</li>
-  <li>The settings are in <code>midimap.conf</code> and the presets in <code>midimap-presets/</code> in the norns home (key=value lines like <code>ui.conf</code>); a damaged value falls back to its default with a line in <code>norns.log</code>, and clean up never touches them.</li>
-</ul>
 
-<h3 id="midi-arc">The virtual arc: A1&ndash;A4, the arc keys, WATCH</h3>
-<p>MIDI MAP also has four rows <strong>A1 to A4</strong> for the four encoders of the <em>virtual</em> arc window (F8); a real arc plugged in is not touched. They work like E1&ndash;E3 (learn, NUMBER, DEVICE, CHANNEL, MODE: absolute or the three relative formats), and the learn is started the same way, then <strong>click the ring in the arc window</strong> (the window lights the rings in turn, then the one being learned) and move the controller. Arc encoders take a CC only. The arc turns by <em>ticks</em>, 1024 to a turn as on a real arc, straight to the script as <code>a.delta(n, d)</code> (nothing of norns&rsquo;s encoder sensitivity or acceleration applies):</p>
+<h3 id="sys-theme">SYSTEM &gt; THEME</h3>
+<p>How the box looks: a style, five colours and looks of your own. The page scrolls.</p>
 <table>
 <tr><th>row</th><th>does</th></tr>
-<tr><td>GAIN</td><td>ticks per MIDI unit, 1 to 64, default <strong>8</strong>: one sweep of an absolute knob (127 values) is about one turn of the ring, and one step of a relative encoder is 8 ticks (a nudge of 1 tick needs GAIN 1)</td></tr>
-<tr><td>ACCEL</td><td><strong>OFF</strong> (default: linear, as an arc is), LOW or HIGH: bigger relative steps and quick successive messages count for more</td></tr>
-<tr><td>ONE TURN</td><td><kbd>K3</kbd> starts counting; turn the physical encoder exactly once round, press <kbd>K3</kbd>: GAIN is set so that one turn of the encoder is one turn of the ring (K2 cancels). A value of 0, or a key release, never turns anything</td></tr>
+<tr><td>STYLE</td><td>ALUMINIUM (brushed metal) or PIXEL (hard-edged blocks, a pixel font). Only the style changes; the colours stay</td></tr>
+<tr><td>PIXEL LOOK</td><td>only with STYLE PIXEL: PIXEL, RETRO (chunky blocks, shadows, a dithered band), 8-BIT (chunky and plain) or 16-BIT (finer, more shading). Works with every colour</td></tr>
+<tr><td>PRESET</td><td>DARK, LIGHT, COLOUR, MAC (the colours of the Mac app), then your own (<code>*</code>); <kbd>K3</kbd> opens the list. A preset is the five colours only, never the style</td></tr>
+<tr><td>BOX, KEYS, ENCODERS, BUTTONS, FONT</td><td><kbd>K3</kbd> opens the colour picker; <kbd>Ctrl</kbd>+<kbd>C</kbd> and <kbd>Ctrl</kbd>+<kbd>V</kbd> copy and paste the code. A hard-to-read FONT and BUTTONS pair is accepted with a warning</td></tr>
+<tr><td>SAVE, DELETE</td><td>as on SCREEN: your own presets, up to 64</td></tr>
 </table>
-<p>If the arc window is closed when a mapped encoder moves, nothing happens and a short message on the box says so once (&ldquo;ARC WINDOW IS CLOSED: F8&rdquo;); the window is not opened for you. <strong>Two controls on one CC:</strong> when you learn or type a CC that another control (E1&ndash;K3 or A1&ndash;A4) already uses, the page asks &ldquo;CC 71 IS E2. MOVE IT TO A1?&rdquo; (<kbd>K3</kbd> yes, <kbd>K2</kbd> no); that is how the encoders of one unit are split between E1&ndash;E3 and the arc. Two controls that overlap on the same CC (for example through ANY) are marked <code>!</code>. The params MAP still wins a CC both want.</p>
-<p><strong>WATCH</strong> (a row after A4) shows which relative format a controller sends: turn one encoder one click to the right and one to the left, a few times. It shows the device, the channel, the CC, the last six values and a verdict: <code>65 63 65 63</code> is REL OFS, <code>1 127 1 127</code> is REL 2S, <code>1 65 1 65</code> is REL SIGN, a run like <code>40 41 43 44</code> is an absolute knob. While WATCH is open nothing is mapped, so you can turn anything. <strong>ARC KEYS</strong> (a row) switches off the use of the keys 5/6, T/Y, G/H, B/N in the norns window (the arc window always has them).</p>
-<p>Scripts that read the keyboard keep those keys: <code>verdandi scan-fkeys</code> now also lists the scripts that read the keyboard and name <kbd>5 6 T Y G H B N</kbd>. The arc settings are in <code>midimap.conf</code> (<code>a1.num=</code>, <code>a1.gain=</code>, <code>a1.accel=</code>, <code>arc_keys=</code>).</p>
 
-<h3 id="midi-actions">MIDI actions: the buttons of the window from a MIDI controller</h3>
-<p>MIDI MAP also has an <strong>ACTIONS</strong> row (after A4). It maps pads, buttons or encoders of a controller to <strong>14 actions</strong> that do what a click on the button does: <strong>MIX, TAPE, HOME, PARAMS</strong> (the menu pages), <strong>INPUT</strong> (MIC, SYS, OFF), <strong>GRID, ARC, KEYS</strong> (the virtual windows), <strong>MAIDEN, MANUAL, MUTE, DETACH</strong> (the screen in its own window), <strong>FULLSCREEN</strong> (of the screen window, as <kbd>F11</kbd>) and <strong>SCREENSHOT</strong>. Quitting, moving in the menu and the F6&ndash;F8 keys cannot be mapped. The mouse and the MIDI message take the same path in the window, so they do the same thing. The row shows <code>3 OF 14</code>.</p>
+<h3 id="picker">The colour picker</h3>
+<p>Opened from a colour row. Rows HUE, SATURATION, BRIGHTNESS and HEX; the box or the screen shows the colour live, and nothing is saved until you keep it.</p>
 <table>
-<tr><th>In the list</th><th></th></tr>
-<tr><td><kbd>E2</kbd></td><td>moves (ASSIGN ALL, the 14 actions, CLEAR ALL)</td></tr>
-<tr><td><kbd>K3</kbd> on an action</td><td><strong>learn</strong>: the banner says <code>LEARN MUTE</code>; press the pad. A <em>note on</em> with a velocity above 0 is taken as a NOTE; a CC is taken as an <strong>encoder step</strong> in the direction you turned (in the format of your last encoder or arc mapping, else REL OFS; WATCH tells you the real one). A pad that sends CC and a button that needs a threshold are set in the view (KIND = CC BUTTON)</td></tr>
-<tr><td><kbd>E3</kbd> right / left on an action</td><td>opens its <strong>view</strong> / <strong>clears</strong> it (&ldquo;MIX CLEARED&rdquo;)</td></tr>
-<tr><td><kbd>K3</kbd> on <strong>ASSIGN ALL</strong></td><td>walks through all 14 in the order of the list: press a pad for the one asked (<code>ASSIGN 3/14</code>), <kbd>K3</kbd> skips it (an action that already has a message keeps it), <kbd>K2</kbd> stops (&ldquo;STOPPED AT 3 OF 14&rdquo;), 15 seconds without a message stops too. A pad another action or control already uses asks first (<kbd>K3</kbd> moves it, <kbd>K2</kbd> skips this action). At the end: &ldquo;DONE: 11 ASSIGNED, 3 SKIPPED&rdquo;</td></tr>
-<tr><td><kbd>K3</kbd> on CLEAR ALL</td><td>asks once</td></tr>
+<tr><th>key</th><th>does</th></tr>
+<tr><td><kbd>Up</kbd> <kbd>Down</kbd>, <kbd>E2</kbd></td><td>choose the row</td></tr>
+<tr><td><kbd>Left</kbd> <kbd>Right</kbd>, <kbd>-</kbd> <kbd>=</kbd>, <kbd>E3</kbd></td><td>change by a step (5 degrees, 5 percent); <kbd>Shift</kbd> five steps, <kbd>Ctrl</kbd> a fine step; <kbd>PageUp</kbd> <kbd>PageDown</kbd> five steps; <kbd>Home</kbd> <kbd>End</kbd> smallest and largest</td></tr>
+<tr><td><kbd>K3</kbd> (<kbd>Enter</kbd>)</td><td>keep and save (&ldquo;saved #3B6EA8&rdquo;); on the HEX row it opens the text entry</td></tr>
+<tr><td><kbd>K2</kbd> (<kbd>Esc</kbd>)</td><td>give the old colour back (&ldquo;restored&rdquo;); leaving by a page key does the same</td></tr>
+<tr><td><kbd>H</kbd>, <kbd>C</kbd>, <kbd>R</kbd></td><td>type a code (3 or 6 digits, with or without #); centre (#408080); back to the opening colour</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>copy the code to the system clipboard; paste one (anything that is not a colour is refused)</td></tr>
 </table>
-<p><strong>Two things on one message.</strong> Learning always asks (&ldquo;NOTE 36 IS MANUAL. MOVE IT TO MUTE?&rdquo;), also in ASSIGN ALL for an action further down the list that already has the note, and for a pad that bounces. Where no question can be asked &mdash; a <code>midimap.conf</code> or preset that puts two on one note, <kbd>E3</kbd> stepping a NUMBER onto a used note, a change of DEVICE or CHANNEL that makes them overlap &mdash; the page says it in a plain sentence (&ldquo;NOTE 36 IS ON MANUAL AND MUTE&rdquo;), the log and a message on opening the page say it, and both rows carry a <code>!</code>. After a learn the line names what was set and the channel it came on (&ldquo;MUTE = NOTE 36 CH 1&rdquo;), and the line under the list always names the selected action and its message.</p>
-<p>The <strong>view</strong> of an action: LEARN, KIND (NOTE, CC BUTTON, ENCODER STEP), NUMBER, DEVICE and CHANNEL (the same list and the same name matching as the controls; ANY never takes the iii grid or the KEYS window), THRESHOLD for a CC button, FORMAT (REL 2S, REL SIGN, REL OFS) and DIRECTION (UP or DOWN) for an encoder step, CLEAR.</p>
-<p><strong>When an action fires.</strong> Only on a press: a note on above velocity 0; a CC button when the value goes above the threshold (an edge); an encoder step when it turns the chosen way. A note off, velocity 0, a CC of 0, a step of 0, the other direction and a key release never do anything. The same action does not fire again within <strong>0.25 s</strong> (a pad bounce does not toggle MUTE twice), and an encoder step fires <strong>once per burst</strong> (the encoder must be quiet for 0.3 s before it fires again). With the row of buttons shown, the button is pressed for 150 ms; with the row hidden nothing is drawn, and nothing is said when an action worked. FULLSCREEN needs the screen in its own window; while it is docked the box says <em>FULLSCREEN: DETACH THE SCREEN FIRST (F9)</em>. Nothing fires while a text entry is open, a learn, WATCH or ONE TURN is running. Scripts still receive every message; the params MAP wins a CC both want, as for the controls; two things on one note or CC ask first and are marked <code>!</code>.</p>
-<p><strong>The master switch</strong> (starts ON): when OFF <em>no action fires</em>, while your E1&ndash;E3, K1&ndash;K3 and A1&ndash;A4 mappings keep working. Three ways, one state, saved in <code>midimap.conf</code> (<code>actions=</code>):</p>
-<ul>
-  <li>the row <strong>MIDI ACTIONS</strong> in MIDI MAP (<kbd>K3</kbd> toggles, <kbd>E3</kbd> right ON, left OFF);</li>
-  <li>the ticked item <strong>MIDI actions enabled</strong> in the right-click menu (<kbd>F10</kbd> opens it; the tick is right after a restart);</li>
-  <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>, in the norns window and in the screen window, with the message <em>MIDI actions on</em> / <em>off</em>. The shell takes it before a script sees it, like <kbd>Ctrl</kbd>+<kbd>M</kbd> (mute); <code>verdandi scan-fkeys</code> lists the scripts that read the keyboard with Ctrl and Shift and name the letter M.</li>
-</ul>
-<p>Files: <code>midimap.conf</code> has <code>actions=0/1</code> and <code>act.mix.type=</code>, <code>act.mix.num=</code>, <code>act.mix.dev=</code>, <code>act.mix.ch=</code>, <code>act.mute.mode=</code>, <code>act.mute.dir=</code>, <code>act.tape.threshold=</code> (type <code>note</code>, <code>ccbutton</code> or <code>step</code>). Your own presets carry the actions (without device and channel); the built-in presets leave them alone.</p>
+
+<h3 id="sys-midimap">SYSTEM &gt; MIDI MAP</h3>
+<p>Maps knobs, encoders and buttons of a MIDI controller to E1&ndash;E3, K1&ndash;K3, the four encoders of the virtual arc, and the buttons of the window. The window shows the control moving. Scripts are never touched: every message still reaches them; if the script&rsquo;s own params MAP uses the same CC, it wins (ON CLASH = BOTH lets both react).</p>
+<table>
+<tr><th>row</th><th>does</th></tr>
+<tr><td>PRESET</td><td>NONE, PUSH 2 (UNVERIFIED), GENERIC REL 2S, then your own (<code>*</code>); a preset sets the mappings for any device</td></tr>
+<tr><td>LEARN</td><td><kbd>K3</kbd>, click a control in the window (E1&ndash;E3, K1&ndash;K3), then move the knob or press the button. An encoder asks you to turn it both ways to suggest its format. 15 seconds of silence or <kbd>K2</kbd> cancels</td></tr>
+<tr><td>E1 E2 E3 K1 K2 K3</td><td>what each answers to, e.g. <code>CC71 REL 2S</code> or <code>NOTE 36</code>; <kbd>K3</kbd> opens its view: NUMBER, DEVICE, CHANNEL, MODE (ABS, REL 2S, REL SIGN, REL OFS), SENS, TYPE, THRESHOLD, CLEAR. <code>!</code> marks a clash. A mapped K1 opens the menu, as K1 does</td></tr>
+<tr><td>A1&ndash;A4, GAIN, ACCEL, ONE TURN</td><td>the virtual arc&rsquo;s encoders (turn the arc with <kbd>5</kbd> <kbd>6</kbd>, <kbd>T</kbd> <kbd>Y</kbd>, <kbd>G</kbd> <kbd>H</kbd>, <kbd>B</kbd> <kbd>N</kbd>; <kbd>Shift</kbd> = smaller steps). GAIN is ticks per MIDI unit; ONE TURN sets it from one full turn of your encoder. Needs the arc window open (<kbd>F8</kbd>)</td></tr>
+<tr><td>WATCH</td><td>turn an encoder a click each way: shows the values and which format it sends</td></tr>
+<tr><td>ARC KEYS</td><td>switches the arc keys of the norns window on or off</td></tr>
+<tr><td>ACTIONS</td><td>maps pads, buttons or encoders to MIX, TAPE, HOME, PARAMS, INPUT, GRID, ARC, KEYS, MAIDEN, MANUAL, MUTE, DETACH, FULLSCREEN, SCREENSHOT. <kbd>K3</kbd> on an action learns it (press the pad); ASSIGN ALL walks through all of them; <kbd>E3</kbd> right opens an action&rsquo;s view, left clears it. Only a press acts; the same action does not fire twice within 0.25 s</td></tr>
+<tr><td>MIDI ACTIONS</td><td>the master switch (also the menu item and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>): off, no action fires; E, K and A mappings keep working</td></tr>
+<tr><td>ON CLASH, SAVE AS, DELETE</td><td>PARAMS MAP (default) or BOTH; your own presets (with the actions, without device and channel)</td></tr>
+</table>
+<p>Learning a note or CC that another control already uses asks first (&ldquo;NOTE 36 IS MANUAL. MOVE IT TO MUTE?&rdquo;). While a text entry is open your mapped E2, E3, K3 and K2 drive it like the keyboard does (that is how you can name a recording from a controller); everything else, actions included, is ignored.</p>
+
+<h3 id="sys-cleanup">SYSTEM &gt; CLEAN UP</h3>
+<p>Shows what Verdandi keeps in your folder (disabled files, logs, crash reports, seeded packs, cache), each with its size. <kbd>K3</kbd> opens a group; nothing changes without a second <kbd>K3</kbd>. An ARM PLUG-INS line appears when plug-ins built for the Raspberry Pi would stop SuperCollider: <kbd>K3</kbd> <kbd>K3</kbd> moves them to <code>disabled/</code> (restorable from there). The last line, REMOVE &gt;N DAYS (30, 90, 180 or 365), is the only thing that deletes, after one confirmation. It never touches <code>dust/</code> or your settings. The same from a terminal: <code>verdandi tidy list</code>.</p>
+
+<h3 id="sys-reset">SYSTEM &gt; RESET</h3>
+<p>One question (<kbd>K3</kbd> yes, <kbd>K2</kbd> no): clears the norns system settings (the system preset and state, favourites, the list of enabled mods) and restarts. Your scripts, <code>dust</code> and the SCREEN, THEME, MIDI MAP and audio settings are not touched.</p>
+
+<h3 id="sys-restart">SYSTEM &gt; RESTART</h3>
+<p>One question, then norns restarts (the window closes and opens again).</p>
 </section>
 
-<!-- sources: docs/port/phase-4-maiden.md, maiden-exposure-evidence.md; linux/norns.sh; linux/maiden-build.sh; linux/patches/maiden-linux-guard-and-units.patch; ws-wrapper/src/main.c;
-     tests: maiden_test.sh, maiden_launcher_test.sh, maiden_install_test.sh, maiden_button_test.sh -->
-<section id="maiden">
-<h2>7. maiden and the script catalog</h2>
-<p>maiden is the web editor of norns: a file tree of <code>dust</code>, an editor, the consoles (matron and SuperCollider) and the script catalog (install and update). When it is built, the launcher starts it and prints <code>maiden at http://127.0.0.1:5000/maiden</code>. The MAIDEN button opens that page. The log is <code>logs/maiden.log</code> in the norns home.</p>
-<ul>
-  <li><strong>Port:</strong> 5000, or <code>NORNS_MAIDEN_PORT=5001 linux/norns.sh</code>. If the port is taken the launcher says so and does not start maiden. The consoles use fixed ports: 5555 (norns) and 5556 (SuperCollider).</li>
-  <li><strong>Where things go:</strong> installed scripts into <code>dust/code/&lt;name&gt;/</code>, the catalogs into <code>dust/data/catalogs</code>, the sources they come from into <code>dust/data/sources</code> (copied on the first start). The editor reads and writes anything under <code>dust</code> and nothing outside it. A script is installed by downloading it (git or zip); maiden runs nothing while installing.</li>
-  <li><strong>Safety:</strong> maiden and both consoles answer on <code>127.0.0.1</code> only, so other computers cannot reach them (tested). In addition, a web page from <em>another site</em> open in your browser cannot use them: the consoles keep a browser connection only if its page came from maiden's own address (<code>127.0.0.1</code> or <code>localhost</code> with maiden's port), and maiden refuses requests with another <code>Host</code> or <code>Origin</code>. Programs on your own computer, such as <code>maiden-repl</code> and your scripts, are not affected: they can do what you can. The consoles run code (Lua, SuperCollider) as you, as on the device.</li>
-  <li><strong>The units commands</strong> of maiden (<code>;restart</code> and the like, which talk to systemd on a norns) are switched off here and answer &ldquo;not available in Verdandi&rdquo;. Restart norns from its window (SYSTEM &gt; RESTART) or start it again.</li>
-  <li><strong>The norns console needs a start without <code>--terminal</code>.</strong> See <a href="#limitations">section 13</a>.</li>
-</ul>
-<p>Checked by tests: the binds, the editor's file API, installing a script from a zip and running it in norns, the refusals above, the button. Checked once by hand over the network: installing a script from GitHub through maiden's git route, and downloading the catalog. The real browser session with the real catalog is for your computer (<code>docs/port/HARDWARE-CHECKLIST.md</code>).</p>
+<!-- sources: linux/norns.sh (decide_server, input), crone/src/PortSelect.h, lua/core/menu.lua (set_input), matron/src/platform/linux/app_audio_linux.cc, jack_midi_in.cc, midi_autoconnect.cc, serialosc_check.cc, serialosc_conflict.h, lua/core/menu/devices.lua; docs/port/phase-3.md, clock-notes.md;
+     tests: launcher_test.sh, audio_ports_test.sh, input_test.sh, input_monitor_test.lua, jack_midi_clock_test.c, midi_autoconnect_test.sh, serialosc_test.sh, serialosc_conflict_test.cpp, vgrid_test.c, devices_midi_test.lua -->
+<section id="sound-midi">
+<h2>Sound, MIDI and grids</h2>
+<p><strong>Sound.</strong> norns uses JACK. The launcher takes a JACK server that is already running; otherwise, if PipeWire runs, it uses it through <code>pw-jack</code>; otherwise it starts its own <code>jackd</code>. Under PipeWire norns plays to the desktop&rsquo;s default output and listens to its default input, read when norns starts. To pin a card put <code>out_ports=</code> / <code>in_ports=</code> (the start of the client name <code>pw-jack jack_lsp</code> shows) in <code>audio.conf</code>. If no card is found norns starts unconnected and the window says &ldquo;AUDIO: not connected, see SYSTEM &gt; AUDIO&rdquo;.</p>
+<table>
+<tr><th>MIC button / Input menu</th><th>what norns hears</th></tr>
+<tr><td>MIC</td><td>the input of the card norns chose</td></tr>
+<tr><td>SYS</td><td>the sound of every application except norns (each appears as a JACK client; later ones join by themselves). norns&rsquo;s own output is never in it, so it cannot feed back</td></tr>
+<tr><td>one application</td><td>chosen in the right-click menu</td></tr>
+<tr><td>OFF</td><td>nothing</td></tr>
+</table>
+<p>With MIC on and speakers a script that plays its input can feed back: keep the volume low or use headphones. The choice is kept for the next start.</p>
+<p><strong>MIDI and a DAW.</strong> Real MIDI devices, grids, arcs and crow work over USB. The KEYS window is a MIDI device named &ldquo;norns keys&rdquo; (also an ALSA port where available). norns has a JACK MIDI input <code>Verdandi:midi_in</code> (device &ldquo;Verdandi JACK in&rdquo;): connect your DAW&rsquo;s MIDI output to it with a patchbay or <code>pw-jack jack_connect</code>, and set <code>clock_source</code> to midi in PARAMS &gt; CLOCK to follow its clock, start, stop and position. To link ports automatically put <code>midi_in_from=</code> in <code>audio.conf</code> (names separated by <code>;</code>, <code>*</code> for a changing number). There is no plug-in (VST3) version yet.</p>
+<p><strong>Grids and arcs.</strong> The virtual grid (64, 128 or 256 keys), arc and keyboard open with <kbd>F6</kbd>, <kbd>F8</kbd>, <kbd>F7</kbd> or their buttons, from any window. Real grids and arcs are found on plug-in; the package installs a udev rule so your user may open them. A grid is listed once.</p>
 </section>
 
-<!-- sources: lua/core/virtual_home.lua, lua/core/mods.lua, lua/core/menu/mods.lua, lua/core/startup.lua; linux/plugin_arch_check.cc, matron/src/platform/linux/plugin_arch.h; linux/shims/*; KNOWN-ISSUES.md items 8, 11;
-     tests: virtual_home_test.lua, mods_test.lua, virtual_chunkname_test.lua, chunkname_test.sh, plugin_arch_test.cpp, plugin_check_test.sh, plugin_note_test.sh, shim_test.sh, shim_restart_test.sh -->
-<section id="scripts">
-<h2>8. Scripts</h2>
-<p>Scripts live in <code>dust/code/&lt;name&gt;/&lt;name&gt;.lua</code>. Put them there, import them from the right-click menu, or install them from maiden; choose one in HOME &gt; SELECT.</p>
-<h3>Mods</h3>
-<p>As on the device, every folder <code>dust/code/&lt;name&gt;/</code> that has <code>lib/mod.lua</code> is a mod and is listed in HOME &gt; SYSTEM &gt; MODS (<kbd>E3</kbd> right enables it, left disables it; the choice is kept in <code>dust/data/system.mods</code>). Enabled mods are loaded when norns starts, so enable, then restart norns (SYSTEM &gt; RESTART). <code>logs/norns.log</code> has one line for every mod found (&ldquo;mod found: name &hellip;&rdquo;, enabled or not), one for every mod loaded and, if a mod has an error, &ldquo;mod failed: name: &hellip;&rdquo; with the error; the other mods still load and norns goes on. Mods that need a SuperCollider extension (an nb voice such as doubledecker has a <code>.sc</code> file) are compiled with the rest of <code>dust</code> when SuperCollider starts.</p>
-
-<h3>/home/we</h3>
-<p>Scripts see the device's paths: <code>os.getenv('HOME')</code> and <code>_path</code> say <code>/home/we</code>, and norns translates such paths to the norns home wherever they leave Lua (files, shell commands, <code>require</code>, softcut, SuperCollider, the sidecar). Output coming back is translated the other way. Scripts and libraries are named with the virtual path (<code>debug.getinfo(1).source</code> is <code>@/home/we/dust/code/&hellip;</code>), so libraries that find their own folder with it work (nb, used by Cheat Codes 2, is tested). Error messages and tracebacks therefore show <code>/home/we/&hellip;</code>, as on the device; the real home is printed once at the top of the log (<code>virtual /home/we -&gt; &hellip;</code>).</p>
-<h3>/home/we inside SuperCollider</h3>
-<p>Engines are written in SuperCollider, which has no idea of the virtual <code>/home/we</code>. The launcher therefore loads a small class folder (<code>sc/linux</code>) that maps <code>/home/we</code> to the norns home in SuperCollider's file, sound file, shell and server-message functions (<code>PathName</code>, <code>File</code>, <code>Buffer.read</code>, <code>.load</code>, <code>unixCmd</code> &hellip;). This is why scripts such as dronecaster and bloom, whose engines read their sample folders by the device path, make sound here. <code>logs/sclang.log</code> shows about two dozen &ldquo;Extension &hellip; overwrites&rdquo; lines at start; they are these overrides and harmless. The next start after an update rewrites <code>sclang_conf.yaml</code> (the old one is kept as <code>sclang_conf.yaml.old</code>). To list the scripts that depend on it: <code>python3 linux/scan-sc-paths.py ~/Verdandi/dust/code</code>. Plug-in code inside scsynth that opens files by itself is not covered (none is known).</p>
-<h3>Commands scripts run</h3>
-<p>norns and the commands its scripts run (<code>os.execute</code>, <code>norns.system_cmd</code>) get <code>linux/shims</code> first on their <code>PATH</code>. <code>sudo systemctl restart norns-&hellip;</code> (a script's installer asks for this on a Raspberry Pi) returns at once with exit 0, prints <code>norns: there is no systemd for norns on this build &hellip;</code> and norns restarts itself within a few seconds. Other <code>sudo</code> commands run as <code>sudo -n</code>: if a password would be needed they fail at once instead of freezing norns. <code>NORNS_NO_SHIMS=1</code> switches this off. A script that calls <code>/usr/bin/sudo</code> by its full path is not covered. <code>wget</code>, <code>apt</code> and <code>apt-get</code> are not provided.</p>
-<p>The answer a script reads from a command (<code>os.capture</code>, <code>io.popen</code>, <code>norns.system_cmd</code>) is what the command writes to its standard output, as on the device; the complaints it writes to standard error go to <code>logs/norns.log</code>. A script that lists a folder that does not exist therefore gets an empty answer (this is what makes mx.samples offer &ldquo;get?&rdquo; for a pack that is not downloaded). A command that says <code>2&gt;&amp;1</code> itself still gets its errors, and starting norns with <code>NORNS_CAPTURE_STDERR=1</code> merges them for every command. <code>/home/we</code> in a command is the norns home (see above); the text of a shell script that a command runs is not rewritten, so a script file that names <code>/home/we</code> inside itself needs the real folder. Downloads like mx.samples&rsquo; need <code>curl</code> and <code>unzip</code>; the package recommends both.</p>
-<h3>Plug-ins built for another machine</h3>
-<p>A script's installer may download SuperCollider plug-ins built for the Raspberry Pi (32-bit ARM <code>.so</code> files, for example <code>PortedPlugins-RaspberryPi.zip</code>). They cannot load on a PC, and SuperCollider stops at the first plug-in it cannot load: no engines, &ldquo;SUPERCOLLIDER FAIL&rdquo;, <code>wrong ELF class</code> in <code>logs/sclang.log</code>. Before SuperCollider starts, norns reads the header of every plug-in in <code>~/verdandi-home/.local/share/SuperCollider/Extensions</code>, <code>/usr/local/share/SuperCollider/Extensions</code>, <code>/usr/share/SuperCollider/Extensions</code> and (<code>*_scsynth.so</code> and <code>.scx</code> only) <code>dust/code</code>, and compares it with this machine. For each <em>folder</em> with wrong files it prints one line: the folder, the bad files and what they are, why SuperCollider will fail, one command (<code>verdandi tidy disable</code>) that moves them to <code>~/verdandi-home/disabled/</code> with a manifest line so they can be restored (also SYSTEM &gt; CLEAN UP). It never moves or deletes anything; the window shows &ldquo;PLUGINS: wrong-architecture plug-in, see log&rdquo; until no wrong file is left (re-checked every 3 seconds). After moving the files, restart norns. <code>NORNS_PLUGIN_CHECK=0</code> or <code>plugin_check=0</code> in <code>audio.conf</code> turns the check off.</p>
+<!-- sources: linux/norns.sh header, lua/core/keyboard.lua, lua/core/menu.lua, matron/src/platform/linux/desktop_shell_linux.cc (shell_menu_key, menu_build), screen_window.cc, window_keys.c;
+     tests: manual_test.sh (this table must hold every shortcut the code handles), keyboard_hardware_test.lua, window_toggle_scenario, window_actions_test.c -->
+<section id="shortcuts">
+<h2>Keyboard shortcuts</h2>
+<table>
+<tr><th>keys</th><th>does</th></tr>
+<tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> (<kbd>Enter</kbd> or <kbd>Space</kbd> = K3, <kbd>Esc</kbd> or <kbd>Backspace</kbd> = K2)</td><td>K1 K2 K3, held while held</td></tr>
+<tr><td><kbd>Q</kbd> <kbd>W</kbd> / <kbd>A</kbd> <kbd>S</kbd> / <kbd>Z</kbd> <kbd>X</kbd></td><td>E1 / E2 / E3 left and right; <kbd>Shift</kbd> adds 5 steps. In a script the arrows are E2 (up, down) and E3 (left, right)</td></tr>
+<tr><td><kbd>F1</kbd> <kbd>F2</kbd> <kbd>F3</kbd> <kbd>F4</kbd></td><td>MIX, TAPE, HOME, PARAMS</td></tr>
+<tr><td><kbd>F5</kbd></td><td>open or close the menu</td></tr>
+<tr><td><kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd></td><td>virtual grid / keyboard / arc window, open and close</td></tr>
+<tr><td><kbd>F9</kbd></td><td>screen in its own window, and back</td></tr>
+<tr><td><kbd>F10</kbd></td><td>the right-click menu (<kbd>Up</kbd> <kbd>Down</kbd> <kbd>Enter</kbd>, <kbd>Esc</kbd> closes)</td></tr>
+<tr><td><kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd></td><td>in the screen window: fullscreen, title bar on and off</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>import files into dust</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>mute the output, from any Verdandi window</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></td><td>MIDI actions on and off</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>screenshot</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td><td>quit</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>copy or paste a colour code on a colour row and in the picker</td></tr>
+<tr><td><kbd>5</kbd> <kbd>6</kbd>, <kbd>T</kbd> <kbd>Y</kbd>, <kbd>G</kbd> <kbd>H</kbd>, <kbd>B</kbd> <kbd>N</kbd></td><td>the four virtual arc encoders, left and right (one press = one LED; <kbd>Shift</kbd> smaller). Always in the arc window; in the others while it is open, a script runs and nothing else reads the keyboard</td></tr>
+<tr><td><kbd>Alt</kbd> + the keys above, <kbd>Alt</kbd>+<kbd>Esc</kbd></td><td>K and E keys for scripts that read the keyboard; <kbd>Alt</kbd>+<kbd>Esc</kbd> switches that mode</td></tr>
+</table>
+<p>Verdandi takes <kbd>F9</kbd>, <kbd>F11</kbd> and the Ctrl shortcuts before a script sees them.</p>
 </section>
 
-<!-- sources: linux/norns.sh, linux/tidy.sh, lua/core/menu/cleanup.lua, matron/src/platform/linux/crash_report.cc, docs/port/clean-layout.md; tests: launcher_logs_test.sh, tidy_test.sh, cleanup_page_test.lua, launcher_test.sh, crash_report_test.sh, boot:headless, maiden_launcher_test.sh -->
+<!-- sources: linux/norns.sh (logs, home), linux/tidy.sh, docs/port/clean-layout.md, lua/core/ui_settings.lua, box_settings.lua, midimap_settings.lua, matron/src/platform/linux/screen_window_conf.c, crash_report.cc;
+     tests: launcher_logs_test.sh, tidy_test.sh, launcher_test.sh, manual_test.sh (every name below is looked up in the source) -->
 <section id="files">
-<h2>9. Files, logs and cleaning up</h2>
-<p>Everything Verdandi makes lives in the norns home (<code>~/Verdandi</code> unless you chose another) in a few folders with plain names. Nothing is made anywhere else except the package's own files (<code>/opt/verdandi</code>, <code>/usr/bin/verdandi</code>, the menu entry, the icon, the udev rule).</p>
+<h2>Settings and files</h2>
+<p>Everything Verdandi makes is in your norns home, <code>~/Verdandi</code> (another place: write it as the first line of <code>~/.config/verdandi/home</code>). The settings files are plain <code>key=value</code> lines and can be edited by hand; a bad value falls back to its default with a line in the log.</p>
 <table>
-<tr><th>in the norns home</th><th>what</th><th>whose</th></tr>
-<tr><td><code>norns</code></td><td>a link to the program</td><td>Verdandi</td></tr>
-<tr><td><code>dust/</code></td><td>scripts (<code>code</code>), audio, data, catalogs, screenshots and GIFs</td><td><strong>yours</strong>: clean up never touches it</td></tr>
-<tr><td><code>audio.conf</code>, <code>ui.conf</code>, <code>box.conf</code>, <code>box-presets/</code>, <code>midimap.conf</code>, <code>midimap-presets/</code>, <code>screen-window.conf</code></td><td>settings, see <a href="#settings">section 10</a> and <a href="#window">section 4</a></td><td><strong>yours</strong></td></tr>
-<tr><td><code>matronrc.lua</code>, <code>version.txt</code></td><td>generated on the first start, tiny</td><td>Verdandi</td></tr>
-<tr><td><code>logs/</code></td><td><code>norns.log</code>, <code>sclang.log</code> (look here for &ldquo;SUPERCOLLIDER FAIL&rdquo;), <code>jackd.log</code>, <code>maiden.log</code>, <code>launcher.log</code>: the current run, and the last four runs as <code>norns.1.log</code> &hellip; <code>norns.4.log</code>. A log that grows past 10 MB while running is cut to its last megabyte; <code>launcher.log</code> stays under 1 MB. So the log of a run that crashed is still there after the restart.</td><td>Verdandi</td></tr>
-<tr><td><code>logs/crash/</code></td><td>one file per crash (<code>crash-&lt;time&gt;-&lt;pid&gt;.txt</code>: the signal, the thread, a backtrace); made only by a crash, the last 5 are kept</td><td>Verdandi</td></tr>
-<tr><td><code>disabled/</code></td><td>what Verdandi moved out of the way for you (for example plug-ins for another machine), with <code>MANIFEST.tsv</code>: what, from where, when, why, and how to put it back</td><td>moved by you, restorable</td></tr>
-<tr><td><code>backups/</code></td><td>made before Verdandi moves any of your files (a migration), with a manifest</td><td>Verdandi</td></tr>
-<tr><td><code>cache/</code></td><td>caches of libraries (the graphics shader cache), capped at 64 MB, safe to delete</td><td>Verdandi</td></tr>
-<tr><td><code>.config/SuperCollider/</code>, <code>.local/share/SuperCollider/</code></td><td>SuperCollider's own settings and extensions (it follows the home folder, so they cannot be elsewhere)</td><td>SuperCollider and the scripts that install extensions</td></tr>
-<tr><td><code>maiden/</code> (a checkout only), <code>.plugin-mismatch</code>, <code>.plugin-fix</code>, <code>.norns-*</code>, <code>.mic-off</code></td><td>the built maiden; the list the window's PLUGINS note reads (only while something is wrong); small marks</td><td>Verdandi</td></tr>
+<tr><th>file or folder</th><th>stores</th></tr>
+<tr><td><code>dust/</code></td><td>your scripts (<code>code</code>), audio, data. Clean up never touches it</td></tr>
+<tr><td><code>ui.conf</code></td><td>SCREEN: brightness, preset, colour, contrast, and the file-dialog tick</td></tr>
+<tr><td><code>screen-presets/</code></td><td>your SCREEN presets, one small file each</td></tr>
+<tr><td><code>box.conf</code>, <code>box-presets/</code></td><td>THEME: style, pixel look, colours, the page buttons shown or hidden; your looks</td></tr>
+<tr><td><code>midimap.conf</code>, <code>midimap-presets/</code></td><td>MIDI MAP: mappings, actions, master switch; your presets</td></tr>
+<tr><td><code>screen-window.conf</code></td><td>the screen window: out or docked, place, size, fullscreen, frame</td></tr>
+<tr><td><code>audio.conf</code></td><td>sound: see below</td></tr>
+<tr><td><code>logs/</code></td><td><code>norns.log</code>, <code>sclang.log</code>, <code>maiden.log</code>, <code>jackd.log</code>, <code>launcher.log</code>; the last four runs are kept as <code>norns.1.log</code> &hellip; <code>norns.4.log</code>, so the log of a crash survives the restart</td></tr>
+<tr><td><code>logs/crash/</code></td><td>one file per crash (signal, thread, backtrace); the last 5 are kept</td></tr>
+<tr><td><code>disabled/</code>, <code>backups/</code>, <code>cache/</code></td><td>what Verdandi moved aside for you (with a manifest to put it back), backups before it moves anything of yours, and a cache that is safe to delete</td></tr>
 </table>
-<h3>SYSTEM &gt; CLEAN UP</h3>
-<p>HOME &gt; SYSTEM &gt; CLEAN UP shows each group above (disabled, logs, crashes, seeded packs, cache) as one line with its size. <kbd>E2</kbd> chooses, <kbd>K3</kbd> opens a group or does what the line says, <kbd>K2</kbd> goes back. <strong>Nothing changes without a second <kbd>K3</kbd></strong> (<kbd>K2</kbd> says no). A <em>ARM PLUG-INS</em> line appears when the start-up check found plug-ins built for another machine that stop SuperCollider: <kbd>K3</kbd>, <kbd>K3</kbd> moves them into <code>disabled/</code> (never deletes them). In DISABLED, <kbd>K3</kbd> on an item restores it to where it came from. The last line, <em>REMOVE &gt;N DAYS</em> (<kbd>E3</kbd> chooses 30, 90, 180 or 365), is the only thing that deletes: it removes what is older than N days in <code>disabled/</code>, the old logs, the crash reports, seeded packs and the cache, after one confirmation. <strong>It never touches <code>dust/</code>, <code>audio.conf</code> or <code>ui.conf</code>.</strong></p>
-<p>The same from a terminal: <code>verdandi tidy list</code>, <code>verdandi tidy disable PATH WHY</code>, <code>verdandi tidy restore ID</code>, <code>verdandi tidy remove-older DAYS</code> (it only shows what it would remove; add <code>--yes</code> to remove). If you leave Verdandi alone for months nothing piles up: logs and crash reports are capped as above, the cache is capped, <code>disabled/</code> and <code>backups/</code> only hold what you moved there.</p>
-<p>Moving the home: write the new place (an absolute path, or <code>~/...</code>) as the first line of <code>~/.config/verdandi/home</code>. If an older version left a nested folder <code>~/Verdandi/Verdandi</code>, <code>verdandi tidy flatten</code> only reads and shows what a clean-up would do (nothing is moved by it). <code>verdandi tidy flatten --apply</code> does it, with Verdandi stopped: it asks you to type one line, makes a backup first (hard links of <code>dust/</code>, no extra space; <code>--full-copy</code> makes a real copy), moves by renaming only, checks that <code>dust/</code> has the same files before and after, and rolls everything back by itself if anything does not match. <code>verdandi tidy flatten --undo</code> puts it all back. Nothing is deleted.</p>
+<p><code>audio.conf</code> keys (an environment variable of the same meaning wins):</p>
+<table>
+<tr><th>key</th><th>meaning</th></tr>
+<tr><td><code>in_ports</code>, <code>out_ports</code></td><td>the sound card, as the start of its JACK client name (<code>NORNS_IN_PORTS</code>, <code>NORNS_OUT_PORTS</code>)</td></tr>
+<tr><td><code>input</code>, <code>output</code>, <code>rate</code>, <code>period</code></td><td>devices, sample rate and period of norns&rsquo;s own jackd; written by SYSTEM &gt; AUDIO (defaults 48000 and 1024)</td></tr>
+<tr><td><code>sys_monitor</code></td><td><code>1</code> adds an input that hears everything the card plays, norns included (it can feed back)</td></tr>
+<tr><td><code>midi_in_from</code></td><td>MIDI ports to link to <code>Verdandi:midi_in</code></td></tr>
+<tr><td><code>plugin_check</code>, <code>serialosc_check</code></td><td><code>0</code> turns that check off</td></tr>
+</table>
+<p>Environment: <code>NORNS_HOME</code> (the norns home), <code>NORNS_AUDIO_SERVER</code> (<code>auto</code>, <code>jackd</code> or <code>pipewire</code>), <code>NORNS_JACK_DRIVER</code> (<code>dummy</code> for silence), <code>NORNS_MAIDEN_PORT</code> (default 5000).</p>
 </section>
 
-<!-- sources: linux/norns.sh header and the code that reads each name (see linux/tests/manual_test.sh: every name below is looked up in the source); lua/core/menu/audio.lua -->
-<section id="settings">
-<h2>10. Settings</h2>
-<p><code>audio.conf</code> holds <code>key=value</code> lines; the last one of a key wins. An environment variable wins over the file.</p>
+<!-- sources: docs/port/KNOWN-ISSUES.md, docs/port/crash-reports.md, linux/norns.sh, matron/src/platform/linux/plugin_arch_note.cc, serialosc_check.cc, ws-wrapper/src/main.c;
+     tests: plugin_check_test.sh, plugin_note_test.sh, serialosc_test.sh, crash_report_test.sh, maiden_launcher_test.sh -->
+<section id="trouble">
+<h2>If something goes wrong</h2>
+<p>Look first in <code>~/Verdandi/logs/norns.log</code> (and <code>sclang.log</code> for SuperCollider). The note on the window names the problem.</p>
 <table>
-<tr><th>audio.conf key</th><th>environment</th><th>meaning</th></tr>
-<tr><td><code>in_ports</code>, <code>out_ports</code></td><td><code>NORNS_IN_PORTS</code>, <code>NORNS_OUT_PORTS</code></td><td>the sound card, as the start of its JACK client name</td></tr>
-<tr><td><code>input</code>, <code>output</code></td><td></td><td>ALSA devices for norns' own jackd (written by SYSTEM &gt; AUDIO)</td></tr>
-<tr><td><code>rate</code>, <code>period</code></td><td><code>NORNS_JACK_RATE</code>, <code>NORNS_JACK_PERIOD</code></td><td>sample rate and period of norns' own jackd (default 48000 and 1024); under PipeWire <code>period</code> becomes the buffer request</td></tr>
-<tr><td><code>sys_monitor</code></td><td><code>NORNS_SYS_MONITOR</code></td><td><code>1</code> offers the sink-monitor input</td></tr>
-<tr><td><code>midi_in_from</code></td><td><code>NORNS_MIDI_IN_FROM</code></td><td>MIDI ports to link to <code>Verdandi:midi_in</code></td></tr>
-<tr><td><code>plugin_check</code></td><td><code>NORNS_PLUGIN_CHECK</code></td><td><code>0</code> turns the plug-in check off</td></tr>
-<tr><td><code>serialosc_check</code></td><td><code>NORNS_SERIALOSC_CHECK</code></td><td><code>0</code> turns the serialosc check off</td></tr>
+<tr><th>what you see</th><th>what to do</th></tr>
+<tr><td>&ldquo;GRID: serialosc has this grid&rdquo; (or grid events late, wrong, twice, or no grid)</td><td>serialosc is running as a service and holds the grid&rsquo;s port. Stop it: <code>sudo systemctl stop serialosc.service</code> (start it again later with <code>start</code>), then replug the grid. SYSTEM &gt; DEVICES &gt; SERIALOSC does the stop for you after one question, if your system allows it. The note goes away by itself. <code>serialosc_check=0</code> turns the check off</td></tr>
+<tr><td>&ldquo;PLUGINS: wrong-architecture plug-in&rdquo;, or &ldquo;SUPERCOLLIDER FAIL&rdquo; and no engines (<code>wrong ELF class</code> in <code>sclang.log</code>)</td><td>a script installed SuperCollider plug-ins built for the Raspberry Pi (32-bit ARM); they cannot load on a PC and stop SuperCollider. SYSTEM &gt; CLEAN UP &gt; ARM PLUG-INS moves them to <code>disabled/</code>, then restart. Such a script&rsquo;s engines that need them will not run</td></tr>
+<tr><td>&ldquo;DUPLICATE ENGINES&rdquo; on the screen, no engines</td><td>two files with the same name ending in <code>.sc</code> exist under <code>dust</code> (an engine installed in two script folders) and SuperCollider cannot start with both. The pairs are listed in <code>norns.log</code>: delete one of each pair (maiden or your file manager) and restart</td></tr>
+<tr><td>A SynthDef &ldquo;build failed&rdquo; in <code>sclang.log</code></td><td>Verdandi uses SuperCollider 3.14, which refuses a few things 3.13 accepted. The log names the SynthDef; the cause is in that script or mod</td></tr>
+<tr><td>&ldquo;AUDIO: not connected&rdquo;, or no sound</td><td>no card was found or the name in <code>in_ports</code> / <code>out_ports</code> matches nothing: see SYSTEM &gt; AUDIO. If jackd cannot open the card, PipeWire holds it: start without <code>NORNS_JACK_DRIVER</code> (norns then uses PipeWire) </td></tr>
+<tr><td>norns closed by itself</td><td>a crash report is in <code>~/Verdandi/logs/crash/</code> and the log of that run is <code>logs/norns.1.log</code>; keep both when you report it</td></tr>
+<tr><td>The maiden page says &ldquo;not connected to norns&rdquo;</td><td>norns was started with <code>--terminal</code>: matron&rsquo;s prompt is your terminal then, and nothing listens on port 5555 for maiden&rsquo;s console. Start without it</td></tr>
+<tr><td>&ldquo;maiden is not running&rdquo; / port 5000 in use</td><td>start with <code>NORNS_MAIDEN_PORT=5001 verdandi</code></td></tr>
+<tr><td>A script says <code>sudo</code> or <code>apt</code> is needed, or asks for a Raspberry Pi tool</td><td>only <code>sudo systemctl restart norns-...</code> is answered (norns restarts); other Raspberry Pi commands fail or do nothing</td></tr>
+<tr><td>The first start is slow</td><td>SuperCollider starts and reports its engines before scripts load</td></tr>
 </table>
-<table>
-<tr><th>environment variable</th><th>meaning</th></tr>
-<tr><td><code>NORNS_HOME</code></td><td>the norns home (default: the folder above the repository)</td></tr>
-<tr><td><code>NORNS_AUDIO_SERVER</code></td><td><code>auto</code>, <code>jackd</code> or <code>pipewire</code></td></tr>
-<tr><td><code>NORNS_JACK_DRIVER</code></td><td>the driver of norns' own jackd (<code>alsa</code> by default; <code>dummy</code> for silence)</td></tr>
-<tr><td><code>NORNS_NO_SCLANG</code></td><td><code>1</code>: do not start SuperCollider</td></tr>
-<tr><td><code>NORNS_NO_SHIMS</code></td><td><code>1</code>: no sudo and systemctl shims for scripts</td></tr>
-<tr><td><code>NORNS_MAIDEN</code>, <code>NORNS_MAIDEN_PORT</code></td><td>where maiden is (default <code>~/verdandi-home/maiden</code>) and its port (default 5000)</td></tr>
-<tr><td><code>NORNS_MANUAL</code></td><td>the page the MANUAL button opens (default <code>linux/manual/manual.html</code>)</td></tr>
-<tr><td><code>NORNS_NO_MAIDEN</code></td><td><code>1</code> in <code>linux/setup-deps.sh</code> or <code>linux/build.sh</code>: do not build maiden</td></tr>
-<tr><td><code>NORNS_CLOCK_DEBUG</code></td><td><code>1</code>: log jumps of JACK's frame time</td></tr>
-</table>
-</section>
-
-<!-- sources: docs/port/KNOWN-ISSUES.md, docs/port/RUN-ON-LAPTOP.md; every item here was met and has a note there -->
-<section id="troubleshooting">
-<h2>11. Troubleshooting</h2>
-<table>
-<tr><th>what you see</th><th>what it is and what to do</th></tr>
-<tr><td>The window says &ldquo;error: SUPERCOLLIDER FAIL&rdquo; and no engines</td><td>look for a line from the plug-in check at the top of the terminal (<a href="#scripts">section 8</a>) and for <code>wrong ELF class</code> in <code>logs/sclang.log</code>; also for <code>PLUGINS:</code> on the window. Move the files as the line says and restart norns.</td></tr>
-<tr><td>&ldquo;AUDIO: not connected&rdquo; on the window</td><td>no sound card was found, or the name in <code>in_ports</code> / <code>out_ports</code> matches nothing: SYSTEM &gt; AUDIO has crone's message (<a href="#audio">section 5</a>).</td></tr>
-<tr><td>No sound with <code>NORNS_JACK_DRIVER=alsa</code>, or jackd cannot open the card</td><td>PipeWire holds the card. Start without the variable (norns then uses PipeWire through <code>pw-jack</code>), or use the <code>dummy</code> driver.</td></tr>
-<tr><td>The maiden page says &ldquo;not connected to norns&rdquo;</td><td>norns was started with <code>--terminal</code>; start without it (<a href="#limitations">section 13</a>).</td></tr>
-<tr><td>&ldquo;port 5000 is in use: maiden is not started&rdquo;</td><td>something else has the port; use <code>NORNS_MAIDEN_PORT=5001 linux/norns.sh</code>.</td></tr>
-<tr><td>&ldquo;maiden is not built&rdquo;</td><td>run <code>linux/maiden-build.sh</code> (needs the network).</td></tr>
-<tr><td>Grid events arrive late or out of order; &ldquo;GRID: serialosc has this grid&rdquo;</td><td>serialosc is running as a service: see <a href="#midi-grid">section 6</a>.</td></tr>
-<tr><td>A library fails with &ldquo;attempt to concatenate a nil value (local 'mydir')&rdquo;</td><td>fixed in this build (libraries find their folder through the virtual path). If you see it, you are running an older checkout.</td></tr>
-<tr><td>The first start takes a while</td><td>SuperCollider starts and reports its engines before scripts can load; the tests wait for it for up to 90 seconds.</td></tr>
-</table>
-</section>
-
-<!-- sources: matron/src/system_cmd.cc (actions), lua/core/*; readme-macos.md; docs/port/KNOWN-ISSUES.md; STATUS.md -->
-<section id="differences">
-<h2>12. Differences from the device</h2>
-<ul>
-  <li>No hardware: the OLED is a window, the keys and encoders are the keyboard and mouse. The SYSTEM menu has DEVICES, AUDIO, MODS, SCREEN, THEME, MIDI MAP, CLEAN UP, RESET and RESTART: WIFI, UPDATE, the password and the display settings are not offered, because the operating system owns them. SLEEP (HOME page) quits norns without powering off the computer; RESTART restarts norns through the launcher.</li>
-  <li>Update scripts in maiden, and Verdandi itself by getting a new version of the repository.</li>
-  <li>Everything that listens (maiden, the consoles) is on <code>127.0.0.1</code> only, unlike the device.</li>
-  <li>No AppImage or Flatpak package yet, and no plug-in version (VST3 is planned for the Windows version).</li>
-  <li>Compared with the Mac version: the same window code, skins and import logic; the audio server (JACK or PipeWire instead of Core Audio), the input taps (PipeWire clients instead of Core Audio process taps), the file dialogs, the screenshot folder and the menu (drawn in the window, there is no menu bar) are Linux specific; there is no AUv3.</li>
-</ul>
-</section>
-
-<!-- sources: docs/port/KNOWN-ISSUES.md items 5-8, docs/port/clock-notes.md, STATUS.md (open items); tests as named in the items -->
-<section id="limitations">
-<h2>13. Known limitations</h2>
-<h3>Scripts with prebuilt Raspberry Pi plug-ins</h3>
-<p>Scripts whose installer downloads ARM plug-ins (about 71 of the 351 community scripts of the catalog scan in <code>macos/docs/02-katalog-scan.md</code> need prebuilt SuperCollider plug-ins) cannot use them: they are 32-bit ARM and this computer is not. norns reports them (section 8) and moves nothing, but SuperCollider does not start while one is in a place it reads. There is no x86_64 build of those bundles here. Installing such a script through maiden works; running its engine does not, until the plug-ins are out of the way (and then only the engines that do not need them).</p>
-<h3>Raspberry Pi system commands</h3>
-<p>Only <code>sudo systemctl &hellip; norns-&hellip;</code> is answered (as a restart of norns). Other <code>sudo</code> commands run with <code>sudo -n</code> and fail if a password is needed; <code>wget</code>, <code>apt</code> and <code>apt-get</code> are not provided; scripts that call full paths such as <code>/usr/bin/sudo</code>, or that expect Raspberry Pi tools and files, will fail or do nothing.</p>
-<h3>--terminal and maiden's norns console</h3>
-<p>matron's Lua prompt is one text stream. With <code>--terminal</code> it is your terminal; without it <code>ws-wrapper</code> offers it on <code>ws://127.0.0.1:5555</code>, which is what maiden's console and <code>maiden-repl</code> connect to. It cannot be both, so with <code>--terminal</code> nothing listens on 5555, the maiden page says &ldquo;not connected to norns&rdquo; (the SuperCollider console and the rest of maiden work), and the launcher and the MAIDEN button say so. To have a terminal prompt as well, start <code>linux/norns.sh</code> without <code>--terminal</code> and run <code>build/maiden-repl/maiden-repl</code> in a second terminal (it connects to the same sockets; not tested against a running norns).</p>
-<h3>serialosc and a real grid</h3>
-<p>A serialosc service that holds the grid's serial port makes grid events unreliable, can keep a grid from appearing in norns or make it appear twice, and can light LEDs again after norns has switched them off. norns detects this and warns (section 6), offers the stop on SYSTEM &gt; DEVICES &gt; SERIALOSC (only after a question), and does not use serialosc's OSC route. A grid is listed once: a repeated device event (a &ldquo;change&rdquo; that serialosc or another program causes) no longer adds it again.</p>
-<h3>SynthDefs that SuperCollider 3.14 rejects</h3>
-<p>Verdandi ships SuperCollider 3.14.1, which refuses a few things that 3.13 let through. The one known case is <code>mx_malone</code> of the mod nb_mxsynths (&ldquo;Clip first input is not audio rate&rdquo;); without a fix the mod would stop creating its other voices. Verdandi lets that one SynthDef build (a small extension in <code>sc/linux-compat</code>, one line in <code>logs/sclang.log</code>, none of your files is changed). A new case shows as <code>SynthDef &hellip; build failed</code> in <code>logs/sclang.log</code>; the name can be added with <code>NORNS_SYNTHDEF_COMPAT=name</code> when starting, and the cause is in the mod (a patch for its author is in <code>docs/port/synthdef-3.14/</code>; KNOWN-ISSUES item 21).</p>
-<h3>Other open points</h3>
-<ul>
-  <li>The internal clock: a forward jump of JACK's frame time after the start is accepted as it is and can make waiting coroutines fire once in a burst. A handling is proposed in <code>docs/port/clock-forward-jump-proposal.diff</code>, not applied.</li>
-  <li>SYS is a set of links made by norns; unlinking an application that you want to hear only directly is not built.</li>
-  <li>PARAMS &gt; CLOCK does not refresh the tempo by itself with an external clock (as on the device software, upstream behavior).</li>
-  <li>Not tested here at all: a real sound card in many setups, a real grid, arc or crow, Wayland and X11 differences, other distributions, the maiden page in other browsers than Chromium (the cross-site protection was exercised with Chromium only), and macOS after the shared-file changes.</li>
-</ul>
+<p>To clear old logs and files see SYSTEM &gt; CLEAN UP. Not yet tested on real hardware in every setup: sound cards, grids, arcs and crow, Wayland: <code>docs/port/HARDWARE-CHECKLIST.md</code> lists what is checked.</p>
 </section>
 
 <!-- sources: LICENSE, docs/port/DEPS.md -->
 <section id="licenses">
-<h2>14. Source and licenses</h2>
-<p>Verdandi Linux is based on the macOS port Verdandi by its original author (ha1dcre), which is based on monome&rsquo;s norns, and it keeps their licence and copyright notices. Verdandi is free software under the GPL-3.0 (<code>LICENSE</code> in the repository). The other components and their licenses are listed in <code>docs/port/DEPS.md</code>, including maiden's Go modules and npm packages and what needs attention when redistributing them. The source is the repository this page came from; the Linux port is on the branch <code>linux-port</code>.</p>
+<h2>Source and licences</h2>
+<p>Verdandi Linux is based on the macOS port Verdandi by its original author (ha1dcre), which is based on monome&rsquo;s norns, and it keeps their licence and copyright notices. It is free software under the GPL-3.0 (<code>LICENSE</code> in the repository; the package keeps the licence texts under <code>/opt/verdandi/licenses</code>). The other components and their licences are listed in <code>docs/port/DEPS.md</code>. The Linux port is on the branch <code>linux-port</code> of this repository.</p>
 </section>
 
 </body>

@@ -3,7 +3,11 @@
 #  - the file exists, is HTML, has a table of contents whose links all resolve, and every section is in it
 #  - every section has a "sources:" comment above it (what its statements come from)
 #  - no external resources (no script, link, img, iframe, no src= or href= to a web address)
-#  - the known limitations section names the four topics it must (ARM plug-ins, Pi system commands, --terminal vs maiden's console, serialosc)
+#  - "If something goes wrong" names the topics it must (ARM plug-ins, Pi system commands, --terminal vs maiden's console, serialosc, duplicate engines, crash reports)
+#  - no removed name (SYSTEM > UI, SYSTEM > BOX, GREYS, an OUT fader, ...), no history wording, no personal word
+#  - a heading "SYSTEM > NAME" for every page of the SYSTEM list (read from lua/core/menu/system.lua)
+#  - an entry in the manual for every shortcut the code handles: the hints of the right-click menu and the key tests of desktop_shell_linux.cc, the F keys of screen_window.cc and
+#    lua/core/keyboard.lua, the arc keys of keyboard.lua
 #  - every NORNS_* name the manual mentions exists in the source, every audio.conf key is read somewhere, every repository path in a <code> exists
 # (that the button opens this file is linux/tests/manual_button_test.sh, which checks it when the file exists)
 set -u
@@ -45,19 +49,74 @@ res("no link to a web address (src/href)", not p.bad_ext, ", ".join(p.bad_ext))
 anchors = [h[1:] for h in p.hrefs if h.startswith("#")]
 res("all #links resolve", all(a in p.ids for a in anchors), ", ".join(a for a in anchors if a not in p.ids))
 res("every section is in the table of contents", all(s in anchors for s in p.sections), ", ".join(s for s in p.sections if s not in anchors))
-want = ["what-this-is", "install", "first-start", "window", "audio", "midi-grid", "maiden", "scripts", "files", "settings", "troubleshooting", "differences", "limitations", "licenses"]
-res("the 14 sections of the outline are there, in order", p.sections == want, str(p.sections))
+want = ["quickstart", "window", "home", "system", "sound-midi", "shortcuts", "files", "trouble", "licenses"]
+res("the 9 sections of the outline are there, in order", p.sections == want, str(p.sections))
 
 # a sources comment right above every section
 blocks = re.findall(r"<!--(.*?)-->\s*<section id=\"([a-z-]+)\"", text, re.S)
 have = {sid: c for c, sid in blocks}
 res("every section has a sources comment above it", all(s in have and "sources:" in have[s] for s in want), ", ".join(s for s in want if s not in have or "sources:" not in have[s]))
 
-# limitations
-m = re.search(r'<section id="limitations">(.*?)</section>', text, re.S)
+# the troubleshooting section
+m = re.search(r'<section id="trouble">(.*?)</section>', text, re.S)
 lim = m.group(1) if m else ""
-for what, pat in (("ARM plug-ins", r"32-bit ARM"), ("Raspberry Pi system commands", r"sudo"), ("--terminal and maiden's console", r"--terminal.*5555|5555.*--terminal"), ("serialosc", r"serialosc")):
-    res("limitations: " + what, re.search(pat, lim, re.S) is not None)
+for what, pat in (("ARM plug-ins", r"32-bit ARM"), ("Raspberry Pi system commands", r"sudo"), ("--terminal and maiden's console", r"--terminal.*5555|5555.*--terminal"), ("serialosc", r"serialosc"),
+                  ("duplicate engines", r"DUPLICATE ENGINES"), ("SuperCollider fail", r"SUPERCOLLIDER FAIL"), ("crash reports", r"logs/crash"), ("where the logs are", r"logs/norns\.log")):
+    res("if something goes wrong: " + what, re.search(pat, lim, re.S) is not None)
+
+# plain text of the page (tags removed, entities decoded)
+plain = html.unescape(re.sub(r"<[^>]+>", " ", text[text.index("<body>"):]))
+plain = re.sub(r"\s+", " ", plain)
+# removed names and words that do not belong in a manual
+for what, pat, flags in (("SYSTEM > UI", r"SYSTEM > UI\b", 0), ("SYSTEM > BOX", r"SYSTEM > BOX\b", 0), ("the UI page", r"\bUI page\b|\bUI\b", 0), ("GREYS", r"\bGREYS\b", 0),
+                         ("an OUT fader or slider", r"OUT (fader|slider)|output (fader|slider)", re.I), ("a SCREEN button", r"SCREEN button", 0), ("the HEX row of SCREEN", r"SCREEN.{0,3}s HEX|SCREEN HEX", 0),
+                         ("history wording", r"was called|earlier version|first version|older version|used to be", re.I), ("a personal word", r"\bowner\b", re.I)):
+    hit = re.search(pat, plain, flags)
+    res("no removed name or history wording: " + what, hit is None, hit.group(0) if hit else "")
+
+# a heading for every SYSTEM page
+sysl = open(os.path.join(repo, "lua", "core", "menu", "system.lua")).read()
+blocks_l = re.findall(r"m\.list = \{(.*?)\}", sysl, re.S)
+pages = [x.strip() for x in re.findall(r'"([^"]+)"', blocks_l[-1])] if blocks_l else []
+pages = [re.sub(r"\s*>\s*$", "", x) for x in pages]
+res("the SYSTEM list was read from system.lua (%d pages)" % len(pages), len(pages) >= 9, str(pages))
+h3 = [html.unescape(re.sub(r"<[^>]+>", "", h)) for h in re.findall(r"<h3[^>]*>(.*?)</h3>", text, re.S)]
+nohead = [pg for pg in pages if "SYSTEM > " + pg not in h3]
+res("every SYSTEM page has a heading 'SYSTEM > NAME' (%d)" % len(pages), not nohead, ", ".join(nohead))
+
+# every shortcut the code handles is in the manual
+def kbd(combo):
+    return "+".join("<kbd>%s</kbd>" % k for k in combo.split("+"))
+combos = set()
+shell = open(os.path.join(repo, "matron", "src", "platform", "linux", "desktop_shell_linux.cc")).read()
+for line in shell.splitlines():
+    if "add_item(" in line:
+        lits = re.findall(r'"([^"]*)"', line)
+        if lits and lits[-1]:
+            combos.add(lits[-1])
+    m2 = re.search(r"ctrl\s*&&.*scancode == SDL_SCANCODE_([A-Z])\b", line)
+    if m2:
+        combos.add("Ctrl+" + ("Shift+" if re.search(r"(?<!!)shift\s*&&", line) else "") + m2.group(1))
+for f in re.findall(r"SDL_SCANCODE_(F\d+)", shell):
+    combos.add(f)
+sw = open(os.path.join(repo, "matron", "src", "platform", "linux", "screen_window.cc")).read()
+for f in re.findall(r"SDL_SCANCODE_(F\d+)", sw):
+    combos.add(f)
+    if f == "F11" and "KMOD_SHIFT" in sw:
+        combos.add("Shift+F11")
+kb = open(os.path.join(repo, "lua", "core", "keyboard.lua")).read()
+for f in re.findall(r'c=="(F\d+)"', kb):
+    combos.add(f)
+arc = re.search(r"^local hw_arc = \{(.*)\}\s*$", kb, re.M)
+arckeys = re.findall(r"(?:\['(\w)'\]|\b([A-Z]))=\{", arc.group(1)) if arc else []
+arckeys = [a1 or a2 for a1, a2 in arckeys]
+res("the shortcuts were read from the code (%d keys and %d arc keys)" % (len(combos), len(arckeys)), len(combos) >= 14 and len(arckeys) == 8, str(sorted(combos)) + str(arckeys))
+shortcuts = re.search(r'<section id="shortcuts">(.*?)</section>', text, re.S)
+sc = shortcuts.group(1) if shortcuts else ""
+missing_sc = [c for c in sorted(combos) if kbd(c) not in sc]
+res("every shortcut the code handles is in the shortcut table (%d)" % len(combos), not missing_sc, ", ".join(missing_sc))
+missing_arc = [k for k in arckeys if "<kbd>%s</kbd>" % k not in sc]
+res("every arc key is in the shortcut table", not missing_arc, ", ".join(missing_arc))
 
 # the code is the source of the names
 src = ""
