@@ -1,7 +1,7 @@
 #ifndef CRONE_MIDIROUTE_H
 #define CRONE_MIDIROUTE_H
 
-// the optional auto-connect of MIDI output ports to Verdandi:midi_in (midi_in_from= in audio.conf, NORNS_MIDI_IN_FROM).
+// the optional auto-connect of MIDI output ports to Verdandi:midi_in (midi_in_from= in audio.conf, NORNS_MIDI_IN_FROM), and of Verdandi:midi_out to MIDI input ports (midi_out_to=, NORNS_MIDI_OUT_TO).
 // pure logic, no JACK calls (the glue is matron/src/platform/linux/midi_autoconnect.cc).
 
 #include <map>
@@ -145,6 +145,25 @@ inline std::vector<std::string> wanted(const std::vector<MidiPort> &ports, const
     std::vector<std::string> out;
     for (const auto &p : ports) {
         if (!p.midi || !p.output || InputRoute::isOwnClient(PortSelect::clientOf(p.name)) || neverLinked(p.name, own)) {
+            continue;
+        }
+        for (const auto &pre : prefixes) {
+            if (matchesPattern(p.name, pre)) {
+                out.push_back(p.name);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+// the OUTPUT side (midi_out_to=): the MIDI input ports (a synth, a DAW track) whose name starts with a prefix, that Verdandi:midi_out is linked to. the same exclusions as for wanted():
+// never one of norns' own JACK clients, never Midi Through or norns' own ALSA clients
+inline std::vector<std::string> wantedSinks(const std::vector<MidiPort> &ports, const std::vector<std::string> &prefixes,
+                                            const std::vector<std::string> &own = {}) {
+    std::vector<std::string> out;
+    for (const auto &p : ports) {
+        if (!p.midi || p.output || InputRoute::isOwnClient(PortSelect::clientOf(p.name)) || neverLinked(p.name, own)) {
             continue;
         }
         for (const auto &pre : prefixes) {

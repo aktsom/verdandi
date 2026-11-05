@@ -55,7 +55,7 @@ mm.clock = function() return T end
 mm.load()
 
 local function add(id, name) _norns.midi.add(id, name, "ptr" .. id) end
-add(1, "Verdandi JACK in"); add(2, "mio"); add(3, "iii grid"); add(4, "Verdandi keys"); add(5, "Push 2")
+add(1, "virtual"); add(2, "mio"); add(3, "iii grid"); add(4, "Verdandi keys"); add(5, "Push 2")
 local function send(id, bytes) _norns.midi.event(id, bytes) end
 local function cc(id, ch, num, val) send(id, {0xB0 + ch - 1, num, val}) end
 local function note_on(id, ch, n, vel) send(id, {0x90 + ch - 1, n, vel}) end
@@ -103,7 +103,7 @@ eq(acts(), "", "and then the mio is not")
 setup(function()
   S.set("e1", "num", 10); S.set("e1", "mode", "rel2c"); S.set("e1", "dev", "mio")
   S.set("e2", "num", 10); S.set("e2", "mode", "rel2c"); S.set("e2", "dev", "Push 2")
-  S.set("e3", "num", 10); S.set("e3", "mode", "rel2c"); S.set("e3", "dev", "Verdandi JACK in")
+  S.set("e3", "num", 10); S.set("e3", "mode", "rel2c"); S.set("e3", "dev", "virtual")
 end)
 cc(2, 1, 10, 1); cc(5, 1, 10, 1); cc(1, 1, 10, 1)
 eq(acts(), "enc:1:1 enc:2:1 enc:3:1", "the same CC from three devices turns three different encoders")

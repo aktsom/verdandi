@@ -60,6 +60,7 @@
 #ifdef NORNS_LINUX_DESKTOP
 #include "crone_main.h"
 #include "platform/linux/input_route.h"
+#include "platform/linux/jack_midi_in.h"
 #include "platform/linux/plugin_arch_note.h"
 #include "platform/linux/serialosc_check.h"
 #include "platform/macos/app_audio.h"
@@ -379,6 +380,7 @@ static int _midi_actions_menu(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_list(lua_State *l);
 static int _midi_in_from(lua_State *l);
+static int _midi_out_to(lua_State *l);
 static int _serialosc_check(lua_State *l);
 static int _grid_conflict_text(lua_State *l);
 static int _plugin_note_text(lua_State *l);
@@ -727,6 +729,7 @@ void w_init(void) {
     lua_register_norns("mic_input", &_mic_input);
     lua_register_norns("app_list", &_app_list);
     lua_register_norns("midi_in_from", &_midi_in_from);
+    lua_register_norns("midi_out_to", &_midi_out_to);
     lua_register_norns("serialosc_check", &_serialosc_check);
     lua_register_norns("grid_conflict_text", &_grid_conflict_text);
     lua_register_norns("plugin_note_text", &_plugin_note_text);
@@ -2698,7 +2701,13 @@ void w_handle_midi_add(void *p) {
     lua_pushinteger(lvm, id + 1); // convert to 1-base
     lua_pushstring(lvm, base->name);
     lua_pushlightuserdata(lvm, dev);
+#ifdef NORNS_LINUX_DESKTOP
+    // the fourth argument: this is the JACK MIDI device, the "virtual" device of the desktop (in and out): it takes the first free vport like a real device
+    lua_pushboolean(lvm, base->path != NULL && strcmp(base->path, JACK_MIDI_PATH) == 0);
+    l_report(lvm, l_docall(lvm, 4, 0));
+#else
     l_report(lvm, l_docall(lvm, 3, 0));
+#endif
 }
 
 void w_handle_midi_remove(int id) {
@@ -4026,6 +4035,18 @@ int _app_list(lua_State *l) {
  */
 int _midi_in_from(lua_State *l) {
     lua_pushboolean(l, midi_autoconnect_start(luaL_checkstring(l, 1)));
+    return 1;
+}
+
+/***
+ * Linux desktop: start the optional MIDI output auto-connect: Verdandi:midi_out is linked to the JACK MIDI input ports whose name starts with one of
+ * the prefixes (separated by ;) and kept linked
+ * @function midi_out_to
+ * @tparam string prefixes
+ * @treturn boolean on
+ */
+int _midi_out_to(lua_State *l) {
+    lua_pushboolean(l, midi_autoconnect_start_out(luaL_checkstring(l, 1)));
     return 1;
 }
 

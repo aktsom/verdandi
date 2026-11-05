@@ -145,3 +145,26 @@ TEST_CASE("descendants: a loop in the parent table cannot hang it") {
     auto d = descendants(parent, 10);
     CHECK(d.count(10) == 1);
 }
+
+// the OUTPUT side: Verdandi:midi_out can be linked to the MIDI inputs (a synth, a DAW track) whose name starts with a prefix (midi_out_to=)
+static MidiPort in(const char *name) { return MidiPort{name, true, false}; }
+
+TEST_CASE("sinks: off by default, no prefix, nothing is wanted") {
+    std::vector<MidiPort> ports = {in("Fake Synth:in")};
+    CHECK(wantedSinks(ports, {}).empty());
+}
+
+TEST_CASE("sinks: a MIDI input port whose name starts with a prefix is wanted; outputs, audio ports and other names are not") {
+    std::vector<MidiPort> ports = {in("Fake Synth:in"), out("Fake Synth:out"), MidiPort{"Fake Synth:audio_in", false, false}, in("Other:in")};
+    auto w = wantedSinks(ports, parsePrefixes("Fake Synth"));
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Fake Synth:in");
+}
+
+TEST_CASE("sinks: never norns' own clients, never Midi Through, never norns' own ALSA clients") {
+    std::vector<MidiPort> ports = {in("Verdandi:midi_in"), in("Midi-Bridge:Midi Through:(playback_0)"), in("Midi-Bridge:Client-128 Virtual RawMIDI:(playback_0)"),
+                                   in("Midi-Bridge:Client-20 Synth:(playback_0)")};
+    auto w = wantedSinks(ports, parsePrefixes("Verdandi;Midi-Bridge:"), std::vector<std::string>{"Client-128"});
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Client-20 Synth:(playback_0)");
+}

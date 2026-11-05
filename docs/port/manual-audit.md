@@ -31,7 +31,7 @@ Done before the rewrite. Facts were read from the code (file named for each item
 
 **Sound:** the launcher chooses own jackd / running JACK / PipeWire through `pw-jack`; MIC button cycle MIC > SYS > OFF, single apps from the menu; `audio.conf` keys `in_ports out_ports input output rate period sys_monitor midi_in_from plugin_check serialosc_check`.
 
-**MIDI, DAW:** JACK MIDI input `Verdandi:midi_in` ("Verdandi JACK in"), `clock_source` midi, optional auto-link (`midi_in_from`), KEYS window = MIDI device "norns keys" (+ ALSA port where available). No VST3 / plug-in exists yet (planned; `docs/port/linux-vst3.md`); nothing to say about Reaper except the JACK MIDI route.
+**MIDI, DAW:** the virtual MIDI device "virtual" with the JACK ports `Verdandi:midi_in` and `Verdandi:midi_out`, `clock_source` midi, optional auto-link (`midi_in_from`, `midi_out_to`), KEYS window = MIDI device "norns keys" (+ ALSA port where available). No VST3 / plug-in exists yet (planned; `docs/port/linux-vst3.md`); nothing to say about Reaper except the JACK MIDI route.
 
 **Grids:** real grid/arc/crow over USB (udev rule `70-verdandi-monome.rules`), serialosc conflict note and guide, a grid listed once.
 

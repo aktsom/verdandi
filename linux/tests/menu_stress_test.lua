@@ -119,7 +119,7 @@ local function world()
   params = {lookup = {}, lookup_param = function(self, id) return {name = id} end}
   midi = {devices = {}, vports = {}}
   for i = 1, 16 do midi.vports[i] = {name = "none"} end
-  w.devs = {{id = 1, name = "mio", port = 1}, {id = 2, name = "iii grid", port = 2}, {id = 3, name = "Push 2", port = 3}, {id = 4, name = "Verdandi JACK in", port = 4}}
+  w.devs = {{id = 1, name = "mio", port = 1}, {id = 2, name = "iii grid", port = 2}, {id = 3, name = "Push 2", port = 3}, {id = 4, name = "virtual", port = 4}}
   for _, d in ipairs(w.devs) do midi.devices[d.id] = d; midi.vports[d.port].name = d.name end
   w.pmap = require 'core/pmap'
   norns.pmap, norns.state = w.pmap, {shortname = "stress"}

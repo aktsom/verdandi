@@ -385,6 +385,18 @@ eq(S.state.actions.mix.num, 36, "applying brings them back"); eq(S.state.actions
 put("/home/we/midimap-presets/old2.midimap", "verdandi-midimap-preset=1\nname=old2\ne1.type=cc\ne1.num=4\n")
 S.load(); S.select_preset("old2"); eq(S.state.actions.mix.num, 36, "a preset from before the actions leaves them alone")
 
+-- ---- the device that was called "Verdandi JACK in" is called "virtual": an old midimap.conf is read as the new name and written as the new name
+st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=71\ne1.dev=Verdandi JACK in\nk1.type=note\nk1.num=36\nk1.dev=verdandi  jack IN\na1.type=cc\na1.num=76\na1.dev=Verdandi JACK in\nact.mix.type=note\nact.mix.num=36\nact.mix.dev=Verdandi JACK in\n")
+eq(st.ctl.e1.dev, "virtual", "an old encoder device name is virtual"); eq(st.ctl.k1.dev, "virtual", "an old key device name (any case, any blanks) is virtual")
+eq(st.ctl.a1.dev, "virtual", "an old arc device name is virtual"); eq(st.actions.mix.dev, "virtual", "an old action device name is virtual")
+check(not logged("dev="), "no complaint about it")
+S.save()
+text = slurp("/home/we/midimap.conf")
+check(text:find("e1.dev=virtual", 1, true) and text:find("act.mix.dev=virtual", 1, true) and not text:find("JACK in", 1, true), "saving writes the new name only")
+check(S.set("e2", "dev", "Verdandi JACK in") and S.state.ctl.e2.dev == "virtual", "typing or choosing the old name stores the new one")
+check(S.set_action("keys", "dev", "Verdandi JACK in") and S.state.actions.keys.dev == "virtual", "the same for an action")
+eq(S.state.ctl.e1.dev == "virtual" and S.state.ctl.e1.num, 71, "the rest of the control is as it was")
+
 if fails == 0 then print("midimap settings: all passed") end
 os.execute("rm -rf '" .. tmp .. "'")
 os.exit(fails == 0 and 0 or 1)

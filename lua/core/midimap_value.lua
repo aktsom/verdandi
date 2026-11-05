@@ -132,6 +132,8 @@ function V.key_note(st, kind, vel)
 end
 
 -- ---------------------------------------------------------------- device names (docs/port/midi-map-plan.md 2.1a)
+V.VIRTUAL = "virtual"                -- the norns-side name of the JACK MIDI device (input Verdandi:midi_in and output Verdandi:midi_out)
+V.OLD_VIRTUAL = "verdandi jack in"   -- what it was called (normalised): read as an alias, never written
 --- trim, collapse blanks, lower case, no control characters, no trailing "(ABSENT)"
 function V.norm_name(s)
   if type(s) ~= "string" then return "" end
@@ -139,6 +141,7 @@ function V.norm_name(s)
   s = s:gsub("%s+", " "):match("^ ?(.-) ?$")
   s = s:lower()
   s = s:gsub(" ?%(absent%)$", "")
+  if s == V.OLD_VIRTUAL then s = V.VIRTUAL end -- the virtual device was called "Verdandi JACK in": an old stored name is the same device
   return s
 end
 
@@ -150,6 +153,12 @@ function V.name_matches(stored, device)
   if s == d then return true end
   if #d > #s + 1 and d:sub(1, #s + 1) == s .. " " and d:sub(#s + 2):match("^%d+$") then return true end
   return false
+end
+
+--- the name to store for a device name that was typed, chosen or read from a file: the old name of the virtual device becomes "virtual", anything else is as it is
+function V.canonical_name(s)
+  if type(s) == "string" and V.norm_name(s) == V.VIRTUAL then return V.VIRTUAL end
+  return s
 end
 
 --- the devices that ANY never takes: the keys window and monome iii devices (a grid or an arc sends notes that are no controller's)

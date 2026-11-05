@@ -43,7 +43,8 @@ end
 -- @tparam integer id : arbitrary numeric identifier
 -- @tparam string name : name
 -- @tparam userdata dev : opaque pointer to device
-function Midi.new(id, name, dev)
+-- @tparam boolean auto : Linux desktop only: this "virtual" device is the JACK MIDI one (in and out), which takes a vport like any device
+function Midi.new(id, name, dev, auto)
   local d = setmetatable({}, Midi)
 
   d.id = id
@@ -60,8 +61,8 @@ function Midi.new(id, name, dev)
   end
   if not tab.contains(connected, name) then
     for i=1,16 do
-      -- assign device unless device is specialized virtual interface
-      if Midi.vports[i].name == "none" and d.name ~= "virtual" then
+      -- assign device unless device is specialized virtual interface (the desktop's JACK "virtual" device is a normal one: a DAW's clock and notes arrive on vport 1)
+      if Midi.vports[i].name == "none" and (d.name ~= "virtual" or auto) then
         Midi.vports[i].name = d.name
         break
       end
@@ -437,9 +438,9 @@ function Midi.update_clock_receive()
 end
 
 -- add a device.
-_norns.midi.add = function(id, name, dev)
+_norns.midi.add = function(id, name, dev, auto)
    print(string.format("_norns.midi.add: %d, %s, %s",id,name,dev))
-  local d = Midi.new(id, name, dev)
+  local d = Midi.new(id, name, dev, auto)
   Midi.devices[id] = d
   Midi.update_devices()
   if Midi.add ~= nil then Midi.add(d) end

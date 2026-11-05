@@ -31,10 +31,14 @@
 using namespace crone::MidiRoute;
 
 static const char *MIDI_IN = "Verdandi:midi_in";
+static const char *MIDI_OUT = "Verdandi:midi_out";
 
 static std::mutex mtx;
-static std::vector<std::string> prefixes;
-static std::atomic<bool> started(false);
+static std::vector<std::string> prefixes;     // midi_in_from: ports linked to Verdandi:midi_in
+static std::vector<std::string> out_prefixes; // midi_out_to: ports Verdandi:midi_out is linked to
+static std::atomic<bool> started(false);      // the input side is on
+static std::atomic<bool> out_started(false);
+static std::atomic<bool> worker_started(false);
 static sem_t wake;
 static std::set<std::string> ever_linked;
 static Throttle throttle;
@@ -140,9 +144,40 @@ static void apply(jack_client_t *c) {
     if (names != NULL) {
         jack_free(names);
     }
+    std::vector<std::string> own_clients = own_alsa_clients();
+    std::vector<std::string> prefixes_now, out_prefixes_now;
+    {
+        std::lock_guard<std::mutex> l(mtx);
+        prefixes_now = prefixes;
+        out_prefixes_now = out_prefixes;
+    }
+    // Verdandi:midi_out to the MIDI inputs that match midi_out_to
+    jack_port_t *outp = jack_port_by_name(c, MIDI_OUT);
+    if (outp != NULL && !out_prefixes_now.empty()) {
+        std::vector<std::string> linked_out;
+        const char **oc = jack_port_get_all_connections(c, outp);
+        for (int i = 0; oc != NULL && oc[i] != NULL; i++) {
+            linked_out.push_back(oc[i]);
+        }
+        if (oc != NULL) {
+            jack_free(oc);
+        }
+        for (const auto &w : missingFrom(wantedSinks(ports, out_prefixes_now, own_clients), linked_out)) {
+            int err = jack_connect(c, MIDI_OUT, w.c_str());
+            if (err != 0 && err != EEXIST) {
+                continue;
+            }
+            std::string key = "out:" + w;
+            bool again = ever_linked.count(key) > 0;
+            ever_linked.insert(key);
+            if (!again || throttle.allow(key, now_s())) {
+                fprintf(stderr, "midi: %s %s to %s\n", again ? "reconnected" : "connected", MIDI_OUT, w.c_str());
+            }
+        }
+    }
     std::vector<std::string> linked;
     jack_port_t *in = jack_port_by_name(c, MIDI_IN);
-    if (in == NULL) {
+    if (in == NULL || prefixes_now.empty()) {
         return;
     }
     const char **conns = jack_port_get_all_connections(c, in);
@@ -153,7 +188,7 @@ static void apply(jack_client_t *c) {
         jack_free(conns);
     }
 
-    std::vector<std::string> want = wanted(ports, prefixes, own_alsa_clients());
+    std::vector<std::string> want = wanted(ports, prefixes_now, own_clients);
     for (const auto &w : missingFrom(want, linked)) {
         int err = jack_connect(c, w.c_str(), MIDI_IN);
         if (err != 0 && err != EEXIST) {
@@ -196,31 +231,62 @@ static void worker(jack_client_t *c) {
 
 extern "C" {
 
-int midi_autoconnect_start(const char *prefix_list) {
-    std::vector<std::string> p = parsePrefixes(prefix_list != NULL ? prefix_list : "");
-    if (p.empty() || started.load()) {
-        return started.load() ? 1 : 0;
+// the worker thread is one for both sides; it starts with the first of them
+static int start_worker(void) {
+    if (worker_started.load()) {
+        return 1;
     }
     jack_client_t *c = input_route_client();
     if (c == NULL) {
         fprintf(stderr, "midi: no JACK server, auto-connect is off\n");
         return 0;
     }
+    sem_init(&wake, 0, 0);
+    worker_started = true;
+    std::thread(worker, c).detach();
+    return 1;
+}
+
+int midi_autoconnect_start(const char *prefix_list) {
+    std::vector<std::string> p = parsePrefixes(prefix_list != NULL ? prefix_list : "");
+    if (p.empty() || started.load()) {
+        return started.load() ? 1 : 0;
+    }
+    if (!start_worker()) {
+        return 0;
+    }
     {
         std::lock_guard<std::mutex> l(mtx);
         prefixes = p;
     }
-    sem_init(&wake, 0, 0);
     started = true;
     fprintf(stderr, "midi: auto-connect to %s from %s\n", MIDI_IN, prefix_list);
-    std::thread(worker, c).detach();
+    sem_post(&wake);
+    return 1;
+}
+
+int midi_autoconnect_start_out(const char *prefix_list) {
+    std::vector<std::string> p = parsePrefixes(prefix_list != NULL ? prefix_list : "");
+    if (p.empty() || out_started.load()) {
+        return out_started.load() ? 1 : 0;
+    }
+    if (!start_worker()) {
+        return 0;
+    }
+    {
+        std::lock_guard<std::mutex> l(mtx);
+        out_prefixes = p;
+    }
+    out_started = true;
+    fprintf(stderr, "midi: auto-connect from %s to %s\n", MIDI_OUT, prefix_list);
+    sem_post(&wake);
     return 1;
 }
 
 void midi_autoconnect_poke(void) {
     // NORNS_MIDI_POKE=0 (tests): no wake-up by port registrations, only the 2 s re-check
     static const bool poke_on = getenv("NORNS_MIDI_POKE") == NULL || strcmp(getenv("NORNS_MIDI_POKE"), "0") != 0;
-    if (poke_on && started.load()) {
+    if (poke_on && worker_started.load()) {
         sem_post(&wake);
     }
 }

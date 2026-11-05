@@ -70,7 +70,7 @@ Linux lists JACK MIDI among its MIDI backends (Cockos wiki; unverified in use).
 - The process callback does no work beyond copying events (bytes and frame offset) into a lock-free ring buffer
   (`third-party/readerwriterqueue` is already there); a reader thread feeds the **existing parser** through a norns
   MIDI device, using the same pipe approach as the keys device (`from_pipe` in `device_midi.cc`). The device is
-  registered as "Verdandi JACK in" (name to confirm); it is a normal norns MIDI device: scripts can read it, and the
+  registered as "virtual" (first "Verdandi JACK in"; renamed when the same device got an output port, `Verdandi:midi_out`); it is a normal norns MIDI device: scripts can read it, and the
   clock source `midi` takes it (`clock_midi_in` = all, or its vport).
 - Timing: the first version uses the arrival time like every other MIDI device (`clock_get_system_time()` when the
   reader thread sees the byte). The frame offset is kept in the ring, so a follow-up can compute the tick time from

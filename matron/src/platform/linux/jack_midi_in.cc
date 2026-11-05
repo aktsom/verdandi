@@ -21,14 +21,17 @@
 #include "clocks/clock_midi.h"
 #include "device_list.h"
 #include "jack_client.h"
+#include "midi_frame.h"
 #include "../macos/product.h"
 #include "readerwriterqueue.h"
 
 #define JACK_MIDI_CLIENT MACOS_PRODUCT // "Verdandi"
 #define JACK_MIDI_PORT "midi_in"
-#define JACK_MIDI_DEVICE MACOS_PRODUCT " JACK in"
+#define JACK_MIDI_PORT_OUT "midi_out"
+#define JACK_MIDI_DEVICE "virtual" // the same device reads and sends (it was called "Verdandi JACK in")
 #define CHUNK 64          // bytes per queue entry: longer messages (sysex) are split, the parser takes the stream
 #define QUEUE_ENTRIES 4096
+#define OUT_ENTRIES 2048  // messages a script sent, waiting for the next JACK cycle (a cycle is about 20 ms: a script would have to send 100 000 a second to fill it)
 
 namespace {
 
@@ -38,8 +41,20 @@ struct chunk_t {
     uint8_t data[CHUNK];
 };
 
+// one message for the output port: the JACK frame time of the send and the whole message
+struct out_msg_t {
+    uint32_t frame;
+    uint16_t len;
+    uint8_t data[MIDI_FRAME_MAX];
+};
+
 jack_client_t *client = NULL;
 jack_port_t *port = NULL;
+jack_port_t *out_port = NULL;
+moodycamel::ReaderWriterQueue<out_msg_t> out_queue(OUT_ENTRIES); // the capacity is made here, at start: enqueue by try_enqueue and dequeue never allocate
+std::atomic_flag out_lock = ATOMIC_FLAG_INIT; // the senders (script thread, clock thread) take turns; the real-time thread never touches it
+std::atomic<unsigned> out_dropped{0};
+std::atomic<bool> out_dropped_said{false};
 moodycamel::ReaderWriterQueue<chunk_t> queue(QUEUE_ENTRIES);
 sem_t wake;
 std::atomic<bool> stopping{false};
@@ -76,7 +91,54 @@ int process(jack_nframes_t nframes, void *) {
     if (any) {
         sem_post(&wake);
     }
+    // the output: what scripts sent, one period later at the distances they were sent at (a clock tick that was sent 20 ms after the one before is written 20 ms
+    // after it), never earlier than the one before in this cycle, and nothing at all when nothing was sent
+    if (out_port != NULL) {
+        void *obuf = jack_port_get_buffer(out_port, nframes);
+        jack_midi_clear_buffer(obuf);
+        size_t biggest = jack_midi_max_event_size(obuf);
+        int32_t last = 0;
+        for (;;) {
+            out_msg_t *m = out_queue.peek();
+            if (m == NULL) {
+                break;
+            }
+            if (m->len > biggest) { // cannot ever fit: dropped, not allowed to block what comes after
+                out_dropped.fetch_add(1, std::memory_order_relaxed);
+                out_queue.pop();
+                continue;
+            }
+            int32_t off = (int32_t)(m->frame + nframes - cycle_start);
+            if (off >= (int32_t)nframes) {
+                break; // for the next cycle
+            }
+            if (off < last) {
+                off = last; // too old (a backlog) or out of order: now, after the one before
+            }
+            int r = jack_midi_event_write(obuf, (jack_nframes_t)off, m->data, m->len);
+            if (r == -ENOBUFS) {
+                break; // the port buffer is full: the rest waits for the next cycle
+            }
+            if (r != 0) {
+                out_dropped.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                last = off;
+            }
+            out_queue.pop();
+        }
+    }
     return 0;
+}
+
+// a script thread: one whole message into the output queue (try_enqueue: no allocation, no waiting; a full queue drops it)
+void out_emit(const uint8_t *msg, size_t len, void *frame) {
+    out_msg_t m;
+    m.frame = *(const uint32_t *)frame;
+    m.len = (uint16_t)len;
+    memcpy(m.data, msg, len);
+    if (!out_queue.try_enqueue(m)) {
+        out_dropped.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 void *reader_thread(void *) {
@@ -125,6 +187,14 @@ void *reader_thread(void *) {
     }
 }
 
+// the output counts are looked at here (the real-time thread must not print)
+void out_report(void) {
+    unsigned d = out_dropped.exchange(0);
+    if (d > 0 && !out_dropped_said.exchange(true)) {
+        fprintf(stderr, "jack_midi_out: %u messages dropped (the queue was full or a message was too big for the port): said once\n", d);
+    }
+}
+
 } // namespace
 
 int jack_midi_in_start(void) {
@@ -143,11 +213,13 @@ int jack_midi_in_start(void) {
         return -1;
     }
     port = jack_port_register(client, JACK_MIDI_PORT, JACK_DEFAULT_MIDI_TYPE, JackPortIsInput, 0);
+    out_port = jack_port_register(client, JACK_MIDI_PORT_OUT, JACK_DEFAULT_MIDI_TYPE, JackPortIsOutput, 0);
     int fds[2];
-    if (port == NULL || pipe(fds) != 0 || sem_init(&wake, 0, 0) != 0) {
+    if (port == NULL || out_port == NULL || pipe(fds) != 0 || sem_init(&wake, 0, 0) != 0) {
         fprintf(stderr, "jack_midi_in: could not make the port\n");
         jack_client_close(client);
         client = NULL;
+        out_port = NULL;
         return -1;
     }
     pipe_rd = fds[0];
@@ -160,7 +232,7 @@ int jack_midi_in_start(void) {
         return -1;
     }
     pthread_setname_np(reader, "jack_midi_in");
-    fprintf(stderr, "jack_midi_in: JACK MIDI input %s:%s\n", JACK_MIDI_CLIENT, JACK_MIDI_PORT);
+    fprintf(stderr, "jack_midi_in: JACK MIDI input %s:%s, output %s:%s (the device \"%s\")\n", JACK_MIDI_CLIENT, JACK_MIDI_PORT, JACK_MIDI_CLIENT, JACK_MIDI_PORT_OUT, JACK_MIDI_DEVICE);
     // the device list takes its own lock; dev_midi_init picks the pipe up (jack_midi_in_take_pipe)
     dev_list_add(DEV_TYPE_MIDI, JACK_MIDI_PATH, strdup(JACK_MIDI_DEVICE), NULL);
     return 0;
@@ -178,4 +250,23 @@ int jack_midi_in_take_pipe(void) {
 
 const char *jack_midi_in_port_name(void) {
     return JACK_MIDI_CLIENT ":" JACK_MIDI_PORT;
+}
+
+const char *jack_midi_out_port_name(void) {
+    return JACK_MIDI_CLIENT ":" JACK_MIDI_PORT_OUT;
+}
+
+long jack_midi_out_send(const uint8_t *data, size_t n) {
+    if (client == NULL || out_port == NULL) {
+        return -1;
+    }
+    // the time of the send in JACK frames (jack_frame_time may be called from any thread); the process callback keeps the distances
+    uint32_t frame = (uint32_t)jack_frame_time(client);
+    while (out_lock.test_and_set(std::memory_order_acquire)) {
+        // another sender is cutting its bytes (microseconds): this is not the real-time thread
+    }
+    midi_frame_split(data, n, out_emit, &frame);
+    out_lock.clear(std::memory_order_release);
+    out_report();
+    return (long)n;
 }

@@ -88,7 +88,7 @@ linux/norns.sh --terminal
   One forward line at start is normal. A line appears only for jumps of more than a second; none during normal running. If a backward line appears and the tempo is still
   right (`clock.get_tempo()`, and in a script `clock.get_beats()` growing by 2 per second at 120 BPM), the fix is working; if the clock is slow again, send the lines.
   A forward jump after the start is still accepted and can make a coroutine waiting on `clock.sync` fire in a burst once (measured, see `KNOWN-ISSUES.md`: handling proposed, not applied).
-- **MIDI from a DAW (Reaper):** norns' JACK MIDI input is the port `Verdandi:midi_in` (device "Verdandi JACK in", vport 1).
+- **MIDI from a DAW (Reaper):** norns' JACK MIDI input is the port `Verdandi:midi_in` (the norns device "virtual", vport 1; it was called "Verdandi JACK in", and an old `midimap.conf` that names it still works).
   Connect Reaper's MIDI output (under PipeWire a `Midi-Bridge` port such as `Client-<n> Virtual RawMIDI`) to it with
   `pw-jack jack_connect "<Reaper's port>" Verdandi:midi_in` or qpwgraph; `pw-jack jack_lsp -t | grep -i midi` lists them. Set
   `clock_source` to midi in PARAMS > CLOCK. To have it made (and made again when it is dropped) put
@@ -96,6 +96,7 @@ linux/norns.sh --terminal
   several prefixes separated by `;`; `NORNS_MIDI_IN_FROM=...` in the environment wins). It is off without that line. norns checks every
   2 seconds, logs `midi: connected/reconnected ...`, and SYSTEM > DEVICES > MIDI shows "AUTO-LINK: n linked". The test script `window_probe.lua` now listens on every "Verdandi" MIDI device (the JACK input and
   the keys window).
+- **MIDI to a DAW or a synth (Reaper):** what a script sends to the "virtual" device (`midi.connect()` on its vport, `m:note_on`, `m:cc`, `m:send`, clock, start, stop) comes out of the JACK port `Verdandi:midi_out`. Connect it to a Reaper track's MIDI input (a `Midi-Bridge` port under PipeWire, or the track through a JACK MIDI connection) with `pw-jack jack_connect Verdandi:midi_out "<port>"` or qpwgraph. The port exists from the start and sends nothing until a script sends something; with nothing connected the sends are simply dropped. To have it linked (and linked again when it is dropped) put `midi_out_to=` in `audio.conf` with the start of the INPUT port's name as `jack_lsp` shows it (the same rules as `midi_in_from`: `;` between prefixes, `*` for a changing number, `NORNS_MIDI_OUT_TO` in the environment wins, off without the line); norns' own ports and `Midi Through` are never linked.
 - **Fixed:** `error code: 22 (Invalid argument) in "pthread_create"` on key presses was the metro thread of the screensaver timer
   failing to start (a 16 KiB stack and a desktop's large thread-local storage; `KNOWN-ISSUES.md` item 4). Metros now get a
   256 KiB stack. If a metro still cannot start, norns says "metro N did not start" once; tell me if you ever see it.
@@ -345,7 +346,7 @@ SYSTEM > MIDI MAP (below THEME) lets a MIDI controller turn E1-E3 and press K1-K
 5. The files are `~/verdandi-home/midimap.conf` and `midimap-presets/`; clean up never touches them.
 6. **Naming a recording with the controller.** While a text entry is open (the tape recording's name after K3 on the TAPE page, a preset name, a number), your mapped **E2** moves through the characters, **E3** switches between the characters and DEL / OK, **K3** adds / deletes / accepts (on the press) and **K2** cancels, as the keyboard and the hardware do. K1, E1, A1-A4 and the MIDI actions are ignored while the entry is open. There is no setting for this; a small `MIDI` in the corner of the entry tells you the mapped controls are live.
 
-Network (RTP-MIDI) controllers arrive through JACK MIDI (`Verdandi:midi_in`, "Verdandi JACK in", all sources one device): use ANY. What to check on your hardware is in `HARDWARE-CHECKLIST.md`, section "MIDI MAP".
+Network (RTP-MIDI) controllers arrive through JACK MIDI (`Verdandi:midi_in`, the device "virtual", all sources one device): use ANY. What to check on your hardware is in `HARDWARE-CHECKLIST.md`, section "MIDI MAP".
 
 ## The virtual arc from MIDI and the keyboard (docs/port/arc-plan.md)
 

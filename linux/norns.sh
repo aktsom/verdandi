@@ -419,9 +419,11 @@ export NORNS_AUDIO_SERVER_MODE="$SERVER"
 # the optional sink monitor input (hears norns too); off unless asked: environment or audio.conf sys_monitor=1
 NORNS_SYS_MONITOR="${NORNS_SYS_MONITOR:-$(conf_get sys_monitor)}"
 export NORNS_SYS_MONITOR
-# the optional MIDI auto-connect: JACK MIDI output port name prefixes (";" between) to link to Verdandi:midi_in. off by default
+# the optional MIDI auto-connect: JACK MIDI output port name prefixes (";" between) to link to Verdandi:midi_in (midi_in_from), and JACK MIDI input port prefixes Verdandi:midi_out is linked to (midi_out_to). both off by default
 NORNS_MIDI_IN_FROM="${NORNS_MIDI_IN_FROM:-$(conf_get midi_in_from)}"
 export NORNS_MIDI_IN_FROM
+NORNS_MIDI_OUT_TO="${NORNS_MIDI_OUT_TO:-$(conf_get midi_out_to)}"
+export NORNS_MIDI_OUT_TO
 # serialosc (serialosc-device) on the grid's serial port is reported; NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf turns that off
 NORNS_SERIALOSC_CHECK="${NORNS_SERIALOSC_CHECK:-$(conf_get serialosc_check)}"
 export NORNS_SERIALOSC_CHECK

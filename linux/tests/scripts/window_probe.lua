@@ -5,7 +5,7 @@ a = arc.connect()
 function g.key(x, y, z) print("PROBE gridkey", x, y, z) end
 function a.delta(n, d) print("PROBE arcdelta", n, d) end
 function a.key(n, z) print("PROBE arckey", n, z) end
--- every Verdandi MIDI device is listened to: "Verdandi JACK in" (vport 1, always there on Linux: a DAW or a keyboard
+-- every Verdandi MIDI device is listened to: "virtual" (vport 1, always there on Linux: a DAW or a keyboard
 -- through JACK MIDI) and "Verdandi keys" (the keys window, the next vport). vport 2 is connected whether or not the
 -- keys window is open yet, so that it keeps working when the window is opened later
 local function listen(n)

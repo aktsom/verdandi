@@ -21,6 +21,8 @@ extern jack_client_t *input_route_client(void);
 // Verdandi:midi_in and keep linked. returns 1 if it is on. status: 1 if on, count of linked ports and their names.
 // poke: a port was registered (any thread, a JACK callback too)
 extern int midi_autoconnect_start(const char *prefix_list);
+// the same for the output: a prefix list of JACK MIDI input ports Verdandi:midi_out is linked to and kept linked to (midi_out_to=)
+extern int midi_autoconnect_start_out(const char *prefix_list);
 extern void midi_autoconnect_poke(void);
 extern int midi_autoconnect_status(int *count, char *names, size_t n);
 

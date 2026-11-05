@@ -3,7 +3,7 @@
 #sleep 5
 norns.script.load("code/probe/window_probe.lua")
 #sleep 3
-jm = nil for i = 1, 16 do if midi.vports[i].name == "Verdandi JACK in" then jm = midi.connect(i) end end
+jm = nil for i = 1, 16 do if midi.vports[i].name == "virtual" then jm = midi.connect(i) end end
 jm.event = function(d) local m = midi.to_msg(d) print("PROBE script", m.type, m.cc, m.val) end
 mm = norns.midimap
 S = require "core/midimap_settings"

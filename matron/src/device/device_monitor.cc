@@ -142,7 +142,10 @@ int dev_monitor_scan(void) {
     // the computer keyboard, through the norns window (platform/linux/hid_virtual.cc)
     dev_list_add(DEV_TYPE_HID, LINUX_SDL_KEYBOARD_PATH, strdup("keyboard"), NULL);
     // MIDI from other programs through JACK (clock, notes): platform/linux/jack_midi_in.cc
-    jack_midi_in_start();
+    // it is the "virtual" device (in and out); without it (no JACK MIDI: NORNS_JACK_MIDI=0) the ALSA virtual port of upstream is the "virtual" device, as before
+    if (jack_midi_in_start() != 0) {
+        dev_list_add(DEV_TYPE_MIDI_VIRTUAL, NULL, "virtual", NULL);
+    }
 #endif
 
     udev = udev_new();

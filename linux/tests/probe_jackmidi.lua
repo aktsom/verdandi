@@ -6,7 +6,7 @@ clock.transport.stop = function() print("PROBE transport stop", string.format("%
 params:set("clock_source", 2)
 jm = nil
 for i = 1, 16 do
-  if midi.vports[i].name == "Verdandi JACK in" then jm = midi.connect(i); print("PROBE jack midi vport", i) end
+  if midi.vports[i].name == "virtual" then jm = midi.connect(i); print("PROBE jack midi vport", i) end
 end
 print("PROBE jack midi found", jm ~= nil)
 if jm then

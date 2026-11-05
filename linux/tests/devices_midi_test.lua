@@ -5,7 +5,7 @@ package.loaded["core/keyboard"] = {keymap = {us = true}, selected_map = "us"}
 util = {clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end}
 midi = {devices = {}, vports = {}, update_devices = function() end}
 for i = 1, 16 do midi.vports[i] = {name = "none"} end
-midi.vports[1].name = "Verdandi JACK in"
+midi.vports[1].name = "virtual"
 grid, arc, hid = {devices = {}, vports = {}}, {devices = {}, vports = {}}, {devices = {}, vports = {}}
 local texts = {}
 screen = {clear = function() texts = {} end, level = function() end, move = function() end,

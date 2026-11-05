@@ -73,7 +73,7 @@ local function clean_dev(v)
   if n:find("[%z\1-\31\127]") then return nil, "no control characters" end
   if #n > M.MAX_DEV then return nil, M.MAX_DEV .. " characters at most" end
   if n:lower() == "any" then return "ANY" end
-  return n
+  return require('core/midimap_value').canonical_name(n) -- the old name of the virtual device is read, shown and written as "virtual"
 end
 
 --- check one field of one control: the value in its normal form, or nil and what was wrong

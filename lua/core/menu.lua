@@ -411,6 +411,9 @@ if _norns.midi_in_from then
   hook.system_post_startup:register("menu-midi-autolink", function()
     local from = os.getenv("NORNS_MIDI_IN_FROM")
     if from and from ~= "" then _norns.midi_in_from(from) end
+    -- and the output: Verdandi:midi_out to the MIDI inputs it names (NORNS_MIDI_OUT_TO, from audio.conf midi_out_to=), off unless given
+    local to = os.getenv("NORNS_MIDI_OUT_TO")
+    if to and to ~= "" and _norns.midi_out_to then _norns.midi_out_to(to) end
   end)
 end
 

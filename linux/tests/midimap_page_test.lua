@@ -62,7 +62,7 @@ mm.clock = function() return T end
 _norns.midimap_pick = function(kind, n) mm.pick(kind .. n) end
 
 local function add(id, name) _norns.midi.add(id, name, "p" .. id) end
-add(1, "Verdandi JACK in"); add(2, "mio"); add(3, "iii grid")
+add(1, "virtual"); add(2, "mio"); add(3, "iii grid")
 
 page = dofile("lua/core/menu/midimap.lua")
 local function fresh()
@@ -184,7 +184,7 @@ check(drawn("CC102"), "the row shows the key's CC")
 fresh()
 page.pos = 4; press(3); page.dpos = 3
 local function choices() local r = {} for _, c in ipairs(page.device_choices()) do r[#r + 1] = c.value end return table.concat(r, "|") end
-eq(choices(), "ANY|iii grid|mio|Verdandi JACK in", "the devices: ANY, then the names (the keys window is not offered when it is not there)")
+eq(choices(), "ANY|iii grid|mio|virtual", "the devices: ANY, then the names (the keys window is not offered when it is not there)")
 add(4, "Verdandi keys"); check(choices():find("Verdandi keys", 1, true), "the keys window is listed when it exists (it can be chosen by name)")
 _norns.midi.remove(4)
 turn(3, 1); eq(S.state.ctl.e2.dev, "iii grid", "E3 on DEVICE picks the next one (stays within the list)")
@@ -194,7 +194,7 @@ page.redraw(); check(drawn("ABSENT"), "and shown that way")
 -- two ports
 S.set("e2", "dev", "mio")
 _norns.midi.remove(2); add(2, "mio 1"); add(5, "mio 2")
-check(choices() == "ANY|iii grid|mio|mio 1|mio 2|Verdandi JACK in" or choices() == "ANY|iii grid|mio 1|mio 2|mio|Verdandi JACK in", "two ports: the interface and each port: " .. choices())
+check(choices() == "ANY|iii grid|mio|mio 1|mio 2|virtual" or choices() == "ANY|iii grid|mio 1|mio 2|mio|virtual", "two ports: the interface and each port: " .. choices())
 local labels = {} for _, c in ipairs(page.device_choices()) do labels[#labels + 1] = c.label end
 check(table.concat(labels, "|"):find("ALL PORTS", 1, true), "the interface entry says ALL PORTS")
 eq(S.state.ctl.e2.dev, "mio", "the stored name `mio` is still the chosen entry")

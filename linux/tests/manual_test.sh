@@ -57,6 +57,9 @@ blocks = re.findall(r"<!--(.*?)-->\s*<section id=\"([a-z-]+)\"", text, re.S)
 have = {sid: c for c, sid in blocks}
 res("every section has a sources comment above it", all(s in have and "sources:" in have[s] for s in want), ", ".join(s for s in want if s not in have or "sources:" not in have[s]))
 
+# the virtual MIDI device and its two JACK ports are in the manual
+for what, pat in (("the virtual device", r"<strong>virtual</strong>"), ("Verdandi:midi_in", r"Verdandi:midi_in"), ("Verdandi:midi_out", r"Verdandi:midi_out"), ("midi_out_to", r"<code>midi_out_to</code>")):
+    res("manual: " + what, re.search(pat, text) is not None)
 # the troubleshooting section
 m = re.search(r'<section id="trouble">(.*?)</section>', text, re.S)
 lim = m.group(1) if m else ""
@@ -70,7 +73,7 @@ plain = re.sub(r"\s+", " ", plain)
 # removed names and words that do not belong in a manual
 for what, pat, flags in (("SYSTEM > UI", r"SYSTEM > UI\b", 0), ("SYSTEM > BOX", r"SYSTEM > BOX\b", 0), ("the UI page", r"\bUI page\b|\bUI\b", 0), ("GREYS", r"\bGREYS\b", 0),
                          ("an OUT fader or slider", r"OUT (fader|slider)|output (fader|slider)", re.I), ("a SCREEN button", r"SCREEN button", 0), ("the HEX row of SCREEN", r"SCREEN.{0,3}s HEX|SCREEN HEX", 0),
-                         ("history wording", r"was called|earlier version|first version|older version|used to be", re.I), ("a personal word", r"\bowner\b", re.I)):
+                         ("history wording", r"was called|earlier version|first version|older version|used to be", re.I), ("a personal word", r"\bowner\b", re.I), ("the old name of the virtual MIDI device", r"JACK in", 0)):
     hit = re.search(pat, plain, flags)
     res("no removed name or history wording: " + what, hit is None, hit.group(0) if hit else "")
 
@@ -133,7 +136,7 @@ code = re.findall(r"<code>(.*?)</code>", text, re.S)
 env = sorted(set(re.findall(r"\b(NORNS_[A-Z_]+|WS_WRAPPER_[A-Z_]+|PIPEWIRE_QUANTUM|XDG_PICTURES_DIR)\b", " ".join(code))))
 missing = [e for e in env if e not in src]
 res("every environment variable named (%d) is in the source" % len(env), not missing, ", ".join(missing))
-keys = ["in_ports", "out_ports", "input", "output", "rate", "period", "sys_monitor", "midi_in_from", "plugin_check", "serialosc_check"]
+keys = ["in_ports", "out_ports", "input", "output", "rate", "period", "sys_monitor", "midi_in_from", "midi_out_to", "plugin_check", "serialosc_check"]
 nokey = [k for k in keys if ("conf_get " + k) not in src and (k + "=") not in src]
 res("every audio.conf key in the table is read or written by the code", not nokey, ", ".join(nokey))
 paths = sorted(set(c for c in code if re.match(r"(linux|docs|matron|lua|macos|ws-wrapper|maiden-repl)/[A-Za-z0-9_./*-]+$", c) and "*" not in c and "&" not in c))

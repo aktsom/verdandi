@@ -33,6 +33,8 @@ struct dev_midi {
     int pipe_rd;
     // the JACK MIDI input feeds the clock itself, with the time of each message (jack_midi_in.cc)
     bool clock_timed;
+    // the JACK MIDI device ("virtual") also sends: its output is the JACK port Verdandi:midi_out (jack_midi_in.cc)
+    bool jack_out;
 #endif
 #endif
 };

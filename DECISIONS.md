@@ -43,7 +43,7 @@ Order of work: `docs/port/phase-2.md` section 6; stop after step 5 with `HARDWAR
 4. `norns.sh` re-runs itself under `pw-jack` only when PipeWire is running and no JACK server answers;
    `NORNS_AUDIO_SERVER` override stays. (Step 3, waits.)
 5. SYSTEM > AUDIO rows are read-only under PipeWire; `PIPEWIRE_QUANTUM` is marked experimental. (Step 4, waits.)
-6. JACK MIDI client "Verdandi", device "Verdandi JACK in", no auto-connect.
+6. JACK MIDI client "Verdandi", device "Verdandi JACK in" (renamed "virtual" when the device also got an output port, `Verdandi:midi_out`: the same device in and out, as upstream's virtual port), no auto-connect.
 7. MIDI start after SPP begins at the SPP position (once).
 8. The owner runs the laptop checklist and sends the output.
 

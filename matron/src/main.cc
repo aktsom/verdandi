@@ -185,7 +185,11 @@ int matron_main(int argc, char **argv) {
     w_init(); // weaver (scripting)
 
     dev_list_init();
+#ifndef NORNS_LINUX_DESKTOP
     dev_list_add(DEV_TYPE_MIDI_VIRTUAL, NULL, "virtual", NULL);
+#endif
+    // (the Linux desktop's "virtual" device is the JACK MIDI one, made by dev_monitor_scan: input and output, platform/linux/jack_midi_in.cc;
+    // upstream's ALSA virtual port is only the fallback when there is no JACK MIDI)
 
     fprintf(stderr, "init dev_monitor...\n");
     dev_monitor_init();

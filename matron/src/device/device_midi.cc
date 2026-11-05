@@ -87,6 +87,7 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
         }
         midi->from_pipe = true;
         if (strcmp(base->path, JACK_MIDI_PATH) == 0) {
+            midi->jack_out = true;
             midi->clock_timed = true;
             jack_midi_in_set_clock_flag(&midi->clock_enabled);
         }
@@ -422,6 +423,12 @@ void *dev_midi_start(void *self) {
 
 ssize_t dev_midi_send(void *self, uint8_t *data, size_t n) {
     struct dev_midi *midi = (struct dev_midi *)self;
+#ifdef NORNS_LINUX_DESKTOP
+    if (midi->from_pipe) {
+        // the JACK device ("virtual"): the JACK port Verdandi:midi_out; the keys window has no output
+        return midi->jack_out ? (ssize_t)jack_midi_out_send(data, n) : -1;
+    }
+#endif
     if (midi->handle_out == NULL) {
         return -1;
     } else {

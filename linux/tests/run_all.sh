@@ -130,6 +130,7 @@ run "c:clipboard classifier and the real SDL clipboard round trip (valid, empty,
 run "lua:renames (SCREEN and THEME in the list, the manual and RUN-ON-LAPTOP.md; ids, aliases and files unchanged; the device list as before)" env NORNS_PLATFORM=linux lua5.3 linux/tests/rename_test.lua
 run "lua:SYSTEM > BOX page (rows, hex entry, STYLE, PRESET list and markers, SAVE, overwrite and delete questions, scrolling)" lua5.3 linux/tests/box_page_test.lua
 run "box:right-click items, Ctrl+M and the menu size (source checks)" linux/tests/box_menu_test.sh
+run "c:midi frame (a script's bytes cut into whole MIDI messages for the JACK output)" bash -c "cc -std=gnu11 -Wall -I '$REPO/matron/src/platform/linux' '$REPO/linux/tests/midi_frame_test.c' -o '$T/midi_frame_test' && '$T/midi_frame_test'"
 run "lua:ui settings and the UI page (hex parsing, text entry, save, load, damaged file, SYSTEM list)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_settings_test.lua
 run "lua:screen presets" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_screen_test.lua
 run "lua:ui page with the computer keyboard (one press = one step, release changes nothing, rows, hex entry; real keyboard module and menu bindings)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/ui_keys_test.lua
@@ -239,6 +240,42 @@ if cc -std=gnu11 "$REPO/linux/tests/jack_midi_clock_test.c" -o "$T/jack_midi_clo
     run "clock:midi clock, start, SPP, stop, continue and notes through JACK MIDI" jackmidi_ok
 else
     echo "SKIP  clock:jack midi (no jack headers)"
+fi
+
+# the virtual MIDI device sends through JACK MIDI (the port Verdandi:midi_out): a listening client gets every message a script sends to it (notes, cc, program change, pitch bend, pressure,
+# sysex, start / continue / stop, song position, 24 clock ticks 20 ms apart, in order) and nothing else; a note sent while nobody listens is dropped, a client that is not connected gets nothing,
+# norns does not mind; the device list says "virtual" (the old name is gone)
+if cc -std=gnu11 "$REPO/linux/tests/jack_midi_out_test.c" -o "$T/jack_midi_out_test" $(pkg-config --cflags --libs jack) 2> /dev/null; then
+    JH2="$(mktemp -d)"
+    ln -s "$REPO" "$JH2/norns"
+    OLOG="$T/jackmidiout.log"
+    CAP="$T/jack_midi_out_test" NORNS_HOME="$JH2" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_jackmidi_out.lua" "$OLOG" > /dev/null 2>&1
+    jackmidiout_ok() {
+        local bad=0 cap="$JH2/probe.marks.cap"
+        chk() { grep -aq "$2" "$OLOG" || { echo "missing: $1"; bad=1; }; }
+        chk "the virtual device is vport 1" "PROBE virtual vport.1"
+        chk "the device list says virtual" "PROBE device.virtual"
+        grep -aq "PROBE device.Verdandi JACK in" "$OLOG" && { echo "the old device name Verdandi JACK in is still in the list"; bad=1; }
+        chk "the probe finished (norns did not mind the sends without a listener)" "PROBE jackmidi out done"
+        grep -aq "jack_midi_out_test: connected" "$cap" || { echo "Verdandi:midi_out does not exist or could not be linked"; bad=1; }
+        local want got nclock
+        want="$(awk -F'\t' '$1 == "PROBE sent" { print $2 }' "$OLOG" | tr -d '\r')"
+        got="$(grep -a '^EV ' "$cap" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s (i > 3 ? " " : "") $i; if (s != "f8") print s }')"
+        [ "$(echo "$want" | wc -l)" -ge 12 ] || { echo "the probe sent fewer messages than it should ($(echo "$want" | wc -l))"; bad=1; }
+        [ "$want" = "$got" ] || { echo "what arrived is not what was sent, in order. sent: $(echo $want | tr '\n' '|') arrived: $(echo $got | tr '\n' '|')"; bad=1; }
+        nclock="$(grep -ac '^EV [0-9.]* f8$' "$cap")"
+        [ "$nclock" = 24 ] || { echo "24 clock ticks expected, got $nclock"; bad=1; }
+        # the clock ticks keep their spacing (20 ms): the mean within 2 ms, every gap within 8 ms of it
+        grep -a '^EV [0-9.]* f8$' "$cap" | awk '{ t[NR] = $2 } END { n = 0; for (i = 2; i <= NR; i++) { g[n++] = t[i] - t[i-1]; s += g[n-1] } m = s / n; ok = (m > 18 && m < 22); for (i = 0; i < n; i++) if (g[i] < m - 8 || g[i] > m + 8) ok = 0; printf "clock gap mean %.2f ms\n", m > "/dev/stderr"; exit !ok }' 2> "$T/jackmidiout.gaps" || { echo "the clock ticks lost their spacing: $(cat "$T/jackmidiout.gaps")"; bad=1; }
+        # nothing is sent at the end: nothing arrived after the last message of the burst plus a margin, and no extra event at all
+        [ "$(grep -ac '^EV ' "$cap")" = "$(( $(echo "$want" | wc -l) + 24 ))" ] || { echo "the number of events is not the number sent (an extra or a missing message): $(grep -ac '^EV ' "$cap")"; bad=1; }
+        grep -aq "jack_midi_out_test: done" "$cap" || { echo "the capture client did not finish"; bad=1; }
+        grep -aq "listening, not connected" "$JH2/probe.marks.nolink" && grep -aq "done 0 events" "$JH2/probe.marks.nolink" || { echo "a client that is not connected must get nothing"; bad=1; }
+        return $bad
+    }
+    run "midi:the virtual MIDI device sends through JACK MIDI (Verdandi:midi_out: notes, cc, program change, pitch bend, pressure, sysex, transport, clock spacing; silence when nothing is sent)" jackmidiout_ok
+else
+    echo "SKIP  midi:jack midi out (no jack headers)"
 fi
 
 # SYSTEM > AUDIO per audio server mode (own jackd, PipeWire, a server we do not own, the macOS default)
@@ -560,6 +597,35 @@ if command -v jackd > /dev/null; then
     done
 fi
 
+# the optional output auto-connect (midi_out_to= in audio.conf, or NORNS_MIDI_OUT_TO): Verdandi:midi_out is linked to the MIDI inputs that match a prefix, a link cut behind norns' back is made again,
+# a client that appears later is linked, an input that does not match is not
+if command -v jackd > /dev/null && [ -x "$T/jack_midi_out_test" ]; then
+    for sc in conf env; do
+        OGLOG="$T/midioutlink-$sc.log"
+        MIDI_SCENARIO=$sc CAP="$T/jack_midi_out_test" "$REPO/linux/tests/midi_out_link_test.sh" "$OGLOG" > /dev/null 2>&1
+        if [ $sc = conf ]; then
+            for _retry in 1 2; do
+                peers "$OGLOG.cut" Verdandi:midi_out | grep -qx "Fake Synth:in" || break
+                MIDI_SCENARIO=$sc CAP="$T/jack_midi_out_test" "$REPO/linux/tests/midi_out_link_test.sh" "$OGLOG" > /dev/null 2>&1
+            done
+        fi
+        midioutlink_ok() {
+            local bad=0
+            has() { peers "$OGLOG.$1" Verdandi:midi_out | grep -qx "$2"; }
+            has start "Fake Synth:in" || { echo "start: Fake Synth:in is not linked"; bad=1; }
+            has start "Other Synth:in" && { echo "start: Other Synth:in is linked, it does not match"; bad=1; }
+            [ $sc = conf ] && has cut "Fake Synth:in" && { echo "the test did not cut the link"; bad=1; }
+            has repaired "Fake Synth:in" || { echo "the cut link was not made again within 4 s"; bad=1; }
+            has late "Late Synth:in" || { echo "a client that appeared later was not linked"; bad=1; }
+            has late "Other Synth:in" && { echo "late: Other Synth:in is linked"; bad=1; }
+            grep -aq "midi: connected Verdandi:midi_out to Fake Synth:in" "$OGLOG" || { echo "no log line for the first link"; bad=1; }
+            return $bad
+        }
+        run "midi:auto-connect from Verdandi:midi_out, repaired when cut ($sc)" midioutlink_ok
+    done
+fi
+
+
 # the window on Xvfb: device skin, oled, mouse, keyboard, virtual grid and arc (needs xdotool, imagemagick)
 if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     WH="$(mktemp -d)"
@@ -586,7 +652,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         chk "arc wheel" "PROBE arcdelta.1.2"
         chk "arc key down" "PROBE arckey.1.1"
         chk "arc key up" "PROBE arckey.1.0"
-        chk "keys window is a norns MIDI device (after the JACK MIDI input)" "PROBE midi device.Verdandi JACK in.Verdandi keys"
+        chk "keys window is a norns MIDI device (after the JACK MIDI input)" "PROBE midi device.virtual.Verdandi keys"
         chk "click on a piano key: note on" "PROBE midi.note_on.52.111.1"
         chk "click on a piano key: note off" "PROBE midi.note_off.52.0.1"
         chk "typed d: note on" "PROBE midi.note_on.52.100.1"
