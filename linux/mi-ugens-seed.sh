@@ -11,6 +11,14 @@
 #         - anything else (a folder that is not ours, a copy the user changed, another Mi*.sc): left alone, one line says why
 #       never deletes or overwrites what is not its own, never needs a network. NORNS_MI_UGENS=0 (or mi_ugens=0 in audio.conf) turns it off.
 #       always exits 0: a failure here must not stop norns. no pack folder (a source checkout): silent.
+#   mi-ugens-seed.sh heal <pack dir> <norns home>
+#       (launcher, before sclang starts, after seed) a script or mod that downloaded the Raspberry Pi mi-UGens leaves files that stop SuperCollider. when
+#       Verdandi's own copy is in the extension folder and intact (stamp and sha256 list match) the foreign wrong-architecture mi-UGens items that
+#       build/linux/mi_heal finds (the user's extension folder and dust/code only, never other plug-ins) are moved into <home>/disabled/ with
+#       `verdandi tidy disable` (manifest line with what, from where, when, why and how to restore; nothing is deleted), one log line, and a note for the
+#       window is left in <home>/.mi-heal-note (shown once). own copy missing or changed: nothing is moved (the PLUGINS note and SYSTEM > CLEAN UP stay). a
+#       foreign copy that loads here is left alone, one line (duplicate classes: the class check). NORNS_MI_UGENS_HEAL=0 (mi_ugens_heal=0 in audio.conf)
+#       turns it off. MI_HEAL_TOOL (the scanner) and NORNS_TIDY (the tidy tool) say where the tools are. always exits 0; no tool or no pack: silent.
 #   mi-ugens-seed.sh info <norns home>
 #       prints the stamp of the copy in the extension folder as key=value lines (state=own|modified|foreign|none)
 set -u
@@ -121,7 +129,59 @@ cmd_info() {
     cat "$d/$STAMP"
 }
 
+heal_enabled() {
+    case "$(printf '%s' "${NORNS_MI_UGENS_HEAL:-}" | tr 'A-Z' 'a-z')" in 0 | off | false | no) return 1 ;; esac
+    return 0
+}
+
+NOTE_TEXT="A script downloaded Raspberry Pi mi-UGens. Moved aside; Verdandi's own copy is in use."
+
+cmd_heal() {
+    local pack="$1" home="$2"
+    heal_enabled || return 0
+    [ -d "$pack" ] && [ -f "$pack/$STAMP" ] && [ -d "$home" ] || return 0
+    local tool="${MI_HEAL_TOOL:-$(dirname "$0")/../build/linux/mi_heal}"
+    local tidy="${NORNS_TIDY:-$(dirname "$0")/tidy.sh}"
+    [ -x "$tool" ] && [ -x "$tidy" ] || return 0
+    local out arms x86
+    out="$("$tool" scan "$home" 2> /dev/null)" || return 0
+    arms="$(printf '%s\n' "$out" | awk -F'\t' '$1 == "arm"')"
+    x86="$(printf '%s\n' "$out" | awk -F'\t' '$1 == "x86" { print $2 }')"
+    if [ -n "$arms" ]; then
+        if ! intact_own "$home"; then
+            echo "mi-UGens: Raspberry Pi mi-UGens found, but Verdandi's own copy is missing or changed, so nothing was moved (see the PLUGINS note and SYSTEM > CLEAN UP)"
+        else
+            local n=0 ids="" path kind why res id
+            while IFS="$(printf '\t')" read -r _ path kind why; do
+                [ -n "$path" ] || continue
+                res="$(NORNS_HOME="$home" TIDY_HOME="$home" "$tidy" disable "$path" "$why" 2>&1)" || continue
+                id="$(printf '%s' "$res" | sed -n 's/.*(id \([^)]*\)).*/\1/p' | head -n 1)"
+                n=$((n + 1)); ids="$ids $id"
+            done <<EOF
+$arms
+EOF
+            if [ $n -gt 0 ]; then
+                echo "mi-UGens: moved $n foreign Raspberry Pi mi-UGens item(s) into $home/disabled/ (Verdandi's own copy is in use); to put one back: verdandi tidy restore <id> (ids:${ids})"
+                printf '%s\n' "$NOTE_TEXT" > "$home/.mi-heal-note" 2> /dev/null || true
+            fi
+        fi
+    fi
+    local p
+    for p in $x86; do
+        echo "mi-UGens: $p is a copy of mi-UGens that is not Verdandi's, left alone (two copies make SuperCollider stop with duplicate classes: SYSTEM > CLEAN UP > CLASSES names them)"
+    done
+    return 0
+}
+
+# the own copy is there, stamped, and every file as it was written (the same rule as the update)
+intact_own() {
+    local d
+    d="$(ext_of "$1")/mi-UGens"
+    [ -f "$d/$STAMP" ] && [ "$(stamp_get "$d/$STAMP" pack)" = mi-UGens ] && intact "$d"
+}
+
 case "${1:-}" in
+    heal) shift; cmd_heal "$@"; exit 0 ;;
     stamp) shift; cmd_stamp "$@" ;;
     seed) shift; cmd_seed "$@"; exit 0 ;;
     info) shift; cmd_info "$@" ;;

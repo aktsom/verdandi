@@ -442,6 +442,11 @@ export NORNS_PLUGIN_CHECK
 NORNS_MI_UGENS="${NORNS_MI_UGENS:-$(conf_get mi_ugens)}"
 export NORNS_MI_UGENS
 NORNS_MI_PACK="${NORNS_MI_PACK:-$REPO/mi-ugens/mi-UGens}"
+# a script's download of the Raspberry Pi mi-UGens next to Verdandi's own (intact) pack is moved aside into disabled/ before sclang starts, with a manifest
+# line and one window note; with the own pack missing or changed nothing is moved. NORNS_MI_UGENS_HEAL=0 or mi_ugens_heal=0 in audio.conf turns it off,
+# also for the check while norns runs (it then only shows a note, the move is always a confirmation in SYSTEM > CLEAN UP)
+NORNS_MI_UGENS_HEAL="${NORNS_MI_UGENS_HEAL:-$(conf_get mi_ugens_heal)}"
+export NORNS_MI_UGENS_HEAL
 
 AUDIO_TOOL="$REPO/build/linux/audio_devices"
 export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
@@ -497,6 +502,7 @@ start_norns() {
     export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
     # the shipped mi-UGens pack first (a copy of the Raspberry Pi build in the same place is then reported by the check below)
     [ -x "$REPO/linux/mi-ugens-seed.sh" ] && "$REPO/linux/mi-ugens-seed.sh" seed "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
+    [ -x "$REPO/linux/mi-ugens-seed.sh" ] && MI_HEAL_TOOL="$REPO/build/linux/mi_heal" NORNS_TIDY="$NORNS_TIDY" "$REPO/linux/mi-ugens-seed.sh" heal "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # before norns and sclang start: SuperCollider stops at the first plug-in it cannot load. report only (one line per file)
     [ -x "$REPO/build/linux/plugin_arch_check" ] && "$REPO/build/linux/plugin_arch_check" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # norns and the commands its scripts run (os.execute, norns.system_cmd) get linux/shims first on the PATH: "sudo systemctl restart norns-*" (a script's

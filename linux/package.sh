@@ -229,7 +229,7 @@ build_tree() {
     say "program tree in $STAGE$PREFIX"
     local T="$STAGE$PREFIX" f
     for f in build/norns/norns build/ws-wrapper/ws-wrapper build/maiden-repl/maiden-repl \
-        build/linux/audio_devices build/linux/plugin_arch_check; do
+        build/linux/audio_devices build/linux/plugin_arch_check build/linux/mi_heal; do
         [ -x "$REPO/$f" ] || die "$f is not built (linux/build.sh)"
         install -D -m 755 "$REPO/$f" "$T/$f"
     done

@@ -228,7 +228,7 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.heal_note or _menu.mi_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -443,6 +443,34 @@ if _norns.grid_conflict_text and _norns.set_warning then
       _menu.show_note()
     end
   end
+  -- the Raspberry Pi mi-UGens: (1) the launcher moved a script's download aside before sclang started and left .mi-heal-note: shown once (the file is read
+  -- and removed, the note stays for a while); (2) a script downloaded them while norns runs: a note with the hint to restart, until the files are gone
+  -- (SYSTEM > CLEAN UP moves them after one confirmation). docs/port/mi-ugens.md
+  local function mi_note_update()
+    local home = os.getenv("NORNS_HOME") or "/home/we"
+    local f = io.open(home .. "/.mi-heal-note")
+    if f then
+      local text = f:read("l")
+      f:close()
+      os.remove(home .. "/.mi-heal-note")
+      if text and text ~= "" then
+        _menu.heal_note = text
+        _menu.heal_note_until = util.time() + (tonumber(os.getenv("NORNS_HEAL_NOTE_SECONDS")) or 25)
+        _menu.show_note()
+        print("mi-UGens: " .. text)
+      end
+    end
+    if _menu.heal_note and util.time() >= (_menu.heal_note_until or 0) then
+      _menu.heal_note = nil
+      _menu.show_note()
+    end
+    local t = _norns.mi_foreign_note_text and _norns.mi_foreign_note_text() or nil
+    if t ~= _menu.mi_note then
+      _menu.mi_note = t
+      _menu.show_note()
+      if t then print(t) end
+    end
+  end
   -- a class SuperCollider could not find or found twice (logs/sclang.log, read from its end and only when it has grown): the line is printed once
   -- and the note stands until the log of a clean start replaces it. lua/core/sc_class_check.lua
   local class_size, class_seen = -1, ""
@@ -489,6 +517,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
   hook.system_post_startup:register("menu-grid-conflict", function()
     grid_note_update()
     plugin_note_update()
+    mi_note_update()
     class_note_update()
     alsa_note_update()
     -- a metro, not a clock coroutine: a script change cancels every coroutine. 33 and 34 are reserved with 31-36
@@ -498,6 +527,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
     poll.event = function()
       grid_note_update()
       plugin_note_update()
+      mi_note_update()
       class_note_update()
       alsa_note_update()
       -- the note of the MAIDEN and MANUAL buttons goes after a few seconds

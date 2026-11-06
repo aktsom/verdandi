@@ -91,6 +91,8 @@ In the style of the wrong-architecture check (`plugin_arch_check`, reports befor
 
 **Built as `lua/core/sc_class_check.lua`** (read from the end of `sclang.log`, last 256 KB, only when the file grew; pure Lua, no shell). Differences from the proposal above: the folders come from the paths that SuperCollider itself prints in the duplicate-class error (nothing is searched on disk, nothing from the log is run), a missing class is told apart as a mi-UGens class (`Mi` + capital) or another one, the engine that was starting comes from the `Meta_Y:initClass` line of the trace, and the note on the window uses the same poll as the PLUGINS note (metro 33) instead of running only at the timeout; the timeout in `startup.lua` prints the same lines. Tests: `sc_class_check_test.lua` on `linux/tests/fixtures/sclang-*.log` (real logs of runs A and a duplicate), `class_note_test.sh`.
 
+**Self-healing added later** (KNOWN-ISSUES 37): a foreign Raspberry Pi pack that a script downloads is moved aside at the next start when the own pack is intact; see there.
+
 ## 6. Recommendation
 
 **Status: done** (KNOWN-ISSUES 37). Decisions taken: the pack ships in `/opt/verdandi/mi-ugens/mi-UGens` and the launcher seeds the user folder; v0.0.9 **plus pull request 24** (MiBeads, needed by Terrarium); the stamp holds a serial, the upstream commit, the build date and the Verdandi version; no network check. The text below is the original recommendation.

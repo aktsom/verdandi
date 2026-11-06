@@ -395,3 +395,10 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **SYSTEM > CLEAN UP:** the MI-UGENS line is short (`MI-UGENS 10f6824`); K3 shows the commit, `shipped with Verdandi <version>` over two lines and the build date; SEEDED reads `1 pack` with a size, and its list says it is copied in by Verdandi.
 - [ ] **A long name:** plug in a USB MIDI device with a long name and open SYSTEM > DEVICES; save a SCREEN and a THEME preset with an 18-letter name; look at the rows: no text over another, `..` at the end of a cut name.
 - [ ] **Scripts are unchanged:** a long sample name in a script's file selection is cut at the edge as before (the same on the Raspberry Pi).
+
+## Self-healing for a Raspberry Pi mi-UGens download (KNOWN-ISSUES 37): what only your machine can show
+
+- [ ] **At the start:** with Verdandi's own pack seeded (SYSTEM > CLEAN UP shows MI-UGENS), install `pedalboard` or `krill` (or press K3 in Terrarium once, if it still offers it) and let it download, then restart norns: the window says once `A script downloaded Raspberry Pi mi-UGens. Moved aside; Verdandi's own copy is in use.`, `logs/launcher.log` has one `mi-UGens: moved ...` line, SuperCollider starts (no SUPERCOLLIDER FAIL), and `~/Verdandi/disabled/` holds the files. Tell me which script it was and what it unpacked (the folder names).
+- [ ] **While norns runs:** press the download in such a script: within about ten seconds the window shows the note with the hint to restart, and SYSTEM > CLEAN UP has an ARM PLUG-INS line; K3 K3 moves it, restart norns, the engines load.
+- [ ] **Restore:** `verdandi tidy list` and `verdandi tidy restore <id>` put a moved item back; the next start moves it aside again (turn that off with `mi_ugens_heal=0` in `audio.conf`).
+- [ ] **A pack of your own:** if you put a working x86-64 mi-UGens in the extension folder yourself, it is left alone (one line in the log) and SuperCollider may report duplicate classes: tell me how you want that handled.

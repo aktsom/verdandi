@@ -75,6 +75,12 @@ for what, pat in (("the pack ships with Verdandi", r"mi-UGens.{0,400}(ships|ship
                   ("where the version is shown", r"CLEAN UP.{0,200}(MI-UGENS|mi-UGens)|(MI-UGENS|mi-UGens).{0,300}CLEAN UP"), ("a copy of its own is left alone", r"(not|never) (overwrit|replac|touch|delet)")):
     res("manual (HOME): mi-UGens, " + what, re.search(pat, home_sec, re.S | re.I) is not None)
 res("manual: audio.conf key mi_ugens", re.search(r"<code>mi_ugens</code>", text) is not None)
+res("manual: audio.conf key mi_ugens_heal", re.search(r"<code>mi_ugens_heal</code>", text) is not None)
+for what, pat in (("a Raspberry Pi download is moved aside by itself", r"moves? (them|it|those|the files?) aside.{0,200}(start|restart)|(start|restart).{0,200}moves? (them|it|those|the files?) aside"),
+                  ("the window note", r"A script downloaded Raspberry Pi mi-UGens"), ("nothing is deleted, restore by tidy", r"verdandi tidy restore"),
+                  ("only with the own copy intact", r"(own copy|own pack|Verdandi.s own).{0,200}(missing|changed|intact)|(missing|changed|intact).{0,200}(own copy|own pack)"),
+                  ("a download while norns runs: restart", r"(while norns runs|while it runs).{0,300}restart|restart.{0,300}(while norns runs|while it runs)")):
+    res("manual (HOME and troubleshooting): mi-UGens heal, " + what, re.search(pat, home_sec + lim, re.S | re.I) is not None)
 for what, pat in (("a class SuperCollider cannot find", r"could not find class|class .{0,40}(missing|not found)"), ("a class defined twice", r"duplicate class|classes twice|same pack twice")):
     res("if something goes wrong: " + what, re.search(pat, lim, re.S | re.I) is not None)
 

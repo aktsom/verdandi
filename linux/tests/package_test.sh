@@ -94,6 +94,10 @@ pgrep -u tester -l | grep -v 'run.sh\|pgrep\|grep' > /home/tester/left.out
 exit 0
 RUN
 chmod 755 /home/tester/run.sh
+# a script's Raspberry Pi mi-UGens download that is there before the first start: the first start seeds the own pack and moves the download aside before sclang
+mkdir -p /home/tester/Verdandi/.local/share/SuperCollider/Extensions/arm-pack
+printf '\177ELF\001\001\001\000\000\000\000\000\000\000\000\000\003\000\050\000\000\000' > /home/tester/Verdandi/.local/share/SuperCollider/Extensions/arm-pack/MiPlaits.so
+chown -R tester:tester /home/tester/Verdandi
 runuser -u tester -- /home/tester/run.sh
 H=/home/tester/Verdandi
 grep -aq startup_status.ok /home/tester/launcher.out && p "installed launcher boots norns as a normal user (headless)" || { f "norns did not boot"; tail -25 /home/tester/launcher.out | sed 's/^/   /'; tail -10 $H/logs/norns.log $H/logs/jackd.log 2>/dev/null | sed 's/^/   /'; }
@@ -112,6 +116,8 @@ arm=0; for so in $MI/*.so; do [ "$(od -An -tx1 -j18 -N1 "$so" | tr -d ' ')" = 3e
 [ $arm = 0 ] && p "every mi-UGens binary in the package is x86_64" || f "a mi-UGens binary is not x86_64"
 [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-GPL-3.0.md ] && [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-eurorack-MIT.txt ] && [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-libsamplerate-BSD-2.txt ] && grep -q "v7b1/mi-UGens" /opt/verdandi/licenses/SOURCES.txt && p "mi-UGens licences (GPL-3.0-or-later, MIT, BSD-2) and the source location are installed" || f "mi-UGens licences or source note missing"
 [ -f $U/.verdandi-stamp ] && cmp -s $U/.verdandi-stamp $MI/.verdandi-stamp && [ -f $U/Classes/MiPlaits.sc ] && p "the first run copied the pack into the user's SuperCollider extension folder (same stamp)" || f "the pack was not seeded: $(ls $H/.local/share/SuperCollider/Extensions 2>&1)"
+[ -x /opt/verdandi/build/linux/mi_heal ] && p "the mi-UGens scanner (mi_heal) is in the package" || f "mi_heal missing in the package"
+[ ! -e $H/.local/share/SuperCollider/Extensions/arm-pack ] && grep -aq "mi-UGens: moved 1 foreign Raspberry Pi" /home/tester/launcher.out && grep -q "foreign mi-UGens plug-in" $H/disabled/MANIFEST.tsv && p "a Raspberry Pi mi-UGens download next to the own pack was moved aside before sclang (manifest line, one log line)" || { f "the foreign pack was not moved aside: $(ls $H/.local/share/SuperCollider/Extensions 2>&1) / $(grep -a "mi-UGens" /home/tester/launcher.out | head -3)"; }
 grep -aq 'wrong ELF class\|not found\|duplicate Class' $H/logs/sclang.log && f "sclang.log has a class or ELF error: $(grep -a 'wrong ELF class\|not found\|duplicate Class' $H/logs/sclang.log | head -2)" || p "sclang compiled the seeded pack without a class or ELF error"
 [ -d /opt/verdandi/supercollider ] && ! [ -e /root/Verdandi ] && p "nothing written outside the user's home by the user's run" || f "root home touched"
 INNER

@@ -62,6 +62,7 @@
 #include "platform/linux/aseq_out.h"
 #include "platform/linux/input_route.h"
 #include "platform/linux/jack_midi_in.h"
+#include "platform/linux/mi_foreign_note.h"
 #include "platform/linux/plugin_arch_note.h"
 #include "platform/linux/serialosc_check.h"
 #include "platform/macos/app_audio.h"
@@ -385,6 +386,8 @@ static int _midi_out_to(lua_State *l);
 static int _serialosc_check(lua_State *l);
 static int _grid_conflict_text(lua_State *l);
 static int _plugin_note_text(lua_State *l);
+static int _mi_foreign_note_text(lua_State *l);
+static int _mi_foreign_fix_text(lua_State *l);
 static int _midi_in_status(lua_State *l);
 static int _alsa_midi_link(lua_State *l);
 static int _set_warning(lua_State *l);
@@ -735,6 +738,8 @@ void w_init(void) {
     lua_register_norns("serialosc_check", &_serialosc_check);
     lua_register_norns("grid_conflict_text", &_grid_conflict_text);
     lua_register_norns("plugin_note_text", &_plugin_note_text);
+    lua_register_norns("mi_foreign_note_text", &_mi_foreign_note_text);
+    lua_register_norns("mi_foreign_fix_text", &_mi_foreign_fix_text);
     lua_register_norns("midi_in_status", &_midi_in_status);
     lua_register_norns("alsa_midi_link", &_alsa_midi_link);
 #endif
@@ -4076,6 +4081,36 @@ int _grid_conflict_text(lua_State *l) {
  */
 int _plugin_note_text(lua_State *l) {
     const char *t = plugin_arch_note_text();
+    if (t != NULL) {
+        lua_pushstring(l, t);
+    } else {
+        lua_pushnil(l);
+    }
+    return 1;
+}
+
+/***
+ * Linux desktop: the note for the device window when a script downloaded the Raspberry Pi mi-UGens while norns runs, else nil
+ * @function mi_foreign_note_text
+ * @treturn string note
+ */
+int _mi_foreign_note_text(lua_State *l) {
+    const char *t = mi_foreign_note_text();
+    if (t != NULL) {
+        lua_pushstring(l, t);
+    } else {
+        lua_pushnil(l);
+    }
+    return 1;
+}
+
+/***
+ * Linux desktop: the items of that download for SYSTEM > CLEAN UP, one "path<TAB>reason" per line, else nil
+ * @function mi_foreign_fix_text
+ * @treturn string lines
+ */
+int _mi_foreign_fix_text(lua_State *l) {
+    const char *t = mi_foreign_fix_text();
     if (t != NULL) {
         lua_pushstring(l, t);
     } else {

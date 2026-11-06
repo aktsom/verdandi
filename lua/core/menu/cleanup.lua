@@ -64,11 +64,23 @@ local function load_data()
     end
   end
   local problems = {}
+  local seen_targets = {}
+  -- what the launcher's plug-in check left (.plugin-fix) and what a script downloaded while norns runs (the Raspberry Pi mi-UGens, read from the running norns)
+  local lines = {}
   local f = io.open(HOME .. "/.plugin-fix")
   if f then
-    for line in f:lines() do
+    for line in f:lines() do lines[#lines + 1] = line end
+    f:close()
+  end
+  local live = _norns and _norns.mi_foreign_fix_text and _norns.mi_foreign_fix_text() or nil
+  if live then
+    for line in live:gmatch("[^\n]+") do lines[#lines + 1] = line end
+  end
+  do
+    for _, line in ipairs(lines) do
       local target, why = line:match("^([^\t]+)\t?(.*)$")
-      if target then
+      if target and not seen_targets[target] then
+        seen_targets[target] = true
         local probe = io.open(target, "r")      -- a file or a folder (a folder opens, then fails to read)
         local exists = probe ~= nil
         if probe then probe:close() end
@@ -76,7 +88,6 @@ local function load_data()
         if exists then table.insert(problems, {target = target, why = why ~= "" and why or "wrong-architecture plug-in"}) end
       end
     end
-    f:close()
   end
   -- a class defined twice in sclang.log (read only; the move is the same one-confirmation move)
   local mi_state = mi.info(HOME).state

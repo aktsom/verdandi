@@ -583,6 +583,36 @@ if command -v jackd > /dev/null; then
     }
     run "mi-UGens:class check note on the device window appears for a duplicate class and clears with a clean log" class_note_ok
 fi
+# self-healing for a foreign Raspberry Pi mi-UGens pack (docs/port/mi-ugens.md, KNOWN-ISSUES 37): the scanner on fake extension folders, the launcher step
+# (moved aside only with the own pack intact, manifest, note, restore, idempotent, off), the note and the CLEAN UP line for a download while norns runs
+mi_foreign_ok() {
+    g++ -std=c++14 -I third-party/doctest -I matron/src -I matron/src/platform/linux linux/tests/mi_foreign_test.cpp matron/src/platform/linux/mi_foreign_note.cc -o "$T/mi_foreign_test" || return 1
+    "$T/mi_foreign_test"
+}
+run "mi-UGens:foreign Raspberry Pi pack scanner (folder or files, Mi classes, the dust code folder, x86-64 copy, baseline for a download while norns runs)" mi_foreign_ok
+run "mi-UGens:heal at start (own pack intact: moved aside with a manifest line and a note; missing or changed: nothing; x86-64 copy; off; restore; idempotent)" linux/tests/mi_heal_test.sh
+if command -v jackd > /dev/null; then
+    MHPACK="${NORNS_MI_TEST_PACK:-$REPO/build/package/cache/mi-ugens-pack/mi-UGens}"
+    if [ -f "$MHPACK/.verdandi-stamp" ] && [ -x "$REPO/build/linux/mi_heal" ]; then
+        MHLOG="$T/mi-heal-boot.log"
+        "$REPO/linux/tests/mi_heal_boot_test.sh" "$MHLOG" > /dev/null 2>&1
+        mi_heal_boot_ok() {
+            local bad=0 l
+            for l in "PROBE start note.A script downloaded Raspberry Pi mi-UGens. Moved aside; Verdandi's own copy is in use." "PROBE start note file gone.true" "PROBE start moved.true" \
+                "PROBE start runtime note.nil" "PROBE runtime note.A script downloaded Raspberry Pi mi-UGens. SYSTEM > CLEAN UP moves them aside, then restart norns." \
+                "PROBE runtime still there.true" "PROBE cleanup row.true" "PROBE not moved before the confirmation.true" "PROBE moved after the confirmation.true" \
+                "PROBE runtime note after.nil" "PROBE sclang errors: 0"; do
+                grep -aq "$l" "$MHLOG" || { echo "missing: $l"; bad=1; }
+            done
+            [ "$(grep -ac "^norns.sh: mi-UGens: moved 1 foreign" "$MHLOG")" = 1 ] || { echo "the launcher line must appear exactly once"; bad=1; }
+            [ "$(grep -ac "^mi-UGens: A script downloaded Raspberry Pi mi-UGens. Moved aside" "$MHLOG")" = 1 ] || { echo "the note is logged once"; bad=1; }
+            return $bad
+        }
+        run "mi-UGens:headless boot with a Raspberry Pi download next to the own pack: moved before sclang, note once, a later download noticed and moved after the CLEAN UP confirmation" mi_heal_boot_ok
+    else
+        echo "SKIP  mi-UGens:heal boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and build/linux/mi_heal from linux/build.sh)"
+    fi
+fi
 # a headless boot with the Emplaitress mod enabled and the shipped pack: seeded, found, no download. needs the built pack (linux/package.sh mi) and a clone of
 # the mod (NORNS_EMPLAITRESS=<dir>); skipped otherwise. the second boot turns the seeding off and must see the download (the check that this can fail)
 if command -v jackd > /dev/null; then

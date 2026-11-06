@@ -156,6 +156,30 @@ page.init(); goto_row("CLASS"); page.key(3, 1); page.key(3, 1)
 check(not exists(home .. "/dust/code/mi-copy/Classes/MiBeads.sc") and exists(ext .. "/Classes/MiBeads.sc"), "K3 K3 moves the copy that is not Verdandi's into disabled/ and leaves the shipped one")
 check(shown("disabled") or page.msg ~= nil, "...and says so")
 
+-- a script downloaded the Raspberry Pi mi-UGens while norns runs: the running norns lists them (_norns.mi_foreign_fix_text), CLEAN UP offers the one-confirmation move
+sh("mkdir -p '" .. home .. "/.local/share/SuperCollider/Extensions/late-pack/Classes'")
+put(home .. "/.local/share/SuperCollider/Extensions/late-pack/MiRings.so", "arm")
+_norns = {mi_foreign_fix_text = function() return home .. "/.local/share/SuperCollider/Extensions/late-pack\tforeign mi-UGens plug-in (32-bit ARM) on x86_64\n" end}
+page.init(); page.redraw()
+local late
+for _, r in ipairs(page.rows) do if r.name == "PROBLEM" and r.problem.target:find("late-pack", 1, true) then late = r end end
+check(late ~= nil and late.label == "ARM PLUG-INS", "a download while norns runs is a problem line (ARM PLUG-INS late-pack)")
+check(goto_row("PROBLEM"), "...reachable")
+for _ = 1, #page.rows do if page.rows[page.pos].problem and page.rows[page.pos].problem.target:find("late-pack", 1, true) then break end page.enc(2, 1) end
+page.key(3, 1)
+check(exists(home .. "/.local/share/SuperCollider/Extensions/late-pack/MiRings.so"), "nothing moved before the confirmation (sclang may have it open)")
+page.key(2, 1)
+check(exists(home .. "/.local/share/SuperCollider/Extensions/late-pack/MiRings.so"), "K2 says no: still there")
+page.init()
+for _ = 1, #page.rows do if page.rows[page.pos].problem and page.rows[page.pos].problem.target:find("late-pack", 1, true) then break end page.enc(2, 1) end
+page.key(3, 1); page.key(3, 1)
+check(not exists(home .. "/.local/share/SuperCollider/Extensions/late-pack/MiRings.so"), "K3 K3 moves it into disabled/")
+page.init()
+local again = false
+for _, r in ipairs(page.rows) do if r.name == "PROBLEM" and r.problem.target:find("late-pack", 1, true) then again = true end end
+check(not again, "and the problem line is gone")
+_norns = nil
+
 -- SYSTEM's list: the page is there on a computer only
 local getenv = os.getenv
 local function system_with(platform)
