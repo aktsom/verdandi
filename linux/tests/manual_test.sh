@@ -67,6 +67,17 @@ for what, pat in (("ARM plug-ins", r"32-bit ARM"), ("Raspberry Pi system command
                   ("duplicate engines", r"DUPLICATE ENGINES"), ("SuperCollider fail", r"SUPERCOLLIDER FAIL"), ("crash reports", r"logs/crash"), ("where the logs are", r"logs/norns\.log")):
     res("if something goes wrong: " + what, re.search(pat, lim, re.S) is not None)
 
+# mi-UGens: what ships, which scripts it serves, how to turn it off, where the version is shown (SYSTEM > CLEAN UP), what a copy of the Raspberry Pi build does
+m = re.search(r'<section id="home">(.*?)</section>', text, re.S)
+home_sec = m.group(1) if m else text
+for what, pat in (("the pack ships with Verdandi", r"mi-UGens.{0,400}(ships|shipped|comes) with"), ("Emplaitress and Terrarium named", r"Emplaitress.*Terrarium|Terrarium.*Emplaitress"),
+                  ("no download or manual copy needed", r"no(thing to)? (download|install)|without (a )?download|never downloads?"), ("the off switch", r"<code>mi_ugens=0</code>"),
+                  ("where the version is shown", r"CLEAN UP.{0,200}(MI-UGENS|mi-UGens)|(MI-UGENS|mi-UGens).{0,300}CLEAN UP"), ("a copy of its own is left alone", r"(not|never) (overwrit|replac|touch|delet)")):
+    res("manual (HOME): mi-UGens, " + what, re.search(pat, home_sec, re.S | re.I) is not None)
+res("manual: audio.conf key mi_ugens", re.search(r"<code>mi_ugens</code>", text) is not None)
+for what, pat in (("a class SuperCollider cannot find", r"could not find class|class .{0,40}(missing|not found)"), ("a class defined twice", r"duplicate class|classes twice|same pack twice")):
+    res("if something goes wrong: " + what, re.search(pat, lim, re.S | re.I) is not None)
+
 # plain text of the page (tags removed, entities decoded)
 plain = html.unescape(re.sub(r"<[^>]+>", " ", text[text.index("<body>"):]))
 plain = re.sub(r"\s+", " ", plain)

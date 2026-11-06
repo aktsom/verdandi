@@ -212,3 +212,22 @@ TEST_CASE("the switch") {
     CHECK_FALSE(enabled("off"));
     CHECK_FALSE(enabled("No"));
 }
+
+TEST_CASE("the mi-UGens pack for the Raspberry Pi gets its own words and the way out") {
+    std::string e = EXT;
+    Group mi{e + "/mi-UGens", {{e + "/mi-UGens/MiPlaits.so", parseElf(arm32())}, {e + "/mi-UGens/MiRings.so", parseElf(arm32())}}, e + "/mi-UGens"};
+    std::string m = message(mi, "x86_64", "/home/n");
+    CHECK(m.find('\n') == std::string::npos);
+    CHECK(m.find("mi-UGens pack built for the Raspberry Pi") != std::string::npos);
+    CHECK(m.find("Verdandi has its own x86_64 copy") != std::string::npos);
+    CHECK(m.find("copied the next time norns starts") != std::string::npos);
+    CHECK(m.find("verdandi tidy disable '" + e + "/mi-UGens' '") != std::string::npos);
+    CHECK(m.find("SYSTEM > CLEAN UP") != std::string::npos);
+    CHECK(m.find("rm ") == std::string::npos);
+    // a file that happens to start with Mi in another folder: the same words only for the Mi UGen names
+    Group other{e + "/pl", {{e + "/pl/A_scsynth.so", parseElf(arm32())}}, ""};
+    CHECK(message(other, "x86_64", "/home/n").find("mi-UGens") == std::string::npos);
+    // a pack of that name that is not 32-bit ARM (x86_64 on an aarch64 machine): no claim about the Raspberry Pi
+    Group x{e + "/mi-UGens", {{e + "/mi-UGens/MiPlaits.so", parseElf(x86_64())}}, e + "/mi-UGens"};
+    CHECK(message(x, "aarch64", "/home/n").find("Raspberry Pi") == std::string::npos);
+}

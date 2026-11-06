@@ -125,6 +125,30 @@ check(exists(home .. "/audio.conf") and exists(home .. "/ui.conf"), "the setting
 page.init(); page.key(2, 1)
 check(pushed[#pushed] == "SYSTEM", "K2 goes back to SYSTEM")
 
+-- the shipped mi-UGens pack: one line with the commit, and a duplicate class in sclang.log is offered as a move of the copy that is not Verdandi's
+local ext = home .. "/.local/share/SuperCollider/Extensions/mi-UGens"
+sh("mkdir -p '" .. ext .. "/Classes' '" .. home .. "/dust/code/mi-copy/Classes' '" .. home .. "/logs'")
+put(ext .. "/.verdandi-stamp", "pack=mi-UGens\nserial=1\ncommit=10f6824f68ad63475f67dfe3fe5016e2d2634f84\nbuilt=2026-11-06\nverdandi=0.1~gitTEST\n")
+put(ext .. "/Classes/MiBeads.sc", "// ours\n")
+put(home .. "/dust/code/mi-copy/Classes/MiBeads.sc", "// theirs\n")
+put(home .. "/logs/sclang.log", "ERROR: duplicate Class found: 'MiBeads' \n" .. ext .. "/Classes/MiBeads.sc\n" .. home .. "/dust/code/mi-copy/Classes/MiBeads.sc\n\n")
+page.init(); page.redraw()
+check(goto_row("MIUGENS"), "the mi-UGens row exists")
+page.redraw()
+check(shown("MI-UGENS") and shown("10f6824") and shown("Verdandi 0.1~gitTEST"), "the page has a mi-UGens line with the shipped commit: " .. table.concat(texts, "|"))
+page.key(3, 1); page.redraw()
+check(shown("built 2026-11-06"), "the line reads MI-UGENS <commit> Verdandi <version> (mi-UGens: <commit>, shipped with Verdandi <version>); K3 adds the build date")
+page.init(); page.redraw()
+check(shown("CLASSES"), "a duplicate class in sclang.log is a problem line")
+check(goto_row("CLASS"), "the CLASS row exists")
+page.key(3, 1)
+check(exists(home .. "/dust/code/mi-copy/Classes/MiBeads.sc"), "nothing moved before the confirmation")
+page.key(2, 1)
+check(exists(home .. "/dust/code/mi-copy/Classes/MiBeads.sc") and exists(ext .. "/Classes/MiBeads.sc"), "K2 says no: both copies are still there")
+page.init(); goto_row("CLASS"); page.key(3, 1); page.key(3, 1)
+check(not exists(home .. "/dust/code/mi-copy/Classes/MiBeads.sc") and exists(ext .. "/Classes/MiBeads.sc"), "K3 K3 moves the copy that is not Verdandi's into disabled/ and leaves the shipped one")
+check(shown("disabled") or page.msg ~= nil, "...and says so")
+
 -- SYSTEM's list: the page is there on a computer only
 local getenv = os.getenv
 local function system_with(platform)

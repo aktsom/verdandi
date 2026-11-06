@@ -99,6 +99,15 @@ _norns.startup_status.timeout = function()
     print("DUPLICATE ENGINES:\n" .. results)
     norns.scripterror("DUPLICATE ENGINES")
   else
+    -- Linux desktop: a class SuperCollider could not find or found twice, from logs/sclang.log (read only): the lines say which folder and what to do
+    if os.getenv("NORNS_PLATFORM") == "linux" then
+      local okc, C = pcall(require, 'core/sc_class_check')
+      if okc then
+        local home = os.getenv("NORNS_HOME") or "/home/we"
+        local okm, M = pcall(require, 'core/mi_ugens')
+        for _, x in ipairs(C.scan(home .. "/logs/sclang.log", {home = home, pack = okm and M.info(home).state or nil})) do print(x.line) end
+      end
+    end
     norns.scripterror("SUPERCOLLIDER FAIL")
   end
 end

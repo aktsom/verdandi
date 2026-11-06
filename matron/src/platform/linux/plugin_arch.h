@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -230,6 +231,22 @@ inline std::string message(const Group &g, const std::string &uname, const std::
         todo = "to fix: " + fix + " (moves " + (many ? "them" : "it") + " into " + home + "/disabled/, restorable; also SYSTEM > CLEAN UP)";
     } else {
         todo = "to fix: move " + std::string(many ? "them" : "it") + " out of SuperCollider's extension folder by hand, it is outside your norns home (never delete)";
+    }
+    // the mi-UGens pack of a Raspberry Pi (a script or mod fetched it): Verdandi ships its own, copied by the launcher once this one is out of the way
+    bool mi = false;
+    if (g.items.front().info.elf && g.items.front().info.machine == 0x28) {
+        mi = true;
+        for (const auto &f : g.items) {
+            std::string base = f.path.substr(f.path.rfind('/') + 1);
+            mi = mi && base.size() > 3 && base.compare(0, 2, "Mi") == 0 && isupper((unsigned char)base[2]) && base.compare(base.size() - 3, 3, ".so") == 0;
+        }
+    }
+    if (mi) {
+        return std::string("SuperCollider plug-in") + (many ? "s" : "") + " in " + g.folder + ": " + names +
+               ": this is the mi-UGens pack built for the Raspberry Pi (a script or mod downloaded it); this machine is " + uname +
+               " and SuperCollider cannot load it, so SuperCollider will not start (no engines, SUPERCOLLIDER FAIL). Verdandi has its own x86_64 copy "
+               "of mi-UGens, which is copied the next time norns starts once this one is out of the way. nothing was changed. " + todo +
+               " ; to turn this check off: NORNS_PLUGIN_CHECK=0 or plugin_check=0 in audio.conf";
     }
     return std::string("SuperCollider plug-in") + (many ? "s" : "") + " in " + g.folder + ": " + names + "; this machine is " + uname +
            ": SuperCollider cannot load " + (many ? "them" : "it") +

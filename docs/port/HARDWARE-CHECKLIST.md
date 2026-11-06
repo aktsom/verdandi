@@ -381,3 +381,11 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **The serialosc note** (start Verdandi with serialosc running): the pill under the buttons shows the three lines inside its border, at the default size, at the smallest window you use, maximised, and on the detached screen window (F9), in the aluminium style and in PIXEL, RETRO, 8-BIT and 16-BIT. On SYSTEM > DEVICES > SERIALOSC every line is whole (nothing cut at the right edge of the screen).
 - [ ] **Other messages:** the ones you see often (a screenshot saved, a GIF saved, "MIDI actions on/off" with Ctrl+Shift+M, "copied" and "saved" in the colour picker, "restored, not saved" after leaving it, an error message) are inside their pill, also with your display scaling (100, 125, 150, 200 percent) and with a recording dot (REC GIF). If one is still cut, send me its words and the window size.
 
+
+## mi-UGens shipped with the package (KNOWN-ISSUES 37): what only your machine can show
+
+- [ ] **Emplaitress:** install the .deb, install the `emplaitress` mod from the catalog, enable it under SYSTEM > MODS, restart norns **once**. Check `logs/launcher.log` for `norns.sh: mi-UGens: seeded ...`, `logs/sclang.log` without `ELFCLASS32`, `Class ... not found` or `duplicate Class`, and `logs/norns.log` with `emplaitress found mi ugens` (not `installing mi-UGens`). Then play a script that uses its players and **hear sound** from the Plaits engines.
+- [ ] **Terrarium:** install the `terrarium` script, load it: its screen must **not** ask for the download (no "K3: download + install"); if it still does, send me what the screen says and do not press K3. Hear it play. (Terrarium needs MiBeads: pull request 24 of mi-UGens.)
+- [ ] **SYSTEM > CLEAN UP** shows a MI-UGENS line with the commit and the Verdandi version.
+- [ ] **A collision (optional):** install `pedalboard` or `krill` and use their installer: if SuperCollider stops, the log and the window note must say which folders and what to move; CLEAN UP > ARM PLUG-INS or CLASSES moves it after one confirmation; restart and the sound works again. Tell me which script it was.
+- [ ] **An update:** install a newer package over this one (when there is one): `logs/launcher.log` says `mi-UGens: updated` only if the serial grew, and a copy you edited is left alone.

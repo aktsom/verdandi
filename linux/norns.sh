@@ -437,6 +437,11 @@ export NORNS_SERIALOSC_CHECK
 # NORNS_PLUGIN_CHECK=0 or plugin_check=0 in audio.conf turns the check off
 NORNS_PLUGIN_CHECK="${NORNS_PLUGIN_CHECK:-$(conf_get plugin_check)}"
 export NORNS_PLUGIN_CHECK
+# the mi-UGens pack Verdandi ships (x86_64): copied into the user's SuperCollider extension folder before sclang starts, so that Emplaitress, Terrarium
+# and the other scripts that want it find it and never download the Raspberry Pi build. NORNS_MI_UGENS=0 or mi_ugens=0 in audio.conf turns that off
+NORNS_MI_UGENS="${NORNS_MI_UGENS:-$(conf_get mi_ugens)}"
+export NORNS_MI_UGENS
+NORNS_MI_PACK="${NORNS_MI_PACK:-$REPO/mi-ugens/mi-UGens}"
 
 AUDIO_TOOL="$REPO/build/linux/audio_devices"
 export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
@@ -490,6 +495,8 @@ rm -f "$RESTART_MARK" "$AUDIO_MARK"
 
 start_norns() {
     export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
+    # the shipped mi-UGens pack first (a copy of the Raspberry Pi build in the same place is then reported by the check below)
+    [ -x "$REPO/linux/mi-ugens-seed.sh" ] && "$REPO/linux/mi-ugens-seed.sh" seed "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # before norns and sclang start: SuperCollider stops at the first plug-in it cannot load. report only (one line per file)
     [ -x "$REPO/build/linux/plugin_arch_check" ] && "$REPO/build/linux/plugin_arch_check" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # norns and the commands its scripts run (os.execute, norns.system_cmd) get linux/shims first on the PATH: "sudo systemctl restart norns-*" (a script's

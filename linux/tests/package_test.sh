@@ -104,6 +104,15 @@ grep -q '/opt/verdandi/sc/core' /home/tester/.config/SuperCollider/sclang_conf.y
 grep -aq '200\|302\|301' /home/tester/maiden.http 2>/dev/null && p "maiden answers on 127.0.0.1:5000 ($(cat /home/tester/maiden.http | tr -d '\r'))" || { f "maiden does not answer"; tail -5 $H/logs/maiden.log; }
 [ ! -f /home/tester/write.out ] && p "the program tree is read-only for the user" || f "a normal user could write into /opt/verdandi"
 [ -s /home/tester/left.out ] && { f "processes left after the stop: $(tr '\n' ' ' < /home/tester/left.out)"; } || p "no process left after the stop"
+# mi-UGens: the pack is in the package (x86_64, stamped, intact, licences), the first run copied it into the user's extension folder with the same stamp
+MI=/opt/verdandi/mi-ugens/mi-UGens
+U=$H/.local/share/SuperCollider/Extensions/mi-UGens
+[ -f $MI/MiPlaits.so ] && [ -f $MI/MiBeads.so ] && [ -f $MI/Classes/MiBeads.sc ] && [ -f $MI/.verdandi-stamp ] && (cd $MI && sha256sum --quiet -c .verdandi-files) && p "the mi-UGens pack is in the package, stamped and intact ($(grep '^commit=' $MI/.verdandi-stamp | cut -c8-14))" || f "mi-UGens pack missing or not intact in the package"
+arm=0; for so in $MI/*.so; do [ "$(od -An -tx1 -j18 -N1 "$so" | tr -d ' ')" = 3e ] || arm=1; done
+[ $arm = 0 ] && p "every mi-UGens binary in the package is x86_64" || f "a mi-UGens binary is not x86_64"
+[ -f /opt/verdandi/licenses/mi-ugens/LICENSE-GPL-3.0.md ] && [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-eurorack-MIT.txt ] && [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-libsamplerate-BSD-2.txt ] && grep -q "v7b1/mi-UGens" /opt/verdandi/licenses/SOURCES.txt && p "mi-UGens licences (GPL-3.0-or-later, MIT, BSD-2) and the source location are installed" || f "mi-UGens licences or source note missing"
+[ -f $U/.verdandi-stamp ] && cmp -s $U/.verdandi-stamp $MI/.verdandi-stamp && [ -f $U/Classes/MiPlaits.sc ] && p "the first run copied the pack into the user's SuperCollider extension folder (same stamp)" || f "the pack was not seeded: $(ls $H/.local/share/SuperCollider/Extensions 2>&1)"
+grep -aq 'wrong ELF class\|not found\|duplicate Class' $H/logs/sclang.log && f "sclang.log has a class or ELF error: $(grep -a 'wrong ELF class\|not found\|duplicate Class' $H/logs/sclang.log | head -2)" || p "sclang compiled the seeded pack without a class or ELF error"
 [ -d /opt/verdandi/supercollider ] && ! [ -e /root/Verdandi ] && p "nothing written outside the user's home by the user's run" || f "root home touched"
 INNER
 chmod 755 "$R/root/inner.sh"

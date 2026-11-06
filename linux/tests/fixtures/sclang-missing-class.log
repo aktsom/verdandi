@@ -1,0 +1,147 @@
+attempting to bind socket at url ws://127.0.0.1:5556
+accepting browser connections from: http://127.0.0.1:5000,http://localhost:5000
+compiling class library...
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Sandboxing disabled by user.
+	Found 867 primitives.
+	Compiling directory '/usr/share/SuperCollider/SCClassLibrary'
+	Compiling directory '/usr/share/SuperCollider/Extensions'
+	Compiling directory '/home/we/.local/share/SuperCollider/Extensions'
+	Compiling directory '/opt/verdandi/sc/core'
+	Compiling directory '/opt/verdandi/sc/engines'
+	Compiling directory '/opt/verdandi/sc/linux'
+	Compiling directory '/opt/verdandi/sc/linux-compat'
+	Compiling directory '/home/we/dust'
+	numentries = 1214576 / 19188248 = 0.063
+	5948 method selectors, 3226 classes
+	method table size 19766272 bytes, big table size 153505984
+	Number of Symbols 15027
+	Byte Code Size 435844
+	compiled 473 files in 0.50 seconds
+
+Info: 27 methods are currently overwritten by extensions. To see which, execute:
+MethodOverride.printAll
+
+compile done
+localhost : setting clientID to 0.
+internal : setting clientID to 0.
+Class tree inited in 0.08 seconds
+Execution warning: Class 'MiPlaits' not found
+WARNING: keyword arg 'pitch' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'engine' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'harm' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'timbre' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'morph' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'trigger' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'fm_mod' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'timb_mod' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'morph_mod' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'decay' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'lpg_colour' not found in call to Object:doesNotUnderstand
+WARNING: keyword arg 'mul' not found in call to Object:doesNotUnderstand
+ERROR: Message 'ar' not understood.
+RECEIVER:
+   nil
+ARGS:
+
+PROTECTED CALL STACK:
+	Meta_MethodError:new	0x0
+		arg this = DoesNotUnderstandError
+		arg what = nil
+		arg receiver = nil
+	Meta_DoesNotUnderstandError:new	0x0
+		arg this = DoesNotUnderstandError
+		arg receiver = nil
+		arg selector = ar
+		arg args = [  ]
+	Object:doesNotUnderstand	0x0
+		arg this = nil
+		arg selector = ar
+		arg args = nil
+	a FunctionDef	0x0
+		sourceCode = "{
+                |out, pitch=60.0, engine=0, harm=0.1, timbre=0.5, morph=0.5, fm_mod=0.0, timb_mod=0.0,
+	    	        morph_mod=0.0, decay=0.5, lpg_color=0.5, mul=1.0, aux_mix=0.0, gain=1.0, pan=0.0, sendA=0, sendB=0, sendABus=0, sendBBus=0|
+	    	    var sound = MiPlaits.ar(
+	    	            pitch: pitch, 
+	    	            engine: engine, 
+	    	            harm: harm, 
+	    	            timbre: timbre, 
+	    	            morph: morph,
+	    	            trigger: Impulse.kr(0),
+	    	    ...etc..."
+		arg out = an OutputProxy
+		arg pitch = an OutputProxy
+		arg engine = an OutputProxy
+		arg harm = an OutputProxy
+		arg timbre = an OutputProxy
+		arg morph = an OutputProxy
+		arg fm_mod = an OutputProxy
+		arg timb_mod = an OutputProxy
+		arg morph_mod = an OutputProxy
+		arg decay = an OutputProxy
+		arg lpg_color = an OutputProxy
+		arg mul = an OutputProxy
+		arg aux_mix = an OutputProxy
+		arg gain = an OutputProxy
+		arg pan = an OutputProxy
+		arg sendA = an OutputProxy
+		arg sendB = an OutputProxy
+		arg sendABus = an OutputProxy
+		arg sendBBus = an OutputProxy
+		var sound = nil
+	SynthDef:buildUgenGraph	0x0
+		arg this = a SynthDef
+		arg func = a Function
+		arg rates = nil
+		arg prependArgs = [  ]
+		var result = nil
+		var saveControlNames = nil
+	a FunctionDef	0x0
+		sourceCode = "<an open Function>"
+	Function:prTry	0x0
+		arg this = a Function
+		var result = nil
+		var thread = a Thread
+		var next = nil
+		var wasInProtectedFunc = false
+	
+CALL STACK:
+	DoesNotUnderstandError:reportError
+		arg this = <instance of DoesNotUnderstandError>
+	Nil:handleError
+		arg this = nil
+		arg error = <instance of DoesNotUnderstandError>
+	Thread:handleError
+		arg this = <instance of Thread>
+		arg error = <instance of DoesNotUnderstandError>
+	Object:throw
+		arg this = <instance of DoesNotUnderstandError>
+	Function:protect
+		arg this = <instance of Function>
+		arg handler = <instance of Function>
+		var result = <instance of DoesNotUnderstandError>
+	SynthDef:build
+		arg this = <instance of SynthDef>
+		arg ugenGraphFunc = <instance of Function>
+		arg rates = nil
+		arg prependArgs = nil
+	< FunctionDef in Method Meta_Emplaitress:initClass >  (no arguments or variables)
+	Function:doOnStartUp
+		arg this = <instance of Function>
+	ArrayedCollection:do
+		arg this = [*9]
+		arg function = <instance of Function>
+		var i = 3
+	List:do
+		arg this = <instance of List>
+		arg function = <instance of Function>
+	Meta_StartUp:run
+		arg this = <instance of Meta_StartUp>
+	Main:startup
+		arg this = <instance of Main>
+		var didWarnOverwrite = false
+^^ ERROR: Message 'ar' not understood.
+RECEIVER: nil
+
+

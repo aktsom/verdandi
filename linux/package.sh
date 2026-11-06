@@ -117,6 +117,47 @@ build_sc() {
     [ -f "$PLUG/SLUGens.so" ] || die "sc3-plugins: no plug-in binaries in $PLUG"
 }
 
+# the x86_64 mi-UGens pack (linux/mi-ugens.pin): v0.0.9 + the head of pull request 24 (MiBeads), built against the SuperCollider source above. the result is
+# $CACHE/mi-ugens-pack/mi-UGens (stamped, the folder the tests use); build_tree copies it into the program tree. nothing is downloaded at run time
+build_mi() {
+    . "$REPO/linux/mi-ugens.pin"
+    say "mi-UGens $MI_UGENS_TAG + pull request $MI_UGENS_PR ($MI_UGENS_PR_COMMIT)"
+    local src="$CACHE/mi-ugens" pack="$CACHE/mi-ugens-pack/mi-UGens" b="$CACHE/mi-ugens-build"
+    [ -d "$CACHE/supercollider/include" ] || die "mi-UGens: the SuperCollider source is missing in $CACHE/supercollider (run '$0 sc' first)"
+    if [ ! -d "$src/.git" ]; then
+        git clone -q "$MI_UGENS_REPO" "$src"
+    fi
+    git -C "$src" fetch -q origin "$MI_UGENS_COMMIT" 2>/dev/null || git -C "$src" fetch -q --tags origin
+    git -C "$src" fetch -q origin "pull/$MI_UGENS_PR/head" 2>/dev/null || true
+    git -C "$src" checkout -q -f "$MI_UGENS_COMMIT"
+    [ "$(git -C "$src" rev-parse HEAD)" = "$MI_UGENS_COMMIT" ] || die "mi-UGens: $MI_UGENS_COMMIT is not what $MI_UGENS_TAG points to"
+    git -C "$src" cat-file -e "$MI_UGENS_PR_COMMIT^{commit}" 2>/dev/null || die "mi-UGens: pull request $MI_UGENS_PR head $MI_UGENS_PR_COMMIT not fetched"
+    git -C "$src" -c user.name=build -c user.email=build@localhost -c commit.gpgsign=false merge -q --no-edit "$MI_UGENS_PR_COMMIT" > /dev/null
+    git -C "$src" submodule update -q --init --recursive
+    rm -rf "$b" "$CACHE/mi-ugens-install" "$CACHE/mi-ugens-pack"
+    cmake -S "$src" -B "$b" -G Ninja -DSC_PATH="$CACHE/supercollider" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$CACHE/mi-ugens-install" -DCMAKE_C_FLAGS="$MAP" -DCMAKE_CXX_FLAGS="-std=c++17 $MAP"
+    # the libsamplerate that MiBraids links has to exist first (a parallel build races on it)
+    cmake --build "$b" --target samplerate
+    cmake --build "$b" -j "$JOBS"
+    cmake --install "$b"
+    mkdir -p "$CACHE/mi-ugens-pack"
+    cp -a "$CACHE/mi-ugens-install/mi-UGens" "$pack"
+    for f in "$pack"/*.so; do [ -f "$f" ] || continue; strip --strip-unneeded "$f" 2>/dev/null || true; done
+    [ -f "$pack/MiPlaits.so" ] && [ -f "$pack/MiBeads.so" ] && [ -f "$pack/Classes/MiBeads.sc" ] || die "mi-UGens: the build did not make MiPlaits.so, MiBeads.so and the classes"
+    # help files are most of the size and unused at runtime
+    rm -rf "$pack/HelpSource"
+    cp "$src/gpl-3.0.md" "$CACHE/mi-ugens-pack/LICENSE-GPL-3.0.md"
+    cp "$src/eurorack/LICENSE.txt" "$CACHE/mi-ugens-pack/LICENSE-eurorack-MIT.txt"
+    cp "$src/projects/MiBraids/libsamplerate/COPYING" "$CACHE/mi-ugens-pack/LICENSE-libsamplerate-BSD-2.txt"
+    mi_stamp "$pack"
+}
+# the stamp and the file list of a pack folder (after the last change to its files: the list holds their hashes)
+mi_stamp() {
+    . "$REPO/linux/mi-ugens.pin"
+    "$REPO/linux/mi-ugens-seed.sh" stamp "$1" "$MI_UGENS_SERIAL" "$MI_UGENS_COMMIT" "$(date -u -d "@$EPOCH" +%Y-%m-%d)" "$VERSION" "$MI_UGENS_TAG + pull request $MI_UGENS_PR $MI_UGENS_PR_COMMIT"
+}
+
 # maiden is built by its own script into a scratch norns home, then copied into the tree
 build_maiden() {
     say "maiden"
@@ -202,6 +243,11 @@ build_tree() {
     install -m 755 "$REPO/linux/tidy.sh" "$T/linux/tidy.sh"
     install -m 755 "$REPO/linux/scan-fkeys.sh" "$T/linux/scan-fkeys.sh"
     cp -a "$REPO/linux/shims" "$REPO/linux/manual" "$T/linux/"
+    install -m 755 "$REPO/linux/mi-ugens-seed.sh" "$T/linux/mi-ugens-seed.sh"
+    [ -f "$CACHE/mi-ugens-pack/mi-UGens/MiPlaits.so" ] || die "the mi-UGens pack is not built: run '$0 mi' (or '$0 all')"
+    rm -rf "$T/mi-ugens"
+    mkdir -p "$T/mi-ugens"
+    cp -a "$CACHE/mi-ugens-pack/mi-UGens" "$T/mi-ugens/mi-UGens"
     install -m 644 "$REPO/linux/brand.sh" "$T/linux/brand.sh"
     # the marker that makes linux/norns.sh use the installed layout (home in ~/Verdandi, program tree read-only)
     echo "installed by the verdandi package" > "$T/INSTALLED"
@@ -218,6 +264,8 @@ build_tree() {
         *) strip --strip-unneeded "$f" 2>/dev/null || true ;;
         esac
     done
+    # the list of hashes is made last: the files above are final
+    mi_stamp "$T/mi-ugens/mi-UGens"
 
     # the places the desktop looks in
     install -D -m 755 /dev/stdin "$STAGE/usr/bin/verdandi" <<WRAP
@@ -233,12 +281,17 @@ WRAP
 # licence texts, unaltered, from the sources that were built; the copyright file points here
 build_licenses() {
     local L="$STAGE$PREFIX/licenses" f
+    . "$REPO/linux/mi-ugens.pin"
     rm -rf "$L"
-    mkdir -p "$L/supercollider" "$L/sc3-plugins" "$L/libmonome" "$L/softcut" "$L/fonts" "$L/third-party"
+    mkdir -p "$L/mi-ugens" "$L/supercollider" "$L/sc3-plugins" "$L/libmonome" "$L/softcut" "$L/fonts" "$L/third-party"
     install -m 644 "$REPO/LICENSE.txt" "$L/norns-GPL-3.0.txt"
     install -m 644 "$REPO/crone/softcut/LICENSE.txt" "$L/softcut/LICENSE.txt"
     install -m 644 "$CACHE/supercollider/COPYING" "$L/supercollider/COPYING"
     install -m 644 "$CACHE/sc3-plugins/license.txt" "$L/sc3-plugins/license.txt"
+    for f in LICENSE-GPL-3.0.md LICENSE-eurorack-MIT.txt LICENSE-libsamplerate-BSD-2.txt; do
+        [ -f "$CACHE/mi-ugens-pack/$f" ] || die "mi-UGens licence $f missing: run '$0 mi'"
+        install -m 644 "$CACHE/mi-ugens-pack/$f" "$L/mi-ugens/$f"
+    done
     [ -f "$CACHE/libmonome/COPYRIGHT" ] || [ -f "$CACHE/libmonome/COPYING" ] || die "libmonome source (licence) missing: run '$0 all'"
     for f in COPYRIGHT COPYING; do [ -f "$CACHE/libmonome/$f" ] && install -m 644 "$CACHE/libmonome/$f" "$L/libmonome/$f"; done
     for f in resources/roboto-LICENSE.txt resources/vera-LICENSE.txt resources/bmp/bmp-LICENSE.txt resources/bmp/tom-thumb-LICENSE.txt; do
@@ -258,6 +311,10 @@ Verdandi is free software (GPL-3.0). The source of every part of this package is
       commit $(git -C "$REPO" rev-parse HEAD)
   SuperCollider $SC_TAG (no Qt, no IDE):  https://github.com/supercollider/supercollider  (tag $SC_TAG)
   sc3-plugins:                            https://github.com/supercollider/sc3-plugins    (commit $SC3_PLUGINS_COMMIT)
+  mi-UGens (Volker Boehm; the wrappers GPL-3.0-or-later, the Mutable Instruments code MIT, libsamplerate BSD-2-Clause):
+      $MI_UGENS_REPO  ($MI_UGENS_TAG, commit $MI_UGENS_COMMIT, plus the head of its pull request $MI_UGENS_PR, commit $MI_UGENS_PR_COMMIT);
+      built by build_mi in linux/package.sh of the Verdandi source, the pin is linux/mi-ugens.pin. the Mutable Instruments code:
+      https://github.com/pichenettes/eurorack  (as vendored in that repository), libsamplerate: https://github.com/libsndfile/libsamplerate
   libmonome $LIBMONOME_VERSION + the pty patch:   https://github.com/monome/libmonome (tag v$LIBMONOME_VERSION),
       the patches are linux/patches/libmonome-*.patch of the Verdandi source
   maiden (patched by linux/patches and macos/patches/maiden-host-flag.patch of the Verdandi source):
@@ -396,6 +453,13 @@ Copyright: the SuperCollider authors
 License: GPL-3+
  See /opt/verdandi/licenses/supercollider/COPYING. sc3-plugins (GPL-2+, some parts under other terms) are in
  opt/verdandi/supercollider/lib/SuperCollider/plugins and share/SuperCollider/Extensions; see /opt/verdandi/licenses/sc3-plugins/license.txt.
+
+Files: opt/verdandi/mi-ugens/*
+Copyright: Volker Boehm (the SuperCollider wrappers), Emilie Gillet and the Mutable Instruments code authors, Erik de Castro Lopo (libsamplerate)
+License: GPL-3+
+ The wrappers are GPL-3.0-or-later (/opt/verdandi/licenses/mi-ugens/LICENSE-GPL-3.0.md). The Mutable Instruments code they build on is MIT
+ (LICENSE-eurorack-MIT.txt) and libsamplerate is BSD-2-Clause (LICENSE-libsamplerate-BSD-2.txt), in the same folder. The pack is copied into a
+ user's SuperCollider extension folder by the launcher.
 
 Files: opt/verdandi/lib/*
 Copyright: William Light and the libmonome authors
@@ -587,11 +651,12 @@ INNER
 
 case "${1:-}" in
     sc) build_sc ;;
+    mi) build_mi ;;
     maiden) build_maiden ;;
     libmonome) build_libmonome ;;
     tree) build_libmonome; build_tree ;;
     deb) build_deb ;;
-    all) build_sc; build_libmonome; build_maiden; build_tree; build_deb ;;
+    all) build_sc; build_mi; build_libmonome; build_maiden; build_tree; build_deb ;;
     clean-root) build_clean_root ;;
     print-desktop) desktop_entry ;;
     print-description) deb_description ;;

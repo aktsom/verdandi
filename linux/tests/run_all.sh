@@ -541,6 +541,10 @@ plugin_check_ok() {
     out="$("$REPO/linux/tests/plugin_check_test.sh")" || { echo "$out" | grep FAIL; return 1; }
 }
 run "plugins:scanner on a fake extension folder (nothing is moved)" plugin_check_ok
+# mi-UGens (docs/port/mi-ugens.md): the seed script, the stamp, the detection the catalog scripts use, the class check on real sclang logs, the info
+run "mi-UGens:seed, stamp, update, left-alone cases, catalog detection" linux/tests/mi_seed_test.sh
+run "mi-UGens:info from the stamp (CLEAN UP and manual)" env NORNS_PLATFORM=linux lua5.3 linux/tests/mi_info_test.lua
+run "mi-UGens:missing-class and duplicate-class check on real sclang logs" env NORNS_PLATFORM=linux lua5.3 linux/tests/sc_class_check_test.lua
 if command -v jackd > /dev/null; then
     run "launcher:logs, crash and cache folders in the home, the last runs of every log kept, no loose logs or hidden cache" linux/tests/launcher_logs_test.sh
     PLOG="$T/plugin-note.log"
@@ -559,6 +563,43 @@ if command -v jackd > /dev/null; then
         grep -aq "PROBE plugin note 1.nil" "$PLOG2" && ! grep -aq "SuperCollider plug-in" "$PLOG2" || { echo "reported although NORNS_PLUGIN_CHECK=0"; return 1; }
     }
     run "plugins:NORNS_PLUGIN_CHECK=0 turns the check off" plugin_off_ok
+fi
+
+if command -v jackd > /dev/null; then
+    CLOG="$T/class-note.log"
+    "$REPO/linux/tests/class_note_test.sh" "$CLOG" > /dev/null 2>&1
+    class_note_ok() {
+        local bad=0
+        grep -aq "PROBE class note 0.nil" "$CLOG" || { echo "a note before any finding"; bad=1; }
+        grep -aq "PROBE class note 1.SUPERCOLLIDER: class problem, see SYSTEM > CLEAN UP" "$CLOG" || { echo "no note on the device window"; bad=1; }
+        [ "$(grep -ac "^SuperCollider found classes twice (MiBeads" "$CLOG")" = 1 ] || { echo "the log line must appear exactly once"; bad=1; }
+        grep -aq "PROBE class note 2.nil" "$CLOG" || { echo "the note stayed after a clean log"; bad=1; }
+        return $bad
+    }
+    run "mi-UGens:class check note on the device window appears for a duplicate class and clears with a clean log" class_note_ok
+fi
+# a headless boot with the Emplaitress mod enabled and the shipped pack: seeded, found, no download. needs the built pack (linux/package.sh mi) and a clone of
+# the mod (NORNS_EMPLAITRESS=<dir>); skipped otherwise. the second boot turns the seeding off and must see the download (the check that this can fail)
+if command -v jackd > /dev/null; then
+    MPACK="${NORNS_MI_TEST_PACK:-$REPO/build/package/cache/mi-ugens-pack/mi-UGens}"
+    if [ -f "$MPACK/.verdandi-stamp" ] && [ -f "${NORNS_EMPLAITRESS:-/nonexistent}/lib/mod.lua" ]; then
+        MLOG="$T/mi-boot.log"; MLOG2="$T/mi-boot-off.log"
+        "$REPO/linux/tests/mi_boot_test.sh" "$MLOG" > /dev/null 2>&1
+        "$REPO/linux/tests/mi_boot_test.sh" "$MLOG2" off > /dev/null 2>&1
+        mi_boot_ok() {
+            local bad=0
+            grep -aq "^norns.sh: mi-UGens: seeded " "$MLOG" || { echo "the pack was not seeded"; bad=1; }
+            grep -aq "emplaitress found mi ugens" "$MLOG" || { echo "the Emplaitress mod did not find the pack"; bad=1; }
+            grep -aq "installing mi-UGens" "$MLOG" && { echo "the mod tried to install the pack"; bad=1; }
+            grep -aq "^PROBE downloads: none" "$MLOG" || { echo "something was downloaded: $(grep -a 'PROBE downloads' "$MLOG")"; bad=1; }
+            grep -aq "^PROBE sclang: 0$" "$MLOG" || { echo "sclang.log has a class or ELF error"; bad=1; }
+            grep -aq "installing mi-UGens" "$MLOG2" && ! grep -aq "^PROBE downloads: none" "$MLOG2" || { echo "with the seeding off the mod must try to download (the harness cannot see downloads)"; bad=1; }
+            return $bad
+        }
+        run "mi-UGens:Emplaitress enabled in a headless boot finds the shipped pack, no download happens" mi_boot_ok
+    else
+        echo "SKIP  mi-UGens:Emplaitress headless boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and NORNS_EMPLAITRESS=<clone of the mod>)"
+    fi
 fi
 
 # "sudo systemctl restart norns-*" from a script (a script's installer, os.execute): the shims in linux/shims turn it into a restart request,

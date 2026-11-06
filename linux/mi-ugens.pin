@@ -1,0 +1,9 @@
+# the mi-UGens pack Verdandi ships (x86_64, built by linux/package.sh against the bundled SuperCollider). sourced by shell scripts.
+# upstream: v0.0.9 plus the head of pull request 24 (MiBeads, which Terrarium needs). a change here bumps MI_UGENS_SERIAL so that
+# the launcher replaces the older copy it seeded earlier (never a copy that is not its own, see docs/port/mi-ugens.md).
+MI_UGENS_REPO=https://github.com/v7b1/mi-UGens.git
+MI_UGENS_TAG=v0.0.9
+MI_UGENS_COMMIT=10f6824f68ad63475f67dfe3fe5016e2d2634f84
+MI_UGENS_PR=24
+MI_UGENS_PR_COMMIT=ea71c18750a414f705a0dcad1d5e172f181bee0c
+MI_UGENS_SERIAL=1

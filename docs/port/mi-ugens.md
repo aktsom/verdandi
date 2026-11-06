@@ -78,7 +78,7 @@ Sound: a note sent as `osc.send({"localhost",57120}, "/emplaitress/perc", {60, 0
 
 **Combination I would build:** A2, plus section 5's check; B only if more scripts turn up that ask for exactly this archive.
 
-## 5. The missing-class check (proposed, not built)
+## 5. The missing-class check (BUILT, see the note at the end of this section)
 
 In the style of the wrong-architecture check (`plugin_arch_check`, reports before start, never moves anything) and the duplicate-engine message in `lua/core/startup.lua`:
 
@@ -89,7 +89,12 @@ In the style of the wrong-architecture check (`plugin_arch_check`, reports befor
 - **Safety:** read-only; bounded input; no evaluation of anything from the log; paths only taken from the file system, never from the log text; limited to `dust/code` and the extension folders; no network; if the log cannot be read or nothing matches it says nothing (the existing "SUPERCOLLIDER FAIL" stays); the three patterns are anchored on sclang's fixed message formats and tested with the real log of run A and run G as fixtures.
 - **Needs:** about 150 lines (shell or Lua in `startup.lua`; a small C++ helper only if the grep is too slow), the two fixture logs, tests in `run_all.sh` (the headless boot with a fake class that uses a missing UGen, as in run A, must print the line and set the note), a manual paragraph, a hardware-checklist item.
 
+**Built as `lua/core/sc_class_check.lua`** (read from the end of `sclang.log`, last 256 KB, only when the file grew; pure Lua, no shell). Differences from the proposal above: the folders come from the paths that SuperCollider itself prints in the duplicate-class error (nothing is searched on disk, nothing from the log is run), a missing class is told apart as a mi-UGens class (`Mi` + capital) or another one, the engine that was starting comes from the `Meta_Y:initClass` line of the trace, and the note on the window uses the same poll as the PLUGINS note (metro 33) instead of running only at the timeout; the timeout in `startup.lua` prints the same lines. Tests: `sc_class_check_test.lua` on `linux/tests/fixtures/sclang-*.log` (real logs of runs A and a duplicate), `class_note_test.sh`.
+
 ## 6. Recommendation
+
+**Status: done** (KNOWN-ISSUES 37). Decisions taken: the pack ships in `/opt/verdandi/mi-ugens/mi-UGens` and the launcher seeds the user folder; v0.0.9 **plus pull request 24** (MiBeads, needed by Terrarium); the stamp holds a serial, the upstream commit, the build date and the Verdandi version; no network check. The text below is the original recommendation.
+
 
 1. **Do A2**, because it is the only variant that makes the owner's sequence (install from maiden, enable, restart) work at the first restart, with nothing downloaded, and it is the cleanest in the licence/size/update sense: a pinned source build in `linux/package.sh` (the sc3-plugins section is the pattern), upstream's own Linux release asset as a check of the build (same bytes), a launcher step that seeds the user folder, a stamp, the notices.
 2. **Smallest first step:** build mi-UGens in `package.sh` into `/opt/verdandi/share/mi-UGens` (pinned `v0.0.9`, `10f6824`; submodule `2ccde95`; compare with upstream's Linux zip) + the licence notices + the launcher seeding step + a headless test (the fake-mod boot of run C: mod folder present, enabled, **no** download, the "ALL HAIL" line appears and the meter hears a note). Then the check of section 5 as step two.

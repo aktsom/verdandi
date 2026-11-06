@@ -1,0 +1,40 @@
+attempting to bind socket at url ws://127.0.0.1:5556
+accepting browser connections from: http://127.0.0.1:5000,http://localhost:5000
+compiling class library...
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Sandboxing disabled by user.
+	Found 867 primitives.
+	Compiling directory '/usr/share/SuperCollider/SCClassLibrary'
+	Compiling directory '/usr/share/SuperCollider/Extensions'
+	Compiling directory '/home/we/.local/share/SuperCollider/Extensions'
+	Compiling directory '/opt/verdandi/sc/core'
+	Compiling directory '/opt/verdandi/sc/engines'
+	Compiling directory '/opt/verdandi/sc/linux'
+	Compiling directory '/opt/verdandi/sc/linux-compat'
+	Compiling directory '/home/we/dust'
+ERROR: duplicate Class found: 'MiBeads' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiBeads.sc
+/home/we/dust/code/mi-copy/Classes/MiBeads.sc
+
+ERROR: duplicate Class found: 'MiWarps' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiWarps.sc
+/home/we/dust/code/mi-copy/Classes/MiWarps.sc
+
+ERROR: duplicate Class found: 'MiGrids' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiGrids.sc
+/home/we/dust/code/mi-copy/Classes/MiGrids.sc
+
+ERROR: duplicate Class found: 'MiPlaits' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiPlaits.sc
+/home/we/dust/code/mi-copy/Classes/MiPlaits.sc
+
+ERROR: duplicate Class found: 'MiBraids' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiBraids.sc
+/home/we/dust/code/mi-copy/Classes/MiBraids.sc
+
+ERROR: duplicate Class found: 'MiVerb' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiVerb.sc
+/home/we/dust/code/mi-copy/Classes/MiVerb.sc
+
+ERROR: duplicate Class found: 'MiOmi' 
+/home/we/.local/share/SuperCollider/Extensions/mi-UGens/Classes/MiOmi.sc

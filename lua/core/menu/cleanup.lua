@@ -13,6 +13,8 @@ m.age = 2 -- 90 days
 
 local TIDY = os.getenv("NORNS_TIDY")
 local HOME = os.getenv("NORNS_HOME") or "/home/we"
+local mi = require 'core/mi_ugens'
+local classes = require 'core/sc_class_check'
 
 local function q(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
 
@@ -66,7 +68,14 @@ local function load_data()
     end
     f:close()
   end
-  return groups, problems
+  -- a class defined twice in sclang.log (read only; the move is the same one-confirmation move)
+  local mi_state = mi.info(HOME).state
+  local findings = classes.scan(HOME .. "/logs/sclang.log", {home = HOME, pack = mi_state})
+  local class_problems = {}
+  for _, f in ipairs(findings) do
+    if f.fix then table.insert(class_problems, {target = f.fix.target, why = f.fix.why, class = true}) end
+  end
+  return groups, problems, class_problems
 end
 
 local function total(list) local t = 0 for _, e in ipairs(list) do t = t + e.bytes end return t end
@@ -78,12 +87,16 @@ local function older_preview()
 end
 
 local function build_rows()
-  local groups, problems = load_data()
+  local groups, problems, class_problems = load_data()
   m.groups = groups
   local rows = {}
   for _, p in ipairs(problems) do
     local base = p.target:match("([^/]+)/?$") or p.target
     table.insert(rows, {name = "PROBLEM", label = "ARM PLUG-INS", mid = "", right = fit(base, 60), problem = p})
+  end
+  for _, p in ipairs(class_problems) do
+    local base = p.target:match("([^/]+)/?$") or p.target
+    table.insert(rows, {name = "CLASS", label = "CLASSES", mid = "", right = fit(base, 60), problem = p})
   end
   local nd = #groups.disabled
   table.insert(rows, {name = "DISABLED", label = "DISABLED", mid = nd .. (nd == 1 and " item" or " items"), right = human(total(groups.disabled))})
@@ -92,6 +105,10 @@ local function build_rows()
   table.insert(rows, {name = "CRASHES", label = "CRASHES", mid = tostring(#groups.crash), right = human(total(groups.crash))})
   table.insert(rows, {name = "SEEDED", label = "SEEDED", mid = #groups.seeded .. (#groups.seeded == 1 and " pack" or " packs"), right = human(total(groups.seeded))})
   table.insert(rows, {name = "CACHE", label = "CACHE", mid = "", right = human(total(groups.cache))})
+  local mi_info = mi.info(HOME)
+  if mi_info.state == "own" then
+    table.insert(rows, {name = "MIUGENS", label = "MI-UGENS", mid = mi_info.commit:sub(1, 7), right = "Verdandi " .. fit(mi_info.verdandi or "?", 70), info = "built " .. (mi_info.built or "?") .. ", GPL-3.0+, v7b1"})
+  end
   local n, size = older_preview()
   m.older_n, m.older_size = n, size
   table.insert(rows, {name = "REMOVE", label = "REMOVE >" .. AGES[m.age] .. " DAYS", mid = "", right = n .. (n == 1 and " item " or " items ") .. size, remove = true})
@@ -150,7 +167,9 @@ m.key = function(n, z)
   end
   if n == 3 then
     local row = m.rows[m.pos]
-    if row.name == "PROBLEM" then
+    if row.name == "MIUGENS" then
+      say(row.info)
+    elseif row.name == "PROBLEM" or row.name == "CLASS" then
       local p = row.problem
       ask("MOVE " .. (p.target:match("([^/]+)/?$") or p.target) .. " to disabled/? K3 yes  K2 no", function()
         local out = run("disable " .. q(p.target) .. " " .. q(p.why))

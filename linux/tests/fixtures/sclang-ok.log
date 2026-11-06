@@ -1,0 +1,9 @@
+compiling class library...
+	Found 867 primitives.
+	Compiling directory '/opt/verdandi/supercollider/share/SuperCollider/SCClassLibrary'
+	numentries = 1214576 / 19188248 = 0.063
+	5948 method selectors, 3226 classes
+	compiled 473 files in 0.50 seconds
+
+compile done
+Class tree inited in 0.08 seconds

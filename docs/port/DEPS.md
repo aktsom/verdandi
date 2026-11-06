@@ -260,3 +260,14 @@ Tools used to **build** the package (not shipped): `cmake`, `ninja-build`, `dpkg
 
 `resources/norns.ttf`, `resources/liquid.ttf`, `resources/Particle.ttf` and `resources/basis33.ttf` have **no licence file** in the source tree and no licence text inside the font files that I found; they come from upstream norns. The other fonts of the norns screen have licence files (Roboto, Vera, the bitmap fonts).
 **Before any public release** (a package or a download given to anyone but the owner) this has to be settled: find the licence of each font from its author, or replace the font, or drop it. Until then the package is for the owner's own use only, and `/usr/share/doc/verdandi/copyright` says so. The macOS port has the same open question.
+
+
+## mi-UGens (shipped in the package, `linux/mi-ugens.pin`, built by `linux/package.sh mi`)
+
+| part | version | licence | where it comes from |
+|---|---|---|---|
+| mi-UGens wrappers and SuperCollider classes (Volker Boehm) | `v0.0.9` (`10f6824f68ad63475f67dfe3fe5016e2d2634f84`) plus the head of its pull request 24 (`ea71c18750a414f705a0dcad1d5e172f181bee0c`, MiBeads) | GPL-3.0-or-later | https://github.com/v7b1/mi-UGens |
+| Mutable Instruments DSP code (Plaits, Rings, Clouds, Beads, Elements, Braids, Warps, Grids, Tides, Ripples, Marbles-family helpers, `stmlib`) vendored in that repository | as vendored | MIT | https://github.com/pichenettes/eurorack (copy: `eurorack/LICENSE.txt` of the source) |
+| libsamplerate (linked by MiBraids) | 0.2.2-19 (`2ccde95`, a submodule of mi-UGens) | BSD-2-Clause | https://github.com/libsndfile/libsamplerate |
+
+Build: cmake against the SuperCollider 3.14.1 source of the package build (`-DSC_PATH`), the `samplerate` target first (a parallel build races on it), the help files left out. The three licence texts are installed in `/opt/verdandi/licenses/mi-ugens/`, the source locations and commits in `/opt/verdandi/licenses/SOURCES.txt`, and the `copyright` file has a stanza for `opt/verdandi/mi-ugens/*`. Nothing is downloaded at run time. The pin file holds a serial number: the launcher replaces its own older copy when the serial grows (`docs/port/mi-ugens.md`).

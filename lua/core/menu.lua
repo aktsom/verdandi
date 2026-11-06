@@ -228,7 +228,7 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -443,6 +443,31 @@ if _norns.grid_conflict_text and _norns.set_warning then
       _menu.show_note()
     end
   end
+  -- a class SuperCollider could not find or found twice (logs/sclang.log, read from its end and only when it has grown): the line is printed once
+  -- and the note stands until the log of a clean start replaces it. lua/core/sc_class_check.lua
+  local class_size, class_seen = -1, ""
+  local function class_note_update()
+    local home = os.getenv("NORNS_HOME") or "/home/we"
+    local f = io.open(home .. "/logs/sclang.log", "rb")
+    if not f then return end
+    local size = f:seek("end")
+    f:close()
+    if size == class_size then return end
+    class_size = size
+    local C = require 'core/sc_class_check'
+    local found = C.scan(home .. "/logs/sclang.log", {home = home, pack = require('core/mi_ugens').info(home).state})
+    local t = C.note(found)
+    local key = ""
+    for _, x in ipairs(found) do key = key .. x.line .. "\n" end
+    if key ~= class_seen then
+      class_seen = key
+      for _, x in ipairs(found) do print(x.line) end
+    end
+    if t ~= _menu.class_note then
+      _menu.class_note = t
+      _menu.show_note()
+    end
+  end
   -- the ALSA raw MIDI route for Reaper (alsa_midi_out_to= is set): snd-virmidi not loaded, no port yet, the Reaper entry to enable for a few seconds after the connection (lua/core/virmidi.lua)
   local alsa_seen, alsa_since = "", nil
   local function alsa_note_update()
@@ -464,6 +489,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
   hook.system_post_startup:register("menu-grid-conflict", function()
     grid_note_update()
     plugin_note_update()
+    class_note_update()
     alsa_note_update()
     -- a metro, not a clock coroutine: a script change cancels every coroutine. 33 and 34 are reserved with 31-36
     local poll = metro[33]
@@ -472,6 +498,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
     poll.event = function()
       grid_note_update()
       plugin_note_update()
+      class_note_update()
       alsa_note_update()
       -- the note of the MAIDEN and MANUAL buttons goes after a few seconds
       if _menu.maiden_note and util.time() >= (_menu.maiden_note_until or 0) then
