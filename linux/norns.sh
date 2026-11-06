@@ -427,6 +427,9 @@ export NORNS_MIDI_OUT_TO
 # the virtual MIDI device as an ALSA sequencer port ("Verdandi out"): on unless NORNS_ALSA_MIDI=0 or alsa_midi=0 in audio.conf
 NORNS_ALSA_MIDI="${NORNS_ALSA_MIDI:-$(conf_get alsa_midi)}"
 export NORNS_ALSA_MIDI
+# an ALSA sequencer client or port whose name starts with this gets "Verdandi out" subscribed to it (Reaper reads raw MIDI only: the snd-virmidi card is the bridge, "VirMIDI"). off unless given
+NORNS_ALSA_MIDI_OUT_TO="${NORNS_ALSA_MIDI_OUT_TO:-$(conf_get alsa_midi_out_to)}"
+export NORNS_ALSA_MIDI_OUT_TO
 # serialosc (serialosc-device) on the grid's serial port is reported; NORNS_SERIALOSC_CHECK=0 or serialosc_check=0 in audio.conf turns that off
 NORNS_SERIALOSC_CHECK="${NORNS_SERIALOSC_CHECK:-$(conf_get serialosc_check)}"
 export NORNS_SERIALOSC_CHECK

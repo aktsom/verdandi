@@ -228,7 +228,7 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -443,10 +443,28 @@ if _norns.grid_conflict_text and _norns.set_warning then
       _menu.show_note()
     end
   end
+  -- the ALSA raw MIDI route for Reaper (alsa_midi_out_to= is set): snd-virmidi not loaded, no port yet, the Reaper entry to enable for a few seconds after the connection (lua/core/virmidi.lua)
+  local alsa_seen, alsa_since = "", nil
+  local function alsa_note_update()
+    if not _norns.alsa_midi_link then return end
+    local V = require 'core/virmidi'
+    local t = nil
+    if V.configured() then
+      local count, names = _norns.alsa_midi_link()
+      local now = util.time()
+      if names ~= alsa_seen then alsa_seen = names; alsa_since = names ~= "" and now or nil end
+      t = V.note({to = V.to(), count = count, names = names, loaded = V.loaded(), since = alsa_since, now = now})
+    end
+    if t ~= _menu.alsa_note then
+      _menu.alsa_note = t
+      _menu.show_note()
+    end
+  end
   _norns.grid_conflict_changed = grid_note_update
   hook.system_post_startup:register("menu-grid-conflict", function()
     grid_note_update()
     plugin_note_update()
+    alsa_note_update()
     -- a metro, not a clock coroutine: a script change cancels every coroutine. 33 and 34 are reserved with 31-36
     local poll = metro[33]
     poll.time = 3
@@ -454,6 +472,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
     poll.event = function()
       grid_note_update()
       plugin_note_update()
+      alsa_note_update()
       -- the note of the MAIDEN and MANUAL buttons goes after a few seconds
       if _menu.maiden_note and util.time() >= (_menu.maiden_note_until or 0) then
         _menu.maiden_note = nil

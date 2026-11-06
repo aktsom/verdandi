@@ -17,12 +17,21 @@ local function sync_list()
   if not desktop then return end
   local want = {table.unpack(BASE_LIST)}
   if _menu.grid_note then want[#want + 1] = "serialosc" end
+  -- the ALSA raw MIDI route for Reaper (alsa_midi_out_to= is set): the guide, the load without a terminal, the Reaper entry (lua/core/virmidi.lua)
+  if require('core/virmidi').configured() then want[#want + 1] = "virmidi" end
   if #want ~= #m.list then
     m.list = want
     if m.mode == "type" then
       m.len = #m.list
       if m.pos > m.len then m.pos = m.len end
     end
+  end
+  -- the setting went: leave the VIRMIDI pages
+  if (m.mode == "virmidi" or m.mode == "confirm_virmidi") and not require('core/virmidi').configured() then
+    m.mode = "type"
+    m.len = #m.list
+    m.pos = math.min(m.pos, m.len)
+    if m.pos < 1 then m.pos = 1 end
   end
   -- serialosc is gone: leave its pages
   if not _menu.grid_note and (m.mode == "serialosc" or m.mode == "confirm_serialosc") then
@@ -114,6 +123,32 @@ end
 
 m.key = function(n,z)
   sync_list()
+  if m.mode == "virmidi" then
+    if z ~= 1 then return end
+    local V = require 'core/virmidi'
+    if n == 2 then
+      if m.result then m.result = nil
+      else m.mode = "type"; m.len = #m.list; m.pos = #m.list end
+    elseif n == 3 then
+      if V.wants_module(V.to()) and not V.loaded() then
+        if V.load_status() ~= "running" then m.mode = "confirm_virmidi" end
+      else
+        m.result = m.result == nil and wrap(table.concat(V.permanent_lines(), "\n")) or nil
+      end
+    end
+    _menu.redraw()
+    return
+  elseif m.mode == "confirm_virmidi" then
+    if z ~= 1 then return end
+    if n == 2 then
+      m.mode = "virmidi"
+    elseif n == 3 then
+      require('core/virmidi').start_load()
+      m.mode = "virmidi"
+    end
+    _menu.redraw()
+    return
+  end
   if m.mode == "serialosc" then
     if z ~= 1 then return end
     if n == 2 then m.mode = "type"; m.len = #m.list; m.pos = #m.list; m.result = nil
@@ -138,7 +173,12 @@ m.key = function(n,z)
       _menu.set_page("SYSTEM")
     elseif n==3 and z==1 then
       m.section = m.list[m.pos]
-      if m.section == "serialosc" then
+      if m.section == "virmidi" then
+        m.mode = "virmidi"
+        m.result = nil
+        _menu.redraw()
+        return
+      elseif m.section == "serialosc" then
         m.mode = "serialosc"
         m.result = nil
         _menu.redraw()
@@ -221,7 +261,7 @@ end
 
 m.enc = function(n,delta)
   sync_list()
-  if m.mode == "serialosc" or m.mode == "confirm_serialosc" then return end
+  if m.mode == "serialosc" or m.mode == "confirm_serialosc" or m.mode == "virmidi" or m.mode == "confirm_virmidi" then return end
   if n==2 then
     prev_pos = m.pos
     m.pos = util.clamp(m.pos + delta, 1, m.len)
@@ -283,8 +323,72 @@ local function redraw_serialosc()
   screen.update()
 end
 
+-- SYSTEM > DEVICES > VIRMIDI: Reaper reads raw MIDI only; the kernel's virtual MIDI card (snd-virmidi) is the bridge. what is the state, the question before loading it (no terminal: the desktop's password dialog), the Reaper
+-- entry to enable, and how to keep it after a reboot
+local function redraw_virmidi()
+  local V = require 'core/virmidi'
+  screen.clear()
+  screen.aa(0)
+  screen.level(15)
+  screen.move(0, 8)
+  screen.text("VIRMIDI")
+  local function put(text, level, y0)
+    local y = y0 or 18
+    screen.level(level or 6)
+    for _, t in ipairs(wrap(text)) do
+      if y <= 52 then screen.move(0, y); screen.text(t); y = y + 8 end
+    end
+    return y
+  end
+  if m.mode == "confirm_virmidi" then
+    put("LOAD SND-VIRMIDI?\nIT NEEDS ADMIN RIGHTS: A PASSWORD DIALOG MAY OPEN.", 8)
+    screen.level(4); screen.move(0, 62); screen.text("K3 YES  K2 NO")
+    screen.update()
+    return
+  end
+  local to = V.to()
+  local count, names = 0, ""
+  if _norns.alsa_midi_link then count, names = _norns.alsa_midi_link() end
+  local keys = "K2 BACK"
+  if m.result then
+    put(table.concat(m.result, "\n"))
+    keys = "K2 BACK"
+  elseif V.wants_module(to) and not V.loaded() then
+    local st = V.load_status()
+    if st == "running" then
+      put("WAITING FOR THE PASSWORD DIALOG...")
+      keys = "K2 BACK"
+    elseif st == "failed" then
+      put("FAILED. TYPE IN A TERMINAL:\n" .. V.COMMAND, 8)
+      keys = "K3 TRY AGAIN  K2 BACK"
+    else
+      put(table.concat(V.guide_lines(), "\n"))
+      keys = "K3 LOAD IT  K2 BACK"
+    end
+  else
+    local y = 18
+    if V.wants_module(to) then y = put("LOADED.", 8, y) end
+    if count > 0 then
+      local first = names:match("^[^,]+") or names
+      y = put("CONNECTED: " .. names, 6, y)
+      y = put("REAPER: ENABLE " .. V.reaper_entry(first), 15, y)
+      local hw = V.reaper_hw(first)
+      if hw then y = put("(" .. hw .. ")", 6, y) end
+    else
+      y = put("WAITING FOR A PORT NAMED " .. to, 6, y)
+    end
+    keys = "K3 KEEP AFTER REBOOT  K2 BACK"
+  end
+  screen.level(4); screen.move(0, 62); screen.text(keys:sub(1, 25))
+  screen.update()
+end
+
 m.redraw = function()
   sync_list()
+  if m.mode == "virmidi" or m.mode == "confirm_virmidi" then
+    redraw_virmidi()
+    return
+  end
   if m.mode == "serialosc" or m.mode == "confirm_serialosc" then
     redraw_serialosc()
     return

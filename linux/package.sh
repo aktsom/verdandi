@@ -368,6 +368,9 @@ fi
 exit 0
 POST
     chmod 755 "$D/postinst" "$D/postrm"
+    # opt-in examples for the ALSA raw MIDI route (Reaper): documentation only. a package does not load kernel modules or put MIDI ports into every DAW unasked, so nothing goes to /etc and the postinst does nothing about it
+    install -D -m 644 "$REPO/linux/virmidi/verdandi-virmidi.modules-load.conf" "$doc/examples/verdandi-virmidi.modules-load.conf"
+    install -D -m 644 "$REPO/linux/virmidi/verdandi-virmidi.modprobe.conf" "$doc/examples/verdandi-virmidi.modprobe.conf"
     (cd "$STAGE" && find opt usr -type f -exec md5sum {} + | sort -k2 > DEBIAN/md5sums)
 
     # copyright file (machine readable) and changelog

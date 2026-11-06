@@ -29,6 +29,10 @@ extern long aseq_out_send(const uint8_t *data, size_t n);
 // the ALSA client id (for tests and messages), -1 if not up
 extern int aseq_out_client_id(void);
 
+// the optional auto-connect of "Verdandi out" to ALSA ports named by alsa_midi_out_to= (NORNS_ALSA_MIDI_OUT_TO), see aseq_link.h: how many ports it is subscribed to now, and the names of their clients
+// (comma separated, written to `names`). 0 and "" when it is off or nothing matches. never waits
+extern int aseq_out_link_status(char *names, size_t n);
+
 #ifdef __cplusplus
 }
 #endif

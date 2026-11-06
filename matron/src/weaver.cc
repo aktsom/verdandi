@@ -59,6 +59,7 @@
 #include "platform/macos/sdl_bridge.h"
 #ifdef NORNS_LINUX_DESKTOP
 #include "crone_main.h"
+#include "platform/linux/aseq_out.h"
 #include "platform/linux/input_route.h"
 #include "platform/linux/jack_midi_in.h"
 #include "platform/linux/plugin_arch_note.h"
@@ -385,6 +386,7 @@ static int _serialosc_check(lua_State *l);
 static int _grid_conflict_text(lua_State *l);
 static int _plugin_note_text(lua_State *l);
 static int _midi_in_status(lua_State *l);
+static int _alsa_midi_link(lua_State *l);
 static int _set_warning(lua_State *l);
 #endif
 static int _choose_file(lua_State *l);
@@ -734,6 +736,7 @@ void w_init(void) {
     lua_register_norns("grid_conflict_text", &_grid_conflict_text);
     lua_register_norns("plugin_note_text", &_plugin_note_text);
     lua_register_norns("midi_in_status", &_midi_in_status);
+    lua_register_norns("alsa_midi_link", &_alsa_midi_link);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
     lua_register_norns("audio_status", &_audio_status);
@@ -4090,6 +4093,20 @@ int _plugin_note_text(lua_State *l) {
 int _serialosc_check(lua_State *l) {
     serialosc_device_added(-1000, luaL_checkstring(l, 1), NULL);
     return _grid_conflict_text(l);
+}
+
+/***
+ * Linux desktop: the optional ALSA auto-connect of "Verdandi out" (alsa_midi_out_to= in audio.conf): how many ALSA ports it is subscribed to and the names of their clients
+ * @function alsa_midi_link
+ * @treturn integer count
+ * @treturn string names
+ */
+int _alsa_midi_link(lua_State *l) {
+    char names[256];
+    int n = aseq_out_link_status(names, sizeof names);
+    lua_pushinteger(l, n);
+    lua_pushstring(l, names);
+    return 2;
 }
 
 /***
