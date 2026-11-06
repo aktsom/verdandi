@@ -635,8 +635,8 @@ run "c:alsa sequencer output (bytes to events, order, bounded, drops counted and
 run "c:alsa sequencer auto-connect (alsa_midi_out_to: prefixes, never itself or controllers, a port that appears later, a cut link, -EBUSY, errors said once; fake sequencer)" bash -c "cd '$REPO' && g++ -std=c++14 -I third-party/doctest -I crone/src -I matron/src/platform/linux linux/tests/aseq_link_test.cpp -o '$T/aseq_link_test' && '$T/aseq_link_test'"
 run "lua:virmidi (the setting, snd-virmidi loaded or not, the notes, the Reaper entry, the load without a terminal: pkexec, never sudo, the command to type)" lua5.3 linux/tests/virmidi_test.lua
 run "lua:SYSTEM > DEVICES > VIRMIDI (the entry only while the setting is on, the guide, the question, loading, failed, loaded, the Reaper entry, keep after a reboot)" env NORNS_PLATFORM=linux lua5.3 linux/tests/devices_virmidi_test.lua
-run "package:virmidi examples (opt-in files only, nothing in /etc, nothing loaded by the package, named in the manual)" linux/tests/virmidi_files_test.sh
-run "c:alsa sequencer client (off by NORNS_ALSA_MIDI=0, without a kernel sequencer, with one)" bash -c "cd '$REPO' && g++ -std=c++14 -I third-party/doctest -I third-party/readerwriterqueue -I matron/src -I matron/src/platform/linux linux/tests/aseq_out_test.cpp matron/src/platform/linux/aseq_out.cc -o '$T/aseq_out_test' -lasound -lpthread && '$T/aseq_out_test'"
+run "package:virmidi examples (opt-in files only, nothing written to etc, nothing loaded by the package, named in the manual)" linux/tests/virmidi_files_test.sh
+run "c:alsa sequencer client (off by NORNS_ALSA_MIDI=0, without a kernel sequencer, with one)" bash -c "cd '$REPO' && g++ -std=c++14 -I third-party/doctest -I third-party/readerwriterqueue -I crone/src -I matron/src -I matron/src/platform/linux linux/tests/aseq_out_test.cpp matron/src/platform/linux/aseq_out.cc -o '$T/aseq_out_test' -lasound -lpthread && '$T/aseq_out_test'"
 if [ -e /dev/snd/seq ] && cc -std=gnu11 "$REPO/linux/tests/aseq_dump_test.c" -o "$T/aseq_dump_test" -lasound 2> /dev/null; then
     JH3="$(mktemp -d)"
     ln -s "$REPO" "$JH3/norns"

@@ -1,6 +1,6 @@
 // the real client of the ALSA sequencer output (matron/src/platform/linux/aseq_out.cc, libasound): it starts when there is a sequencer and says so when there is none, NORNS_ALSA_MIDI=0 switches it off, a send never fails
 // the caller (nothing connected is not an error), and it does not crash without a sequencer. where /dev/snd/seq exists (a laptop) the client is really made and found by name.
-//   g++ -std=c++14 -I third-party/doctest -I third-party/readerwriterqueue -I matron/src -I matron/src/platform/linux linux/tests/aseq_out_test.cpp matron/src/platform/linux/aseq_out.cc -lasound -lpthread
+//   g++ -std=c++14 -I third-party/doctest -I third-party/readerwriterqueue -I crone/src -I matron/src -I matron/src/platform/linux linux/tests/aseq_out_test.cpp matron/src/platform/linux/aseq_out.cc -lasound -lpthread
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest/doctest.h"
 
