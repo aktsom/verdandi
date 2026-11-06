@@ -28,7 +28,7 @@ screen.level = function(l) frame[#frame + 1] = "V" .. tostring(l) end
 screen.text = function(s) frame[#frame + 1] = "L:" .. tostring(s) end
 screen.text_right = function(s) frame[#frame + 1] = "R:" .. tostring(s) end
 screen.text_center = function(s) frame[#frame + 1] = "C:" .. tostring(s) end
-screen.text_extents = function(s) return #tostring(s) * 5 end
+screen.text_extents = function(s) return #tostring(s) * 4 end
 screen.update = function() shown = frame; updates = updates + 1 end
 local function drawn(s) for _, t in ipairs(shown) do if t:match("^[LRC]:") and t:find(s, 1, true) then return true end end return false end
 local function texts() local r = {} for _, t in ipairs(shown) do if t:match("^[LRC]:") then r[#r + 1] = t:sub(3) end end return r end
@@ -440,6 +440,42 @@ page.mode = "rows"; page.pos = 17; press(3); check(drawn("ERROR"), "an error in 
 mm.set_actions = real
 -- the page joins the menu back
 page.deinit(); eq(mm.walk_index(), nil, "leaving ends a walk"); page.init()
+
+
+-- ---- every row at long values fits the screen (real font metrics; the table comes from linux/tests/font_widths_dump.c, run_all.sh sets FONT_WIDTHS) ----
+if os.getenv("FONT_WIDTHS") then
+  local W = dofile("linux/tests/page_width.lua")
+  W.load(os.getenv("FONT_WIDTHS"))
+  local saved_screen = screen
+  W.install()
+  local LONG = "Ableton Push 2 Live Port With A Very Long Device Name Indeed"
+  add(4, LONG); add(5, string.rep("W", 40))
+  for i = 1, 6 do pcall(S.save_preset, "Preset " .. i .. string.rep("W", 12)) end
+  pcall(S.save_preset, string.rep("W", 18))
+  local seen, drawn_n = {}, 0
+  local function look(tag)
+    W.clear()
+    local ok, err = pcall(page.redraw)
+    if not ok then seen[#seen + 1] = tag .. ": redraw raised " .. tostring(err); return end
+    drawn_n = drawn_n + #W.records()
+    for _, v in ipairs(W.violations()) do if not seen[v] then seen[v] = true; seen[#seen + 1] = tag .. ": " .. v end end
+  end
+  for round = 1, 3 do
+    page.init(); page.pos, page.top = 1, 1
+    local n = #page.rows()
+    for pos = 1, n + 2 do
+      page.pos = math.min(pos, #page.rows()); look("round " .. round .. " row " .. pos)
+      pcall(page.key, 3, 1); pcall(page.key, 3, 0); look("round " .. round .. " K3 on row " .. pos)
+      for step = 1, 8 do pcall(page.enc, round == 3 and 3 or 2, step % 2 == 0 and 1 or -1); look("round " .. round .. " enc on row " .. pos .. " step " .. step) end
+      pcall(page.key, 3, 1); pcall(page.key, 3, 0); look("round " .. round .. " K3 again on row " .. pos)
+      pcall(page.key, 2, 1); pcall(page.key, 2, 0)
+      page.init(); page.pos, page.top = pos, 1
+    end
+  end
+  check(drawn_n > 200, "midimap width sweep drew " .. drawn_n .. " texts")
+  check(#seen == 0, "MIDI MAP fits the screen at long values:\n      " .. table.concat(seen, "\n      ", 1, math.min(#seen, 15)))
+  screen = saved_screen
+end
 
 if fails == 0 then real_print("midimap page: all passed") end
 os.execute("rm -rf '" .. tmp .. "'")

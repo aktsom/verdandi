@@ -101,6 +101,18 @@ tidy list --tsv | grep -q "^seeded	seeded" && ok "a stamped pack is listed as se
 tidy remove-older 90 --yes > /dev/null 2>&1
 [ ! -e "$H/.local/share/SuperCollider/Extensions/seeded" ] && [ -d "$H/.local/share/SuperCollider/Extensions/foreign" ] && ok "an old seeded pack goes, the foreign folder stays" || bad "seeded/foreign handling"
 
+# the mi-UGens pack the launcher seeds (stamp .verdandi-stamp, not .verdandi-pack): counted in SEEDED, never removed by age (it is in use, and its files carry the build date)
+MI="$H/.local/share/SuperCollider/Extensions/mi-UGens"
+mkdir -p "$MI/Classes"; echo "// c" > "$MI/Classes/MiPlaits.sc"; printf 'pack=mi-UGens\nserial=1\ncommit=10f6824f68ad63475f67dfe3fe5016e2d2634f84\nbuilt=2026-11-06\nverdandi=0.1~gitX\n' > "$MI/.verdandi-stamp"
+touch -d "400 days ago" "$MI/.verdandi-stamp" "$MI/Classes/MiPlaits.sc"
+LINE="$(tidy list --tsv | grep "^seeded	mi-UGens	")"
+[ -n "$LINE" ] && ok "the seeded mi-UGens pack is listed as seeded (it was shown as 0 packs)" || bad "mi-UGens not listed as seeded" "$(tidy list --tsv | grep seeded)"
+EPOCH="$(printf '%s' "$LINE" | cut -f4)"
+[ "$EPOCH" -gt $(( $(date +%s) - 86400 )) ] 2> /dev/null && ok "...with the time of the listing, not the date it was built (the age rule does not apply)" || bad "mi-UGens epoch" "$LINE"
+printf '%s' "$LINE" | cut -f6 | grep -q "10f6824" && ok "...and its commit in the detail column" || bad "mi-UGens detail" "$LINE"
+tidy remove-older 30 --yes > /dev/null 2>&1
+[ -f "$MI/Classes/MiPlaits.sc" ] && ok "REMOVE > N DAYS leaves the seeded mi-UGens pack alone" || bad "mi-UGens removed by age"
+
 # ---- rotate: 5 runs, the current log fresh, launcher.log capped, crash reports pruned ----
 rm -rf "${H:?}/logs"
 mkdir -p "$H/logs/crash"

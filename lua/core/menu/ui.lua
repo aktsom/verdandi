@@ -266,7 +266,7 @@ end
 local function hint(text)
   screen.level(m.msg and 15 or 2)
   screen.move(0, 62)
-  screen.text(m.msg or text)
+  screen.text(fit(m.msg or text, 124))
 end
 
 local function redraw_list()
@@ -333,7 +333,8 @@ local function redraw_raw()
       screen.move(0, y)
       screen.text(row)
       screen.move(124, y)
-      screen.text_right(value_text(row))
+      -- the value is cut to the room next to the row's name (a long preset name used to run over it)
+      screen.text_right(fit(value_text(row), 124 - screen.text_extents(row) - 5))
     end
   end
   scrollbar(m.top, #rows)

@@ -217,11 +217,17 @@ collect() {
             printf 'crash\t%s\t%s\t%s\t%s\t\n' "$id" "$id" "$(stat -c %Y "$e")" "$(stat -c %s "$e")"
         done < <(find "$CRASH" -maxdepth 1 -type f -name 'crash-*.txt' | sort)
     fi
-    # seeded packs: a folder in an extension folder that carries our stamp file
+    # seeded packs: a folder in an extension folder that carries our stamp file (.verdandi-pack, or .verdandi-stamp for the mi-UGens pack)
     if [ -d "$EXT" ]; then
         while IFS= read -r e; do
-            [ -f "$e/.verdandi-pack" ] || continue
             id="$(basename "$e")"
+            if [ -f "$e/.verdandi-stamp" ] && [ "$(sed -n 's/^pack=//p' "$e/.verdandi-stamp" | head -n 1)" = mi-UGens ]; then
+                # the mi-UGens pack the launcher copies (linux/mi-ugens-seed.sh): counted here, but dated now: it is in use, its files carry the build
+                # date, and the age rule must not remove it (it is not in the list of what REMOVE > N DAYS may delete: no .verdandi-pack)
+                printf 'seeded\t%s\t%s\t%s\t%s\t%s\n' "$id" "$id" "$(date -u +%s)" "$(bytes_of "$e")" "mi-UGens $(sed -n 's/^commit=//p' "$e/.verdandi-stamp" | head -n 1 | cut -c1-7)"
+                continue
+            fi
+            [ -f "$e/.verdandi-pack" ] || continue
             printf 'seeded\t%s\t%s\t%s\t%s\t%s\n' "$id" "$id" "$(stat -c %Y "$e/.verdandi-pack")" "$(bytes_of "$e")" "$(head -n 1 "$e/.verdandi-pack" | tr '\t' ' ')"
         done < <(find "$EXT" -mindepth 1 -maxdepth 1 -type d | sort)
     fi
@@ -249,7 +255,7 @@ cmd_list() {
         logcurrent) title="logs/ (current runs, kept)" ;;
         logs) title="logs/ (older runs)" ;;
         crash) title="logs/crash/ (the last $CRASH_KEEP crash reports)" ;;
-        seeded) title="seeded packs (ours: they carry a .verdandi-pack stamp)" ;;
+        seeded) title="seeded packs (copied in by Verdandi: they carry a stamp file)" ;;
         cache) title="cache/ (libraries' caches, safe to delete)" ;;
         esac
         local part total=0 n=0 gid name epoch bytes extra

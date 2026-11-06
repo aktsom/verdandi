@@ -38,7 +38,8 @@ _menu = {redraw = function() redraws = redraws + 1 end, set_page = function(p) p
 norns = {none = function() end}
 util = {
   clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
-  os_capture = function(cmd) local h = io.popen(cmd .. " 2>&1"); local out = h:read("a"); h:close(); return out end,
+  -- the real util.os_capture (lua/lib/util.lua): without raw the output is scrubbed to ONE line
+  os_capture = function(cmd, raw) local h = io.popen(cmd); local s = h:read("a"); h:close(); if raw then return s end s = s:gsub("^%s+", ""):gsub("%s+$", ""):gsub("[\n\r]+", " "); return s end,
 }
 package.loaded.util = util
 local function shown(s) for _, t in ipairs(texts) do if t:find(s, 1, true) then return true end end return false end
@@ -133,11 +134,17 @@ put(ext .. "/Classes/MiBeads.sc", "// ours\n")
 put(home .. "/dust/code/mi-copy/Classes/MiBeads.sc", "// theirs\n")
 put(home .. "/logs/sclang.log", "ERROR: duplicate Class found: 'MiBeads' \n" .. ext .. "/Classes/MiBeads.sc\n" .. home .. "/dust/code/mi-copy/Classes/MiBeads.sc\n\n")
 page.init(); page.redraw()
+local seeded
+for _, r in ipairs(page.rows) do if r.name == "SEEDED" then seeded = r end end
+check(seeded and seeded.mid == "1 pack" and seeded.right ~= "0B", "SEEDED counts the mi-UGens pack Verdandi copied in (1 pack, not 0 packs 0B): " .. tostring(seeded and (seeded.mid .. " " .. seeded.right)))
 check(goto_row("MIUGENS"), "the mi-UGens row exists")
 page.redraw()
-check(shown("MI-UGENS") and shown("10f6824") and shown("Verdandi 0.1~gitTEST"), "the page has a mi-UGens line with the shipped commit: " .. table.concat(texts, "|"))
+check(shown("MI-UGENS") and shown("10f6824"), "the page has a short mi-UGens line with the shipped commit: " .. table.concat(texts, "|"))
 page.key(3, 1); page.redraw()
-check(shown("built 2026-11-06"), "the line reads MI-UGENS <commit> Verdandi <version> (mi-UGens: <commit>, shipped with Verdandi <version>); K3 adds the build date")
+check(shown("commit 10f6824") and shown("built 2026-11-06"), "K3 on it opens the detail view: the commit and the build date: " .. table.concat(texts, "|"))
+check(table.concat(texts):find("shipped with Verdandi 0.1~gitTEST", 1, true) ~= nil, "...and the whole line: shipped with Verdandi <version> (wrapped, nothing cut)")
+page.key(2, 1); page.redraw()
+check(shown("MI-UGENS") and not shown("commit 10f6824"), "K2 leaves the detail view for the list of lines")
 page.init(); page.redraw()
 check(shown("CLASSES"), "a duplicate class in sclang.log is a problem line")
 check(goto_row("CLASS"), "the CLASS row exists")

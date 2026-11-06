@@ -20,7 +20,7 @@ local function q(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
 
 local function run(args)
   if TIDY == nil or TIDY == "" then return "" end
-  return util.os_capture(q(TIDY) .. " " .. args .. " 2>&1") or ""
+  return util.os_capture(q(TIDY) .. " " .. args .. " 2>&1", true) or "" -- raw: the lines of tidy are records, the scrubbed form is one line
 end
 
 local function human(b)
@@ -33,6 +33,16 @@ local function human(b)
   return string.format("%d%s", math.floor(b), units[i])
 end
 m.human = human -- (for linux/tests/menu_format_test.lua)
+
+-- a text cut into lines no wider than w (between characters: a version or a path has no spaces)
+local function wrap(s, w)
+  local lines, cur = {}, ""
+  for ch in s:gmatch(".") do
+    if cur ~= "" and screen.text_extents(cur .. ch) > w then lines[#lines + 1] = cur; cur = ch else cur = cur .. ch end
+  end
+  if cur ~= "" then lines[#lines + 1] = cur end
+  return lines
+end
 
 local function fit(s, w)
   if screen.text_extents(s) <= w then return s end
@@ -107,7 +117,8 @@ local function build_rows()
   table.insert(rows, {name = "CACHE", label = "CACHE", mid = "", right = human(total(groups.cache))})
   local mi_info = mi.info(HOME)
   if mi_info.state == "own" then
-    table.insert(rows, {name = "MIUGENS", label = "MI-UGENS", mid = mi_info.commit:sub(1, 7), right = "Verdandi " .. fit(mi_info.verdandi or "?", 70), info = "built " .. (mi_info.built or "?") .. ", GPL-3.0+, v7b1"})
+    -- short on the row (the version is long): K3 opens the detail view with the whole line
+    table.insert(rows, {name = "MIUGENS", label = "MI-UGENS", mid = "", right = mi_info.commit:sub(1, 7), info = mi_info})
   end
   local n, size = older_preview()
   m.older_n, m.older_size = n, size
@@ -148,6 +159,11 @@ m.key = function(n, z)
     _menu.redraw()
     return
   end
+  if m.mode == "detail" then
+    if n == 2 or n == 3 then m.mode = "groups" end
+    _menu.redraw()
+    return
+  end
   if m.mode == "list" then
     if n == 2 then
       m.mode = "groups"
@@ -168,7 +184,8 @@ m.key = function(n, z)
   if n == 3 then
     local row = m.rows[m.pos]
     if row.name == "MIUGENS" then
-      say(row.info)
+      m.detail_lines = {"MI-UGENS", "commit " .. row.info.commit:sub(1, 7), "shipped with Verdandi " .. (row.info.verdandi or "?"), "built " .. (row.info.built or "?"), "GPL-3.0+, v7b1/mi-UGens"}
+      m.mode = "detail"
     elseif row.name == "PROBLEM" or row.name == "CLASS" then
       local p = row.problem
       ask("MOVE " .. (p.target:match("([^/]+)/?$") or p.target) .. " to disabled/? K3 yes  K2 no", function()
@@ -202,7 +219,7 @@ end
 
 m.enc = function(n, delta)
   m.msg = nil
-  if m.mode == "confirm" then return end
+  if m.mode == "confirm" or m.mode == "detail" then return end
   if m.mode == "list" then
     if n == 2 then m.ipos = util.clamp(m.ipos + delta, 1, math.max(1, #m.items)) end
   elseif n == 2 then
@@ -227,10 +244,29 @@ m.redraw = function()
     screen.update()
     return
   end
+  if m.mode == "detail" then
+    local y, first = 8, true
+    for _, line in ipairs(m.detail_lines) do
+      for _, part in ipairs(wrap(line, 126)) do
+        if y <= 52 then
+          screen.level(first and 15 or 10)
+          screen.move(0, y)
+          screen.text(part)
+          y = y + 9
+        end
+        first = false
+      end
+    end
+    screen.level(4)
+    screen.move(0, 62)
+    screen.text("K2 BACK")
+    screen.update()
+    return
+  end
   if m.mode == "list" then
     screen.level(15)
     screen.move(0, 8)
-    screen.text(m.list_kind .. (m.list_kind == "DISABLED" and "  K3 = RESTORE" or ""))
+    screen.text(fit(m.list_kind == "SEEDED" and "SEEDED: COPIED IN BY VERDANDI" or (m.list_kind .. (m.list_kind == "DISABLED" and "  K3 = RESTORE" or "")), 128))
     local first = math.max(1, math.min(m.ipos - 2, #m.items - 4))
     for i = 0, 4 do
       local it = m.items[first + i]

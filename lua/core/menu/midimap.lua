@@ -703,7 +703,8 @@ local function hint(default)
   elseif L.msg then text, level = L.msg, 15 end
   screen.level(level)
   screen.move(0, 64)
-  screen.text(text)
+  -- cut to the screen (a message with a long preset name), and clear of the countdown at the right
+  screen.text(fit(text, (L.state ~= "idle" and mm.seconds_left() > 0) and 110 or 126))
 end
 
 local function draw_row(i, y, label, value, selected, target)

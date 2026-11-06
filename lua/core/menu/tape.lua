@@ -199,6 +199,18 @@ local function draw_loop_icon_right(x_right, y_center)
   screen.aa(1)
 end
 
+-- Linux desktop: a file name wider than the room next to the PLAY / REC label is cut with ".." (a long take or file name ran over the label and off the screen);
+-- the device build draws it as before
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+local function room_fit(name, label)
+  if not desktop or not name then return name end
+  local room = 127 - screen.text_extents(label) - 6
+  if screen.text_extents(name) <= room then return name end
+  local n = #name
+  while n > 1 and screen.text_extents(name:sub(1, n) .. "..") > room do n = n - 1 end
+  return name:sub(1, n) .. ".."
+end
+
 -- draw play header
 local function draw_play_header()
   screen.move(128, 10)
@@ -260,7 +272,7 @@ local function draw_play_file_info()
 
   screen.level(2)
   screen.move(0, 10)
-  screen.text(m.play.file)
+  screen.text(room_fit(m.play.file, "PLAY"))
 
   -- position and length
   screen.move(0, 24)
@@ -324,7 +336,7 @@ local function draw_rec_file_info()
   if rec_state ~= C.TAPE_REC_STATE_EMPTY and rec_file then
     screen.level(1)
     screen.move(0, 48)
-    screen.text(rec_file)
+    screen.text(room_fit(rec_file, "REC"))
     screen.level(2)
     screen.move(0, 62)
     screen.text(m.rec.pos_str)

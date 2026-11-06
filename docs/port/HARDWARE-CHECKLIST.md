@@ -389,3 +389,9 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **SYSTEM > CLEAN UP** shows a MI-UGENS line with the commit and the Verdandi version.
 - [ ] **A collision (optional):** install `pedalboard` or `krill` and use their installer: if SuperCollider stops, the log and the window note must say which folders and what to move; CLEAN UP > ARM PLUG-INS or CLASSES moves it after one confirmation; restart and the sound works again. Tell me which script it was.
 - [ ] **An update:** install a newer package over this one (when there is one): `logs/launcher.log` says `mi-UGens: updated` only if the serial grew, and a copy you edited is left alone.
+
+## Long text on our own pages (KNOWN-ISSUES 38): what only your screen can show
+
+- [ ] **SYSTEM > CLEAN UP:** the MI-UGENS line is short (`MI-UGENS 10f6824`); K3 shows the commit, `shipped with Verdandi <version>` over two lines and the build date; SEEDED reads `1 pack` with a size, and its list says it is copied in by Verdandi.
+- [ ] **A long name:** plug in a USB MIDI device with a long name and open SYSTEM > DEVICES; save a SCREEN and a THEME preset with an 18-letter name; look at the rows: no text over another, `..` at the end of a cut name.
+- [ ] **Scripts are unchanged:** a long sample name in a script's file selection is cut at the edge as before (the same on the Raspberry Pi).

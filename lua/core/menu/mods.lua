@@ -43,6 +43,15 @@ m.enc = function(n,delta)
   end
 end
 
+-- Linux desktop: a name wider than its room (before the +/- marker at x=120) is cut with ".."; the device build draws it as before
+local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+local function clip(s, room)
+  if not desktop or screen.text_extents(s) <= room then return s end
+  local n = #s
+  while n > 1 and screen.text_extents(s:sub(1, n) .. "..") > room do n = n - 1 end
+  return s:sub(1, n) .. ".."
+end
+
 m.redraw = function()
   screen.clear()
   screen.level(15)
@@ -73,7 +82,7 @@ m.redraw = function()
         -- selected item
         if _menu.m[name] then line = line .. " >" end
         screen.move(4,y)
-        screen.text(line)
+        screen.text(clip(line, 112))
 
         -- change enabled state indicator
         if loaded ~= enabled then

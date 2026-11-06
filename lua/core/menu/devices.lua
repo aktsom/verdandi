@@ -13,6 +13,15 @@ m.len = #m.list
 local desktop = os.getenv("NORNS_PLATFORM") ~= nil
 local BASE_LIST = {"midi", "grid", "arc", "hid", "keyboard layout"}
 
+-- Linux desktop: a name that is wider than its room is cut with ".." (a USB device can have a very long name); the device build draws it as before
+local function clip(s, room)
+  s = tostring(s)
+  if not desktop or screen.text_extents(s) <= room then return s end
+  local n = #s
+  while n > 1 and screen.text_extents(s:sub(1, n) .. "..") > room do n = n - 1 end
+  return s:sub(1, n) .. ".."
+end
+
 local function sync_list()
   if not desktop then return end
   local want = {table.unpack(BASE_LIST)}
@@ -284,7 +293,7 @@ local function redraw_select(do_show_all_if_fit, do_uppercase)
       if do_uppercase then line = string.upper(line) end
       screen.level(i==m.pos and 15 or 4)
       screen.move(20,10*i)
-      screen.text(line)
+      screen.text(clip(line, 107))
     end
   else --  -> scroll & selected item is always at pos 3
     for i=1,6 do
@@ -293,7 +302,7 @@ local function redraw_select(do_show_all_if_fit, do_uppercase)
         if do_uppercase then line = string.upper(line) end
         screen.level(i==3 and 15 or 4)
         screen.move(20,10*i)
-        screen.text(line)
+        screen.text(clip(line, 107))
       end
     end
   end
@@ -379,7 +388,7 @@ local function redraw_virmidi()
     end
     keys = "K3 KEEP AFTER REBOOT  K2 BACK"
   end
-  screen.level(4); screen.move(0, 62); screen.text(keys:sub(1, 25))
+  screen.level(4); screen.move(0, 62); screen.text(clip(keys:sub(1, 25), 127))
   screen.update()
 end
 
@@ -419,7 +428,7 @@ m.redraw = function()
       if on then
         screen.move(0,20)
         screen.level(3)
-        screen.text("AUTO-LINK: " .. (count > 0 and (count .. " linked") or "none yet"))
+        screen.text(clip("AUTO-LINK: " .. (count > 0 and (count .. " linked") or "none yet"), 127))
       end
     end
   end
@@ -434,7 +443,8 @@ m.redraw = function()
       screen.text(string.upper(m.list[i]) .. " >")
       if m.list[i] == "keyboard layout" then
         screen.move(127,10*i+y_offset)
-        screen.text_right(string.upper(keyboard.selected_map))
+        local used = screen.text_extents(string.upper(m.list[i]) .. " >") + 4
+        screen.text_right(clip(string.upper(keyboard.selected_map), 127 - used))
       end
     elseif m.mode == "list" then
       if m.section == "midi" then
@@ -447,21 +457,21 @@ m.redraw = function()
             else
               screen.level(3)
             end
-            screen.text(line)
+            screen.text(clip(line, 127))
           end
         end
       elseif m.section == "grid" then
         screen.text(i..".")
         screen.move(8,10*i+y_offset)
-        screen.text(grid.vports[i].name)
+        screen.text(clip(grid.vports[i].name, 119))
       elseif m.section == "arc" then
         screen.text(i..".")
         screen.move(8,10*i+y_offset)
-        screen.text(arc.vports[i].name)
+        screen.text(clip(arc.vports[i].name, 119))
       elseif m.section == "hid" then
         screen.text(i..".")
         screen.move(8,10*i+y_offset)
-        screen.text(hid.vports[i].name)
+        screen.text(clip(hid.vports[i].name, 119))
       end
     end
   end

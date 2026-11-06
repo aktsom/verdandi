@@ -27,7 +27,7 @@ screen.level = function(l) cur_level = l end
 screen.move = function(x, y) cur_y = y end
 screen.text = function(s) lines[#lines + 1] = {s = s, y = cur_y, level = cur_level, right = false} end
 screen.text_right = function(s) lines[#lines + 1] = {s = s, y = cur_y, level = cur_level, right = true} end
-screen.text_extents = function(s) return #s * 5 end
+screen.text_extents = function(s) return #s * 4 end
 screen.update = function() calls = calls + 1 end
 local pushed = {}
 local redraws = 0
@@ -308,7 +308,7 @@ for _, l in ipairs(lines) do
 end
 local wide = false
 for _, l in ipairs(lines) do if l.s:find("WWWW", 1, true) then wide = l end end
-check(wide and (wide.s:find("..", 1, true) or #wide.s * 5 <= 128 - 35), "a long name is cut with .. or fits next to 'in use'")
+check(wide and (wide.s:find("..", 1, true) or #wide.s * 4 <= 128 - 35), "a long name is cut with .. or fits next to 'in use'")
 page.redraw()
 
 -- ---- K2 leaves the page; the page is in SYSTEM's list below UI, on a computer ----

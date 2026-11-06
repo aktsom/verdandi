@@ -200,12 +200,20 @@ local function keychar_raw(a)
 end
 
 -- ---------------------------------------------------------------- drawing
+-- cut to the room, with ".." (the heading comes from the page that opened the picker; "not set" is at the right)
+local function fit(s, w)
+  if screen.text_extents(s) <= w then return s end
+  local n = #s
+  while n > 1 and screen.text_extents(s:sub(1, n) .. "..") > w do n = n - 1 end
+  return s:sub(1, n) .. ".."
+end
+
 local function redraw_raw()
   screen.clear()
   local o = m.opts or {}
   screen.level(4)
   screen.move(0, 8)
-  screen.text(o.label or "COLOUR")
+  screen.text(fit(o.label or "COLOUR", (m.orig == nil and m.last_hex == nil) and 70 or 126))
   if m.orig == nil and m.last_hex == nil then
     screen.move(127, 8)
     screen.text_right("not set")

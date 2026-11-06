@@ -267,3 +267,36 @@ TEST_CASE("device build: left- and right-aligned text with fractional positions 
     }
 }
 #endif
+
+// ---- a text wider than the screen (a long sample name in a file browser): the device draws it clipped at the surface, one line, no wrapping, no change of
+// the glyph spacing. the desktop build must draw the same pixels as plain cairo at the same start. nothing about how a script's text is drawn is changed
+TEST_CASE("a text wider than the screen is clipped at the screen edge, like plain cairo on the same surface (left, right and centered)") {
+    const char *longs[] = {"a_very_long_sample_name_that_does_not_fit_on_the_screen_at_all_0123456789.wav",
+                           "Kick Drum 808 Boom Long Tail Layered Stack 24bit 48kHz Take 12 Final Mix FINAL v2 (copy).wav", "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"};
+    for (const char *s : longs) {
+        double w = ink_width(s);
+        CAPTURE(s);
+        REQUIRE(w > 128);
+        for (int aa = 0; aa <= 1; aa++) {
+            CHECK(norns(s, 0, 20, aa, 0) == reference(s, 0, 20, aa));
+            CHECK(norns(s, 60, 20, aa, 0) == reference(s, 60, 20, aa));
+            CHECK(norns(s, 126, 30, aa, 1) == reference(s, 126 - w, 30, aa));
+        }
+        // clipped at the right edge: the last columns have ink, and only the row band of the text has any (no wrapped second line)
+        std::vector<unsigned char> img = norns(s, 0, 20, 1, 0);
+        bool edge = false, other_rows = false;
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 128; x++) {
+                bool ink = img[(y * 128 + x) * 4 + 3] != 0;
+                if (ink && x >= 120) {
+                    edge = true;
+                }
+                if (ink && (y < 12 || y > 24)) {
+                    other_rows = true;
+                }
+            }
+        }
+        CHECK(edge);
+        CHECK_FALSE(other_rows);
+    }
+}
