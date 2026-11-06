@@ -17,6 +17,11 @@ extern void dev_list_remove(device_t type, const char *node);
 extern void dev_list_monome_all_off(int timeout_ms);
 // is this monome device (a pointer a script holds) still in the list? a removed device is freed: a call through a stale pointer writes into freed memory
 extern bool dev_list_has_monome(struct dev_monome *md);
+// the MIDI devices of ALSA rawmidi nodes (/dev/snd/midiC<n>D<m>) in the list: those whose read thread found the device gone, or whose node is not there any more, are removed (the removal reaches Lua before anything is added
+// again); returns how many. the periodic check of the device monitor calls it, so an unplug without a udev remove is not remembered forever
+extern int dev_list_midi_sweep(void);
+// how many ports of this node are in the list
+extern int dev_list_midi_ports_listed(const char *node);
 #endif
 
 #ifdef __cplusplus

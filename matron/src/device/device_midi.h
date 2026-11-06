@@ -35,6 +35,10 @@ struct dev_midi {
     bool clock_timed;
     // the JACK MIDI device ("virtual") also sends: its output is the JACK port Verdandi:midi_out (jack_midi_in.cc)
     bool jack_out;
+    // a USB / ALSA rawmidi device: which of the ports of its node this is, and whether the read thread found the device gone (-ENODEV: unplugged, powered off). the device list removes a gone device without
+    // waiting for a udev event that may never come, and a new device of the same node replaces it (docs/port/KNOWN-ISSUES.md 36)
+    unsigned int port_index;
+    volatile int gone;
 #endif
 #endif
 };

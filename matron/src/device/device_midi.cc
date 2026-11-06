@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "device_monitor.h"
 #include "platform/linux/aseq_out.h"
 #include "platform/linux/jack_midi_in.h"
 #include "platform/linux/keys_midi.h"
@@ -102,6 +103,10 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
 #endif
 
     sscanf(base->path, "/dev/snd/midiC%uD%u", &alsa_card, &alsa_dev);
+#ifdef NORNS_LINUX_DESKTOP
+    midi->port_index = port_index;
+    midi->gone = 0;
+#endif
 
     if (asprintf(&alsa_name, "hw:%u,%u,%u", alsa_card, alsa_dev, port_index) < 0) {
         fprintf(stderr, "failed to create alsa device name for card %d,%d\n", alsa_card, alsa_dev);
@@ -401,6 +406,16 @@ void *dev_midi_start(void *self) {
 
     do {
         read = snd_rawmidi_read(midi->handle_in, state.buffer, DEV_MIDI_INPUT_BUFFER_SIZE);
+#ifdef NORNS_LINUX_DESKTOP
+        if (read < 0) {
+            // the device is gone (unplugged, powered off): not an inconsistency of the data. the list is told: the entry goes without waiting for a udev event that may never come, and
+            // a device of the same node that comes back takes its place (docs/port/KNOWN-ISSUES.md 36)
+            fprintf(stderr, "midi: %s vanished (read error %d); it leaves the list\n", base->name, (int)read);
+            midi->gone = 1;
+            dev_monitor_poke();
+            break;
+        }
+#endif
         if (dev_midi_consume_buffer(&state, read, midi) != read) {
             fprintf(stderr, "midi inconsistency for device: %s\n", base->name);
         }

@@ -14,12 +14,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "device.h"
 #include "device_hid.h"
 #include "device_list.h"
 #include "device_monitor.h"
+#include "device_midi.h"
 #include "device_monome.h"
 #ifdef NORNS_LINUX_DESKTOP
 #include "device_dedupe.h"
@@ -71,6 +73,9 @@ static int is_dev_monome_grid(struct udev_device *dev);
 static int is_dev_crow(struct udev_device *dev);
 
 static void *watch_loop(void *data);
+#ifdef NORNS_LINUX_DESKTOP
+static void add_dev_sound(struct udev_device *dev);
+#endif
 
 // try to get MIDI device name from ALSA
 // returns a newly-allocated string (may be NULL)
@@ -189,11 +194,78 @@ int dev_monitor_scan(void) {
 //-------------------------------
 //--- static function definitions
 
+#ifdef NORNS_LINUX_DESKTOP
+static volatile int midi_check_poke = 0;
+
+void dev_monitor_poke(void) {
+    midi_check_poke = 1;
+}
+
+static double mono_seconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+void dev_monitor_midi_check(void) {
+    // 1. devices that went (their read thread found them gone, or their node is not there): out of the list, Lua hears it
+    dev_list_midi_sweep();
+    // 2. sound cards with MIDI ports that are not (all) in the list: add them. (udev's "add" event was missed or came before the card answered, a port was busy, an earlier add failed)
+    static struct udev *check_udev = NULL;
+    if (check_udev == NULL) {
+        check_udev = udev_new();
+    }
+    struct udev_enumerate *ue = udev_enumerate_new(check_udev);
+    if (ue == NULL) {
+        return;
+    }
+    udev_enumerate_add_match_subsystem(ue, "sound");
+    udev_enumerate_scan_devices(ue);
+    struct udev_list_entry *entry;
+    for (entry = udev_enumerate_get_list_entry(ue); entry != NULL; entry = udev_list_entry_get_next(entry)) {
+        const char *syspath = udev_list_entry_get_name(entry);
+        if (syspath == NULL) {
+            continue;
+        }
+        struct udev_device *dev = udev_device_new_from_syspath(check_udev, syspath);
+        if (dev == NULL) {
+            continue;
+        }
+        const char *node = get_alsa_midi_node(dev);
+        if (node != NULL) {
+            int listed = dev_list_midi_ports_listed(node);
+            if (listed == 0 || (unsigned int)listed < dev_midi_port_count(node)) {
+                add_dev_sound(dev);
+            }
+            free((void *)node);
+        }
+        udev_device_unref(dev);
+    }
+    udev_enumerate_unref(ue);
+}
+
+// the watch loop calls this about every 100 ms: the MIDI check runs every 3 seconds, and at once after a poke
+void dev_monitor_watch_tick(double *last) {
+    double now = mono_seconds();
+    if (midi_check_poke || now - *last >= 3.0) {
+        midi_check_poke = 0;
+        *last = now;
+        dev_monitor_midi_check();
+    }
+}
+#endif
+
 void *watch_loop(void *p) {
     (void)p;
     struct udev_device *dev;
+#ifdef NORNS_LINUX_DESKTOP
+    double last_check = 0;
+#endif
 
     while (1) {
+#ifdef NORNS_LINUX_DESKTOP
+        dev_monitor_watch_tick(&last_check);
+#endif
         if (poll(pfds, DEV_FILE_COUNT, WATCH_TIMEOUT_MS) < 0) {
             switch (errno) {
             case EINVAL:

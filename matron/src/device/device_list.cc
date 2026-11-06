@@ -50,6 +50,29 @@ static struct dev_node *dev_lookup_path(const char *path, struct dev_node *node_
     return NULL;
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+#include <unistd.h>
+
+// ALSA rawmidi nodes (a USB MIDI device); the JACK "virtual" device and the keys window have other paths
+static bool is_alsa_midi_path(const char *p) {
+    return p != NULL && strncmp(p, "/dev/snd/midiC", 14) == 0;
+}
+
+// one line in the log for a node that could not be added, said once until it works (the periodic check tries again every few seconds)
+static char failed_path[256];
+static void midi_add_failed(const char *path, const char *why) {
+    if (strncmp(failed_path, path, sizeof failed_path) != 0) {
+        snprintf(failed_path, sizeof failed_path, "%s", path);
+        fprintf(stderr, "midi: could not add %s: %s; it is tried again every few seconds\n", path, why);
+    }
+}
+static void midi_add_worked(const char *path) {
+    if (strncmp(failed_path, path, sizeof failed_path) == 0) {
+        failed_path[0] = '\0';
+    }
+}
+#endif
+
 void dev_list_init(void) {
     dq.size = 0;
     dq.head = NULL;
@@ -116,6 +139,59 @@ void dev_list_add(device_t type, const char *path, const char *name, lua_State *
 
     switch (type) {
     case DEV_TYPE_MIDI:
+#ifdef NORNS_LINUX_DESKTOP
+        if (is_alsa_midi_path(path)) {
+            // a device of this node whose read thread found it gone (unplugged, powered off) is not coming back: it leaves the list first, so that Lua has removed it before the device that took its place is added
+            dev_list_midi_sweep();
+            midi_port_count = dev_midi_port_count(path);
+            if (midi_port_count == 0) {
+                midi_add_failed(path, "the card does not answer (yet)");
+                free((void *)name);
+                return;
+            }
+            bool name_used = false;
+            int added = 0, failed = 0;
+            for (unsigned int pidx = 0; pidx < midi_port_count; pidx++) {
+                bool listed = false;
+                pthread_mutex_lock(&lock);
+                for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+                    if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MIDI && dn->d->base.path != NULL && strcmp(dn->d->base.path, path) == 0 && dn->d->midi.port_index == pidx) {
+                        listed = true;
+                        break;
+                    }
+                }
+                pthread_mutex_unlock(&lock);
+                if (listed) {
+                    fprintf(stderr, "midi: %s port %u is listed already, not added again\n", path, pidx);
+                    continue;
+                }
+                d = dev_new(type, path, name, midi_port_count > 1, pidx, NULL);
+                if (d == NULL) {
+                    failed++;
+                    midi_add_failed(path, "the port could not be opened");
+                    continue;
+                }
+                if (midi_port_count <= 1) {
+                    name_used = true; // the device owns the name
+                }
+                ev = post_add_event(d, EVENT_MIDI_ADD);
+                if (ev != NULL) {
+                    fprintf(stderr, "midi: added %s (%s port %u)\n", d->base.name != NULL ? d->base.name : "?", path, pidx);
+                    ev->midi_add.dev = d;
+                    event_post(ev);
+                    added++;
+                }
+            }
+            if (failed == 0) {
+                midi_add_worked(path);
+            }
+            if (!name_used) {
+                free((void *)name); // every port has a name of its own, or none was added
+            }
+            (void)added;
+            return;
+        }
+#endif
         midi_port_count = dev_midi_port_count(path);
         for (unsigned int pidx = 0; pidx < midi_port_count; pidx++) {
             d = dev_new(type, path, name, midi_port_count > 1, pidx, NULL);
@@ -191,9 +267,29 @@ void dev_list_remove(device_t type, const char *node) {
 
     switch (type) {
     case DEV_TYPE_MIDI:
+#ifdef NORNS_LINUX_DESKTOP
+        if (is_alsa_midi_path(node)) {
+            // a remove that comes after the device was plugged in again (events are not always in order) must not take the new device away: the node is there and nothing has found the device gone.
+            // if it really went, the read thread says so (-ENODEV) and the periodic check removes it
+            bool gone = false;
+            for (struct dev_node *x = dn; x != NULL; x = x->next) {
+                if (x->d->base.type == DEV_TYPE_MIDI && x->d->base.path != NULL && strcmp(x->d->base.path, node) == 0 && x->d->midi.gone) {
+                    gone = true;
+                }
+            }
+            if (!gone && access(node, F_OK) == 0) {
+                fprintf(stderr, "midi: remove of %s ignored: the node is there and the device answers (a late event)\n", node);
+                pthread_mutex_unlock(&lock);
+                return;
+            }
+        }
+#endif
         while (dn != NULL) {
             ev = event_data_new(EVENT_MIDI_REMOVE);
             ev->midi_remove.id = dn->d->base.id;
+#ifdef NORNS_LINUX_DESKTOP
+            fprintf(stderr, "midi: removed %s (%s): udev remove\n", dn->d->base.name != NULL ? dn->d->base.name : "?", node);
+#endif
             dev_list_remove_node(dn, ev);
             dn = dev_lookup_path(node, NULL);
         }
@@ -241,6 +337,40 @@ static void *monome_off_thread(void *arg) {
         monome_led_all(md->m, 0); // a grid without levels takes this one
     }
     return NULL;
+}
+
+int dev_list_midi_sweep(void) {
+    int removed = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dq.head; dn != NULL;) {
+        struct dev_node *next = dn->next;
+        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MIDI && is_alsa_midi_path(dn->d->base.path)) {
+            bool node_missing = access(dn->d->base.path, F_OK) != 0;
+            if (dn->d->midi.gone || node_missing) {
+                union event_data *ev = event_data_new(EVENT_MIDI_REMOVE);
+                ev->midi_remove.id = dn->d->base.id;
+                fprintf(stderr, "midi: removed %s (%s): %s, no udev remove came\n", dn->d->base.name != NULL ? dn->d->base.name : "?", dn->d->base.path,
+                        dn->d->midi.gone ? "the device vanished" : "the node is gone");
+                dev_list_remove_node(dn, ev);
+                removed++;
+            }
+        }
+        dn = next;
+    }
+    pthread_mutex_unlock(&lock);
+    return removed;
+}
+
+int dev_list_midi_ports_listed(const char *node) {
+    int n = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MIDI && dn->d->base.path != NULL && node != NULL && strcmp(dn->d->base.path, node) == 0) {
+            n++;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return n;
 }
 
 bool dev_list_has_monome(struct dev_monome *md) {

@@ -115,6 +115,13 @@ run "window:buttons start the system xdg-open with the user's own HOME and XDG f
 g++ -std=gnu++14 -D_GNU_SOURCE -DNORNS_LINUX_DESKTOP -I matron/src -I matron/src/device -I matron/src/platform/linux -I matron/src/platform/macos \
     $(pkg-config --cflags lua5.3 libevdev 2>/dev/null) -I/usr/include/libevdev-1.0 linux/tests/device_monitor_null_test.cc -o "$T/dmn" \
     && run "c:device_monitor (devices without node, product, vendor or model: no strdup(NULL), no crash)" "$T/dmn"
+# a USB MIDI device that is unplugged, powered off and comes back (the BeatStep Pro of the owner's laptop, KNOWN-ISSUES 36): the real device monitor, list and read threads with a fake udev and a fake ALSA, lua/core/midi.lua as norns
+# runs it: the same node again, a new node, no udev remove, a remove that comes late, a card that is not ready, a busy port, repeated adds, and random plug / unplug sequences (the settled state is checked: list, Lua, vports, handles)
+g++ -std=gnu++14 -D_GNU_SOURCE -DNORNS_LINUX_DESKTOP -I matron/src -I matron/src/device -I matron/src/platform/linux -I matron/src/platform/macos \
+    $(pkg-config --cflags lua5.3 libevdev alsa 2>/dev/null) -I/usr/include/libevdev-1.0 linux/tests/midi_replug_test.cc matron/src/device/device_list.cc matron/src/device/device.cc matron/src/device/device_midi.cc \
+    -Wl,--wrap=access -o "$T/midi_replug_test" $(pkg-config --libs lua5.3 libevdev) -lpthread -ldl 2> "$T/midi_replug_build.log" \
+    && run "c:midi unplug and replug (device monitor, list, read threads with a fake udev and ALSA; no remove, late remove, not ready, busy, duplicates; 30 random sequences)" "$T/midi_replug_test" 30 1 \
+    || { echo "FAIL  c:midi unplug and replug does not build"; tail -5 "$T/midi_replug_build.log"; FAILED+=("midi replug build"); }
 run "linux:crash report (signal, thread name, backtrace in the log and crash-report.txt; the default action and the core dump kept)" linux/tests/crash_report_test.sh
 cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -o "$T/ulk" -lm 2> "$T/ulk.err" || cat "$T/ulk.err"
 python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"

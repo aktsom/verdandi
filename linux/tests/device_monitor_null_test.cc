@@ -63,6 +63,9 @@ union event_data *event_data_new(event_t) { memset(&fake_ev, 0, sizeof fake_ev);
 void event_post(union event_data *ev) { if (ev->serial_config.name == NULL) serial_name_null = true; }
 int jack_midi_in_start(void) { return -1; }
 int aseq_out_start(void) { return -1; }
+int dev_list_midi_sweep(void) { return 0; }
+int dev_list_midi_ports_listed(const char *) { return 0; }
+unsigned int dev_midi_port_count(const char *) { return 0; }
 
 static int failures;
 #define CASE(name, ...)                                                                        \
