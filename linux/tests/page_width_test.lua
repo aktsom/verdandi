@@ -94,6 +94,7 @@ end
 
 -- ======================================================= DEVICES (midi, grid, arc, hid, keyboard layout, serialosc, virmidi)
 do
+  LOADSTATE = "idle"
   local LONGNAME = "Behringer UMC1820 USB Audio Class 2 Multichannel Interface Port 1 (long name)"
   package.loaded["core/keyboard"] = {keymap = {us = true, ["a-very-long-keyboard-layout-name-here"] = true}, selected_map = "a-very-long-keyboard-layout-name-here", set_map = function() end}
   midi = {devices = {}, vports = {}, update_devices = function() end}
@@ -111,7 +112,9 @@ do
   local real_getenv = os.getenv
   os.getenv = function(k) if k == "NORNS_PLATFORM" then return "linux" end return real_getenv(k) end
   package.loaded["core/virmidi"] = {configured = function() return true end, to = function() return "VirMIDI" end, wants_module = function() return true end,
-    loaded = function() return false end, load_status = function() return "idle" end, guide_lines = function() return {"SNDVIRMIDI IS NOT LOADED", "A kernel module that makes the virtual MIDI card", "Reaper can read"} end,
+    loaded = function() return false end, load_status = function() return LOADSTATE end, load_detail = function() return "cancelled" end,
+    failure_lines = function() return {"CANCELLED: THE PASSWORD DIALOG WAS CLOSED OR REFUSED.", "TYPE THIS IN A TERMINAL:", "sudo modprobe snd-virmidi midi_devs=1"} end,
+    hw_entries = function() return {"hw:VirMIDI,0", "hw:VirMIDI,1"} end, guide_lines = function() return {"SNDVIRMIDI IS NOT LOADED", "A kernel module that makes the virtual MIDI card", "Reaper can read"} end,
     COMMAND = "sudo modprobe snd-virmidi midi_devs=1 (long command to type in a terminal)", reaper_entry = function(n) return "VirMIDI [hw:3,0,0] " .. n end, reaper_hw = function() return "hw:3,0,0 a long hardware name" end,
     note = function() return nil end}
   _norns.alsa_midi_link = function() return 1, "VirMIDI 3-0 long port name" end
@@ -136,8 +139,11 @@ do
     pcall(page.key, 3, 1); sweep("DEVICES " .. tostring(page.section or page.mode) .. " K3")
     pcall(page.key, 3, 1); sweep("DEVICES " .. tostring(page.section or page.mode) .. " K3 again")
   end
-  for _, mode in ipairs({"serialosc", "confirm_serialosc", "virmidi", "confirm_virmidi"}) do
-    page.init(); page.refresh(); page.mode = mode; sweep("DEVICES " .. mode)
+  for _, st in ipairs({"idle", "running", "failed"}) do
+    LOADSTATE = st
+    for _, mode in ipairs({"serialosc", "confirm_serialosc", "virmidi", "confirm_virmidi"}) do
+      page.init(); page.refresh(); page.mode = mode; sweep("DEVICES " .. mode .. " (load " .. st .. ")")
+    end
   end
   report("DEVICES")
 end

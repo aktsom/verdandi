@@ -32,6 +32,10 @@
 #include "platform/linux/hid_virtual.h"
 #include "platform/linux/aseq_out.h"
 #include "platform/linux/jack_midi_in.h"
+#include "platform/linux/midi_ignore.h"
+#include <set>
+#include <string>
+#include <vector>
 #endif
 
 #define SUB_NAME_SIZE 32
@@ -195,6 +199,96 @@ int dev_monitor_scan(void) {
 //--- static function definitions
 
 #ifdef NORNS_LINUX_DESKTOP
+// ---- the virtual MIDI card (snd-virmidi) is the bridge a DAW reads (Reaper lists raw hw: devices): a raw port has one reader, so norns must not open it as a controller.
+// platform/linux/midi_ignore.h has the rules; audio.conf midi_ignore= (NORNS_MIDI_IGNORE, default "VirMIDI;Virtual Raw MIDI") and the target of alsa_midi_out_to name the cards. docs/port/KNOWN-ISSUES.md 40
+static std::string read_small_file(const std::string &path) {
+    std::string out;
+    FILE *f = fopen(path.c_str(), "r");
+    if (f == NULL) {
+        return out;
+    }
+    char buf[1024];
+    size_t n = fread(buf, 1, sizeof buf - 1, f);
+    buf[n] = '\0';
+    fclose(f);
+    return std::string(buf);
+}
+
+// the lines of /proc/asound/cards that belong to card N: the id line (" 2 [VirMIDI        ]: VirMIDI - VirMIDI") and the long name under it
+static std::string proc_cards_entry(const std::string &cards, unsigned card) {
+    std::string key = std::to_string(card) + " [";
+    size_t pos = 0;
+    while (pos < cards.size()) {
+        size_t end = cards.find('\n', pos);
+        if (end == std::string::npos) {
+            end = cards.size();
+        }
+        size_t first = cards.find_first_not_of(' ', pos);
+        if (first != std::string::npos && first < end && cards.compare(first, key.size(), key) == 0) {
+            size_t end2 = end < cards.size() ? cards.find('\n', end + 1) : std::string::npos;
+            return cards.substr(pos, (end2 == std::string::npos ? cards.size() : end2) - pos);
+        }
+        pos = end + 1;
+    }
+    return "";
+}
+
+// is this sound card (its midiC<n>D<m> node) one that must not be opened? what() = the card's id for the log
+static bool midi_card_ignored(struct udev_device *dev, const char *node, std::string *what) {
+    unsigned card = 0, devno = 0;
+    if (node == NULL || sscanf(node, "/dev/snd/midiC%uD%u", &card, &devno) != 2) {
+        return false;
+    }
+    std::vector<std::string> ids;
+    const char *id = udev_device_get_sysattr_value(dev, "id");
+    if (id != NULL) {
+        ids.push_back(id);
+        if (what != NULL) {
+            *what = id;
+        }
+    }
+    struct udev_device *d = dev;
+    for (int depth = 0; d != NULL && depth < 4; depth++, d = udev_device_get_parent(d)) {
+        const char *drv = udev_device_get_driver(d);
+        if (drv != NULL) {
+            ids.push_back(drv);
+        }
+        const char *product = udev_device_get_sysattr_value(d, "product"); // a USB device's name: what alsa_midi_out_to and midi_ignore may name
+        if (product != NULL) {
+            ids.push_back(product);
+        }
+    }
+    const char *proc = getenv("NORNS_PROC_ASOUND");
+    std::string root = proc != NULL ? proc : "/proc/asound";
+    ids.push_back(read_small_file(root + "/card" + std::to_string(card) + "/id"));
+    ids.push_back(proc_cards_entry(read_small_file(root + "/cards"), card));
+    ids.push_back(read_small_file(root + "/card" + std::to_string(card) + "/midi" + std::to_string(devno)));
+    if (midi_ignore::matches(midi_ignore::entries(getenv("NORNS_MIDI_IGNORE"), getenv("NORNS_ALSA_MIDI_OUT_TO")), ids)) {
+        if (what != NULL && what->empty()) {
+            *what = node;
+        }
+        return true;
+    }
+    return false;
+}
+
+static std::set<std::string> skip_said;     // nodes whose skipping was said already (once each)
+static std::set<std::string> release_said;
+
+// a card that must not be opened: said once; if it is in the list (opened before: the setting changed, or an older run), let go of it so that a DAW can open it
+static void midi_card_skip(const char *node, const std::string &what) {
+    if (dev_list_midi_ports_listed(node) > 0) {
+        if (release_said.insert(node).second) {
+            fprintf(stderr, "dev_monitor: released virtual raw MIDI card %s (%s): it was open, a DAW can open it now\n", what.c_str(), node);
+        }
+        dev_list_midi_release(node);
+        return;
+    }
+    if (skip_said.insert(node).second) {
+        fprintf(stderr, "dev_monitor: skipped virtual raw MIDI card %s (%s): not opened, a DAW reads it (midi_ignore in audio.conf)\n", what.c_str(), node);
+    }
+}
+
 static volatile int midi_check_poke = 0;
 
 void dev_monitor_poke(void) {
@@ -233,9 +327,14 @@ void dev_monitor_midi_check(void) {
         }
         const char *node = get_alsa_midi_node(dev);
         if (node != NULL) {
-            int listed = dev_list_midi_ports_listed(node);
-            if (listed == 0 || (unsigned int)listed < dev_midi_port_count(node)) {
-                add_dev_sound(dev);
+            std::string what;
+            if (midi_card_ignored(dev, node, &what)) {
+                midi_card_skip(node, what);
+            } else {
+                int listed = dev_list_midi_ports_listed(node);
+                if (listed == 0 || (unsigned int)listed < dev_midi_port_count(node)) {
+                    add_dev_sound(dev);
+                }
             }
             free((void *)node);
         }
@@ -419,6 +518,16 @@ void add_dev_sound(struct udev_device *dev) {
     // try to act according to
     // https://github.com/systemd/systemd/blob/master/rules/78-sound-card.rules
     const char *alsa_node = get_alsa_midi_node(dev);
+#ifdef NORNS_LINUX_DESKTOP
+    if (alsa_node != NULL) {
+        std::string what;
+        if (midi_card_ignored(dev, alsa_node, &what)) {
+            midi_card_skip(alsa_node, what);
+            free((void *)alsa_node);
+            return;
+        }
+    }
+#endif
     if (alsa_node != NULL) {
         char *name = get_device_name(dev);
         if (name == NULL) {

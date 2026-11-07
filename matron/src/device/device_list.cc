@@ -361,6 +361,20 @@ int dev_list_midi_sweep(void) {
     return removed;
 }
 
+int dev_list_midi_release(const char *node) {
+    int n = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dev_lookup_path(node, NULL); dn != NULL; dn = dev_lookup_path(node, NULL)) {
+        union event_data *ev = event_data_new(EVENT_MIDI_REMOVE);
+        ev->midi_remove.id = dn->d->base.id;
+        fprintf(stderr, "midi: released %s (%s)\n", dn->d->base.name != NULL ? dn->d->base.name : "?", node);
+        dev_list_remove_node(dn, ev);
+        n++;
+    }
+    pthread_mutex_unlock(&lock);
+    return n;
+}
+
 int dev_list_midi_ports_listed(const char *node) {
     int n = 0;
     pthread_mutex_lock(&lock);

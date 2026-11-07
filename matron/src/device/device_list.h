@@ -22,6 +22,9 @@ extern bool dev_list_has_monome(struct dev_monome *md);
 extern int dev_list_midi_sweep(void);
 // how many ports of this node are in the list
 extern int dev_list_midi_ports_listed(const char *node);
+// let go of every port of this node at once (its handles are closed, Lua is told): for a card that must not be open (the virtual MIDI card a DAW reads); unlike dev_list_remove it does not wait for the card to
+// vanish. returns how many ports were released
+extern int dev_list_midi_release(const char *node);
 #endif
 
 #ifdef __cplusplus

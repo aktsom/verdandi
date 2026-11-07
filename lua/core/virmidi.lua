@@ -8,7 +8,11 @@ local M = {}
 M.COMMAND = "sudo modprobe snd-virmidi midi_devs=1" -- what to type in a terminal
 M.STATUS = "/home/we/.virmidi-load"                  -- written when the load is started (its time)
 M.DONE = "/home/we/.virmidi-done"                    -- written by the background command: its exit code
-local PATIENCE = 150                                  -- seconds a load may take (the password dialog is a person)
+M.PATIENCE = 150                                      -- seconds a load may take (the password dialog is a person)
+M.TIMEOUT = 120                                       -- the background command is killed after this many seconds (exit code 124)
+M.SYS_MODULE = "/sys/module/snd_virmidi"
+M.PROC_MODULES = "/proc/modules"
+M.PROC_ASOUND = "/proc/asound"
 
 function M.exec(cmd)
   local ok = os.execute(cmd)
@@ -55,7 +59,39 @@ function M.wants_module(to)
   return t:find("virmidi", 1, true) ~= nil or t:find("virtual raw", 1, true) ~= nil
 end
 
-function M.loaded() return M.exists("/sys/module/snd_virmidi") end
+-- the module is loaded: its folder in /sys/module, or its line in /proc/modules (whichever shows it; a load by anything, not only by this page)
+function M.loaded()
+  if M.exists(M.SYS_MODULE) then return true end
+  local mods = M.read(M.PROC_MODULES)
+  if mods then
+    for line in mods:gmatch("[^\n]+") do
+      if line:match("^snd_virmidi%s") then return true end
+    end
+  end
+  return false
+end
+
+--- the ALSA card number of the virtual MIDI card (id VirMIDI), or nil
+function M.card()
+  local cards = M.read(M.PROC_ASOUND .. "/cards")
+  if not cards then return nil end
+  for line in cards:gmatch("[^\n]+") do
+    local n, id = line:match("^%s*(%d+)%s*%[([^%]]-)%s*%]")
+    if n and id == "VirMIDI" then return tonumber(n) end
+  end
+  return nil
+end
+
+--- what to enable in Reaper, from the card and its raw MIDI devices: hw:VirMIDI,<device> for each (the device index is the one in /proc/asound/card<n>/midi<device>)
+function M.hw_entries()
+  local card = M.card()
+  local out = {}
+  if not card then return out end
+  for dev = 0, 7 do
+    if M.read(M.PROC_ASOUND .. "/card" .. card .. "/midi" .. dev) then out[#out + 1] = "hw:VirMIDI," .. dev end
+  end
+  return out
+end
 
 --- "VirMIDI 3-0" (what the ALSA client is called) is what to enable in Reaper; its hw form follows the device index
 function M.reaper_entry(client) return client end
@@ -92,9 +128,9 @@ function M.start_load()
   if M.is_root() then
     cmd = "timeout 60 modprobe snd-virmidi midi_devs=1"
   elseif M.have("pkexec") then
-    cmd = "timeout 120 pkexec modprobe snd-virmidi midi_devs=1"
+    cmd = "timeout " .. M.TIMEOUT .. " pkexec modprobe snd-virmidi midi_devs=1"
   else
-    M.write(M.DONE, "127\n")
+    M.write(M.DONE, "125\n") -- no way to ask for admin rights here
     return false
   end
   M.write(M.STATUS, tostring(M.now()) .. "\n")
@@ -102,19 +138,47 @@ function M.start_load()
   return true
 end
 
---- "idle" (nothing was started), "running", "ok" (the command finished with 0), "failed" (a refusal, no agent, an error, no answer for two minutes)
+--- "idle" (nothing was started), "running", "ok" (the command finished with 0, or the module is loaded whoever loaded it), "failed" (a refusal, no agent, an error, no answer in time: load_detail says which)
 function M.load_status()
   local done = M.read(M.DONE)
+  local st = M.read(M.STATUS)
+  if M.loaded() and (done or st) then return "ok" end
   if done then
     return (tonumber(done:match("^%s*(%d+)")) == 0) and "ok" or "failed"
   end
-  local st = M.read(M.STATUS)
   if st then
     local t = tonumber(st:match("^%s*(%d+)"))
-    if t and M.now() - t > PATIENCE then return "failed" end
+    if t and M.now() - t > M.PATIENCE then return "failed" end
     return "running"
   end
   return "idle"
+end
+
+--- why a load failed, as a word: "cancelled" (the dialog was closed or refused: pkexec 126), "no_agent" (nobody to ask: 127), "timeout" (no answer in time: 124, or nothing for M.PATIENCE seconds),
+--- "no_pkexec" (no way to ask here), "modprobe" (modprobe itself failed: 1), "failed" (anything else); nil while it runs, when it worked, or when nothing was started
+function M.load_detail()
+  if M.load_status() ~= "failed" then return nil end
+  local done = M.read(M.DONE)
+  if not done then return "timeout" end
+  local code = tonumber(done:match("^%s*(%d+)"))
+  if code == 126 then return "cancelled" end
+  if code == 127 then return "no_agent" end
+  if code == 124 then return "timeout" end
+  if code == 125 then return "no_pkexec" end
+  if code == 1 then return "modprobe" end
+  return "failed"
+end
+
+--- the page's lines for a failed load: what happened in plain words, and the command to type in a terminal instead
+function M.failure_lines(why)
+  local what = {
+    cancelled = "CANCELLED: THE PASSWORD DIALOG WAS CLOSED OR REFUSED.",
+    no_agent = "NO PASSWORD DIALOG: NO AUTHENTICATION AGENT IS RUNNING.",
+    timeout = "NO ANSWER: THE PASSWORD DIALOG WAS NOT ANSWERED IN TIME.",
+    no_pkexec = "NO WAY TO ASK FOR ADMIN RIGHTS HERE (NO PKEXEC).",
+    modprobe = "FAILED: MODPROBE COULD NOT LOAD THE MODULE.",
+  }
+  return {what[why] or "FAILED TO LOAD THE MODULE.", "TYPE THIS IN A TERMINAL:", M.COMMAND}
 end
 
 function M.guide_lines()

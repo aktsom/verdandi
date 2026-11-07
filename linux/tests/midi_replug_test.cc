@@ -70,6 +70,11 @@ const char *udev_device_get_sysattr_value(struct udev_device *d, const char *k) 
     auto i = d->attrs.find(k);
     return i == d->attrs.end() ? NULL : i->second.c_str();
 }
+// the kernel driver bound to a device (a platform device's "snd_virmidi"): the fake keeps it in the attribute "__driver"
+const char *udev_device_get_driver(struct udev_device *d) {
+    auto i = d->attrs.find("__driver");
+    return i == d->attrs.end() ? NULL : i->second.c_str();
+}
 }
 
 // the sound cards udev lists (an enumeration) and the devices that stand behind their syspaths
@@ -389,6 +394,71 @@ static void tick() {
     dev_monitor_watch_tick(&last);
     settle();
 }
+
+// ------------------------------------------------------------------------------------------------------ the virtual MIDI card (snd-virmidi): udev shows the card with the id "VirMIDI" under a platform device bound to snd_virmidi,
+// and no "product" anywhere. /proc/asound (NORNS_PROC_ASOUND) has its names
+static udev_device *virmidi_card_device(int card, const char *id = "VirMIDI", const char *driver = "snd_virmidi") {
+    std::string dir = tmproot + "/card" + std::to_string(card);
+    mkdir(dir.c_str(), 0755);
+    mkdir((dir + "/midiC" + std::to_string(card) + "D0").c_str(), 0755);
+    card_dir[card] = dir;
+    auto *plat = new udev_device{NULL, "platform", "/nonexistent", {}, {{"__driver", driver}}, NULL};
+    std::string *node = new std::string("/dev/snd/controlC" + std::to_string(card));
+    std::string *sp = new std::string(dir);
+    auto *d = new udev_device{node->c_str(), "sound", sp->c_str(), {}, {{"id", id}}, plat};
+    keep.push_back(plat); keep.push_back(d);
+    by_syspath[dir] = d;
+    return d;
+}
+static void proc_asound(int card, const char *id, const char *longname, const char *rawname) {
+    std::string root = tmproot + "/proc";
+    mkdir(root.c_str(), 0755);
+    mkdir((root + "/card" + std::to_string(card)).c_str(), 0755);
+    FILE *f = fopen((root + "/cards").c_str(), "w");
+    fprintf(f, " %d [%-14s]: %s - %s\n                      %s\n", card, id, id, id, longname);
+    fclose(f);
+    f = fopen((root + "/card" + std::to_string(card) + "/midi0").c_str(), "w");
+    fprintf(f, "%s\n", rawname);
+    fclose(f);
+    f = fopen((root + "/card" + std::to_string(card) + "/id").c_str(), "w");
+    fprintf(f, "%s\n", id);
+    fclose(f);
+    setenv("NORNS_PROC_ASOUND", root.c_str(), 1);
+}
+static void udev_add_virmidi(int card, const char *id = "VirMIDI", const char *driver = "snd_virmidi") {
+    know_enum(card);
+    add_dev(virmidi_card_device(card, id, driver), DEV_FILE_SOUND);
+}
+static std::string logfile;
+static void capture_log() { // the monitor's stderr lines, for the child of a CASE
+    logfile = tmproot + "/stderr.log";
+    freopen(logfile.c_str(), "w", stderr);
+}
+static std::string log_text() {
+    fflush(stderr);
+    std::string out;
+    FILE *f = fopen(logfile.c_str(), "r");
+    if (!f) return out;
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof buf, f)) > 0) out.append(buf, n);
+    fclose(f);
+    return out;
+}
+static int count_of(const std::string &hay, const std::string &needle) {
+    int n = 0;
+    for (size_t p = hay.find(needle); p != std::string::npos; p = hay.find(needle, p + 1)) n++;
+    return n;
+}
+// what a DAW does: opens the raw port for reading. a port that norns holds answers -EBUSY
+static int daw_open(int card) {
+    snd_rawmidi_t *in = NULL;
+    std::string name = "hw:" + std::to_string(card) + ",0,0";
+    int rc = snd_rawmidi_open(&in, NULL, name.c_str(), 0);
+    if (rc == 0) snd_rawmidi_close(in);
+    return rc;
+}
+
 static void world(const char *name) {
     char t[] = "/tmp/replugXXXXXX";
     tmproot = mkdtemp(t);
@@ -396,6 +466,7 @@ static void world(const char *name) {
     enum_paths.clear(); by_syspath.clear(); card_dir.clear();
     dev_list_init();
     lua_world();
+    unsetenv("NORNS_MIDI_IGNORE"); unsetenv("NORNS_ALSA_MIDI_OUT_TO"); unsetenv("NORNS_PROC_ASOUND");
     (void)name;
 }
 
@@ -471,6 +542,70 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 0);
     int stress_runs = argc > 1 ? atoi(argv[1]) : 40;
     unsigned seed0 = argc > 2 ? (unsigned)atoi(argv[2]) : 1;
+
+
+    // ---- the virtual MIDI card (snd-virmidi) must never be opened as a controller: Reaper reads its raw port, which has one reader
+    CASE("a snd-virmidi card appears: not opened, not listed, one log line, the periodic check adds nothing; a DAW can open its raw port", {
+        capture_log();
+        proc_asound(2, "VirMIDI", "Virtual MIDI Card 1", "Virtual Raw MIDI (16 ports)");
+        alsa_plug(2, 1); udev_add_virmidi(2); settle();
+        EXPECT_EQ(device_names(), "", "the virtual card is not a norns MIDI device");
+        EXPECT(handles(2) == 0, "no handle on the raw port");
+        EXPECT(dev_list_midi_ports_listed("/dev/snd/midiC2D0") == 0, "not in the list");
+        for (int i = 0; i < 4; i++) tick();
+        EXPECT(handles(2) == 0, "the periodic check does not open it either");
+        EXPECT_EQ(device_names(), "", "still nothing");
+        EXPECT(daw_open(2) == 0, "a DAW can open the raw port (it is not busy)");
+        EXPECT(count_of(log_text(), "skipped virtual raw MIDI card") == 1, "one log line, not one per check");
+        EXPECT(count_of(log_text(), "adding midi device") == 0, "no 'adding midi device' for it");
+        // a real controller next to it is still listed and opened
+        plug(3);
+        EXPECT_EQ(device_names(), TWO, "a real controller is listed as always");
+        EXPECT_EQ(check_state({3}), "", "state");
+        unplug(2); plug(2, 1);
+        EXPECT(handles(2) == 0, "the card goes and comes back: still not opened");
+    });
+    CASE("the card is found by its /proc/asound names when the id and the driver say nothing (renamed id, no driver)", {
+        capture_log();
+        proc_asound(2, "Virtual", "Virtual MIDI Card 1", "Virtual Raw MIDI (16 ports)");
+        alsa_plug(2, 1); udev_add_virmidi(2, "Virtual", "somedriver"); settle();
+        EXPECT(handles(2) == 0 && device_names() == "", "skipped by the raw MIDI name");
+        EXPECT(count_of(log_text(), "skipped virtual raw MIDI card") == 1, "and said");
+    });
+    CASE("the setting midi_ignore replaces the default list: with another list the virtual card is listed again, and a named controller is skipped", {
+        capture_log();
+        setenv("NORNS_MIDI_IGNORE", "Nothing here", 1);
+        proc_asound(2, "VirMIDI", "Virtual MIDI Card 1", "Virtual Raw MIDI (16 ports)");
+        alsa_plug(2, 1); udev_add_virmidi(2); settle();
+        EXPECT(handles(2) > 0, "not in the list: opened as before (the setting is the owner's)");
+        setenv("NORNS_MIDI_IGNORE", "BeatStep", 1);
+        plug(3);
+        EXPECT(handles(3) == 0, "a card whose name contains an entry is skipped");
+    });
+    CASE("the target of alsa_midi_out_to is a card a DAW reads: skipped too", {
+        capture_log();
+        setenv("NORNS_ALSA_MIDI_OUT_TO", "Arturia", 1);
+        plug(3);
+        EXPECT(handles(3) == 0 && device_names() == "", "skipped");
+        EXPECT(count_of(log_text(), "skipped virtual raw MIDI card") == 1, "said once");
+    });
+    CASE("a virtual card that was opened before (the list changed, or the module came while an older norns ran): the next sweep releases it, Lua is told, a DAW can open it", {
+        capture_log();
+        setenv("NORNS_MIDI_IGNORE", "Nothing here", 1);
+        proc_asound(2, "VirMIDI", "Virtual MIDI Card 1", "Virtual Raw MIDI (16 ports)");
+        alsa_plug(2, 1); udev_add_virmidi(2); settle();
+        EXPECT(handles(2) > 0, "opened");
+        EXPECT(daw_open(2) == -EBUSY, "and a DAW is locked out: the problem");
+        unsetenv("NORNS_MIDI_IGNORE");
+        tick();
+        EXPECT(handles(2) == 0, "released");
+        EXPECT_EQ(device_names(), "", "out of the list");
+        EXPECT(daw_open(2) == 0, "a DAW opens it without a restart of norns");
+        EXPECT(count_of(log_text(), "released virtual raw MIDI card") == 1, "one line says so");
+        tick(); tick();
+        EXPECT(count_of(log_text(), "released virtual raw MIDI card") == 1, "and only once");
+        EXPECT(handles(2) == 0, "it stays closed");
+    });
 
     CASE("a clean unplug (udev remove) and the same node again: listed again, same names, same vports, the mapped events flow", {
         listen_on_vport1();

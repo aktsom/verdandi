@@ -84,6 +84,15 @@ for what, pat in (("a Raspberry Pi download is moved aside by itself", r"moves? 
 for what, pat in (("a class SuperCollider cannot find", r"could not find class|class .{0,40}(missing|not found)"), ("a class defined twice", r"duplicate class|classes twice|same pack twice")):
     res("if something goes wrong: " + what, re.search(pat, lim, re.S | re.I) is not None)
 
+# the virtual MIDI card: never opened by norns, the setting, the page that follows the load
+snd = home_sec + text
+res("manual: audio.conf key midi_ignore", re.search(r"<code>midi_ignore</code>", text) is not None)
+for what, pat in (("norns never opens the virtual card as a controller", r"(never|not) (opens?|lists?).{0,120}(VirMIDI|virtual MIDI card)|(VirMIDI|virtual MIDI card).{0,200}(never|not) (opened|listed|opens|lists)"),
+                  ("the default list", r"VirMIDI;Virtual Raw MIDI"), ("a raw port has one reader", r"one reader|only one program|one program at a time"),
+                  ("Reaper's error text", r"could not be opened"), ("the VIRMIDI page follows the load by itself", r"(by itself|on its own|without a key).{0,200}(loaded|load)|(loaded|load).{0,200}(by itself|on its own|without a key)"),
+                  ("the Reaper entry hw:VirMIDI,<device>", r"hw:VirMIDI,"), ("a closed password dialog is said in plain words", r"(closed|cancel).{0,160}(dialog|password)|(dialog|password).{0,160}(closed|cancel)")):
+    res("manual: virtual MIDI card, " + what, re.search(pat, text, re.S | re.I) is not None)
+
 # plain text of the page (tags removed, entities decoded)
 plain = html.unescape(re.sub(r"<[^>]+>", " ", text[text.index("<body>"):]))
 plain = re.sub(r"\s+", " ", plain)

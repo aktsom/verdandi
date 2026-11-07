@@ -424,6 +424,12 @@ NORNS_MIDI_IN_FROM="${NORNS_MIDI_IN_FROM:-$(conf_get midi_in_from)}"
 export NORNS_MIDI_IN_FROM
 NORNS_MIDI_OUT_TO="${NORNS_MIDI_OUT_TO:-$(conf_get midi_out_to)}"
 export NORNS_MIDI_OUT_TO
+# sound cards the device monitor must not open as MIDI controllers: the kernel's virtual MIDI card (snd-virmidi) is the bridge a DAW reads, and a raw port has one reader.
+# audio.conf midi_ignore=<names separated by ;> (default "VirMIDI;Virtual Raw MIDI"; "midi_ignore=" alone ignores no name; the alsa_midi_out_to target is always ignored)
+if [ -z "${NORNS_MIDI_IGNORE+x}" ] && grep -q '^midi_ignore=' "$NORNS_HOME/audio.conf" 2> /dev/null; then
+    NORNS_MIDI_IGNORE="$(conf_get midi_ignore)"
+    export NORNS_MIDI_IGNORE
+fi
 # the virtual MIDI device as an ALSA sequencer port ("Verdandi out"): on unless NORNS_ALSA_MIDI=0 or alsa_midi=0 in audio.conf
 NORNS_ALSA_MIDI="${NORNS_ALSA_MIDI:-$(conf_get alsa_midi)}"
 export NORNS_ALSA_MIDI

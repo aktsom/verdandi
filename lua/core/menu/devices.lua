@@ -11,6 +11,7 @@ m.len = #m.list
 
 -- Linux desktop: while serialosc has the grid (the note of lua/core/menu.lua) there is one more entry, with the guide in short lines and the stop without a terminal (docs/port/KNOWN-ISSUES.md 31)
 local desktop = os.getenv("NORNS_PLATFORM") ~= nil
+local vm_poll_start, vm_poll_stop -- the VIRMIDI page's poll (defined below)
 local BASE_LIST = {"midi", "grid", "arc", "hid", "keyboard layout"}
 
 -- Linux desktop: a name that is wider than its room is cut with ".." (a USB device can have a very long name); the device build draws it as before
@@ -37,6 +38,7 @@ local function sync_list()
   end
   -- the setting went: leave the VIRMIDI pages
   if (m.mode == "virmidi" or m.mode == "confirm_virmidi") and not require('core/virmidi').configured() then
+    if vm_poll_stop then vm_poll_stop() end
     m.mode = "type"
     m.len = #m.list
     m.pos = math.min(m.pos, m.len)
@@ -137,7 +139,7 @@ m.key = function(n,z)
     local V = require 'core/virmidi'
     if n == 2 then
       if m.result then m.result = nil
-      else m.mode = "type"; m.len = #m.list; m.pos = #m.list end
+      else m.mode = "type"; m.len = #m.list; m.pos = #m.list; vm_poll_stop() end
     elseif n == 3 then
       if V.wants_module(V.to()) and not V.loaded() then
         if V.load_status() ~= "running" then m.mode = "confirm_virmidi" end
@@ -154,6 +156,7 @@ m.key = function(n,z)
     elseif n == 3 then
       require('core/virmidi').start_load()
       m.mode = "virmidi"
+      vm_poll_start()
     end
     _menu.redraw()
     return
@@ -185,6 +188,7 @@ m.key = function(n,z)
       if m.section == "virmidi" then
         m.mode = "virmidi"
         m.result = nil
+        if require('core/virmidi').load_status() == "running" then vm_poll_start() end -- a load that was started before: keep watching it
         _menu.redraw()
         return
       elseif m.section == "serialosc" then
@@ -332,6 +336,37 @@ local function redraw_serialosc()
   screen.update()
 end
 
+-- the page does not wait for a key press: while a load runs (the password dialog is a person, pkexec's answer comes later) a poll of one second looks at the module and the answer of the command,
+-- and redraws when something changed (loaded, failed, why); it stops when the load is not running any more and when the page is left
+local vm_signature = nil
+local function vm_signature_now()
+  local V = require 'core/virmidi'
+  local count = 0
+  if _norns and _norns.alsa_midi_link then count = _norns.alsa_midi_link() end
+  local hw = V.hw_entries and V.hw_entries() or {}
+  return table.concat({tostring(V.loaded()), tostring(V.load_status()), tostring(V.load_detail and V.load_detail() or ""), tostring(count), table.concat(hw, ",")}, "|")
+end
+vm_poll_stop = function()
+  if _menu.timer and _menu.timer.stop then _menu.timer:stop() end
+end
+local function vm_poll_tick()
+  local sig = vm_signature_now()
+  if sig ~= vm_signature then
+    vm_signature = sig
+    _menu.redraw()
+  end
+  local V = require 'core/virmidi'
+  if V.load_status() ~= "running" then vm_poll_stop() end
+end
+vm_poll_start = function()
+  if not desktop or not _menu.timer then return end
+  vm_signature = vm_signature_now()
+  _menu.timer.time = 1
+  _menu.timer.count = -1
+  _menu.timer.event = vm_poll_tick
+  _menu.timer:start()
+end
+
 -- SYSTEM > DEVICES > VIRMIDI: Reaper reads raw MIDI only; the kernel's virtual MIDI card (snd-virmidi) is the bridge. what is the state, the question before loading it (no terminal: the desktop's password dialog), the Reaper
 -- entry to enable, and how to keep it after a reboot
 local function redraw_virmidi()
@@ -368,7 +403,8 @@ local function redraw_virmidi()
       put("WAITING FOR THE PASSWORD DIALOG...")
       keys = "K2 BACK"
     elseif st == "failed" then
-      put("FAILED. TYPE IN A TERMINAL:\n" .. V.COMMAND, 8)
+      -- what happened in plain words (the dialog was closed, nobody to ask, no answer in time ...) and the command to type instead
+      put(table.concat(V.failure_lines(V.load_detail()), "\n"), 8)
       keys = "K3 TRY AGAIN  K2 BACK"
     else
       put(table.concat(V.guide_lines(), "\n"))
@@ -385,6 +421,9 @@ local function redraw_virmidi()
       if hw then y = put("(" .. hw .. ")", 6, y) end
     else
       y = put("WAITING FOR A PORT NAMED " .. to, 6, y)
+      -- loaded, and not connected yet: the entry for Reaper follows the card and its device index (hw:VirMIDI,<device>)
+      local hw = V.hw_entries and V.hw_entries() or {}
+      if V.wants_module(to) and #hw > 0 then y = put("REAPER: ENABLE " .. hw[1], 15, y) end
     end
     keys = "K3 KEEP AFTER REBOOT  K2 BACK"
   end
@@ -486,6 +525,6 @@ m.init = function()
   m.len = #m.list
 end
 
-m.deinit = function() end
+m.deinit = function() if vm_poll_stop then vm_poll_stop() end end
 
 return m

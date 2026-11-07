@@ -94,6 +94,59 @@ local perm = table.concat(V.permanent_lines(), "\n")
 check(perm:find("/etc/modules-load.d/", 1, true) and perm:find("snd-virmidi", 1, true) and perm:find("midi_devs=1", 1, true) and perm:find("/etc/modprobe.d/", 1, true), "the permanent setup names both files and the option")
 check(#V.guide_lines() >= 3, "a guide of a few lines")
 
+-- ---- the module is seen as loaded from /sys/module or /proc/modules (whichever shows it first)
+files["/sys/module/snd_virmidi"] = nil
+files["/proc/modules"] = "snd_rawmidi 40960 3 snd_seq_midi - Live 0x0000000000000000\nxsnd_virmidi_x 1 0 - Live 0x0\n"
+check(not V.loaded(), "a similar name in /proc/modules is not it")
+files["/proc/modules"] = "snd_rawmidi 40960 3 snd_virmidi - Live 0x0000000000000000\nsnd_virmidi 16384 0 - Live 0x0000000000000000\n"
+check(V.loaded(), "snd_virmidi in /proc/modules: loaded")
+files["/proc/modules"] = nil
+-- a load whose DONE file was lost: the module is there, so it is ok, not 'running' for ever
+files[V.DONE] = nil; files[V.STATUS] = "1000\n"; V.now = function() return 1005 end
+files["/sys/module/snd_virmidi"] = true
+check(V.load_status() == "ok", "the module is loaded although the command's answer never came: ok")
+files["/sys/module/snd_virmidi"] = nil
+-- why a load failed, in plain words
+local function detail_for(code) files[V.DONE] = code .. "\n"; files[V.STATUS] = "1000\n"; V.now = function() return 1005 end return V.load_status(), V.load_detail() end
+local st, d = detail_for(126); check(st == "failed" and d == "cancelled", "126: the dialog was closed or refused: cancelled (" .. tostring(d) .. ")")
+st, d = detail_for(127); check(st == "failed" and d == "no_agent", "127: no authentication agent: no_agent (" .. tostring(d) .. ")")
+st, d = detail_for(124); check(st == "failed" and d == "timeout", "124: the command ran out of time: timeout (" .. tostring(d) .. ")")
+st, d = detail_for(125); check(st == "failed" and d == "no_pkexec", "125: no way to ask: no_pkexec (" .. tostring(d) .. ")")
+st, d = detail_for(1); check(st == "failed" and d == "modprobe", "1: modprobe itself failed: modprobe (" .. tostring(d) .. ")")
+st, d = detail_for(9); check(st == "failed" and d == "failed", "any other code: failed (" .. tostring(d) .. ")")
+st, d = detail_for(0); check(st == "ok" and d == nil, "0: ok, no reason (" .. tostring(d) .. ")")
+files[V.DONE] = nil; files[V.STATUS] = "1000\n"; V.now = function() return 1010 end
+check(V.load_status() == "running" and V.load_detail() == nil, "waiting: running, no reason")
+V.now = function() return 1000 + 400 end
+check(V.load_status() == "failed" and V.load_detail() == "timeout", "no answer in time: failed, timeout")
+V.now = function() return 1000 end
+for _, why in ipairs({"cancelled", "no_agent", "timeout", "no_pkexec", "modprobe", "failed"}) do
+  local lines = V.failure_lines(why)
+  local text = table.concat(lines, " ")
+  check(#lines >= 2 and text:find("sudo modprobe snd-virmidi", 1, true), why .. ": plain lines and the command to type in a terminal: " .. text)
+end
+check(table.concat(V.failure_lines("cancelled"), " "):upper():find("CLOSED") or table.concat(V.failure_lines("cancelled"), " "):upper():find("CANCEL"), "cancelled says the dialog was closed")
+check(table.concat(V.failure_lines("timeout"), " "):upper():find("NO ANSWER"), "timeout says no answer came")
+check(table.concat(V.failure_lines("no_agent"), " "):upper():find("AGENT") or table.concat(V.failure_lines("no_agent"), " "):upper():find("DIALOG"), "no_agent names the missing dialog")
+
+-- ---- the card and the Reaper entry (hw:VirMIDI,<device>) follow /proc/asound
+files["/proc/asound/cards"] = nil
+check(V.card() == nil and #V.hw_entries() == 0, "no card: no entry")
+files["/proc/asound/cards"] = " 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n                      HDA Intel PCH at 0xf7210000 irq 130\n 2 [VirMIDI        ]: VirMIDI - VirMIDI\n                      Virtual MIDI Card 1\n"
+check(V.card() == 2, "the VirMIDI card is card 2 (" .. tostring(V.card()) .. ")")
+files["/proc/asound/card2/midi0"] = "Virtual Raw MIDI (16 ports)\n"
+local hw = V.hw_entries()
+check(#hw == 1 and hw[1] == "hw:VirMIDI,0", "one device: hw:VirMIDI,0 (" .. table.concat(hw, ",") .. ")")
+files["/proc/asound/card2/midi1"] = "Virtual Raw MIDI (16 ports)\n"
+hw = V.hw_entries()
+check(#hw == 2 and hw[2] == "hw:VirMIDI,1", "two devices: the second is hw:VirMIDI,1 (" .. table.concat(hw, ",") .. ")")
+files["/proc/asound/cards"] = " 3 [VirMIDI        ]: VirMIDI - VirMIDI\n                      Virtual MIDI Card 1\n"
+files["/proc/asound/card2/midi0"] = nil; files["/proc/asound/card2/midi1"] = nil
+files["/proc/asound/card3/midi0"] = "Virtual Raw MIDI (16 ports)\n"
+check(V.card() == 3 and V.hw_entries()[1] == "hw:VirMIDI,0", "the card number follows the system (card 3), the device index is the device's")
+files["/proc/asound/cards"] = " 1 [Device         ]: USB-Audio - USB Audio Device\n                      C-Media at usb-0000:00:14.0-1\n"
+check(V.card() == nil, "another card is not it")
+
 os.getenv = real_getenv
 if fails == 0 then print("virmidi_test: all passed") end
 os.exit(fails == 0 and 0 or 1)

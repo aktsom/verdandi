@@ -47,6 +47,7 @@ const char *udev_device_get_sysattr_value(struct udev_device *d, const char *k) 
     auto i = d->attrs.find(k);
     return i == d->attrs.end() ? NULL : i->second.c_str();
 }
+const char *udev_device_get_driver(struct udev_device *) { return NULL; }
 }
 
 // ---- what the monitor hands on ----
@@ -65,6 +66,7 @@ int jack_midi_in_start(void) { return -1; }
 int aseq_out_start(void) { return -1; }
 int dev_list_midi_sweep(void) { return 0; }
 int dev_list_midi_ports_listed(const char *) { return 0; }
+int dev_list_midi_release(const char *) { return 0; }
 unsigned int dev_midi_port_count(const char *) { return 0; }
 
 static int failures;

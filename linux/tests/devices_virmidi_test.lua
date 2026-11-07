@@ -12,7 +12,11 @@ screen.text_right = function(s) frame[#frame + 1] = "R:" .. tostring(s) end
 screen.text_extents = function(s) return #tostring(s) * 5 end
 local function drawn(s) for _, t in ipairs(frame) do if t:find(s, 1, true) then return true end end return false end
 local function lines() local r = {} for _, t in ipairs(frame) do if t:match("^[LR]:") then r[#r + 1] = t:sub(3) end end return r end
-_menu = {redraw = function() end, set_page = function(p) _menu.page = p end}
+local redraws = 0
+local timer = {running = false, time = 0, count = 0, event = nil}
+function timer:start() self.running = true end
+function timer:stop() self.running = false end
+_menu = {redraw = function() redraws = redraws + 1 end, set_page = function(p) _menu.page = p end, timer = timer}
 package.loaded['core/keyboard'] = {keymap = {us = {}}, selected_map = "us"}
 midi = {devices = {}, vports = {}}; grid = {devices = {}, vports = {}}; arc = {devices = {}, vports = {}}; hid = {devices = {}, vports = {}}
 for i = 1, 16 do midi.vports[i] = {name = "none"} end
@@ -21,7 +25,7 @@ for i = 1, 4 do grid.vports[i] = {name = "none"}; arc.vports[i] = {name = "none"
 local link = {0, ""}
 _norns = {alsa_midi_link = function() return link[1], link[2] end}
 -- the module, faked
-local state = {loaded = false, status = "idle", started = 0}
+local state = {loaded = false, status = "idle", started = 0, detail = nil, hw = {}}
 package.loaded['core/virmidi'] = {
   to = function() return "VirMIDI" end, configured = function() return true end, wants_module = function() return true end,
   loaded = function() return state.loaded end, load_status = function() return state.status end,
@@ -30,6 +34,9 @@ package.loaded['core/virmidi'] = {
   guide_lines = function() return {"REAPER READS RAW MIDI ONLY.", "THE VIRTUAL MIDI CARD", "SNDVIRMIDI BRIDGES IT."} end,
   permanent_lines = function() return {"/etc/modules-load.d/", "snd-virmidi"} end,
   reaper_entry = function(c) return c end, reaper_hw = function(c) return "hw:VirMIDI,0" end,
+  load_detail = function() return state.detail end,
+  failure_lines = function(why) return {"FAILED (" .. tostring(why) .. "): " .. (why == "cancelled" and "THE PASSWORD DIALOG WAS CLOSED." or "NO ANSWER."), "TYPE THIS IN A TERMINAL:", "sudo modprobe snd-virmidi midi_devs=1"} end,
+  card = function() return state.loaded and 2 or nil end, hw_entries = function() return state.hw end,
 }
 local page = dofile("lua/core/menu/devices.lua")
 local function press(n) page.key(n, 1) end
@@ -54,9 +61,30 @@ press(2); check(page.mode == "virmidi" and state.started == 0, "K2 on the questi
 press(3); press(3)
 check(state.started == 1 and page.mode == "virmidi", "K3 yes starts the load once"); page.redraw()
 check(drawn("WAITING"), "while it runs the page says so: " .. table.concat(lines(), " | "))
--- failed: the command to type
-state.status = "failed"; page.redraw()
+-- the page does not wait for a key: a poll runs while it waits (the password dialog is a person)
+check(timer.running and timer.event ~= nil and timer.time > 0 and timer.time <= 2, "a poll of at most two seconds runs while the page waits (" .. tostring(timer.time) .. ")")
+-- the dialog is closed: the poll notices, the page redraws by itself and says it in plain words with the command to type
+state.status = "failed"; state.detail = "cancelled"
+local before = redraws
+timer.event()
+check(redraws > before, "the poll redraws the page when the state changed, no key pressed")
+page.redraw()
+check(table.concat(lines(), " "):find("DIALOG WAS CLOSED", 1, true) and drawn("modprobe"), "cancelled: plain words and the command to type (" .. table.concat(lines(), " | ") .. ")")
+before = redraws; timer.event()
+check(redraws == before, "a poll that finds nothing new does not redraw")
+state.detail = "timeout"; timer.event(); page.redraw()
+check(table.concat(lines(), " "):find("NO ANSWER", 1, true), "no answer in time: said (" .. table.concat(lines(), " | ") .. ")")
 check(drawn("FAILED") and drawn("modprobe"), "failed: the command to type is shown (" .. table.concat(lines(), " | ") .. ")")
+-- the load finishes while the page waits (the password was entered): the poll refreshes it to the loaded state, no key pressed
+state.status = "running"; state.detail = nil; timer.event(); page.redraw()
+check(drawn("WAITING"), "running again: waiting")
+state.loaded = true; state.status = "ok"; state.hw = {"hw:VirMIDI,0"}
+before = redraws
+timer.event()
+check(redraws > before, "the poll sees the module loaded and redraws")
+page.redraw()
+check(drawn("LOADED") and not drawn("WAITING FOR THE PASSWORD"), "the page is in the loaded state (" .. table.concat(lines(), " | ") .. ")")
+check(drawn("hw:VirMIDI,0"), "with the Reaper entry that follows the card and device index, before any ALSA port is linked (" .. table.concat(lines(), " | ") .. ")")
 -- loaded, nothing linked yet
 state.loaded = true; state.status = "ok"; page.redraw()
 check(drawn("LOADED"), "loaded: says so")
@@ -69,6 +97,12 @@ check(drawn("hw:VirMIDI,0"), "with its hw form")
 press(3); page.redraw()
 check(drawn("modules-load.d") or drawn("snd-virmidi"), "K3 on a loaded page shows how to keep it after a reboot (" .. table.concat(lines(), " | ") .. ")")
 press(2); check(page.mode == "virmidi" or page.mode == "type", "K2 goes back")
+press(2)
+check(page.mode == "type" and not timer.running, "leaving the page stops the poll (" .. tostring(page.mode) .. ", running " .. tostring(timer.running) .. ")")
+-- the page opened on a loaded module needs no poll
+page.pos = 6; press(3)
+check(page.mode == "virmidi" and not timer.running, "an already loaded module: nothing to wait for, no poll")
+press(2)
 
 -- the setting off: no entry
 package.loaded['core/virmidi'].configured = function() return false end
