@@ -271,3 +271,16 @@ Tools used to **build** the package (not shipped): `cmake`, `ninja-build`, `dpkg
 | libsamplerate (linked by MiBraids) | 0.2.2-19 (`2ccde95`, a submodule of mi-UGens) | BSD-2-Clause | https://github.com/libsndfile/libsamplerate |
 
 Build: cmake against the SuperCollider 3.14.1 source of the package build (`-DSC_PATH`), the `samplerate` target first (a parallel build races on it), the help files left out. The three licence texts are installed in `/opt/verdandi/licenses/mi-ugens/`, the source locations and commits in `/opt/verdandi/licenses/SOURCES.txt`, and the `copyright` file has a stanza for `opt/verdandi/mi-ugens/*`. Nothing is downloaded at run time. The pin file holds a serial number: the launcher replaces its own older copy when the serial grows (`docs/port/mi-ugens.md`).
+
+
+## NamAmp (shipped in the package, `linux/namamp.pin`, built by `linux/package.sh namamp`)
+
+| part | version | licence | where it comes from |
+|---|---|---|---|
+| the wrapper (`linux/namamp/NamAmp.cpp`: the UGen `NamAmp` and the plug-in command `namLoad`) | this repository | GPL-3.0-or-later | ours (a copy of the source is installed in `/opt/verdandi/licenses/namamp/NamAmp.cpp.txt`) |
+| NeuralAmpModelerCore (the NAM runtime: WaveNet A1 and A2, LSTM, convolutional, linear, slimmable) | commit `0b3d3c97b0859a3a8c92a8628c4dd89a25eb5842` | MIT | https://github.com/sdatkinson/NeuralAmpModelerCore |
+| Eigen (matrices; header only, a submodule of the NAM core) | 5.0.1, commit `bc3b39870ecb690a623a3f49149a358b95c5781d` | MPL-2.0 | https://gitlab.com/libeigen/eigen (its source is at that URL; nothing of it is modified) |
+| nlohmann/json (single header vendored by the NAM core) | 3.12.0 | MIT | https://github.com/nlohmann/json |
+| SuperCollider plug-in headers | 3.14.1 (the bundled source) | GPL-3.0-or-later | build input only, not shipped |
+
+Build: `g++ -std=c++20 -O3 -fPIC -DNDEBUG -DNAM_SAMPLE_FLOAT`, baseline x86-64 (no AVX2 build), linked with `-Wl,--no-undefined`, stripped; about 20 seconds on four jobs, about 1.0 MB. It needs glibc 2.38 (the package builder and base are Ubuntu 24.04). The licence texts are in `/opt/verdandi/licenses/namamp/`, the source locations and commits in `/opt/verdandi/licenses/SOURCES.txt`, and the `copyright` file has a stanza for `opt/verdandi/namamp/*`. Nothing is downloaded at run time. Test data: two small example models of NeuralAmpModelerCore (MIT) in `linux/tests/fixtures/nam/` with their licence text.

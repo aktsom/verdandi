@@ -242,3 +242,65 @@ TEST_CASE("the note and the CLEAN UP list while norns runs: baseline first, then
     CHECK(mi_foreign_note_text() == nullptr);
     CHECK(mi_foreign_fix_text() == nullptr);
 }
+
+// ---- the running norns, any plug-in (not only mi-UGens): what a script installs while norns runs
+TEST_CASE("runtime, any wrong-architecture plug-in: the note names it, the CLEAN UP list has it, non-plug-in files and right-architecture plug-ins are ignored") {
+    fresh();
+    setenv("HOME", HOME.c_str(), 1);
+    setenv("MI_FOREIGN_INTERVAL", "0", 1);
+    setenv("PLUGIN_ARCH_UNAME", "x86_64", 1);
+    unsetenv("NORNS_MI_UGENS_HEAL");
+    unsetenv("NORNS_PLUGIN_HEAL");
+    // a fresh process state is needed for the baseline: a plug-in that is there at the first look belongs to the launcher
+    CHECK(mi_foreign_note_text() == nullptr);
+    put(EXT() + "/synthpack/Thing_scsynth.so", arm());       // a script's installer, while norns runs
+    put(HOME + "/dust/code/s/lib/Other_scsynth.so", arm());  // a script that unpacks into its own folder
+    put(HOME + "/dust/code/s/lib/cjson.so", arm());          // a Lua library: never
+    put(EXT() + "/fine/Fine_scsynth.so", x86());             // this machine's own architecture: never
+    put(EXT() + "/readme/notes.txt", "x");
+    const char *n = mi_foreign_note_text();
+    REQUIRE(n != nullptr);
+    std::string note = n;
+    CHECK(note.find("A script installed a Raspberry Pi plug-in") == 0);
+    CHECK(note.find("restart") != std::string::npos);
+    CHECK(note.find("CLEAN UP") != std::string::npos);
+    CHECK(note.find("mi-UGens") == std::string::npos);   // not mi-UGens: the general wording
+    std::string fix = mi_foreign_fix_text() ? mi_foreign_fix_text() : "";
+    CHECK(fix.find(EXT() + "/synthpack\t") != std::string::npos);
+    CHECK(fix.find(HOME + "/dust/code/s/lib/Other_scsynth.so\t") != std::string::npos);
+    CHECK(fix.find("cjson") == std::string::npos);
+    CHECK(fix.find("/fine") == std::string::npos);
+    CHECK(fix.find("32-bit ARM") != std::string::npos);
+    // the setting
+    setenv("NORNS_PLUGIN_HEAL", "0", 1);
+    CHECK(mi_foreign_note_text() == nullptr);
+    CHECK(mi_foreign_fix_text() == nullptr);
+    unsetenv("NORNS_PLUGIN_HEAL");
+    // gone when moved
+    REQUIRE(system(("rm -rf '" + EXT() + "/synthpack' '" + HOME + "/dust/code/s/lib/Other_scsynth.so'").c_str()) == 0);
+    CHECK(mi_foreign_note_text() == nullptr);
+}
+
+TEST_CASE("runtime: the mi-UGens wording stays for mi-UGens only, and mi_ugens_heal=0 silences only those") {
+    fresh();
+    setenv("HOME", HOME.c_str(), 1);
+    setenv("MI_FOREIGN_INTERVAL", "0", 1);
+    setenv("PLUGIN_ARCH_UNAME", "x86_64", 1);
+    unsetenv("NORNS_PLUGIN_HEAL");
+    setenv("NORNS_MI_UGENS_HEAL", "0", 1);
+    CHECK(mi_foreign_note_text() == nullptr);
+    put(EXT() + "/late-mi/MiRings.so", arm());
+    CHECK(mi_foreign_note_text() == nullptr);              // a mi-UGens download with mi_ugens_heal=0: said by nobody here
+    put(EXT() + "/late-other/Late_scsynth.so", arm());
+    const char *n = mi_foreign_note_text();
+    REQUIRE(n != nullptr);                                  // another plug-in still is
+    CHECK(std::string(n).find("A script installed a Raspberry Pi plug-in") == 0);
+    CHECK(std::string(mi_foreign_fix_text()).find("late-mi") == std::string::npos);
+    unsetenv("NORNS_MI_UGENS_HEAL");
+    n = mi_foreign_note_text();
+    REQUIRE(n != nullptr);                                  // both again
+    REQUIRE(system(("rm -rf '" + EXT() + "/late-other'").c_str()) == 0);
+    n = mi_foreign_note_text();
+    REQUIRE(n != nullptr);
+    CHECK(std::string(n).find("A script downloaded Raspberry Pi mi-UGens") == 0); // only the mi-UGens one is left: the specific wording
+}

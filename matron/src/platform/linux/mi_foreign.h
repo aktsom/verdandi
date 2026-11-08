@@ -271,6 +271,82 @@ static inline Result scan(const std::string &home, const std::string &machine, c
     return res;
 }
 
+
+// ---- any wrong-architecture SuperCollider plug-in (the running norns, and the same files the launcher's start-up heal moves: linux/plugin-heal.sh uses
+// build/linux/plugin_arch_check for those). the user's extension folder and dust/code only (the two places scripts install into); a folder directly in the extension
+// folder whose plug-ins are all wrong is one target, else the files. Lua libraries in dust/code and files of this machine's architecture are never listed.
+static inline void walkAny(const std::string &dir, int depth, bool inDust, const std::string &skip, std::vector<std::string> &out) {
+    if (depth > 8 || dir == skip) {
+        return;
+    }
+    DIR *d = opendir(dir.c_str());
+    if (d == NULL) {
+        return;
+    }
+    while (struct dirent *e = readdir(d)) {
+        std::string name = e->d_name;
+        if (name == "." || name == "..") {
+            continue;
+        }
+        std::string path = dir + "/" + name;
+        struct stat st;
+        if (lstat(path.c_str(), &st) != 0) {
+            continue;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            walkAny(path, depth + 1, inDust, skip, out);
+        } else if ((S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) && plugin_arch::isPluginFile(path, inDust)) {
+            out.push_back(path);
+        }
+    }
+    closedir(d);
+}
+
+static inline Result scanAny(const std::string &home, const std::string &machine) {
+    using namespace plugin_arch;
+    Result res;
+    Expect expect = expectedFor(machine);
+    if (expect.machine == 0) {
+        return res;
+    }
+    std::string ext = home + "/.local/share/SuperCollider/Extensions";
+    std::vector<std::string> files;
+    walkAny(ext, 0, false, "\x01none", files);
+    walkAny(home + "/dust/code", 0, true, "\x01none", files);
+    std::sort(files.begin(), files.end());
+    files.erase(std::unique(files.begin(), files.end()), files.end());
+    std::vector<Finding> found = plugin_arch::scan(files, [](const std::string &p) { return readHead(p); }, machine);
+    for (const auto &g : groupFindings(found, files, {ext})) {
+        std::string why = "wrong-architecture plug-in (" + describe(g.items.front().info) + ") on " + expect.name;
+        if (!g.moveFolder.empty()) {
+            res.arm.push_back({g.moveFolder, true, why});
+        } else {
+            for (const auto &f : g.items) {
+                res.arm.push_back({f.path, false, why});
+            }
+        }
+    }
+    return res;
+}
+
+// is every file of this target a mi-UGens plug-in?
+static inline bool isMiTarget(const Target &t) {
+    if (!t.dir) {
+        return isMiPlugin(baseOf(t.path));
+    }
+    std::vector<std::string> inside;
+    walkPlugins(t.path, 0, "\x01none", inside);
+    if (inside.empty()) {
+        return false;
+    }
+    for (const auto &p : inside) {
+        if (!isMiPlugin(baseOf(p))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // the running norns: what appeared after the first look
 class Runtime {
   public:

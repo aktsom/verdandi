@@ -453,6 +453,19 @@ NORNS_MI_PACK="${NORNS_MI_PACK:-$REPO/mi-ugens/mi-UGens}"
 # also for the check while norns runs (it then only shows a note, the move is always a confirmation in SYSTEM > CLEAN UP)
 NORNS_MI_UGENS_HEAL="${NORNS_MI_UGENS_HEAL:-$(conf_get mi_ugens_heal)}"
 export NORNS_MI_UGENS_HEAL
+# the NamAmp plug-in (princeton's NAM amp) ships x86_64 too: seeded to Extensions/princeton/NamAmp.so before sclang starts when the script is installed. NORNS_NAMAMP=0 or
+# namamp=0 in audio.conf turns that (and the cmp/cp shims' special case) off. namamp_gain=<dB> (NORNS_NAMAMP_GAIN, default 0) is added to the gain argument that the
+# script sends with namLoad; the plug-in reads it at every load (restart norns or load the model again)
+NORNS_NAMAMP="${NORNS_NAMAMP:-$(conf_get namamp)}"
+export NORNS_NAMAMP
+NORNS_NAMAMP_GAIN="${NORNS_NAMAMP_GAIN:-$(conf_get namamp_gain)}"
+export NORNS_NAMAMP_GAIN
+NORNS_NAMAMP_PACK="${NORNS_NAMAMP_PACK:-$REPO/namamp/NamAmp}"
+export NORNS_NAMAMP_PACK
+# any wrong-architecture SuperCollider plug-in that would stop sclang is moved aside into disabled/ at the start (linux/plugin-heal.sh); NORNS_PLUGIN_HEAL=0 or plugin_heal=0
+# in audio.conf turns that off, and then the plug-in check below only reports
+NORNS_PLUGIN_HEAL="${NORNS_PLUGIN_HEAL:-$(conf_get plugin_heal)}"
+export NORNS_PLUGIN_HEAL
 
 AUDIO_TOOL="$REPO/build/linux/audio_devices"
 export NORNS_AUDIO_TOOL="$AUDIO_TOOL"
@@ -506,10 +519,14 @@ rm -f "$RESTART_MARK" "$AUDIO_MARK"
 
 start_norns() {
     export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
+    # wrong-architecture plug-ins a script installed (it did that while norns ran, or an earlier version did): moved aside into disabled/ with a manifest line, before
+    # anything is seeded and before sclang starts. the plug-ins Verdandi ships (NamAmp, mi-UGens) are then seeded in their place below
+    [ -x "$REPO/linux/plugin-heal.sh" ] && PLUGIN_ARCH_CHECK_TOOL="$REPO/build/linux/plugin_arch_check" NORNS_TIDY="$NORNS_TIDY" "$REPO/linux/plugin-heal.sh" heal "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # the shipped mi-UGens pack first (a copy of the Raspberry Pi build in the same place is then reported by the check below)
     [ -x "$REPO/linux/mi-ugens-seed.sh" ] && "$REPO/linux/mi-ugens-seed.sh" seed "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     [ -x "$REPO/linux/mi-ugens-seed.sh" ] && MI_HEAL_TOOL="$REPO/build/linux/mi_heal" NORNS_TIDY="$NORNS_TIDY" "$REPO/linux/mi-ugens-seed.sh" heal "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
-    # before norns and sclang start: SuperCollider stops at the first plug-in it cannot load. report only (one line per file)
+    [ -x "$REPO/linux/namamp-seed.sh" ] && "$REPO/linux/namamp-seed.sh" seed "$NORNS_NAMAMP_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
+    # before norns and sclang start: SuperCollider stops at the first plug-in it cannot load. what is still wrong here (a system folder, or the heal is off) is reported only (one line per file)
     [ -x "$REPO/build/linux/plugin_arch_check" ] && "$REPO/build/linux/plugin_arch_check" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # norns and the commands its scripts run (os.execute, norns.system_cmd) get linux/shims first on the PATH: "sudo systemctl restart norns-*" (a script's
     # installer) becomes a restart request, and sudo never waits for a password (linux/shims/norns-shim-lib.sh). NORNS_NO_SHIMS=1: not

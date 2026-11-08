@@ -1,6 +1,6 @@
 # princeton and its NamAmp plug-in: findings and plan
 
-Status: **investigation and plan only. No product code was written.** Everything that was built or run is in a scratch directory (appendix A has the commands and the scratch wrapper so the work can be repeated). Date of the findings: 2026-11-08.
+Status: **built** (KNOWN-ISSUES 41: `linux/namamp/NamAmp.cpp`, `linux/namamp.pin`, `package.sh namamp`, `linux/namamp-seed.sh`, the `cmp`/`cp` shims (option A of section 4.4), `linux/plugin-heal.sh`, the generalised runtime scan). The text below is the investigation and plan it was built from (originally: investigation and plan only, no product code). Everything that was built or run is in a scratch directory (appendix A has the commands and the scratch wrapper so the work can be repeated). Date of the findings: 2026-11-08.
 
 ## 0. Verdict
 

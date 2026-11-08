@@ -607,14 +607,14 @@ if command -v jackd > /dev/null; then
         "$REPO/linux/tests/mi_heal_boot_test.sh" "$MHLOG" > /dev/null 2>&1
         mi_heal_boot_ok() {
             local bad=0 l
-            for l in "PROBE start note.A script downloaded Raspberry Pi mi-UGens. Moved aside; Verdandi's own copy is in use." "PROBE start note file gone.true" "PROBE start moved.true" \
+            for l in "PROBE start note.A script installed a Raspberry Pi plug-in (arm-pack). Moved aside; Verdandi's own x86-64 copy is in use." "PROBE start note file gone.true" "PROBE start moved.true" \
                 "PROBE start runtime note.nil" "PROBE runtime note.A script downloaded Raspberry Pi mi-UGens. SYSTEM > CLEAN UP moves them aside, then restart norns." \
                 "PROBE runtime still there.true" "PROBE cleanup row.true" "PROBE not moved before the confirmation.true" "PROBE moved after the confirmation.true" \
                 "PROBE runtime note after.nil" "PROBE sclang errors: 0"; do
                 grep -aq "$l" "$MHLOG" || { echo "missing: $l"; bad=1; }
             done
-            [ "$(grep -ac "^norns.sh: mi-UGens: moved 1 foreign" "$MHLOG")" = 1 ] || { echo "the launcher line must appear exactly once"; bad=1; }
-            [ "$(grep -ac "^mi-UGens: A script downloaded Raspberry Pi mi-UGens. Moved aside" "$MHLOG")" = 1 ] || { echo "the note is logged once"; bad=1; }
+            [ "$(grep -ac "^norns.sh: plugin heal: moved 1 " "$MHLOG")" = 1 ] || { echo "the launcher line must appear exactly once"; bad=1; }
+            [ "$(grep -ac "^plugin heal: A script installed a Raspberry Pi plug-in (arm-pack). Moved aside" "$MHLOG")" = 1 ] || { echo "the note is logged once"; bad=1; }
             return $bad
         }
         run "mi-UGens:headless boot with a Raspberry Pi download next to the own pack: moved before sclang, note once, a later download noticed and moved after the CLEAN UP confirmation" mi_heal_boot_ok
@@ -622,6 +622,40 @@ if command -v jackd > /dev/null; then
         echo "SKIP  mi-UGens:heal boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and build/linux/mi_heal from linux/build.sh)"
     fi
 fi
+# NamAmp (docs/port/namamp.md): the seed, the cmp / cp shims, the start-up heal of any wrong-architecture plug-in, the runtime scan, the plug-in itself rendered offline, and the real princeton
+# script in a headless boot (needs a clone: NORNS_PRINCETON=<dir>; skipped otherwise)
+run "namamp:seed, stamp, update by serial, left-alone cases, off switch" linux/tests/namamp_seed_test.sh
+run "namamp:cmp and cp shims answer princeton's pair for our intact copy only; every other call is the real program" linux/tests/namamp_shim_test.sh
+run "plugin heal:wrong-architecture plug-ins moved aside at the start (manifest, one line, one note, restore, replacement noted, outside the home never moved, off)" linux/tests/plugin_heal_test.sh
+run "namamp:the plug-in rendered offline with the bundled scsynth (models, silence, missing file, gain argument and namamp_gain)" linux/tests/namamp_render_test.sh
+if command -v jackd > /dev/null; then
+    NBLOG="$T/namamp-boot.log"
+    "$REPO/linux/tests/namamp_boot_test.sh" "$NBLOG" > "$T/namamp-boot.skip" 2>&1
+    nb_rc=$?
+    if [ $nb_rc -eq 77 ]; then
+        echo "$(sed -n 's/^SKIP namamp_boot_test: /SKIP  namamp:princeton headless boot - /p' "$T/namamp-boot.skip" | head -1)"
+    else
+        namamp_boot_ok() {
+            local bad=0 l
+            for l in "PROBE start note.A script installed Raspberry Pi plug-ins (other-script, princeton). Moved aside" "PROBE nam status.ok" "PROBE nam files.2.true" "PROBE sclang elf errors: 0" "PROBE nam available: 1" \
+                "PROBE manifest: 3" "PROBE moved other: yes" "PROBE runtime note.A script installed a Raspberry Pi plug-in (late-pack)" "PROBE cleanup row.true" "PROBE not moved before the confirmation.true" \
+                "PROBE moved after the confirmation.true" "PROBE runtime note after.nil"; do
+                grep -aq "$l" "$NBLOG" || { echo "missing: $l"; bad=1; }
+            done
+            [ "$(grep -ac "^norns.sh: plugin heal: moved 2 " "$NBLOG")" = 1 ] || { echo "the heal line must appear exactly once"; bad=1; }
+            [ "$(grep -ac "^norns.sh: NamAmp: seeded " "$NBLOG")" = 1 ] || { echo "the seed line must appear exactly once"; bad=1; }
+            grep -aq "^norns: NamAmp.so: Verdandi's own x86-64 copy is in use" "$NBLOG" || { echo "the shim did not answer the script's cmp"; bad=1; }
+            [ "$(grep -a '^PROBE ext_after' "$NBLOG" | cut -d: -f2)" = "$(grep -a '^PROBE pack sha' "$NBLOG" | cut -d: -f2)" ] || { echo "the seeded copy changed while the script ran"; bad=1; }
+            [ "$(grep -a '^PROBE script_after' "$NBLOG" | cut -d: -f2)" = "$(grep -a '^PROBE arm sha' "$NBLOG" | cut -d: -f2)" ] && [ "$(grep -a '^PROBE script_before' "$NBLOG" | cut -d: -f2)" = "$(grep -a '^PROBE script_after' "$NBLOG" | cut -d: -f2)" ] || { echo "the script's own file in dust/ changed"; bad=1; }
+            local off on
+            off="$(grep -a '^PROBE peak off' "$NBLOG" | sed 's/.*PEAK \([0-9.]*\).*/\1/')"; on="$(grep -a '^PROBE peak on' "$NBLOG" | sed 's/.*PEAK \([0-9.]*\).*/\1/')"
+            awk -v a="$off" -v b="$on" 'BEGIN { exit !(a > 0.05 && b > 0.0005 && b < a * 0.8) }' || { echo "no NAM signal: peak off $off, on $on"; bad=1; }
+            return $bad
+        }
+        run "namamp:princeton boots headless with the Raspberry Pi file in place: moved aside, our copy seeded, the script sees NAM installed, signal, a later wrong-architecture plug-in is noted and moved after the confirmation" namamp_boot_ok
+    fi
+fi
+
 # a headless boot with the Emplaitress mod enabled and the shipped pack: seeded, found, no download. needs the built pack (linux/package.sh mi) and a clone of
 # the mod (NORNS_EMPLAITRESS=<dir>); skipped otherwise. the second boot turns the seeding off and must see the download (the check that this can fail)
 if command -v jackd > /dev/null; then

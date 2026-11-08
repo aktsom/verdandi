@@ -32,7 +32,7 @@ bool haveNote = false;
 
 void refresh() {
     const char *home = getenv("HOME");
-    if (home == nullptr || healOff(getenv("NORNS_MI_UGENS_HEAL"))) {
+    if (home == nullptr || healOff(getenv("NORNS_PLUGIN_HEAL"))) {
         haveNote = false;
         return;
     }
@@ -53,14 +53,32 @@ void refresh() {
         struct utsname u;
         machine = uname(&u) == 0 ? u.machine : "";
     }
-    mi_foreign::Result r = mi_foreign::scan(home, machine, mi_foreign::ownClasses(home));
+    // every wrong-architecture plug-in a script installs (mi-UGens included); mi_ugens_heal=0 silences the mi-UGens ones only
+    mi_foreign::Result r = mi_foreign::scanAny(home, machine);
     std::vector<mi_foreign::Target> fresh = runtime.update(r);
-    fixText.clear();
+    bool miOff = healOff(getenv("NORNS_MI_UGENS_HEAL"));
+    std::vector<mi_foreign::Target> shown;
+    bool allMi = true;
     for (const auto &t : fresh) {
+        bool mi = mi_foreign::isMiTarget(t);
+        if (mi && miOff) {
+            continue;
+        }
+        allMi = allMi && mi;
+        shown.push_back(t);
+    }
+    fixText.clear();
+    for (const auto &t : shown) {
         fixText += t.path + "\t" + t.why + "\n";
     }
-    haveNote = !fresh.empty();
-    noteText = "A script downloaded Raspberry Pi mi-UGens. SYSTEM > CLEAN UP moves them aside, then restart norns.";
+    haveNote = !shown.empty();
+    if (allMi) {
+        noteText = "A script downloaded Raspberry Pi mi-UGens. SYSTEM > CLEAN UP moves them aside, then restart norns.";
+    } else {
+        std::string name = shown[0].path.substr(shown[0].path.rfind('/') + 1);
+        std::string more = shown.size() > 1 ? " and " + std::to_string(shown.size() - 1) + " more" : "";
+        noteText = "A script installed a Raspberry Pi plug-in (" + name + more + "). SYSTEM > CLEAN UP moves it aside, then restart norns.";
+    }
 }
 
 } // namespace

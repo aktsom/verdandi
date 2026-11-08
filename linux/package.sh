@@ -158,6 +158,59 @@ mi_stamp() {
     "$REPO/linux/mi-ugens-seed.sh" stamp "$1" "$MI_UGENS_SERIAL" "$MI_UGENS_COMMIT" "$(date -u -d "@$EPOCH" +%Y-%m-%d)" "$VERSION" "$MI_UGENS_TAG + pull request $MI_UGENS_PR $MI_UGENS_PR_COMMIT"
 }
 
+# the x86_64 NamAmp plug-in (linux/namamp.pin): our own wrapper (linux/namamp/NamAmp.cpp) over NeuralAmpModelerCore at a pinned commit (Eigen is its submodule, nlohmann/json
+# is vendored in it), compiled against the SuperCollider source above. the result is $CACHE/namamp-pack/NamAmp (the plug-in, the stamp and the licence texts); build_tree copies it
+# into the program tree. nothing is downloaded at run time
+build_namamp() {
+    . "$REPO/linux/namamp.pin"
+    say "NamAmp: NeuralAmpModelerCore $NAMAMP_CORE_COMMIT"
+    local src="$CACHE/namamp-core" ob="$CACHE/namamp-build" out="$CACHE/namamp-pack" pack="$CACHE/namamp-pack/NamAmp"
+    local sc="$CACHE/supercollider"
+    [ -f "$sc/include/plugin_interface/SC_PlugIn.hpp" ] || die "NamAmp: the SuperCollider source is missing in $sc (run '$0 sc' first)"
+    clone_at "$NAMAMP_CORE_REPO" "$src" "$NAMAMP_CORE_COMMIT"
+    [ "$(git -C "$src" rev-parse HEAD)" = "$NAMAMP_CORE_COMMIT" ] || die "NamAmp: $NAMAMP_CORE_COMMIT is not what the NAM core checkout is at"
+    git -C "$src" submodule update -q --init Dependencies/eigen
+    [ "$(git -C "$src/Dependencies/eigen" rev-parse HEAD)" = "$NAMAMP_EIGEN_COMMIT" ] || die "NamAmp: Eigen is not at $NAMAMP_EIGEN_COMMIT"
+    rm -rf "$ob" "$out"
+    mkdir -p "$ob" "$pack"
+    local flags="-std=c++20 -O3 -fPIC -DNDEBUG -DNAM_SAMPLE_FLOAT -ffile-prefix-map=$CACHE=. -ffile-prefix-map=$REPO=."
+    local inc="-I $src -I $src/NAM -I $src/Dependencies/nlohmann -I $src/Dependencies/eigen -I $sc/include/plugin_interface -I $sc/include/common -I $sc/server/plugin_interface -I $sc/common"
+    local f
+    for f in "$src"/NAM/*.cpp "$src"/NAM/wavenet/*.cpp "$REPO/linux/namamp/NamAmp.cpp"; do
+        printf '%s\n%s\n' "$f" "$ob/$(basename "$(dirname "$f")")_$(basename "$f" .cpp).o"
+    done | xargs -P "$JOBS" -n2 sh -c "g++ $flags $inc -c \"\$0\" -o \"\$1\"" || die "NamAmp: the build failed"
+    g++ -shared -o "$pack/NamAmp.so" "$ob"/*.o -Wl,--no-undefined -Wl,-z,relro,-z,now || die "NamAmp: the link failed"
+    strip --strip-unneeded "$pack/NamAmp.so" 2> /dev/null || true
+    [ -f "$pack/NamAmp.so" ] && [ "$(od -An -tx1 -j18 -N2 "$pack/NamAmp.so" | tr -d ' ')" = 3e00 ] || die "NamAmp: NamAmp.so is not an x86-64 file"
+    # the licence texts (what the three libraries and our wrapper are under)
+    install -m 644 "$src/LICENSE" "$out/LICENSE-NeuralAmpModelerCore-MIT.txt"
+    install -m 644 "$src/Dependencies/eigen/COPYING.MPL2" "$out/LICENSE-Eigen-MPL-2.0.txt"
+    {
+        echo "MIT License"
+        echo
+        printf 'Copyright (c) %s\n' "$(sed -n 's|^// SPDX-FileCopyrightText: *||p' "$src/Dependencies/nlohmann/json.hpp" | head -n 1)"
+        echo
+        cat <<MIT
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+MIT
+    } > "$out/LICENSE-nlohmann-json-MIT.txt"
+    grep -q "^Copyright (c) 20.*Lohmann" "$out/LICENSE-nlohmann-json-MIT.txt" || die "NamAmp: no copyright line found in the nlohmann/json header"
+    namamp_stamp "$pack"
+}
+# the stamp of the NamAmp pack folder (after the last change to the plug-in: it holds its sha256)
+namamp_stamp() {
+    . "$REPO/linux/namamp.pin"
+    "$REPO/linux/namamp-seed.sh" stamp "$1" "$NAMAMP_SERIAL" "$NAMAMP_CORE_COMMIT" "$(date -u -d "@$EPOCH" +%Y-%m-%d)" "$VERSION" "NeuralAmpModelerCore $NAMAMP_CORE_COMMIT, Eigen $NAMAMP_EIGEN_COMMIT"
+}
+
 # maiden is built by its own script into a scratch norns home, then copied into the tree
 build_maiden() {
     say "maiden"
@@ -248,6 +301,12 @@ build_tree() {
     rm -rf "$T/mi-ugens"
     mkdir -p "$T/mi-ugens"
     cp -a "$CACHE/mi-ugens-pack/mi-UGens" "$T/mi-ugens/mi-UGens"
+    install -m 755 "$REPO/linux/namamp-seed.sh" "$T/linux/namamp-seed.sh"
+    install -m 755 "$REPO/linux/plugin-heal.sh" "$T/linux/plugin-heal.sh"
+    [ -f "$CACHE/namamp-pack/NamAmp/NamAmp.so" ] || die "the NamAmp plug-in is not built: run '$0 namamp' (or '$0 all')"
+    rm -rf "$T/namamp"
+    mkdir -p "$T/namamp"
+    cp -a "$CACHE/namamp-pack/NamAmp" "$T/namamp/NamAmp"
     install -m 644 "$REPO/linux/brand.sh" "$T/linux/brand.sh"
     # the marker that makes linux/norns.sh use the installed layout (home in ~/Verdandi, program tree read-only)
     echo "installed by the verdandi package" > "$T/INSTALLED"
@@ -266,6 +325,7 @@ build_tree() {
     done
     # the list of hashes is made last: the files above are final
     mi_stamp "$T/mi-ugens/mi-UGens"
+    namamp_stamp "$T/namamp/NamAmp"
 
     # the places the desktop looks in
     install -D -m 755 /dev/stdin "$STAGE/usr/bin/verdandi" <<WRAP
@@ -282,12 +342,18 @@ WRAP
 build_licenses() {
     local L="$STAGE$PREFIX/licenses" f
     . "$REPO/linux/mi-ugens.pin"
+    . "$REPO/linux/namamp.pin"
     rm -rf "$L"
-    mkdir -p "$L/mi-ugens" "$L/supercollider" "$L/sc3-plugins" "$L/libmonome" "$L/softcut" "$L/fonts" "$L/third-party"
+    mkdir -p "$L/mi-ugens" "$L/namamp" "$L/supercollider" "$L/sc3-plugins" "$L/libmonome" "$L/softcut" "$L/fonts" "$L/third-party"
     install -m 644 "$REPO/LICENSE.txt" "$L/norns-GPL-3.0.txt"
     install -m 644 "$REPO/crone/softcut/LICENSE.txt" "$L/softcut/LICENSE.txt"
     install -m 644 "$CACHE/supercollider/COPYING" "$L/supercollider/COPYING"
     install -m 644 "$CACHE/sc3-plugins/license.txt" "$L/sc3-plugins/license.txt"
+    for f in LICENSE-NeuralAmpModelerCore-MIT.txt LICENSE-Eigen-MPL-2.0.txt LICENSE-nlohmann-json-MIT.txt; do
+        [ -f "$CACHE/namamp-pack/$f" ] || die "NamAmp licence $f missing: run '$0 namamp'"
+        install -m 644 "$CACHE/namamp-pack/$f" "$L/namamp/$f"
+    done
+    install -m 644 "$REPO/linux/namamp/NamAmp.cpp" "$L/namamp/NamAmp.cpp.txt"
     for f in LICENSE-GPL-3.0.md LICENSE-eurorack-MIT.txt LICENSE-libsamplerate-BSD-2.txt; do
         [ -f "$CACHE/mi-ugens-pack/$f" ] || die "mi-UGens licence $f missing: run '$0 mi'"
         install -m 644 "$CACHE/mi-ugens-pack/$f" "$L/mi-ugens/$f"
@@ -315,6 +381,11 @@ Verdandi is free software (GPL-3.0). The source of every part of this package is
       $MI_UGENS_REPO  ($MI_UGENS_TAG, commit $MI_UGENS_COMMIT, plus the head of its pull request $MI_UGENS_PR, commit $MI_UGENS_PR_COMMIT);
       built by build_mi in linux/package.sh of the Verdandi source, the pin is linux/mi-ugens.pin. the Mutable Instruments code:
       https://github.com/pichenettes/eurorack  (as vendored in that repository), libsamplerate: https://github.com/libsndfile/libsamplerate
+  NamAmp (our own wrapper, linux/namamp/NamAmp.cpp of the Verdandi source, GPL-3.0-or-later; a copy is in licenses/namamp/NamAmp.cpp.txt) over
+      NeuralAmpModelerCore (MIT): $NAMAMP_CORE_REPO  (commit $NAMAMP_CORE_COMMIT)
+      Eigen (MPL-2.0, its source: https://gitlab.com/libeigen/eigen, commit $NAMAMP_EIGEN_COMMIT, header only, a submodule of the NAM core)
+      nlohmann/json (MIT, https://github.com/nlohmann/json, the single header that the NAM core vendors); built by build_namamp in linux/package.sh,
+      the pin is linux/namamp.pin. the licence texts are in licenses/namamp/
   libmonome $LIBMONOME_VERSION + the pty patch:   https://github.com/monome/libmonome (tag v$LIBMONOME_VERSION),
       the patches are linux/patches/libmonome-*.patch of the Verdandi source
   maiden (patched by linux/patches and macos/patches/maiden-host-flag.patch of the Verdandi source):
@@ -460,6 +531,13 @@ License: GPL-3+
  The wrappers are GPL-3.0-or-later (/opt/verdandi/licenses/mi-ugens/LICENSE-GPL-3.0.md). The Mutable Instruments code they build on is MIT
  (LICENSE-eurorack-MIT.txt) and libsamplerate is BSD-2-Clause (LICENSE-libsamplerate-BSD-2.txt), in the same folder. The pack is copied into a
  user's SuperCollider extension folder by the launcher.
+
+Files: opt/verdandi/namamp/*
+Copyright: the Verdandi authors (the wrapper), the authors of NeuralAmpModelerCore, Eigen and nlohmann/json
+License: GPL-3+
+ The wrapper is GPL-3.0-or-later (a copy of its source: /opt/verdandi/licenses/namamp/NamAmp.cpp.txt). NeuralAmpModelerCore and nlohmann/json are MIT
+ (LICENSE-NeuralAmpModelerCore-MIT.txt, LICENSE-nlohmann-json-MIT.txt) and Eigen is MPL-2.0 (LICENSE-Eigen-MPL-2.0.txt), in /opt/verdandi/licenses/namamp/. The plug-in is
+ copied into a user's SuperCollider extension folder by the launcher.
 
 Files: opt/verdandi/lib/*
 Copyright: William Light and the libmonome authors
@@ -651,12 +729,13 @@ INNER
 
 case "${1:-}" in
     sc) build_sc ;;
+    namamp) build_namamp ;;
     mi) build_mi ;;
     maiden) build_maiden ;;
     libmonome) build_libmonome ;;
     tree) build_libmonome; build_tree ;;
     deb) build_deb ;;
-    all) build_sc; build_mi; build_libmonome; build_maiden; build_tree; build_deb ;;
+    all) build_sc; build_mi; build_namamp; build_libmonome; build_maiden; build_tree; build_deb ;;
     clean-root) build_clean_root ;;
     print-desktop) desktop_entry ;;
     print-description) deb_description ;;

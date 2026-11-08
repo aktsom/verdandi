@@ -448,16 +448,19 @@ if _norns.grid_conflict_text and _norns.set_warning then
   -- (SYSTEM > CLEAN UP moves them after one confirmation). docs/port/mi-ugens.md
   local function mi_note_update()
     local home = os.getenv("NORNS_HOME") or "/home/we"
-    local f = io.open(home .. "/.mi-heal-note")
-    if f then
-      local text = f:read("l")
-      f:close()
-      os.remove(home .. "/.mi-heal-note")
-      if text and text ~= "" then
-        _menu.heal_note = text
-        _menu.heal_note_until = util.time() + (tonumber(os.getenv("NORNS_HEAL_NOTE_SECONDS")) or 25)
-        _menu.show_note()
-        print("mi-UGens: " .. text)
+    -- the launcher's notes (the mi-UGens heal, the heal of any wrong-architecture plug-in): each file is read once and removed
+    for _, name in ipairs({".mi-heal-note", ".plugin-heal-note"}) do
+      local f = io.open(home .. "/" .. name)
+      if f then
+        local text = f:read("l")
+        f:close()
+        os.remove(home .. "/" .. name)
+        if text and text ~= "" then
+          _menu.heal_note = text
+          _menu.heal_note_until = util.time() + (tonumber(os.getenv("NORNS_HEAL_NOTE_SECONDS")) or 25)
+          _menu.show_note()
+          print(name == ".mi-heal-note" and ("mi-UGens: " .. text) or ("plugin heal: " .. text))
+        end
       end
     end
     if _menu.heal_note and util.time() >= (_menu.heal_note_until or 0) then

@@ -1,0 +1,15 @@
+#!/bin/bash
+# cp shim, see norns-shim-lib.sh (the NamAmp case). anything that does not name NamAmp.so goes straight to the real cp
+case "$*" in
+*NamAmp.so*)
+    . "$(dirname "$0")/norns-shim-lib.sh"
+    if shim_two_files cp "$@" && shim_namamp_pair "$SHIM_SRC" "$SHIM_DST"; then
+        shim_log "NamAmp.so: Verdandi's own x86-64 copy is in use, the script's Raspberry Pi file is not copied over it"
+        exit 0
+    fi
+    ;;
+esac
+. "$(dirname "$0")/norns-shim-lib.sh"
+real="$(shim_real cp)"
+[ -n "$real" ] || { echo "cp: not available" >&2; exit 127; }
+exec "$real" "$@"

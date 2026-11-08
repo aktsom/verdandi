@@ -107,3 +107,52 @@ shim_systemctl() {
     fi
     exec "$real" "$@"
 }
+
+# ---- NamAmp (docs/port/namamp.md): princeton copies its own Raspberry Pi NamAmp.so over the extension folder's copy whenever "cmp -s SRC DST" says they differ.
+# with Verdandi's own intact x86-64 copy there (our stamp, the sha256 matches) that pair is answered without doing anything: cmp says "equal", cp does nothing. only that
+# exact case: the destination is such a copy, the source is a file of the same name that is another architecture. every other call is the real program, unchanged.
+# NORNS_NAMAMP=0 turns it off.
+
+# the machine and class bytes of an ELF file ("0228" style), or nothing
+shim_elf_id() {
+    [ -f "$1" ] || return 1
+    local c m
+    c="$(od -An -tx1 -j4 -N1 "$1" 2> /dev/null | tr -d ' \n')"
+    m="$(od -An -tx1 -j18 -N2 "$1" 2> /dev/null | tr -d ' \n')"
+    [ "$(od -An -c -N4 "$1" 2> /dev/null | tr -d ' \n')" = '177ELF' ] || return 1
+    echo "$c$m"
+}
+
+# shim_namamp_pair SRC DST: 0 if this is the case above
+shim_namamp_pair() {
+    local src="$1" dst="$2" dir stamp want have
+    case "$(printf '%s' "${NORNS_NAMAMP:-}" | tr 'A-Z' 'a-z')" in 0 | off | false | no) return 1 ;; esac
+    [ "${src##*/}" = NamAmp.so ] && [ "${dst##*/}" = NamAmp.so ] || return 1
+    dir="$(dirname "$dst")"
+    stamp="$dir/.verdandi-namamp"
+    [ -f "$stamp" ] && [ -f "$dst" ] && [ -f "$src" ] || return 1
+    sed -n 's/^pack=//p' "$stamp" | head -n 1 | grep -qx NamAmp || return 1
+    want="$(sed -n 's/^sha256=//p' "$stamp" | head -n 1)"
+    have="$(sha256sum "$dst" 2> /dev/null | cut -d' ' -f1)"
+    [ -n "$want" ] && [ "$want" = "$have" ] || return 1
+    local a b
+    a="$(shim_elf_id "$src")" || return 1
+    b="$(shim_elf_id "$dst")" || return 1
+    [ "$a" != "$b" ]
+}
+
+# the two file arguments of a cmp or cp command line: both in $1 $2 on success (exactly two non-option words, no option that takes a target or a value)
+shim_two_files() {
+    local prog="$1"; shift
+    local a files=()
+    for a in "$@"; do
+        case "$a" in
+        -t | -T | --target-directory* | --no-target-directory | -n | -i | -b | --bytes* | --ignore-initial*) return 1 ;;
+        -*) ;;
+        *) files+=("$a") ;;
+        esac
+    done
+    [ ${#files[@]} = 2 ] || return 1
+    SHIM_SRC="${files[0]}"
+    SHIM_DST="${files[1]}"
+}

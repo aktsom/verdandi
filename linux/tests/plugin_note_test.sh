@@ -10,6 +10,7 @@ mkdir -p "$H/dust/code/fake/ignore"
 export FAKEPLUG="$H/dust/code/fake/ignore/Fake_scsynth.so"
 printf "\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x28\x00\x00\x00" > "$FAKEPLUG"
 head -c 64 /dev/zero >> "$FAKEPLUG"
+export NORNS_PLUGIN_HEAL=0   # this test is about the report and the note: the start-up heal (plugin_heal_test.sh) would move the plug-in first
 [ "${2:-}" = disabled ] && export NORNS_PLUGIN_CHECK=0
 NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_plugin_note.lua" "$LOG" > /dev/null 2>&1
 exit 0

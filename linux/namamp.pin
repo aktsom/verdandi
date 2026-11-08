@@ -1,0 +1,6 @@
+# the NamAmp plug-in Verdandi ships (x86_64): our own wrapper (linux/namamp/NamAmp.cpp) over NeuralAmpModelerCore, built by linux/package.sh against the bundled
+# SuperCollider. sourced by shell scripts. a change here bumps NAMAMP_SERIAL so that the launcher replaces the older copy it seeded earlier.
+NAMAMP_CORE_REPO=https://github.com/sdatkinson/NeuralAmpModelerCore.git
+NAMAMP_CORE_COMMIT=0b3d3c97b0859a3a8c92a8628c4dd89a25eb5842
+NAMAMP_EIGEN_COMMIT=bc3b39870ecb690a623a3f49149a358b95c5781d
+NAMAMP_SERIAL=1

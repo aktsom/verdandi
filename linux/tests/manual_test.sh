@@ -93,6 +93,18 @@ for what, pat in (("norns never opens the virtual card as a controller", r"(neve
                   ("the Reaper entry hw:VirMIDI,<device>", r"hw:VirMIDI,"), ("a closed password dialog is said in plain words", r"(closed|cancel).{0,160}(dialog|password)|(dialog|password).{0,160}(closed|cancel)")):
     res("manual: virtual MIDI card, " + what, re.search(pat, text, re.S | re.I) is not None)
 
+# NamAmp (princeton's NAM amp) and the heal of any wrong-architecture plug-in
+res("manual: audio.conf key namamp", re.search(r"<code>namamp</code>", text) is not None)
+res("manual: audio.conf key namamp_gain", re.search(r"<code>namamp_gain</code>", text) is not None)
+res("manual: audio.conf key plugin_heal", re.search(r"<code>plugin_heal</code>", text) is not None)
+for what, pat in (("princeton and NAM captures named", r"princeton.{0,600}\.nam|\.nam.{0,600}princeton"), ("where the captures go", r"dust/data/princeton/nam"),
+                  ("the plug-in ships and is copied before SuperCollider starts", r"NamAmp.{0,500}(ships|shipped|comes) with.{0,300}(before SuperCollider starts|at every start|when norns starts)|(ships|shipped|comes) with.{0,500}NamAmp"),
+                  ("the script's own install step is satisfied without touching dust", r"(cmp|copy|install).{0,400}(dust/code|dust).{0,300}(not touch|untouched|nothing in|never)|(not touch|untouched|nothing in).{0,300}dust"),
+                  ("how to change the gain", r"namamp_gain=.{0,10}[0-9-].{0,400}(dB|decibel)|(dB|decibel).{0,400}namamp_gain"),
+                  ("a wrong-architecture plug-in is moved aside by itself", r"(moves?|moved) (them|it|the file|the plug-in|any).{0,200}aside.{0,300}(by itself|at (every|the next) start|before SuperCollider starts)|(at (every|the next) start|before SuperCollider starts).{0,300}(moves?|moved).{0,100}aside"),
+                  ("only a note and a confirmation while norns runs", r"(while norns runs).{0,500}(note).{0,300}(confirmation|confirm|asks)|(confirmation|asks).{0,300}(while norns runs)")):
+    res("manual (HOME): NamAmp and the plug-in heal, " + what, re.search(pat, home_sec, re.S | re.I) is not None)
+
 # plain text of the page (tags removed, entities decoded)
 plain = html.unescape(re.sub(r"<[^>]+>", " ", text[text.index("<body>"):]))
 plain = re.sub(r"\s+", " ", plain)
