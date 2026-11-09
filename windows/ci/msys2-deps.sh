@@ -37,7 +37,7 @@ install_pkgs() {
 }
 
 # Lua 5.3.6 from the official Lua repository on GitHub (www.lua.org was not reachable from the runner in the first run). the tag is pinned to its commit and checked. the sources are compiled
-# directly (no makefile, no readline): every l*.c except the tests becomes liblua.a, lua.c becomes lua.exe. LUA_PLATFORM_FLAGS / LUA_PLATFORM_LIBS only for trying the script on Linux
+# directly (no makefile, no readline): every l*.c except the tests and the interpreter (lua.c has a main: it must not be in the library) becomes liblua.a, lua.c becomes lua.exe. LUA_PLATFORM_FLAGS / LUA_PLATFORM_LIBS only for trying the script on Linux
 LUA_COMMIT="75ea9ccbea7c4886f30da147fb67b693b2624c26" # tag v5.3.6
 build_lua() {
     local d="$PWD/m0-work/lua-src" f objs=()
@@ -47,7 +47,7 @@ build_lua() {
     (
         cd "$d" || exit 1
         for f in l*.c; do
-            case "$f" in ltests.c) continue ;; esac
+            case "$f" in ltests.c | lua.c | luac.c) continue ;; esac
             gcc -O2 -std=c99 -DLUA_COMPAT_5_2 ${LUA_PLATFORM_FLAGS:-} -c "$f" -o "${f%.c}.o" || exit 1
             objs+=("${f%.c}.o")
         done
