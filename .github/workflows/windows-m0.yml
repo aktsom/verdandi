@@ -1,0 +1,150 @@
+# Verdandi Windows, milestone M0 (toolchain and boot smoke test). plan and click-by-click guide: docs/port/windows-plan.md and windows/README.md.
+# nothing here ships a product: it builds SuperCollider 3.14.1 for Windows, checks the MinGW toolchain for norns, and boots sclang and scsynth without an audio device.
+# every step records PASS or FAIL in a report and the run goes on (windows/ci/lib.sh); the artifact "verdandi-m0" holds the report, the logs and what is needed to repeat the test on your own PC.
+name: windows-m0
+
+on:
+  push:
+    branches: [linux-port, windows-port]
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-m0.yml'
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner image'
+        type: choice
+        default: windows-2022
+        options:
+          - windows-2022
+          - windows-latest
+      with_asio:
+        description: 'Build SuperCollider with ASIO (needs the SDK licence decision; leave off for M0)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  SC_TAG: Version-3.14.1
+
+jobs:
+  sc:
+    name: M0a SuperCollider 3.14.1 (MSVC)
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build SuperCollider
+        env:
+          WITH_ASIO: ${{ inputs.with_asio && '1' || '0' }}
+          JOBS: '4'
+        run: windows/ci/build-sc.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m0-out-sc
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  msys2:
+    name: M0a MinGW toolchain, Lua, libmonome, Link
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: git base-devel
+      - name: Dependencies (packages, Lua 5.3, libmonome, Link probe)
+        run: windows/ci/msys2-deps.sh
+      - name: Portable tests
+        run: windows/ci/portable-tests.sh
+      - name: Porting inventory
+        run: windows/ci/inventory.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m0-out-msys2
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  smoke:
+    name: M0b boot smoke (sclang, scsynth)
+    needs: sc
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: m0-out-sc
+          path: sc-artifact
+      - name: Unpack SuperCollider
+        run: 7z x sc-artifact/sc-win64.zip -osc-unpacked -y > /dev/null && find sc-unpacked -maxdepth 2 | head -20
+      - name: Smoke test
+        env:
+          SC_TREE: ${{ github.workspace }}/sc-unpacked/SuperCollider
+        run: windows/ci/smoke-sc.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m0-out-smoke
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  report:
+    name: Report and artifact
+    needs: [sc, msys2, smoke]
+    if: always()
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: m0-out-*
+          path: m0-out
+          merge-multiple: true
+      - name: Report
+        env:
+          M0_RUN: "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} | commit ${{ github.sha }} | runner ${{ inputs.runner || 'windows-2022' }} (${{ runner.os }} ${{ runner.arch }})"
+        run: |
+          windows/ci/report.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Assemble the artifact
+        if: always()
+        run: |
+          mkdir -p dist
+          cp -r m0-out/M0-REPORT.md m0-out/logs m0-out/status dist/ 2> /dev/null || true
+          cp m0-out/inventory.tsv m0-out/inventory-summary.txt m0-out/msys2-packages.txt m0-out/sc-win64.zip dist/ 2> /dev/null || true
+          cp -r sc dist/norns-sc
+          cp windows/dist/verdandi-test.cmd windows/dist/m0-job.scd windows/dist/README-M0.txt dist/
+          find dist -maxdepth 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verdandi-m0
+          path: dist
+          retention-days: 30

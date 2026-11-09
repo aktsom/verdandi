@@ -1,195 +1,263 @@
-# Windows standalone: plan (no product code)
+# Windows standalone: plan, version 2 (no product code)
 
-Status: **plan only.** Decision of the owner: **no VST3 plug-in** (`docs/port/plugin-feasibility.md` stays as reference); build a **Windows standalone that does everything the Linux version does**. Reference setup: Windows with **Ableton Live** and an **RME Fireface UC** (ASIO, owned by Ableton), keyboard-centred use, **two monome grids** (a 2023-24 grid 128 and a 2011 grid 256 with 4-step LEDs), norns audio into Ableton tracks and **Ableton's tempo and transport driving norns**. It must be as easy and plug and play as possible, with plain-language guidance in the app, in the spirit of the Linux version.
+Status: **plan and milestone M0 setup only.** Decision: **no VST3 plug-in for now** (`docs/port/plugin-feasibility.md` stays as reference); a **Windows standalone that does everything the Linux version does**. Reference setup: Windows with **Ableton Live** owning an **RME Fireface UC** (ASIO), keyboard-centred use, **two monome grids** (a 2023-24 grid 128 and a 2011 grid 256 with 4-step LEDs), norns audio into Ableton tracks, and **Ableton's tempo and transport driving norns** (Link, or MIDI clock, selectable). As easy and plug and play as possible, with plain-language guidance in the app, as in the Linux version.
 
-Each claim says whether it was **read** in this repository, **found on the web** (links at the end; forum-level evidence is marked), **my knowledge** (not checked here), or an **estimate**. I have no Windows machine, no mingw cross compiler and no Wine in this session (checked), so **nothing in this plan was built or run on Windows**. Section 9 lists what cannot be verified without the owner's hardware.
+Each claim says whether it was **read** in this repository, **found on the web** (links at the end; forum-level evidence is marked), **my knowledge** (not checked here), or an **estimate / guess**. There is no Windows machine, no mingw cross compiler and no Wine in the cloud session, so **nothing in this plan was built or run on Windows**; what can be checked on Linux (script syntax, the Linux-runnable parts of the M0 scripts, the workflow with `actionlint`) was, and section 10 says what was not.
 
-## 0. Summary
+## 0. What changed since version 1
 
-**What we build.** One Windows application "Verdandi": a small launcher (`Verdandi.exe`) that starts and watches `norns.exe` (matron + crone + softcut + the sidecar, today's code), `sclang.exe` and, on demand, maiden. Inside `norns.exe` **one audio callback** (PortAudio, ASIO or WASAPI) runs crone and softcut and **pumps SuperCollider's server, built as a library** (`scpump.dll`, a small patch that gives scsynth an external audio driver), once per block. **No JACK, no separate scsynth process, no virtual audio device of our own.** The same design the feasibility study called A2, now as the standalone's engine. It also lets the tests run on a Windows machine with no sound card.
+- Tempo and transport: **both Ableton Link and MIDI clock**, one clock setting that shows which one drives (section 3). v1 had Link first and MIDI as a fallback.
+- Audio: the default route is now **the shared RME driver + TotalMix FX Loopback into an Ableton track** (section 4); WASAPI is the fallback.
+- Grids: **both grids are identified by USB ids** (section 5); the libmonome Windows layer was read and has **three real gaps** that the plan now names.
+- Everything the Linux version learned since v1 is in the **feature table of section 2** with a Windows replacement or "not applicable" for each item.
+- **M0 is concrete and split into M0a, M0b, M0c** (section 8), the first two prepared as a GitHub Actions workflow (`.github/workflows/windows-m0.yml`, scripts in `windows/ci/`, your step-by-step in `windows/README.md`).
+- Decisions the plan still needs are collected in section 9 with a recommendation each.
 
-**Audio with Ableton owning the Fireface** (section 1). Recommended default: **RME's ASIO multi-client mode** (Verdandi opens the same driver as a second client, same sample rate and buffer, which it follows and never sets) plus **a TotalMix FX route that brings norns' output channels back into an Ableton audio track** (a software loopback if the UC has one; otherwise one cable from a digital or analog output to an input of the same interface). An **audio doctor** page in the app finds the channel pair, plays a test tone, listens for the loop, and says in plain words what to change. Fallback: the interface's Windows (WDM/WASAPI) devices beside ASIO with the same TotalMix route. **What I could not verify:** whether the UC's driver is multi-client for the owner's driver version, whether the UC has a loopback, and how the WDM devices behave beside ASIO.
+## 1. Decisions already taken (recorded)
 
-**Tempo and transport** (section 2). **Ableton Link first**: norns already has Link (`clock_link.cc`), Live has it built in, the licence is GPL-2.0-or-later (compatible), it gives tempo, beat phase and start/stop without any MIDI port. Fallback: MIDI clock and notes through **loopMIDI** (or Windows' new MIDI loopback, arriving about now).
+1. **Tempo and transport:** both Ableton Link and external MIDI clock (start, stop, continue, song position), selectable, with a clear note of which one drives.
+2. **Audio:** Ableton owns the Fireface (ASIO). TotalMix FX Loopback is available and known. **Default route: Verdandi uses the shared RME driver and returns to Ableton through a Loopback input on an audio track; fallback WASAPI.**
+3. **Grids:** a 2023-24 grid 128 and a 2011 grid 256 (4-step LEDs). **Direct serial through COM ports is preferred; serialosc is optional.** Detection is configurable.
+4. **Carry over from Linux:** clean layout, tidy and CLEAN UP, plug-in heal/seed for mi-UGens and NamAmp built for Windows, plain-language notes, the manual, crash reports, MIDI MAP and actions, themes.
+5. **Plug and play, per-user installer, no administrator rights, unsigned for now.**
 
-**SuperCollider** (section 3): build **3.14.1 from source with MSVC, without Qt**, with the external-driver patch, in CI; plug-ins as Windows DLLs only (sc3-plugins 3.13 work with 3.14; the ARM-only packs need a Windows rebuild or a plain warning).
+## 2. Every Linux feature and its Windows replacement
 
-**Grids and devices** (section 4): find COM ports ourselves (SetupAPI, hot-plug) and talk the monome protocol through libmonome's Windows serial layer; serialosc stays optional (it is reported to need an FTDI device in the registry). Both grid models are tested at milestone M3.
+(Checked against the current Linux code: `matron/src/platform/linux`, `matron/src/device`, `linux/`, `lua/core`. "shared" = the same source on both platforms. "N/A" = does not exist on Windows, with the reason.)
 
-**The code** (section 5): about **30 Linux-specific places** in matron, crone, the sidecar, the launcher, maiden and the tools, each with its Windows replacement; the shared code base stays one tree with a `platform/windows` layer next to `platform/linux` and `platform/macos`.
+### 2.1 Window, screen, look
 
-**Build and packaging** (section 6): **MSYS2 UCRT64 (gcc) for norns, MSVC for SuperCollider and `scpump.dll`**, built by **GitHub Actions on `windows-latest`** (the cloud session cannot run Windows); an **Inno Setup per-user installer** (no administrator prompt), user data in `%USERPROFILE%\Verdandi`, no code signing for now.
+| Linux feature | Windows |
+|---|---|
+| SDL2 window with the device skin, maiden link, keys, file drop | **shared** (SDL2 runs on Windows). The skin and key mapping are plain C with Cairo and have tests; reused as they are |
+| detached screen window, window geometry kept (`screen_window*.c`, `detach_check.sh`) | **shared**; geometry stored in `ui.conf` as now. Multi-monitor and per-monitor DPI behaviour is the owner's M2 test |
+| box styles, THEME and SCREEN pages, presets, colour picker, toasts | **shared** (C and Lua; fonts are files in `resources/`, no fontconfig) |
+| screenshots and GIFs | **shared** (Cairo); saved under `%USERPROFILE%\Verdandi` |
+| open URL (`xdg-open`) | `ShellExecuteW` |
+| file picker (`file_picker.cc`: zenity, kdialog, portals) | the Windows common item dialogs (a COM call); **fileselect** (the Lua script browser) keeps its long-name handling (shared) but lists directories natively in C instead of through `ls -p` |
+| dust import / drop of samples and scripts | **shared** (SDL drop events), copying done in C |
+| clipboard | **shared** (SDL clipboard) |
 
-**Test loop and milestones** (section 7): M0 to M6, each with what the owner tests; he downloads a build from the CI run, installs it and reports with a "report a problem" zip. **Effort: roughly 4 to 7 months of focused work by one person (a labelled guess).**
+### 2.2 Virtual devices
 
-**Decisions the owner must make** (section 8, recommendation first for each): toolchain, the engine design, the default audio route, Link first, direct COM for grids, installer and data location, CI.
+| Linux feature | Windows |
+|---|---|
+| virtual grid and arc as a **pty** opened by libmonome like a USB device (`vgrid_device.c`, `vgrid_proto.c`) | **N/A** (no ptys). Replaced by the **OSC virtual grid** of PLAN.md Phase 5.5 (`device_monome.cc` talks to an in-process virtual device). The same Lua/skin side |
+| arc keys, grid keys, `keys_midi.cc` (the window keys as a JACK MIDI output) | the key mapping is **shared**; the MIDI side becomes an internal device (no port) or a loopback port if the user asks for it |
+| MIDI virtual device `jack_midi_in.cc` ("Verdandi:midi_in") for DAW notes and clock | **RtMidi** (WinMM, or Windows MIDI Services when present) opening a **loopback port** (see 2.3) |
+| MIDI output port for the DAW (`aseq_out.cc`, `aseq_link.h`, `aseq_pump.h`: an ALSA sequencer port "Verdandi out" and its links) | **N/A as such**: Windows has no user-created MIDI ports without a driver. Replaced by opening an **existing loopback endpoint** by name (Windows MIDI Services virtual loopback, or loopMIDI) as the output, with the same name-based auto-connect rules; if none exists the VIRMIDI page says so in plain words |
+| VIRMIDI page and the virtual MIDI card (`linux/virmidi`, kernel `snd-virmidi`) | **N/A** (a Linux kernel module). Replaced by a **"virtual ports" page**: which loopback ports exist, which one Verdandi uses, a link to the download of loopMIDI (not bundled, redistribution terms unknown), and the note that Windows 11 with Windows MIDI Services has built-in loopback (section 5.4) |
+| `midi_autoconnect.cc` (connects the DAW ports by name) | **shared rules**, RtMidi port names instead of ALSA/JACK names; the rule table is data |
+
+### 2.3 Audio
+
+| Linux feature | Windows |
+|---|---|
+| JACK or PipeWire-JACK, launcher writes `audio.conf` (`input=`, `output=`, `rate=`, `period=`) | the **audio backend interface** with PortAudio (ASIO, WASAPI) and a **null backend** (section 4); `audio.conf` keeps its keys as hints |
+| AUDIO page (ports, xruns, CPU), `jack_client.*` | the backend reports the same counters; the page lists **devices and channel pairs** |
+| `audio_devices.c` (ALSA cards) | PortAudio device list |
+| MIC / SYS / OFF / APP input (`app_audio_linux.cc`, PipeWire) | MIC = chosen channels, OFF = silence, **SYS = WASAPI loopback of the default render device (does not hear Ableton's ASIO audio; the app says so)**, APP = per-process loopback (same limit) |
+| scsynth as a separate JACK client | **in-process** through `scpump.dll` (section 6); fallback JACK2 for Windows |
+| `plugin_arch_check.cc`, plug-in architecture note, CLEAN UP page entry | same rule on **PE files** (the machine field of a `.scx`/DLL) instead of ELF: `plugin_arch.h` gets a PE reader; the note says "built for another system/processor" |
+
+### 2.4 Devices
+
+| Linux feature | Windows |
+|---|---|
+| `device_monitor.cc` (libudev: hot-plug, replug, the **sweep** of stale entries at start) | a **SetupAPI + `WM_DEVICECHANGE` monitor** thread feeding the same add/remove events; the start sweep is a full enumeration |
+| MIDI replug (a device that comes back keeps its slot) | the same slot logic (shared Lua/C++); keyed by a stable name + port index, because WinMM ports are numbers that move |
+| **device ignore rules** (`midi_ignore` in `ui.conf`, `midi_ignore.h`, tested by `midi_ignore_test.cpp`) | **shared** header and rules; M0a already compiles and runs this test with MinGW. Windows port names differ ("MIDI Out 1", "2- Name"), so the rules match on a normalised name |
+| `device_dedupe.h` (same device seen by two paths) | **shared**; M0a runs its test |
+| `serialosc_conflict.h` / `serialosc_check.cc` (a running serialosc holds the grid) | **shared** logic; Windows detects `serialosc.exe` in the process list and a COM port that cannot be opened ("busy") |
+| udev rule `70-verdandi-monome.rules` (access for the grid without root, FTDI 0403:6001 with serial `m[0-9k]*`, and the newer VID/PID) | **N/A** (no permissions problem on Windows; the CDC serial driver is part of Windows 10 and later, the FTDI VCP driver is delivered by Windows Update: my knowledge, to confirm at M3). The same **VID/PID/serial table** lives in the monitor (section 5) |
+| crow (USB serial) | COM monitor by vendor id |
+| HID keyboards, gamepads (libevdev stubs) | SDL controller API (M3, optional); physical keyboards through the SDL window |
+| mDNS (avahi) | N/A (Bonjour is not part of Windows); maiden is reached by `localhost` |
+
+### 2.5 Clocks and MIDI messages
+
+| Linux feature | Windows |
+|---|---|
+| clock sources internal, MIDI, Link, crow (`matron/src/clocks/`) | **all shared**; see section 3 |
+| MIDI clock in with start, stop, **continue and song position** (`clock_midi.cc`, Linux Phase 3) | shared parser, fed by RtMidi |
+| MIDI clock out (`clock_midi_out_1..16`, the legacy `clock_midi_out` option) | shared (Lua) |
+| MIDI MAP and MIDI actions, themes, `midimap*.lua` | shared Lua; the data files live in the user folder |
+
+### 2.6 Plug-ins, scripts, tools
+
+| Linux feature | Windows |
+|---|---|
+| **plug-in heal and seed** (`plugin-heal.sh`, `mi_heal.cc`, `mi-ugens-seed.sh`, `namamp-seed.sh`, pins `mi-ugens.pin`, `namamp.pin`) | **mi-UGens and NamAmp are built for Windows (x64 DLLs) in CI** from the same pinned commits and shipped as seed packs; the heal logic that decides "missing or wrong architecture, replace with the seed" is **C++ (`mi_heal.cc`) and stays shared**; the shell wrapper `plugin-heal.sh` is rewritten in Lua/C++ (decision 9.8) rather than needing a shell. NamAmp needs its own CMake build with MSVC (to be proven at M5) |
+| other ARM-only SuperCollider packs | detected by the PE check, with the plain note, and a table of known packs and their Windows status |
+| **shims** in `linux/shims`: `sudo`, `systemctl`, `cmp`, `cp` (plain explanations, harmless stand-ins). There is **no `wget` shim** in the repository | `sudo` and `systemctl` as small `.cmd`/busybox applet stand-ins with the same texts; `cmp` and `cp` come with busybox; **`wget` is not shimmed on Linux; on Windows busybox's applet and a bundled `curl.exe` cover it** |
+| shell commands from scripts (`os.execute`, sidecar: `fork`, `/bin/sh`) | `CreateProcess` + pipes running **`busybox sh -c`**; M0a shows what happens without it (MinGW Lua's `os.execute` uses `cmd.exe`) |
+| SC class check / compile-error notes (class note) | shared (the text of sclang's output is the same) |
+| SC compat extensions (`sc/linux-compat/NornsSynthDefCompat.sc`) and the virtual home (`/home/we` in Lua, SC and shell commands) | shared; rename the folders to `desktop-compat` when the Windows layer lands; real home is `%USERPROFILE%\Verdandi` with forward slashes |
+| tidy / CLEAN UP / clean layout (`linux/tidy.sh`, 982 lines of shell) | the layout is identical under `%USERPROFILE%\Verdandi`; the tool is run with busybox `sh` if POSIX-clean, otherwise **ported to Lua so both platforms share one** (decision 9.8) |
+| logs, **crash reports** (`crash_report.cc`: signal handlers + backtrace) | `SetUnhandledExceptionFilter` + DbgHelp minidump into `logs\crash\`, same plain-language page |
+| second start / raise the window (`.norns-raise` control file), `norns.sh` | `Verdandi.exe` launcher: **named mutex**, **job object**, a named event to raise the window |
+| **manual** (`linux/manual/manual.html`) | shared HTML, installed in the program folder, opened from the menu |
+| maiden (Go, patched), maiden-repl | Go cross-compiles; same patch; the readline REPL is dropped (the web REPL is the console) |
+| packaging (`.deb`, privacy scan) | Inno Setup per-user installer (section 7); the privacy scan is ported |
+| tests (`run_all.sh`: bash, Xvfb, xdotool, jackd dummy) | Lua and C tests run under MSYS2/busybox; the window scenarios stay the owner's checklist; M0a already runs the ones that need nothing |
+
+## 3. Clocks: how norns's source model maps onto Windows
+
+**Read in `lua/core/clock.lua`:** norns has **one** clock source at a time: the option param `clock_source` with the entries `internal`, `midi`, `link`, `crow` (`set_save false`; the choice is kept in `norns.state.clock`). Scripts read the beat through `clock.run`/`clock.sync`; they do not care where it comes from.
+
+**Mapping.**
+- `link` = **Ableton Link** (`clock_link.cc`): tempo, beat phase and start/stop with nothing installed on the Ableton side beyond switching Link on (Preferences > Link). Optional start/stop sync, quantum.
+- `midi` = **external MIDI clock** from the port the user chose (a loopback port that Ableton sends to): 0xF8 ticks, start, stop, **continue and song position pointer** (`clock_midi.cc`).
+- `internal` = Verdandi's own tempo; `crow` unchanged.
+
+**Selectable, with a clear note of who drives.** A **"clock" line in the window status area and on PARAMS > CLOCK** shows the active source in words: "Clock: Link, 3 peers, 120 BPM, running" / "Clock: MIDI clock from Verdandi in, 120 BPM, stopped" / "Clock: internal". The source is a normal setting remembered across restarts; **it never switches by itself** (a second source that is also active is shown as "also heard: MIDI clock, not used"). A mismatch hint appears when the chosen source is silent for a few seconds ("Link is on, but no other app shares a session: switch Link on in Ableton").
+
+**Link: library and licence (read in `third-party/link`).** The library is **Ableton Link** (`third-party/link`, header-only C++ with the C wrapper `abl_link`), licensed **GPL-2.0-or-later** (`LICENSE.md`; the alternative is a proprietary licence from Ableton). GPL-2.0-or-later is compatible with Verdandi's GPL-3.0. It supports Windows (`LINK_PLATFORM_WINDOWS`, MSVC 2015 or newer in its README; MinGW is **not** a listed compiler, so M0a includes a compile-and-run probe, `windows/ci/link_probe.cpp`). Link needs the bundled `modules/asio-standalone` **networking** library (Boost-licensed, **not** Steinberg's ASIO). Link's README recommends an ASIO audio driver for timing on Windows, which fits the RME route.
+
+**Link open points.** (1) `clock_link.cc` has **no output-latency compensation** (read: no `outputLatency` use), so a "Link latency (ms)" setting plus the backend's reported latency are part of M4. (2) The first start may show a **Windows Firewall prompt** for `Verdandi.exe` (Link discovery uses UDP multicast); allowing it may need an administrator on the owner's PC. Link between two programs on the same PC probably works over loopback without it, **unverified**; M4 tests both. (3) The MIDI clock needs a loopback port (section 5.4).
+
+**MIDI clock timing.** The parser times ticks with the system clock; Windows' timer resolution (about 15.6 ms by default, 1 ms with `timeBeginPeriod`) matters for the tick timestamps: RtMidi gives driver timestamps, which M4 uses instead of the arrival time.
+
+## 4. Audio with Ableton owning the Fireface
+
+Unchanged in structure from v1 (backend interface, PortAudio, null backend, doctor); updated for the decisions.
 
 ![Architecture of the Windows standalone](windows-plan/architecture.png)
 
-## 1. The audio path with Ableton owning the Fireface
+**Default route (decision 2).** Verdandi opens the **same RME ASIO driver as Ableton** as a second client (RME states multi-client ASIO with the same sample rate; web). Verdandi **follows** the sample rate and buffer size and never sets them. Its stereo output pair goes to **TotalMix FX**, whose **Loopback** feature returns it as an input of the same interface; in Ableton an audio track takes that **Loopback input**. Verdandi's input (MIC) is a free hardware input pair, or Ableton's return.
 
-### 1.1 What the Linux version does today (read)
-- **crone**: `crone/src/Client.h` (305 lines) is the only JACK code of crone: it opens a JACK client, registers stereo ports and calls a virtual `process(numFrames)` of the mixer (6 in / 6 out: ADC, softcut, engine) and of softcut. **scsynth** is its own JACK client; matron is a fourth (`matron/src/jack_client.*`: the clock time `jack_client_get_current_time`, the CPU load, the xrun count and the port lists of the AUDIO page).
-- **The launcher** (`linux/norns.sh`, 576 lines) starts jackd or uses PipeWire's JACK and writes `audio.conf` (`input=`, `output=`, `rate=`, `period=`); `audio_devices.c` lists ALSA cards; `app_audio_linux.cc` captures another program's audio for the **MIC / SYS / OFF / APP** input modes.
-- On Windows there is **no JACK to replace**: the audio backend must be written once, and it replaces all of the above.
-
-### 1.2 The options (what they need from the user, what they cost)
-
-| route | setup the user does once | latency | reliability | verdict |
-|---|---|---|---|---|
-| **A. RME ASIO multi-client + TotalMix FX route** | in TotalMix FX route Verdandi's output pair to a loop; in Ableton add an audio track fed by that input pair; the audio doctor tells him each step | the ASIO buffer both ways (the same as any ASIO program) plus norns' own block (about 1.3 ms) | the best: no extra software, no resampling, one clock | **default**, if the UC allows it |
-| **B. the interface's Windows (WDM / WASAPI / MME) devices beside ASIO** | same TotalMix route, Verdandi opens the WDM device by name | WASAPI shared adds about 10 ms or more, exclusive less | good if the driver allows both at once (RME's drivers are said to; **verify**) | **fallback 1** |
-| **C. a virtual audio cable (VB-CABLE and similar)** | install the cable; Verdandi plays to it | one extra buffer (about 10 ms) | works for programs that can read the cable. **Ableton uses one ASIO driver, so it cannot read the cable** unless an ASIO driver that contains the cable (a Voicemeeter-type tool, ASIO4ALL) replaces the RME driver in Live (my knowledge; **not verified**) | not recommended for Ableton |
-| **D. an ASIO loopback tool / ASIO linking program** | install and configure | one buffer | fragile, third-party, old (my knowledge) | no |
-| **E. a hardware loop** (analog out to in, or SPDIF/ADAT out to in) | one cable | the converter delay for analog (about 1 to 2 ms each way, estimate) | always works; costs a cable and an input pair | the **last resort** and the answer if the UC has no software loopback |
-
-**What I found about the hardware.** RME's manuals say RME interfaces support **ASIO multi-client** operation, more than one ASIO program at once, **with the same sample rate** (the Fireface 800 manual says so; an RME staff post says full multi-client operation since 2011; forum reports are mixed) (web). **TotalMix FX Loopback** is documented for the UCX, UFX and 802 (an RME forum post); **the UC is not named** (web). So **whether the UC has a software loopback is open**: if not, route A needs one cable (digital or analog) from an output to an input of the interface. **Nothing in this section was tried on the owner's UC.**
-
-### 1.3 Recommendation
 ![Audio routing with Ableton owning the interface](windows-plan/audio-routing.png)
 
-- **Default: route A.** Verdandi opens the **same ASIO driver as Ableton**, on a channel pair that nothing else uses, and **follows** the sample rate and buffer size it finds (in multi-client mode they belong to whoever opened the driver first; Verdandi never changes them, restarts its stream when the driver asks for a reset, and says so in plain words: "Ableton changed the sample rate to 44100, Verdandi follows"). A TotalMix route (loopback, or the cable) brings the pair back to an Ableton input.
-- **Fallback 1: route B**; **fallback 2: route E**. Route C only for hosts other than Ableton.
-- **The audio doctor** (SYSTEM > AUDIO, built at M1): lists the ASIO drivers and Windows devices, opens the chosen driver, reports "shared with another program: yes/no, rate, buffer", **plays a test tone on the output pair and listens on the input pairs to find the loop**, and shows the result as a short sentence and one next step ("No signal came back. In TotalMix FX, route Verdandi's pair AN 7/8 to the Loopback output, then press Test again."). It never changes the interface's settings by itself.
+**Fallback: WASAPI** (shared mode, about 10 ms or more more latency; exclusive mode would block Ableton and is not offered) through the interface's Windows devices, with the same TotalMix route. **Last resort:** a cable from an output to an input.
 
-### 1.4 What Verdandi must support: the audio backend
-| need | choice |
-|---|---|
-| a Windows audio backend library | **PortAudio** (permissive licence) with **ASIO and WASAPI**. SuperCollider's own Windows build uses PortAudio with ASIO, so the combination is proven (web). The **ASIO SDK licence** changed to a dual model (proprietary or **GPLv3**) in October 2025; whether a GPL-3.0 project may build and redistribute an ASIO-enabled PortAudio is **not settled by what I could read** (web): check the SDK's licence file before the first release (decision 3). **RtAudio** (MIT) has the same ASIO SDK need; **miniaudio** has no ASIO. |
-| what replaces `Client.h` | an **audio backend interface** (`start(rate, block)`, a callback that gives input and output pointers) with a PortAudio implementation; the three crone clients keep their `process()` and are called in a fixed order by one callback. A **null backend** (a timer or a test driver) serves CI and headless tests. The Linux build can keep JACK as another backend implementation: **one code base**. |
-| what replaces matron's JACK code | the clock time from the callback's sample counter; CPU load and xrun counts from the backend; the AUDIO page lists **devices and channel pairs** instead of JACK ports |
-| scsynth's audio | **in-process** through `scpump.dll` (section 3): one callback, sample-synchronous, no loop through a virtual cable |
-| sample rate and buffer | follow the driver (ASIO) or the device's mix format (WASAPI shared); norns is happiest at 48 kHz (softcut's buffers are counted in samples, so other rates change times, not function); `audio.conf` keeps `rate=` and `period=` as hints that the doctor explains |
-| input modes | **MIC**: the chosen channels. **OFF**: silence. **AUX (new)**: an ASIO channel pair, for the Ableton route. **SYS**: **WASAPI loopback** of the default render device: it hears what Windows plays, **not Ableton's ASIO audio** (ASIO bypasses Windows' mixer): the app says so. **APP**: per-process loopback (a documented Windows API for capturing one program's audio; the minimum Windows 10 build is not clear from my sources: a forum says 20438) (web); same limit for ASIO programs. |
-| realtime | the callback thread registers with the Windows multimedia scheduler ("Pro Audio") (my knowledge) |
+**Audio doctor** (SYSTEM > AUDIO, M1): lists ASIO drivers and Windows devices, opens the chosen driver, reports "shared with another program: yes/no, rate, buffer", plays a test tone and listens on the input pairs to find the loop, and says in a sentence what to change ("In TotalMix FX, route Verdandi's pair to the Loopback output, then press Test again"). It never changes the interface's settings.
 
-## 2. Tempo and transport from Ableton
+**Open points.** Whether the UC's driver version is truly multi-client with Ableton open, and whether **TotalMix FX Loopback** is offered for the UC (RME documents it for the UCX, UFX and 802; the owner reports having used it). The owner confirms both at M1.
 
-**Ableton Link (default).** Read: norns already has Link: `matron/src/clocks/clock_link.cc` (180 lines), the Ableton Link SDK as a submodule (`third-party/link`, `LINK_PLATFORM_LINUX` or `MACOSX` today), a Link thread started at launch, source `link` in PARAMS > CLOCK, tempo, beat and optional start/stop sync, a settable quantum. **Licence:** Link is **dual-licensed GPL-2.0-or-later or proprietary** (web: README text in forks; not Ableton's page itself); Verdandi is GPL-3.0, which GPL-2.0-or-later allows. **Windows:** Link builds with MSVC 2013 and newer and with MinGW gcc 13 in other projects (web); the platform define is `LINK_PLATFORM_WINDOWS` (web). Live has Link built in (Preferences > Link): tempo, beat phase and start/stop are shared **with nothing installed and no MIDI port**. **Known gap (read):** `clock_link.cc` does not compensate the audio output latency (no `outputLatency` use), so on Windows the beat would sit a buffer late; a setting "Link latency (ms)" and the backend's reported latency fix this (part of M4).
+## 5. Grids and devices
 
-**MIDI clock (fallback, and for notes).** Read (`docs/port/clock-notes.md`): norns follows MIDI clock through `clock_midi.cc` (0xF8, start, stop; **continue and song position are ignored**; tempo is timed with the system clock). On Linux the DAW's clock arrives through `jack_midi_in.cc` (`Verdandi:midi_in`). **On Windows** the same parser is fed by **RtMidi** (MIT-style licence, WinMM backend, my knowledge) from a virtual port: **loopMIDI** (a free driver for personal use; redistribution terms not checked, so the installer would **link to it, not bundle it**) or **Windows MIDI Services' loopback endpoints**, which Microsoft says reach most customers between **November 2026 and January 2027** (web), a built-in replacement for loopMIDI. WinMM MIDI ports are single-opener (my knowledge): a hardware controller used by both Ableton and Verdandi must be shared by routing through Ableton; virtual loopback ports are multi-client. The "norns keys" source of the window (`keys_midi.cc`, a JACK MIDI output on Linux) becomes an **internal pipe device**.
+### 5.1 What libmonome does on Windows (read: libmonome 1.4.9, `src/platform/windows.c`, `src/private/devices.h`)
 
-**Order:** Link first (M4), MIDI clock as the fallback (M3/M4). A "clock doctor" line on the PARAMS > CLOCK page says which source is live and what to switch on in Ableton.
+- A Windows platform file **exists**: SetupAPI COM-port lookup, overlapped serial I/O on `\\.\COMn` at 115200 8N1 (57600 for `a40h` arduinomes), `GUID_DEVINTERFACE_COMPORT`. `monome_event_loop` is **not implemented** on Windows, so norns needs **its own reader thread** (polling `monome_event_next`).
+- **`monome_open(path)` identifies a device only by its USB serial string** (`monome_platform_get_dev_serial`, then a pattern table): `m64-*`, `m128-*`, `m256-*` and `mk*` are "series" devices with **fixed dimensions**, `m40h*` and `a40h-*` are 40h, **`m<digits>` and `M<digits>` (the second is a Windows SetupAPI fix) are "mext"** and report their size by a query.
+- **LED levels:** series devices have **only on/off per LED plus one global brightness** (libmonome turns a level above 7 into "on"); only mext devices take per-LED levels. So whether the 2011 256 shows **4 steps** depends on which family it is. A serial like `m256-xxx` would be series (2 states in libmonome: 16 norns levels would collapse to on/off, not 4 steps); a serial like `m1000123` would be mext (the firmware quantises). **I cannot tell which from the description; the Device Manager serial decides** (section 10).
+- **Three gaps found by reading** (each is a small patch on libmonome, in the repository's `linux/patches` style, to be proven at M3):
+  1. For an FTDI device the serial is taken from the instance id with `sscanf("FTDIBUS\\VID_%*x+PID_%*x+%[a-zA-Z0-9]m")`. That **stops at `-`**, so `m256-021` is cut to `m256`, and the code then strips a trailing `A` that FTDI appends, assuming that form. Hyphenated names, which the family table expects, can come out wrong and select the wrong protocol or no protocol.
+  2. The 2023-24 device is a **USB composite/CDC device** (VID_CAFE&PID_1110, shown as "USB Serial Device"); its COM port is likely a child (`USB\VID_CAFE&PID_1110&MI_00\...`). The serial then has to be read from the **parent** device (`CM_Get_Parent`), which the code does not do.
+  3. No reader thread and **no hot-plug** (libmonome has none on Windows): both come from our monitor.
+- **serialosc on Windows** exists with installers (web) but is reported to need an FTDI device in the registry (web): another reason why serialosc is optional.
 
-## 3. SuperCollider on Windows
+### 5.2 The two grids (supplied by the owner) and the detection rules
 
-- **Binaries or build.** SuperCollider **3.14.1** has Windows binaries (a win64 zip and a winget package, web), but they include the Qt IDE (138 MB) and **do not have the external driver** we need. **Plan: build 3.14.1 from source with MSVC** (the project's documented Windows toolchain is MSVC 2017/2019; web), **Qt off** (`SC_QT=OFF`, as the Linux and macOS packages already do), plus **our small patch**: an `external` audio driver and a C API wrapper that becomes `scpump.dll` (`create`, `pump(frames, in, out)`, `send_osc`, `destroy`). Others embed scsynth this way with a build-time patch; upstream offers no such driver (web). **This patch is the largest unknown of the plan: I could not build or test it here.** It is milestone M0b, and the plan's fallback is below.
-- **Fallback if the patch fails:** keep `scsynth.exe` with SuperCollider's own PortAudio ASIO driver and connect crone to it through a second virtual path; the honest fallback is **JACK2 for Windows** (an installer exists) with SuperCollider built `AUDIOAPI=jack` (**not verified that this builds on Windows**): a second audio stack the user must install, worse plug-and-play. I would not go there unless the patch is impossible.
-- **Plug-ins.** Windows needs `.scx`/DLL builds. **sc3-plugins 3.13 work with 3.14** (the interface did not change, web); a Windows build is built in CI from the pinned commit. **mi-UGens** (the `nb_mxsynths` and similar packs) and other **ARM-only packs**: scripts download `.so` files built for the Raspberry Pi; the Linux port already **detects wrong-architecture plug-ins and explains** (`plugin_arch_check.cc`, `plugin_arch_note.cc`, the CLEAN UP page). On Windows the same note appears for `.so` and ARM files, and a **table of known packs and their Windows status** (built by us in CI, or "not available for Windows yet") is shipped with the app. Boost-based extensions built for 3.13 may break with 3.14 (web: FluCoMa).
-- **sclang startup.** `sclang.exe` is started by the launcher with a generated `sclang_conf.yaml` (include paths: norns' `sc/`, the compat folder, the virtual home folder), as `linux/norns.sh` does; `Crone.useRemoteServer` (exists, read) points it at `scpump.dll`'s UDP port; the REPL websocket wrapper (`ws-wrapper`, a small C program) is rebuilt for Windows (pipes instead of ptys).
-- **`sc/linux-compat` and `NornsVirtualHome`.** `NornsSynthDefCompat.sc` (the 3.14 SynthDef compatibility layer) and `NornsVirtualHome.sc` (the virtual `/home/we`) are **platform-neutral SuperCollider code**: rename the folders to `sc/desktop-compat` and `sc/desktop`, used by Linux and Windows. The only change is that the virtual home maps `/home/we` to a Windows path (forward slashes are accepted by SuperCollider's file classes: my knowledge; test at M5) and that path joins are checked for drive letters.
-
-## 4. Grids and devices
-
-- **Today (read):** `device_monitor.cc` (435 lines) uses **libudev** to see serial ports, HID and sound devices; `device_monome.cc` opens a grid with `monome_open(<tty path>)`; the serial number comes from libmonome; Lua assigns grids to vports by name and serial (`lua/core/grid.lua`). The repository's libmonome is patched for the pty virtual grid and for write retries (`linux/patches`).
-- **serialosc on Windows** exists with installers (web), but is reported to **require an FTDI device in the Windows registry** (web: a third-party serialosc clone's README). The 2011 grid 256 is an FTDI device (monomeserial's notes list `m256-xxx` names, web); a 2023-24 grid's USB chip is **not known to me**, so **serialosc may not see it**.
-- **Plan: direct serial through COM ports, no extra program.** A Windows **device monitor** (SetupAPI enumeration plus `WM_DEVICECHANGE`, run as a thread) lists COM ports with their USB vendor and product ids and friendly names, probes new ports with the monome handshake, and feeds the **same add/remove events** that udev does today; libmonome's serial layer is used as it is (its Windows platform code is present in serialosc's static build, web; **not checked here**). serialosc stays **optional**: if it is running it holds the ports, and the app says so (the Linux port already has this conflict note, `HARDWARE-CHECKLIST.md`).
-- **The two grids** (tested at M3): the 2011 256 is an older-protocol device with **4-step LEDs**, so norns' 16 levels are quantised to 4 on it (libmonome and `grid.lua` handle levels per device; the Linux `grid_led_test` shows what is covered); the 2023-24 128 is a current-protocol device. Both at once means **two vports**, as on a norns. The app shows "grid m256-020 connected (vport 1)" and a plain note if a port is busy.
-- **MIDI devices:** RtMidi over WinMM; the device list is rebuilt on hot-plug; names are stable ids so `midi.connect` keeps working. **HID:** the window keyboard is already handled through SDL (`hid_virtual.cc`, the window-key mapping), so typing works as on Linux; **gamepads** through SDL's controller API at M3 (optional); physical USB keyboards through the same SDL path. **crow** (a USB serial device) through the COM monitor with its vendor id.
-
-## 5. The code: every Linux-specific assumption and its replacement
-
-(read in the repository; "shared" = stays one code base)
-
-| area | Linux assumption | Windows replacement | shared? |
+| grid | USB id | Windows shows | currently |
 |---|---|---|---|
-| **toolchain** | gcc, waf, pthreads, `poll`, unnamed semaphores, `clock_nanosleep` | MSYS2 UCRT64 gcc with winpthreads (keeps POSIX threads and semaphores); waf if it works there, else a CMake wrapper (decision 1) | yes |
-| **crone / audio** | JACK (`Client.h`) | the backend interface + PortAudio; a null backend | interface shared, JACK kept for Linux |
-| **matron JACK use** | `jack_client.*` (time, CPU, xruns, ports) | the backend's counters; device and channel lists | split |
-| **scsynth** | a JACK client, a separate process | `scpump.dll` in-process | Windows only |
-| **ALSA** | `audio_devices.c` (cards), `device_midi.cc` (rawmidi), `matron/src/hardware/*` (device only) | PortAudio device list, RtMidi; hardware files stay excluded | split |
-| **udev** | `device_monitor.cc` | SetupAPI + `WM_DEVICECHANGE` monitor | split |
-| **libevdev / gpiod** | `device_hid.cc` (device-only); the macOS port has stub headers | SDL controller API; the stubs are reused for compilation | split |
-| **pty** | the virtual grid/arc (`vgrid_device.c`, libmonome patch), `ws-wrapper` | the OSC virtual grid of **Phase 5.5** (no ptys); `ws-wrapper` with pipes | Phase 5.5 shared |
-| **shell commands** | the sidecar: `fork`, `execl("/bin/sh")`, `poll`, `waitpid` (`norns/sidecar_shell.cpp`, 297 lines) | `CreateProcess` with pipes and a timeout, running **`busybox sh -c`** | rewrite of one file |
-| **GNU tools** | scripts call `sh`, `ls`, `cp`, `mv`, `rm`, `unzip`, `tar`, `wget`, `curl`, `grep`, `awk`, `sed` | bundle **busybox for Windows** (GPL-2.0, one small program with these applets, my knowledge) and **curl.exe**; scripts that need git, python or others get a plain error | Windows only |
-| **sudo / systemctl** | shims in `linux/shims` that print a plain explanation | the same two as `.cmd` or busybox applets with the same texts | shared texts |
-| **virtual home** | `/home/we` translated in Lua (`core/virtual_home.lua`), SC (`NornsVirtualHome.sc`), shell commands (scanners `scan-shell-paths.py`) | the same layers; the real home is `%USERPROFILE%\Verdandi` and is given to shell commands with forward slashes | shared |
-| **paths** | `/`-only code, `ls -p` in `util.scandir` | forward-slash normalisation at one place; native directory listing in C instead of a shell `ls` | shared fix |
-| **signals / crashes** | `crash_report.cc` (signal handlers, backtrace) | `SetUnhandledExceptionFilter` + DbgHelp, a minidump into `logs/crash/` | split |
-| **process control** | `norns.sh`: `pgrep`, `kill` trees, `trap`, `mkfifo`, the **second-start control file** (`.norns-raise`) | `Verdandi.exe` with a **named mutex** (one instance), a **job object** (children die with it), a named event to raise the window; the control-file idea stays for compatibility | Windows launcher |
-| **launcher** | a 576-line bash script | `Verdandi.exe` (C++), configuration files unchanged (`audio.conf`, `ui.conf`, `box.conf`, ...) | Windows only |
-| **file dialogs** | `file_picker.cc` (zenity, kdialog, portals) | the Windows common item dialogs (a COM call) | split |
-| **open URL** | `xdg-open` (`open_url.c`) | `ShellExecuteW` | split |
-| **clipboard** | SDL clipboard | the same SDL calls (the picker's clipboard binding is SDL) | shared |
-| **window, screen, fonts** | SDL2 + cairo + `resources/*.ttf` (loaded from files) | the same; cairo and freetype from MSYS2; **no fontconfig needed** | shared |
-| **mDNS** | avahi (`dns_sd`) in `osc.cc` | dropped on Windows (Bonjour is not part of Windows); maiden is reached by `localhost` | `#ifdef` |
-| **app audio (SYS/APP)** | `app_audio_linux.cc` (PipeWire) | WASAPI loopback | split |
-| **MIDI to the DAW (Linux)** | `jack_midi_in.cc`, `midi_autoconnect.cc`, `keys_midi.cc` | RtMidi ports with name-based auto-connect (the same rules); an internal pipe for the keys source | split |
-| **Link** | `LINK_PLATFORM_LINUX` | `LINK_PLATFORM_WINDOWS` | shared |
-| **maiden** | Go; a patch removes systemd/dbus (`maiden-linux-guard-and-units.patch`) and adds an origin guard | Go cross-compiles; the same patch (the unit API already answers "none"); paths with `filepath` | shared patch |
-| **maiden-repl** | readline + ncurses console | dropped on Windows (maiden's web REPL is the console) | `#ifdef` |
-| **tidy tool** | `linux/tidy.sh`, 982 lines of shell (CLEAN UP, rotate, flatten) | run with busybox `sh` **if it is POSIX-clean (to check)**, else port to Lua (matron runs it) so Linux and Windows share one tool | check |
-| **packaging** | `linux/package.sh` (.deb, privacy scan), `setup-deps.sh`, `build.sh` | a CI workflow and an Inno Setup script; the **privacy scan is ported** (no builder identity in any file) | split |
-| **tests** | `run_all.sh` (bash, Xvfb, xdotool, jackd dummy) | Lua and C tests run on Windows through busybox/PowerShell wrappers; window tests become CI smoke tests; the real-window scenarios are the owner's checklist | partly |
+| 2023-24 grid 128 | **VID_CAFE & PID_1110** (the same id as the Linux udev rule) | "USB Serial Device" | COM6 |
+| 2011 grid 256, 4-step LEDs | FTDI, hardware id `FTDIBUS\COMPORT&VID_0403&PID_6001` | "USB Serial Port" | COM4 |
 
-**One code base.** Keep one tree: `matron/src/platform/{linux,macos,windows}`, `crone` with the backend interface, shared Lua and SC, `linux/` and a new `windows/` for launcher, packaging and tests. Windows-only code stays behind `#ifdef _WIN32` or the build's platform directory; the Linux and macOS builds are untouched (the existing guard tests of `box_c_test.sh` extend to the new identifiers).
+**Rules of our monitor** (configurable in a small `devices.conf`, defaults as below; **COM numbers are never used for identification**, they change when a device moves to another USB socket):
+1. Enumerate COM ports with SetupAPI **without opening them**; for each read VID, PID, the device serial string (from the parent for composite devices) and the friendly name.
+2. **CAFE:1110** is a grid. It is opened and asked for its identification (mext query).
+3. **0403:6001 is a generic FTDI id** (used by Arduino boards, GPS dongles, lab gear). It is treated as a grid **only if** the USB serial matches a monome pattern (`m64-`, `m128-`, `m256-`, `mk`, `m40h`, `a40h-`, `m<digits>`, `M<digits>`) or the user listed that serial in `devices.conf`. A port that matches neither is **never opened**; it shows in the device list as "serial port, not a monome (ignored)" and the user can add it by one line or one menu item.
+4. Settings for the unusual: `monome_vidpid=` extra id pairs, `monome_serial=` extra serial patterns, `monome_ignore=` ports/serials to leave alone, `serialosc=auto|off` (never open ports that serialosc.exe holds).
+5. Two grids at once = two vports, the vport assignment by name and serial as on Linux (`lua/core/grid.lua`).
 
-## 6. Build and packaging
+**What the 2011 grid needs:** the serial from the Device Manager decides the protocol (series or mext, 5.1); the hyphen/suffix patch (gap 1); and a note in the app about the LED steps ("this grid shows 4 brightness steps; Verdandi maps its 16 levels onto them"). If the grid turns out to be series, the 4-step display is limited to what libmonome sends (on/off + a global intensity); a better mapping would need a libmonome change, to be decided with the evidence.
 
-- **Toolchain.** **MSYS2 UCRT64 (gcc)** for norns, crone, sidecar and the small tools (keeps the POSIX-flavoured code buildable with winpthreads); **MSVC** for SuperCollider 3.14.1 and `scpump.dll` (the project's tested toolchain, web); the two meet only through **`scpump.dll`'s C interface and OSC over UDP**, so no C++ ABI crosses the line. **Build system:** try **waf** in MSYS2 first (one wscript for all platforms); if it fights back, a Windows-only CMake wrapper (decision 1).
-- **Where a Windows build is produced (the cloud session cannot run Windows).** **GitHub Actions on `windows-latest`**: it has MSVC and can install MSYS2 (`msys2/setup-msys2`); it builds, runs the headless tests and uploads the zip and installer as **artifacts**. A **cross-compile on Linux with mingw-w64** is possible for norns only if every dependency is cross-built: **not worth it** (no mingw here, and the dependency chain is long). **Wine**: not installed here; would only smoke-test headless pieces and cannot do ASIO, SDL window behaviour or serial ports: **not used**. The fork already has upstream's workflows (`test.yml`, `release.yml` on ARM runners); a new `windows.yml` is added on the `windows-port` branch. **The owner must enable Actions on his fork** (forks start with Actions off; I cannot do it, and I do not open issues or contact anyone).
-- **Testing.** The CI runner has **no audio device**, which is exactly why the **null/pumped backend** matters: the headless boot, the Lua and C tests, the engine start and an audio-less render all run there. ASIO, the window feel, grids and Ableton are the owner's tests.
-- **Installer.** **Inno Setup** (free, scriptable, per-user install into `%LOCALAPPDATA%\Programs\Verdandi` with **no administrator prompt**, Start menu entry, clean uninstall that leaves `%USERPROFILE%\Verdandi` alone); NSIS is the equal alternative; **MSIX needs signing** and is not for now.
-- **Signing and SmartScreen.** **Not needed now**: on the owner's own PC an unsigned installer shows "Windows protected your PC", and "More info > Run anyway" proceeds (the first run notes in the app and in the checklist say so). Signing (a certificate or Microsoft's signing service) and the reputation it needs matter only if the app is shared later (web: SmartScreen reputation is per file and slow).
-- **Bundled dependencies.** The MSYS2 DLLs norns needs (found by a dependency script and copied), SDL2, cairo, freetype, liblo, libsndfile, libsamplerate, FFTW, Lua, nng, libmonome, RtMidi, PortAudio; SuperCollider (no Qt) + sc3-plugins + a Windows pack table; maiden (a Go binary + its web app); busybox and curl; the fonts. Licences go into `DEPS.md` (Windows column) and a `licenses` folder in the installer. **Size: about 150 MB installed (an estimate).**
-- **Privacy scan.** The Linux `package.sh` scans every file for the builder's identity; Windows CI runs a ported scan (runner names appear in debug paths: build with `-ffile-prefix-map` and strip symbols).
-- **User data location and file layout.** Program files are read-only under `%LOCALAPPDATA%\Programs\Verdandi`. User data under **`%USERPROFILE%\Verdandi`**, the same layout as Linux (`~/Verdandi`): `dust\` (scripts, samples, data), `logs\`, `audio.conf`, `ui.conf`, `box.conf`, `box-presets\`, `disabled\`, `cache\`, with the same **CLEAN UP page** and **problem notes** (plain language: what is wrong, what to do). A menu item "Open the Verdandi folder". A user name with spaces is handled by quoting everywhere (a test case at M0).
+### 5.3 Behaviour
 
-## 7. The owner's test loop and the milestones
+Hot-plug add/remove through `WM_DEVICECHANGE`; an unplug while a script runs closes the port and tells the script (as on Linux); a replug within the same session returns to the same vport. The window shows "grid 128 (CAFE:1110) connected on COM6 as vport 1" in plain words, and if a port cannot be opened: "COM4 is in use by another program (serialosc? a serial terminal?)".
 
-**How he gets a build, installs it and reports.** (1) Push to `windows-port` runs the workflow. (2) On GitHub: Actions > the latest run > **Artifacts** > download `verdandi-windows-<commit>.zip` (portable before M6, installer from M6); Windows marks downloads from the internet, so **right-click the zip > Properties > Unblock** before unpacking (my knowledge). (3) Run `Verdandi.exe` (M0: a test batch file). (4) Anything wrong: the menu item **"Report a problem"** writes `Verdandi-report-<date>.zip` on the Desktop (logs, versions, the audio doctor's result; **no personal data**: the privacy scan applies to it) which he sends or pastes. (5) A **Windows section in `HARDWARE-CHECKLIST.md`** lists what to try per milestone.
+### 5.4 MIDI devices and virtual ports
 
-| M | content | what the owner tests | expected | effort (guess) |
-|---|---|---|---|---|
-| **M0** | toolchain and headless boot: CI builds `norns.exe` and the MSVC SuperCollider with the external-driver patch (**M0b**); matron + sclang + `scpump.dll` boot on a runner with a null audio clock; Lua and C tests pass | downloads the zip, runs `verdandi-test.cmd`, sends the log | "boot ok", engines listed, tests pass; a path with spaces works | 3 to 6 weeks |
-| **M1** | audio out: the PortAudio backend (ASIO, WASAPI), the audio doctor v1 | with Ableton running, plays the test tone on a free pair of the Fireface; reads the shared-driver line | tone heard, rate and buffer followed, no crackle; plain message if the driver is exclusive | 2 to 4 weeks |
-| **M2** | the screen window, keyboard, file dialogs, clipboard, screenshots, GIFs, the THEME and SCREEN pages | types in the window (letters, arrows, Ctrl combinations), loads a file, copies a colour | everything as on Linux | 2 to 3 weeks |
-| **M3** | devices: COM monitor and both grids, hot-plug, MIDI (RtMidi), crow, SDL controllers | plugs in the 128 and the 256, plays a grid script; sends notes from Ableton through loopMIDI | both found without any setup, LED levels right (4 steps on the 256), unplug/replug recovers | 3 to 5 weeks |
-| **M4** | Ableton: audio return route in the doctor, **Link** clock with latency setting, MIDI clock fallback | records norns on an Ableton track; starts/stops Live; changes tempo | tempo and start/stop follow, the recorded audio is aligned (a click test), plain notes when the loop is missing | 2 to 4 weeks |
-| **M5** | maiden, scripts and mods, shell tools (busybox, curl), virtual home, SuperCollider plug-in packs | installs a script from maiden, runs it, enables a mod, downloads samples | works as on Linux; ARM-only packs explained | 3 to 5 weeks |
-| **M6** | installer, clean layout, CLEAN UP, problem notes, one-instance, crash reports, report-a-problem, privacy scan | installs on his PC (and a clean VM if he has one), first run, uninstall | no administrator prompt, no manual file moving, every problem has a sentence | 3 to 5 weeks |
-| **M7** | polish, the pack table, performance, docs | long sessions | nothing new broken | ongoing |
+RtMidi over WinMM (or Windows MIDI Services when present). **Windows MIDI Services** reached general availability on Windows 11 on 17 February 2026 (phased rollout; web) and includes **built-in virtual loopback endpoints**, which makes loopMIDI unnecessary on a machine that has it. **loopMIDI** stays the documented alternative for Windows 10 or older Windows 11; its redistribution terms could not be confirmed, so the installer **links to it, it does not bundle it**. WinMM ports are single-opener (my knowledge): a hardware controller used by both Ableton and Verdandi has to be shared through Ableton. Known early issue (web): WinMM apps may not see newly plugged devices under Windows MIDI Services; M3 tests hot-plug.
 
-**Total roughly 17 to 31 weeks, about 4 to 7 months for one person: a guess.** M0b (the SuperCollider patch) and M3 (grids) have the widest error bars.
+## 6. SuperCollider and the in-process engine
 
-## 8. Risks, open questions and decisions
+- **Build 3.14.1 from source with MSVC, Qt off**, plus a small patch giving scsynth an external audio driver and a C wrapper (`scpump.dll`: `create`, `pump`, `send_osc`, `destroy`). Binaries from supercollider.github.io include the Qt IDE and no external driver. M0a builds the **unpatched** no-Qt SuperCollider (this is the base of the patch); the patch itself is **M0c**, with a decision gate.
+- **Fallback if the patch fails:** JACK2 for Windows with SuperCollider built for JACK (a second audio stack the user installs; **unverified that it builds on Windows**): worse plug and play, not recommended unless the patch is impossible.
+- **Plug-ins:** Windows `.scx` DLLs. sc3-plugins builds against 3.14 (web: 3.13 plug-ins work); M0a **tries** it, non-fatal. mi-UGens and NamAmp: see 2.6.
+- **sclang** is started with a generated `sclang_conf.yaml` (norns `sc/core`, `sc/engines`, the compat folder), as `norns.sh` does on Linux; M0b proves the class library compiles with those folders on Windows.
+- The **ASIO SDK** (SuperCollider's PortAudio uses it for ASIO): see decision 9.1. M0 builds **without** ASIO (`WITH_ASIO=0`); the workflow has an input to try it later.
 
-**Risks, in plain words.**
-1. **The scsynth external-driver patch** may be harder than it looks or need re-basing at each SuperCollider release. Fallback: JACK2 for Windows (worse plug and play).
-2. **Audio with Ableton depends on the owner's UC**: multi-client ASIO and the loop. Worst case: one cable and a clear doctor, still workable.
-3. **Grids**: the 2023-24 grid's USB identity is unknown to me; direct COM must be proven at M3.
-4. **Toolchain**: waf on MSYS2, two compilers meeting at a C interface, a large dependency set.
-5. **The ASIO SDK licence** for an ASIO-enabled PortAudio in a GPL-3.0 program is unsettled (web).
-6. **Shell-dependent scripts** assume a Linux userland; busybox covers the common cases, not all.
-7. **Windows details** I could not test: SmartScreen on an unsigned installer, antivirus with a program that starts helpers, the MIDI loopback timing, serial hot-plug.
-8. **Effort** is a guess; **Phase 5.5 (serialosc/OSC virtual grid)** and the Linux standalone's open items interact.
+## 7. Build, CI and packaging
 
-**Decisions the owner must make (recommendation first).**
-1. **Toolchain:** MSYS2 UCRT64 for norns + MSVC for SuperCollider and `scpump.dll`; try waf, fall back to CMake. *(Alternative: all-MSVC: a bigger port.)*
-2. **Engine design:** the **in-process pumped scsynth** (one audio callback) as described. *(Alternative: JACK2 for Windows: more setup, a second audio stack.)*
-3. **Audio backend and licence:** PortAudio with ASIO and WASAPI, after checking the ASIO SDK licence file; *(alternative: WASAPI only for a first release, no ASIO).*
-4. **Default audio route:** multi-client ASIO + TotalMix route with the audio doctor; fallbacks WDM/WASAPI and a hardware loop. **Please check which TotalMix FX version and whether the UC shows a Loopback option** (decides cable or no cable).
-5. **Clock:** Ableton Link first, MIDI clock via loopMIDI/Windows MIDI loopback as fallback.
-6. **Grids:** direct COM with our own monitor; serialosc optional. **Please tell me the USB identity (device manager name) of the 2023-24 grid** if you can.
-7. **Installer and data:** Inno Setup per-user, no signing for now, user data in `%USERPROFILE%\Verdandi`.
-8. **CI:** GitHub Actions on `windows-latest` for builds and headless tests; enable Actions on the fork; builds delivered as workflow artifacts.
-9. **Shell tools:** bundle busybox and curl.
-10. **Phases:** `PLAN.md` Phase 7 and 8 (the VST3 plug-ins) are parked; Phase 6 becomes this plan (updated in `PLAN.md`).
+- **Toolchain:** MSYS2 UCRT64 (gcc, winpthreads) for norns, crone, sidecar and small tools; MSVC for SuperCollider and `scpump.dll`; the two meet only at `scpump.dll`'s C interface and UDP OSC.
+- **CI:** GitHub Actions on Windows runners (the cloud session cannot run Windows). **Runner:** `windows-latest` currently points to **Windows Server 2025 with Visual Studio 2026** (read in the runner-images repository), while SuperCollider's own CI recipe uses the **"Visual Studio 17 2022"** generator. The workflow therefore **pins `windows-2022`** (VS 2022 17.14, CMake 3.31, Ninja, Inno Setup, 7-Zip, vcpkg at `C:\vcpkg`, MSYS2 at `C:\msys64`) and offers `windows-latest` as a run option to find out when to move.
+- **Installer:** Inno Setup, per-user into `%LOCALAPPDATA%\Programs\Verdandi`, no administrator prompt, uninstall leaves `%USERPROFILE%\Verdandi` alone. **Unsigned:** the owner's PC shows "Windows protected your PC", More info > Run anyway; downloads from the internet need "Unblock" in the file properties.
+- **User data:** `%USERPROFILE%\Verdandi` with the Linux layout (`dust\`, `logs\`, `audio.conf`, `ui.conf`, `box.conf`, ...). A user name with spaces or non-ASCII letters is a test case from M0b on (the smoke test runs from such a path).
+- **Dependencies:** MSYS2 DLLs (found by a dependency script), SDL2, cairo, freetype, liblo, libsndfile, libsamplerate, FFTW, Lua 5.3 (built from source; MSYS2 ships 5.4), nng, libmonome, RtMidi, PortAudio; busybox and curl; maiden. Licences go into `docs/port/DEPS.md` (Windows column) when they are added to the product; M0 only builds and does not ship them.
+- **Privacy scan:** the Linux `package.sh` scan is ported (build with `-ffile-prefix-map`, strip symbols).
 
-## 9. What I could not verify
-- Anything on Windows or with the owner's hardware: the UC's ASIO multi-client behaviour and driver version, whether the UC has a TotalMix Loopback, WDM devices beside ASIO, the 2023-24 grid's USB chip, the 2011 grid's protocol and LED handling on Windows, Ableton's Link and MIDI behaviour on his setup.
-- Building SuperCollider 3.14.1 with MSVC and the external-driver patch; waf and MSYS2; libmonome's Windows serial layer; Link, RtMidi and PortAudio builds.
-- The ASIO SDK licence terms for a GPL-3.0 redistribution; loopMIDI's redistribution terms; the minimum Windows build for per-process loopback; whether `curl.exe` and `tar.exe` are present on his Windows (assumed to be bundled anyway).
-- GitHub Actions on the fork (whether enabled), runner contents and their limits.
+## 8. Milestones, effort (a labelled guess) and what you test
+
+**Test loop.** Every push to `linux-port`/`windows-port` that touches `windows/` starts the workflow; you download the artifact and read the report (`windows/README.md`, click by click). Before M6 the artifact is a portable zip; from M6 an installer.
+
+| M | content | what you test | effort (guess) |
+|---|---|---|---|
+| **M0a** *toolchain and dependencies* | **Proves** that (1) SuperCollider 3.14.1 builds with MSVC without Qt on a runner, with its dependencies from vcpkg and FFTW; (2) MSYS2 UCRT64 has the packages norns needs (listed one by one with their availability); (3) Lua 5.3 builds from source; (4) libmonome builds with its Windows layer; (5) Ableton Link compiles and runs with MinGW; (6) the portable tests (midi ignore, dedupe, serialosc conflict, plug-in architecture, colour, clock options) run; (7) a **porting inventory** lists which matron/crone files already compile. **Does not prove** anything about audio, norns booting, or the external driver | download the artifact and read the report (section 6 of `windows/README.md`) | 1 to 2 weeks (including fixing what the first runs reveal) |
+| **M0b** *boot smoke test* | **Proves** that on Windows `sclang.exe` compiles the class library **with norns's `sc/core` and `sc/engines`**, `scsynth.exe` renders a SynthDef offline (`-N`, no audio device) to a non-silent wav, and both work from a path with spaces and a non-ASCII letter. **Does not prove** realtime audio, matron or the engines' boot | runs `verdandi-test.cmd` from the artifact on his PC; sends `M0-LOCAL-REPORT.txt` | about 1 week |
+| **M0c** *minimal Windows platform layer (feature code, a separate approved task)* | matron + crone (null backend) + Lua boot headless on the runner; the `scpump` external-driver prototype with a **decision gate**; the busybox shell decision with evidence | the headless-boot artifact | 3 to 5 weeks |
+| **M1** | audio out: PortAudio ASIO/WASAPI, audio doctor v1, TotalMix route | Live running, test tone on the Loopback route; rate/buffer line | 2 to 4 weeks |
+| **M2** | window, keyboard, file dialogs, clipboard, screenshots/GIFs, THEME and SCREEN pages, **OSC virtual grid/arc/keys** (Phase 5.5) | types in the window, loads a file, plays the virtual grid | 2 to 4 weeks |
+| **M3** | devices: COM monitor, **both grids**, hot-plug, MIDI (RtMidi), loopback ports, crow, controllers | plugs in the 128 and the 256, plays a grid script, replug | 3 to 5 weeks |
+| **M4** | clocks: **Link** with latency setting, **MIDI clock** (start/stop/continue/SPP), the "who drives" note, record norns on an Ableton track | starts/stops Live, changes tempo, click test for alignment, firewall prompt behaviour | 3 to 5 weeks |
+| **M5** | maiden, scripts and mods, busybox/curl, virtual home, mi-UGens and NamAmp Windows builds, plug-in heal/seed | installs a script, runs it, enables a mod, plug-in pack heal | 3 to 5 weeks |
+| **M6** | installer, clean layout, CLEAN UP, notes, one-instance, crash reports, report a problem, privacy scan | installs on his PC, first run, uninstall | 3 to 5 weeks |
+| **M7** | polish, pack table, performance, docs | long sessions | ongoing |
+
+**Total roughly 19 to 35 weeks, about 4.5 to 8 months for one person: a guess.** The widest error bars: M0c (the external driver) and M3 (grids).
+
+### M0 in the workflow: what each step proves
+
+`.github/workflows/windows-m0.yml` has four jobs; every step records PASS, FAIL or SKIP in the report and the run goes on (`windows/ci/lib.sh`).
+
+| step | what it shows |
+|---|---|
+| `sc-source`, `sc-vcpkg-libs`, `sc-fftw`, `sc-configure`, `sc-build`, `sc-package` | SuperCollider 3.14.1 builds (the recipe of SuperCollider's own Windows CI, without Qt/IDE/help/tests/supernova/Link) and the install tree is zipped |
+| `msys2-packages` | which MSYS2 UCRT64 package names exist (`liblo`, `cairo`, `freetype`, `libsndfile`, `SDL2`, `nng`, ...); a missing one is a finding, not a failure |
+| `lua53-build` | Lua 5.3.6 from source with a `lua53.pc` file (the name the wscript asks for) |
+| `libmonome-build` | libmonome 1.4.9 with its CMake file and the Windows serial layer; tries `-Werror` (upstream's flag) first and says so if it had to be dropped |
+| `link-probe` | Ableton Link compiled with `LINK_PLATFORM_WINDOWS` under MinGW and run once |
+| `pt-*` | Lua colour/clock-option tests and the C++ tests listed above, built with MinGW |
+| `inventory` | for every source file outside `platform/{linux,macos}` and `hardware/`: compiles or the first error (the work list of M0c) |
+| `smoke-tools`, `smoke-sclang-nrt`, `smoke-spaces` | M0b, as above |
+
+**If a full build does not fit in one go,** this is why it is split: M0a answers "do the tools build", M0b "does the built SuperCollider run norns's classes"; a red M0a part does not stop M0b (it needs only the SuperCollider job). The report's final job fails the run's mark only when SuperCollider or the smoke test failed, so a green mark means "the core is fine", while the table shows the rest.
+
+## 9. Decisions still needed (recommendation first)
+
+1. **ASIO SDK licence vs. a WASAPI-only fallback build.** Steinberg added a **GPLv3 option to the ASIO SDK** (a dual licence, proprietary agreement or GPLv3) in October 2025 (web, secondary coverage; **the SDK's own `LICENSE.txt` has to be read before a release**). **Recommendation:** build ASIO with the GPLv3 option, keep a **WASAPI-only build configuration** (CMake switch) as the fallback if the licence reading comes out differently; M0 and M1 can proceed with WASAPI. The SDK is a build input downloaded in CI, never committed.
+2. **Toolchain:** MSYS2 UCRT64 for norns + MSVC for SuperCollider; waf if it works in MSYS2, a Windows CMake wrapper if not. *(All-MSVC is a bigger port.)* Decide at M0c with the inventory in hand.
+3. **In-process SuperCollider design:** keep the `scpump.dll` external-driver design (one callback, no virtual cable, runs on a runner without a sound card), **gate at M0c**: if the patch is not workable in a few weeks, fall back to JACK2 for Windows.
+4. **Default clock source:** `internal` until the user picks one; Link and MIDI both offered; the note shows the driver. *(Alternative: Link by default when a session is found: rejected, a source that switches by itself is confusing.)*
+5. **Link and the firewall:** test at M4 on the owner's PC; if a prompt needs an administrator, the app explains it and MIDI clock remains the no-prompt path.
+6. **Virtual MIDI ports:** link to Windows MIDI Services (when present) and loopMIDI; do not bundle loopMIDI (terms unknown).
+7. **Unsigned installer** for now; revisit if the app is ever shared.
+8. **Shell tools:** bundle **busybox + curl**, and port the tidy tool and the plug-in heal wrapper to Lua/C++ if busybox cannot run them cleanly (decide at M5 with a test run; the cost is small because `mi_heal.cc` is already C++).
+9. **Repository visibility and Actions minutes:** a public fork has free minutes; a private one pays double for Windows. Recommendation: the owner decides, M0 fits in a month's free quota either way.
+10. **The 2011 grid family** (series vs mext): decided by the serial in Device Manager (section 10), then the 4-step LED handling and whether a libmonome change is worth it.
+
+## 10. What I need from you
+
+For the grids: in **Device Manager > Ports (COM & LPT)**, for each grid: right-click > Properties > **Details** and copy (a screenshot or text) the values of **Hardware Ids**, **Device instance path**, **Bus reported device description** and **Parent** (for the 128), plus **Manufacturer** and the **serial** (it is the last part of the instance path). Also: the 2011 grid's name on its back (m256-xxx or similar).
+
+For the rest: the Windows version (`winver`); the RME driver and **TotalMix FX versions**, whether the **Loopback** option is visible for the UC, the sample rate and buffer Live uses; the Ableton version and whether Link is on; whether **Windows MIDI Services** or **loopMIDI** is installed; whether the GitHub fork is public or private and whether Actions is enabled; whether your Windows user name contains spaces or non-ASCII letters; any antivirus that might block unsigned programs.
+
+## 11. What could not be verified
+
+- **Everything on Windows**: MSVC and vcpkg builds, the FFTW download, MSYS2 package names, the Link and libmonome builds with MinGW, `verdandi-test.cmd`, the behaviour of `windows-2022` versus `windows-latest`. The first M0 run is that test.
+- **Checked on Linux here:** the scripts pass `shellcheck` and `bash -n`; the workflow passes `actionlint` and parses as YAML; `smoke-sc.sh` was run against the Linux SuperCollider build (compile, NRT render, spaces/non-ASCII path), `portable-tests.sh` and `inventory.sh` and `report.sh` were run on Linux, and the Link probe compiled and ran with `LINK_PLATFORM_LINUX`. `act` could not be run (no Docker daemon in the session).
+- Action versions in the workflow (`actions/checkout@v4`, `upload-artifact@v4`, `download-artifact@v4`, `msys2/setup-msys2@v2`, `ilammy/msvc-dev-cmd@v1`) are major tags from my knowledge, **not verified** against the marketplace.
+- The ASIO SDK licence text; loopMIDI's terms; Windows MIDI Services behaviour on the owner's build; the UC's multi-client and Loopback behaviour; the 2011 grid's family; the FTDI/CDC drivers coming by Windows Update.
 - All effort figures.
 
 ## Sources (web; forum-level evidence is marked "forum")
-- RME multi-client ASIO and loopback: [RME forum: Multi Client ASIO driver](https://forum.rme-audio.de/viewtopic.php?pid=166261), [Fireface 800 manual, multi-client operation](https://manualsdump.com/en/manuals/intel-fireface_800/267972/28), [RME FFUC user manual](https://manualmachine.com/rme/ffuc/5937613-user-manual), [forum: loopback and CC mode (UCX, UFX, 802)](https://forum.rme-audio.de/viewtopic.php?pid=111904) (forum).
-- Ableton Link licence and Windows: [Link forks' README text (GPL-2.0-or-later or proprietary)](https://github.com/gluon/Void-LinkAudio) (a third-party project quoting it), [Ableton Link on GitHub (forks)](https://github.com/thomasf/link).
-- SuperCollider on Windows: [3.14.0 release](https://supercollider.github.io/releases/2025/07/26/supercollider-3.14.0.html), [Windows README (older fork)](https://github.com/8c6794b6/supercollider/blob/master/README_WINDOWS.md), [3.14.1 win64 zip listing](https://www.sourceforge.net/projects/supercollider.mirror/files/Version-3.12.2), [embedding scsynth with an external driver (scsynth-sys)](https://docs.rs/crate/scsynth-sys/latest/source/csrc/SC_ExternalDriver.cpp).
-- Grids on Windows: [serialosc](https://github.com/monome/serialosc), [pyserialoscd (the FTDI note)](https://github.com/nexxyz/pyserialoscd), [monomeserial](https://github.com/monome/monomeserial), [monome docs](https://monome.org/docs/grid/grid-computer/).
+- RME multi-client ASIO and loopback: [RME forum: Multi Client ASIO driver](https://forum.rme-audio.de/viewtopic.php?pid=166261), [Fireface 800 manual](https://manualsdump.com/en/manuals/intel-fireface_800/267972/28), [RME FFUC user manual](https://manualmachine.com/rme/ffuc/5937613-user-manual), [forum: loopback (UCX, UFX, 802)](https://forum.rme-audio.de/viewtopic.php?pid=111904) (forum).
+- Ableton Link: the repository copy `third-party/link` (`LICENSE.md`, `README.md`), read.
+- SuperCollider on Windows: [3.14.0 release](https://supercollider.github.io/releases/2025/07/26/supercollider-3.14.0.html); SuperCollider's own `build_windows.yml` (read in the source cache); [embedding scsynth with an external driver (scsynth-sys)](https://docs.rs/crate/scsynth-sys/latest/source/csrc/SC_ExternalDriver.cpp).
+- GitHub runner images: the runner-images repository README and the Windows 2022 / 2025 image readmes (read).
+- Grids on Windows: [serialosc](https://github.com/monome/serialosc), [libmonome](https://github.com/monome/libmonome) (read from the cache), [monome docs](https://monome.org/docs/grid/grid-computer/).
 - ASIO SDK licence: [Libre Arts on Steinberg's relicensing](https://librearts.org/2025/11/steinberg-relicenses-vst3-and-asio/), [Steinberg forum: ASIO licence and open source](https://forums.steinberg.net/t/asio-license-and-open-source-software/696630) (forum).
-- Windows MIDI Services loopback: [Microsoft MIDI: virtual loopback](https://microsoft.github.io/MIDI/endpoints/virtual-loopback.html).
-- Per-process loopback: [Microsoft Learn: ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/desktop/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync), [Application loopback audio sample](https://learn.microsoft.com/en-us/samples/microsoft/windows-classic-samples/applicationloopbackaudio-sample/), [PureBasic forum: minimum build](https://www.purebasic.fr/english/viewtopic.php?p=636463) (forum).
+- Windows MIDI Services: [Microsoft MIDI: virtual loopback](https://microsoft.github.io/MIDI/endpoints/virtual-loopback.html).
+- Per-process loopback: [Microsoft Learn: ActivateAudioInterfaceAsync](https://learn.microsoft.com/en-us/windows/desktop/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync).
 - SmartScreen: [Microsoft Learn: SmartScreen reputation](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
