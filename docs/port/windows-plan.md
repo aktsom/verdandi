@@ -196,7 +196,7 @@ RtMidi over WinMM (or Windows MIDI Services when present). **Windows MIDI Servic
 |---|---|---|---|
 | **M0a** *toolchain and dependencies* | **Proves** that (1) SuperCollider 3.14.1 builds with MSVC without Qt on a runner, with its dependencies from vcpkg and FFTW; (2) MSYS2 UCRT64 has the packages norns needs (listed one by one with their availability); (3) Lua 5.3 builds from source; (4) libmonome builds with its Windows layer; (5) Ableton Link compiles and runs with MinGW; (6) the portable tests (midi ignore, dedupe, serialosc conflict, plug-in architecture, colour, clock options) run; (7) a **porting inventory** lists which matron/crone files already compile. **Does not prove** anything about audio, norns booting, or the external driver | download the artifact and read the report (section 6 of `windows/README.md`) | 1 to 2 weeks (including fixing what the first runs reveal) |
 | **M0b** *boot smoke test* | **Proves** that on Windows `sclang.exe` compiles the class library **with norns's `sc/core` and `sc/engines`**, `scsynth.exe` renders a SynthDef offline (`-N`, no audio device) to a non-silent wav, and both work from a path with spaces and a non-ASCII letter. **Does not prove** realtime audio, matron or the engines' boot | runs `verdandi-test.cmd` from the artifact on his PC; sends `M0-LOCAL-REPORT.txt` | about 1 week |
-| **M0c** *minimal Windows platform layer (feature code, a separate approved task)* | matron + crone (null backend) + Lua boot headless on the runner; the `scpump` external-driver prototype with a **decision gate**; the busybox shell decision with evidence | the headless-boot artifact | 3 to 5 weeks |
+| **M0c** *minimal Windows platform layer* (done as part of M1, see 8b) | matron + crone (null backend) + Lua boot headless on the runner; the `scpump` external-driver prototype with a **decision gate**; the busybox shell decision with evidence | the headless-boot artifact | 3 to 5 weeks |
 | **M1** | audio out: PortAudio ASIO/WASAPI, audio doctor v1, TotalMix route | Live running, test tone on the Loopback route; rate/buffer line | 2 to 4 weeks |
 | **M2** | window, keyboard, file dialogs, clipboard, screenshots/GIFs, THEME and SCREEN pages, **OSC virtual grid/arc/keys** (Phase 5.5) | types in the window, loads a file, plays the virtual grid | 2 to 4 weeks |
 | **M3** | devices: COM monitor, **both grids**, hot-plug, MIDI (RtMidi), loopback ports, crow, controllers | plugs in the 128 and the 256, plays a grid script, replug | 3 to 5 weeks |
@@ -245,6 +245,30 @@ RtMidi over WinMM (or Windows MIDI Services when present). **Windows MIDI Servic
 2. **sclang on Windows reads its command line in the ANSI code page.** With a script path containing a non-ASCII letter it printed `ERROR: Primitive '_FileExists' failed. caught exception 'bad conversion' in primitive in method Meta_File:exists` (path form `C:/Users/RUNNER~1/...`; the folder had a UTF-8 "Ünï"). It is the **path encoding**, not the slash form. Consequence for the product: the launcher starts sclang (and scsynth) **from inside the working folder with relative, ASCII-only arguments**, or with 8.3 short paths, and a user name with accented letters is a test case from M0b on. The second run tests both ways (`info-nonascii-abs`, `info-nonascii-rel`); these two are information and do not decide the green or red mark.
 
 **Hard time limits** are now in every M0b step: each sclang/scsynth call has a 300 s limit (`timeout -k 10`), the smoke step 20 minutes, the other steps 15 to 30 minutes, and stray `sclang.exe`/`scsynth.exe` are killed at the end. A job that produces no result is reported as "NO RESULT" and fails the run's mark.
+
+### M0 second run (run 42689210080, commit b1e59ff): passed
+
+SuperCollider 3.14.1 with MSVC, the sclang compile with norns's classes, the offline render, Lua 5.3 (pinned commit), libmonome, the Ableton Link probe (**Link compiles and runs with MinGW**), and the portable tests all passed. The porting inventory then listed 31 files that do not compile; M1 below starts from that list.
+
+## 8b. M1: the first runnable build (null audio)
+
+Approach note: `docs/port/phase-m1.md`. Workflow: `.github/workflows/windows-m1.yml`. What is built, in one paragraph: the 31 files of the inventory fall into three groups (the missing include path to the built Lua, the Linux-only system headers, the device layer), and the Windows build handles them without changing Linux behaviour:
+
+| gap in the inventory | what M1 does |
+|---|---|
+| `lualib.h`/`lua.h` (about 23 files) | include path of the built Lua 5.3 (CMake `lua53.pc`) |
+| `termios.h`, `sys/wait.h`, `glob.h`, `fnmatch.h`, `sys/queue.h`, `sys/statvfs.h`, `PTHREAD_STACK_MIN`, `insque`, `strndup`, `realpath`, `localtime_r`, ... | `matron/src/platform/windows/include/` (small headers) and `compat_win.h` (force-included), `posix_compat.c` (glob, fnmatch, statvfs, insque) |
+| `alsa/asoundlib.h` (device_midi) | MIDI devices are stubs (one log line) |
+| `jack/jack.h` (crone, matron) | `matron/src/platform/windows/jack_null/`: a JACK-compatible null backend, in-process: crone's mixer and softcut run on silence, the clock and CPU counters work; unit test on Linux and under Wine |
+| `dns_sd.h` (osc.cc) | Bonjour stub (one log line) |
+| `monome.h`, serial devices, HID, hot-plug, the pty virtual grid | stubs in `stubs_win.cc` (grids come with M3, the OSC virtual grid with M2) |
+| `fork()` for the sidecar (shell commands) | the sidecar runs as a thread; commands run through `cmd.exe` (or `busybox sh` when `busybox.exe` is next to `norns.exe`) in a job object |
+| no audio device on the runner (the M0 hang) | scsynth gets a **null audio driver** (`windows/patches/scsynth-null-audio.patch`, `VERDANDI_NULL_AUDIO=1`), tried on Linux against a PortAudio build of the same source |
+| crash reports (signals, backtrace) | `SetUnhandledExceptionFilter` + DbgHelp minidump in `logs\crash` |
+
+**Checked without Windows:** all 80 sources of `norns.exe` compile with the mingw-w64 cross compiler on Linux (`windows/ci/xcheck.sh`; with `XC_LINK=1` the only unresolved symbol is SDL's `WinMain`, which `-lSDL2main` provides); the null backend, the POSIX stand-ins, the shell runner and the launcher run under **Wine** (`linux/tests/windows_wine_test.sh`, in `run_all.sh`); the null audio driver booted scsynth with no device and answered `/status` with its clock at the nominal rate. **Not checked:** linking and running `norns.exe` itself (the dependencies are MSYS2 packages, not available here), SDL on Windows, the real window, DbgHelp. That is what the first M1 runs on the runner are for.
+
+**Findings about the design:** `norns.exe` is one process (matron + crone + softcut + the sidecar thread); the launcher `Verdandi.exe` starts it, then sclang from inside its own folder with relative ASCII arguments (the M0 finding), and ends everything with a job object. The program folder is linked into the user folder as `norns` (a directory junction, no rights needed) because matron reads `$HOME/norns/lua`. **scsynth is not yet wired into crone's inputs** (on Linux sclang connects scsynth to crone through JACK ports): in M1 the engines run, but their audio goes nowhere; with the real audio backend (M2) scsynth's null driver is replaced by the pumped one of the plan.
 
 ## 9. Decisions still needed (recommendation first)
 

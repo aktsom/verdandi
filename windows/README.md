@@ -52,3 +52,25 @@ A push that happened before you switched Actions on does not start anything. Sta
 | the SuperCollider box is red at `sc-fftw` or `sc-vcpkg-libs` | a download or a package failed: send the run link, this is a normal M0 finding |
 | the report says SKIP | the step was not tried because an earlier one it needs failed |
 | the artifact is missing | the report box did not run; open the run page, click the red box, copy the last lines |
+
+
+---
+
+# Windows M1: the first runnable build (no sound yet)
+
+M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It opens the norns window, boots norns's Lua side, starts SuperCollider in the background on a silent "null" audio device and lets you run scripts and click through the menus. **Not in M1:** sound, grids, MIDI, Link, maiden, an installer. Approach: `docs/port/phase-m1.md`.
+
+## Get it
+
+1. Actions (as in step 1 above, once). The workflow **windows-m1** starts by itself when a push changes the program (or `windows/`); you can see it in **Actions** on the left under "windows-m1". It takes roughly 20 to 30 minutes (a guess; the first M0 run took 20 minutes for SuperCollider and MinGW together).
+2. Open the finished run, scroll to **Artifacts** at the bottom:
+   - **m1-zip**: `Verdandi-windows-M1.zip`, the program (about 100 to 150 MB, a guess).
+   - **verdandi-windows-m1**: `M1-REPORT.md` (every step PASS or FAIL), the logs of the automatic test run and its screenshot (`m1-run`).
+3. Right-click the downloaded zip, Properties, tick **Unblock**, OK. Extract all into a folder of your own (not Downloads\ inside the zip viewer).
+4. Double-click **Verdandi.exe**. Windows may say it protected your PC: More info, Run anyway (the build is not signed).
+
+## What you should see
+The norns window within about 20 seconds; the home screen; the menus (F10 or the right mouse button). The checklist of what to try is in `docs/port/HARDWARE-CHECKLIST.md` ("Windows M1").
+
+## What to send back
+`M1-REPORT.md` (always), and from `%USERPROFILE%\Verdandi\logs` the files `launcher.log`, `norns.log`, `sclang.log` (and everything in `crash\` if there is something), plus what you saw. Windows version (`winver`), and whether an antivirus window appeared.

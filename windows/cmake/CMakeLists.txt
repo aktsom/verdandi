@@ -27,7 +27,9 @@ pkg_check_modules(LIBLO REQUIRED IMPORTED_TARGET liblo)
 pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
-pkg_check_modules(NNG REQUIRED IMPORTED_TARGET nng)
+# nng: MSYS2 ships a CMake package, not a pkg-config file (first M1 run: "Package nng not found"); header and library are searched directly
+find_path(NNG_INC nng/nng.h REQUIRED)
+find_library(NNG_LIB NAMES nng libnng REQUIRED)
 # the static library (no extra DLL to ship); it needs the Windows SetupAPI for the serial port lookup
 find_library(MONOME_LIB NAMES libmonome.a monome REQUIRED)
 find_path(MONOME_INC monome.h REQUIRED)
@@ -78,15 +80,15 @@ target_include_directories(norns PRIVATE
   ${REPO}/third-party/concurrentqueue
   ${REPO}/third-party/readerwriterqueue
   ${REPO}/third-party/lua-cjson
-  ${MONOME_INC})
+  ${MONOME_INC} ${NNG_INC})
 # winsock macros (connect, close, ...) for the one file that talks to a socket
 set_source_files_properties(${REPO}/matron/src/platform/macos/sdl_bridge.cc PROPERTIES
   COMPILE_OPTIONS "-include;${REPO}/matron/src/platform/windows/compat_win.h;-include;${REPO}/matron/src/platform/windows/compat_sock.h")
 target_compile_options(norns PRIVATE -Wno-unused-parameter)
 target_link_libraries(norns PRIVATE
   lua-cjson ${MONOME_LIB}
-  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::SDL2 PkgConfig::NNG
-  ws2_32 setupapi winmm ole32 shell32 dbghelp psapi stdc++ pthread m)
+  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::SDL2 ${NNG_LIB}
+  ws2_32 mswsock advapi32 setupapi winmm ole32 shell32 dbghelp psapi stdc++ pthread m)
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
 install(TARGETS norns RUNTIME DESTINATION .)

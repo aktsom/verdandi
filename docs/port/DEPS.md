@@ -284,3 +284,19 @@ Build: cmake against the SuperCollider 3.14.1 source of the package build (`-DSC
 | SuperCollider plug-in headers | 3.14.1 (the bundled source) | GPL-3.0-or-later | build input only, not shipped |
 
 Build: `g++ -std=c++20 -O3 -fPIC -DNDEBUG -DNAM_SAMPLE_FLOAT`, baseline x86-64 (no AVX2 build), linked with `-Wl,--no-undefined`, stripped; about 20 seconds on four jobs, about 1.0 MB. It needs glibc 2.38 (the package builder and base are Ubuntu 24.04). The licence texts are in `/opt/verdandi/licenses/namamp/`, the source locations and commits in `/opt/verdandi/licenses/SOURCES.txt`, and the `copyright` file has a stanza for `opt/verdandi/namamp/*`. Nothing is downloaded at run time. Test data: two small example models of NeuralAmpModelerCore (MIT) in `linux/tests/fixtures/nam/` with their licence text.
+
+## Windows build (milestone M1, `windows/`): what is added
+
+Nothing is shipped in a product yet; these are the build inputs and what the M1 zip contains. Every package is installed by MSYS2 (UCRT64) in CI; their licences are in the packages and go into `licenses/` of the zip before a release (to do before M6).
+
+| Package / file | Used for | Licence |
+|---|---|---|
+| MinGW-w64 gcc, winpthreads, UCRT runtime (MSYS2 UCRT64) | compiler, POSIX threads on Windows, C runtime; DLLs are copied next to `norns.exe` | GPL-3.0 with the GCC runtime library exception; winpthreads: MIT/ZPL |
+| SDL2, cairo (+ freetype, pixman, libpng, fontconfig, zlib), liblo, libsndfile (+ its codec libraries), nng, libsamplerate | as on Linux (window, drawing, OSC, files, sidecar IPC) | zlib; LGPL-2.1 or MPL-1.1 (cairo); FTL or GPL-2 (freetype); LGPL-2.1+; LGPL-2.1+; MIT |
+| Lua 5.3.6 (github.com/lua/lua, tag v5.3.6, pinned by commit) | scripting | MIT |
+| libmonome 1.4.9 (static, built from source) | grids and arcs (not used in M1; linked for later) | ISC |
+| SuperCollider 3.14.1 (MSVC build, plus `windows/patches/scsynth-null-audio.patch`) | sclang, scsynth | GPL-3.0-or-later (the patch is ours, same licence) |
+| `matron/src/platform/windows/include/sys/queue.h` | BSD list macros that MinGW lacks (copied from the C library headers of a Linux system) | BSD-3-Clause |
+| `matron/src/platform/windows/jack_null/` | a JACK-**compatible** interface written for this project (names and values of the JACK API, no JACK code) | GPL-3.0 (ours) |
+| Wine 9 and mingw-w64 cross compiler (apt) | only to test Windows code on Linux; not shipped | LGPL-2.1+ / GPL |
+| ASIO SDK | **not used in M1** (decision in `docs/port/windows-plan.md` section 9) | Steinberg dual licence |
