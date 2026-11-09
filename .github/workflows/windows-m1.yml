@@ -35,6 +35,7 @@ concurrency:
 env:
   SC_TAG: Version-3.14.1
   M0_REQUIRE: 'sc norns assemble m1'
+  TAIL_LINES: '130'
 
 jobs:
   sc:

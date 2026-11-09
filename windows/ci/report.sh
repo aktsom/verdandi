@@ -103,7 +103,7 @@ done
             echo '```'
             digest "$name"
             echo "--- last lines:"
-            m0_tail "$name" 25
+            m0_tail "$name" "${TAIL_LINES:-25}"
             echo '```'
         fi
     done

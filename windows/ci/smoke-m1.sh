@@ -76,6 +76,13 @@ chk_png() {
     [ -n "$PYTHON" ] || { echo "no python: only the existence of the file is checked"; return 0; }
     "$PYTHON" "$(native "$HERE/png_nonblank.py")" "$(native "$png")"
 }
+# always last: what the program said, so that a failed start can be read from the report without the artifact. FAIL when the start did not reach the smoke script
+chk_diagnostics() {
+    echo "--- launcher.log:"; tail -n 20 "$LOGS/launcher.log" 2> /dev/null
+    echo "--- norns.log (last 70 lines):"; tail -n 70 "$LOGS/norns.log" 2> /dev/null
+    echo "--- sclang.log (last 30 lines):"; tail -n 30 "$LOGS/sclang.log" 2> /dev/null
+    grep -q "VERDANDI_SMOKE_OK" "$LOGS/norns.log" 2> /dev/null
+}
 chk_crash() { if ls "$LOGS/crash"/* > /dev/null 2>&1; then echo "crash reports:"; ls -l "$LOGS/crash"; return 1; fi; echo "no crash reports"; }
 collect() {
     mkdir -p "$M0_OUT/m1-run"
@@ -96,4 +103,5 @@ m0_run m1-check-sclang chk_sclang
 m0_run m1-check-script chk_script
 m0_run m1-check-screen chk_png
 m0_run m1-check-crash chk_crash
+m0_run m1-check-diagnostics chk_diagnostics
 exit 0
