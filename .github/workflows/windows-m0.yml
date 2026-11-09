@@ -64,17 +64,23 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
+      # third-party/doctest, third-party/link (and its asio-standalone) are git submodules
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
           update: true
           install: git base-devel
       - name: Dependencies (packages, Lua 5.3, libmonome, Link probe)
+        timeout-minutes: 30
         run: windows/ci/msys2-deps.sh
       - name: Portable tests
+        timeout-minutes: 15
         run: windows/ci/portable-tests.sh
       - name: Porting inventory
+        timeout-minutes: 15
         run: windows/ci/inventory.sh
       - uses: actions/upload-artifact@v4
         if: always()
@@ -101,6 +107,7 @@ jobs:
       - name: Unpack SuperCollider
         run: 7z x sc-artifact/sc-win64.zip -osc-unpacked -y > /dev/null && find sc-unpacked -maxdepth 2 | head -20
       - name: Smoke test
+        timeout-minutes: 20
         env:
           SC_TREE: ${{ github.workspace }}/sc-unpacked/SuperCollider
         run: windows/ci/smoke-sc.sh
@@ -138,9 +145,10 @@ jobs:
         run: |
           mkdir -p dist
           cp -r m0-out/M0-REPORT.md m0-out/logs m0-out/status dist/ 2> /dev/null || true
-          cp m0-out/inventory.tsv m0-out/inventory-summary.txt m0-out/msys2-packages.txt m0-out/sc-win64.zip dist/ 2> /dev/null || true
+          cp m0-out/inventory.tsv m0-out/inventory-summary.txt m0-out/inventory-categories.md m0-out/portable-summary.txt m0-out/msys2-packages.txt m0-out/sc-win64.zip dist/ 2> /dev/null || true
           cp -r sc dist/norns-sc
-          cp windows/dist/verdandi-test.cmd windows/dist/m0-job.scd windows/dist/README-M0.txt dist/
+          cp -r windows/ci/sc-smoke dist/sc-smoke
+          cp windows/pack/verdandi-test.cmd windows/pack/m0-job.scd windows/pack/README-M0.txt dist/
           find dist -maxdepth 1
       - uses: actions/upload-artifact@v4
         if: always()

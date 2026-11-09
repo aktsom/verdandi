@@ -16,6 +16,7 @@ group_of() {
         msys2-* | lua53-* | libmonome-* | link-* | inventory) echo "M0a toolchain and dependencies" ;;
         pt-*) echo "M0a portable tests" ;;
         smoke-*) echo "M0b boot smoke" ;;
+        info-*) echo "M0b findings (information)" ;;
         *) echo "other" ;;
     esac
 }
@@ -42,17 +43,38 @@ for f in "$M0_OUT"/status/*.status; do
     printf '%s\t| %s | %s | %s | %s |\n' "$(group_of "$name")" "$(group_of "$name")" "$name" "$word" "$detail"
 done | sort -t "$(printf '\t')" -k1,1 -s | cut -f2- >> "$out"
 
+# a job that hung or was cancelled leaves no status at all: say so instead of staying silent
+missing=""
+for part in sc smoke; do
+    ls "$M0_OUT"/status/$part-*.status > /dev/null 2>&1 || missing="$missing $part"
+done
 {
+    if [ -n "$missing" ]; then
+        echo
+        echo "**NO RESULT from:$missing (the job failed before its first step finished, was cancelled, or timed out).**"
+    fi
     echo
     echo "**$pass passed, $fail failed, $skip skipped.**"
     echo
     echo "A failed step is information, not a disaster: M0 exists to find these. Send this file together with the zip of the run (or the logs folder in it)."
     if [ -f "$M0_OUT/inventory-summary.txt" ]; then
         echo
-        echo "## Porting inventory"
+        echo "## Porting inventory (counts)"
         echo
         echo '```'
         cat "$M0_OUT/inventory-summary.txt"
+        echo '```'
+    fi
+    if [ -f "$M0_OUT/inventory-categories.md" ]; then
+        echo
+        sed 's/^# /### /; s/^## /#### /' "$M0_OUT/inventory-categories.md"
+    fi
+    if [ -f "$M0_OUT/portable-summary.txt" ]; then
+        echo
+        echo "## Portable tests: which compile and run, which need porting"
+        echo
+        echo '```'
+        cat "$M0_OUT/portable-summary.txt"
         echo '```'
     fi
     if [ -f "$M0_OUT/msys2-packages.txt" ]; then
@@ -81,6 +103,7 @@ done | sort -t "$(printf '\t')" -k1,1 -s | cut -f2- >> "$out"
 cat "$out"
 # the job fails when a step of the CORE parts failed, so that the green/red mark of the run is meaningful: SuperCollider build and the smoke test. the rest is reported only
 core_fail=0
+[ -n "$missing" ] && core_fail=1
 for f in "$M0_OUT"/status/sc-*.status "$M0_OUT"/status/smoke-*.status; do
     [ -e "$f" ] || continue
     read -r word _ < "$f"

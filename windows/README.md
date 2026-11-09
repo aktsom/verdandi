@@ -10,7 +10,7 @@ Plan and context: `docs/port/windows-plan.md`. The scripts are in `windows/ci/`,
 2. Click **Actions** in the row of tabs under the repository name.
 3. If you see a page saying workflows are disabled: click the green button **I understand my workflows, go ahead and enable them**. (A fork starts with this switched off.)
 4. Check **Settings > Actions > General**. **Actions permissions** must be **Allow all actions and reusable workflows** (the workflow uses two helper actions from outside GitHub: `msys2/setup-msys2` and `ilammy/msvc-dev-cmd`). Click **Save** if you changed it.
-5. A private repository uses your free monthly minutes, and Windows minutes count double. A full M0 run is expected to take roughly one to one and a half hours (a guess), so about 2 to 3 hours of quota. A public repository has no limit.
+5. A private repository uses your free monthly minutes, and Windows minutes count double. A full M0 run is expected to take about 15 to 30 minutes (the first run: SuperCollider 7 minutes, MinGW part 4 minutes), so under one hour of quota. A public repository has no limit.
 
 ## 2. Start the first run
 
@@ -25,7 +25,7 @@ A push that happened before you switched Actions on does not start anything. Sta
 
 1. **Actions** tab. A run called **windows-m0** appears at the top, with a yellow circle while it works.
 2. Click it. You see four boxes: **M0a SuperCollider 3.14.1 (MSVC)**, **M0a MinGW toolchain, Lua, libmonome, Link**, **M0b boot smoke** (starts when the first box is done) and **Report and artifact**.
-3. Expected: the first box takes the longest (a SuperCollider build, a guess of 30 to 60 minutes). A red cross on a box is normal at this stage and is exactly what M0 is for: the report says which step and why.
+3. Expected: the first box takes the longest (the SuperCollider build took about 7 minutes in the first run). A red cross on a box is normal at this stage and is exactly what M0 is for: the report says which step and why.
 
 ## 4. Download the result
 

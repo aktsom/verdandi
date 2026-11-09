@@ -224,6 +224,28 @@ RtMidi over WinMM (or Windows MIDI Services when present). **Windows MIDI Servic
 
 **If a full build does not fit in one go,** this is why it is split: M0a answers "do the tools build", M0b "does the built SuperCollider run norns's classes"; a red M0a part does not stop M0b (it needs only the SuperCollider job). The report's final job fails the run's mark only when SuperCollider or the smoke test failed, so a green mark means "the core is fine", while the table shows the rest.
 
+### M0 results so far (first run: run 42680578683, commit b7ff438; second run pending)
+
+| step | first run | cause and fix (in the second run's workflow) |
+|---|---|---|
+| SuperCollider 3.14.1 with MSVC, no Qt: all seven `sc-*` steps | **PASS** (about 7 minutes, much faster than guessed) | none; the install tree zip is the base for M0b |
+| `smoke-sclang-nrt` (sclang compiles SuperCollider's library with norns's `sc/core`, `sc/engines`; scsynth `-N` renders a non-silent wav) | **PASS** | none |
+| `msys2-packages` | **PASS, 14 of 14** (gcc, cmake, ninja, make, pkgconf, liblo, cairo, freetype, libsndfile, SDL2, nng, libsamplerate, fftw, readline) | none |
+| `libmonome-build` | **PASS** with MinGW | none |
+| `inventory` | PASS (31 files with an error, 11 compile on their own) | now sorted by category in the report |
+| `smoke-spaces` (the second sclang run, folder name with spaces **and** an accented letter) | **hung until the 30 minute job cancel** | two separate causes, below |
+| `lua53-build` | FAIL: `www.lua.org` unreachable from the runner (curl error 28) | Lua 5.3.6 now comes from `github.com/lua/lua`, tag `v5.3.6`, **pinned to its commit** `75ea9ccb...` and checked after the clone; compiled directly with gcc (no makefile) |
+| `link-probe` | FAIL: `ableton/Link.hpp` not found | `third-party/link` (and its nested `asio-standalone`) are **git submodules** and the checkout was not recursive; the msys2 job now checks out `submodules: recursive`, and the probe says plainly if the submodule is missing. Whether Link compiles with MinGW is **still unknown** |
+| `pt-cpp-*` (4 tests) | FAIL: `doctest/doctest.h` not found | same cause: `third-party/doctest` is a submodule. Now recursive checkout, with the `git submodule update` and the MSYS2 `doctest` package as fallbacks. Whether the tests also need Linux-only headers is **still unknown** (the report now lists which compile and run) |
+| `pt-lua-*` | FAIL: `line 24: : command not found` | the Lua path variable was empty because `lua53-build` had failed; the script now falls back to the built Lua or a Lua on the PATH and otherwise **skips with a reason** instead of running an empty command |
+| `Assemble the artifact` | FAIL: `windows/dist/...: No such file` | the repository's `.gitignore` ignores every `dist/` folder, so the helper files were never committed. The folder is now `windows/pack/` |
+
+**Two real findings about SuperCollider on Windows (the product needs both):**
+1. **norns's `Crone` class boots a server when sclang starts** (`Crone.bootOnInit`). On a machine with no usable audio device scsynth fails (`Pa_OpenDefaultStream ... Device unavailable`, exit code -1073740791 = 0xC0000409) and sclang then waits for the server for ever. For the tests, a smoke-only class (`windows/ci/sc-smoke/SmokeNoBoot.sc`) switches the boot off; **no test boots a realtime server any more**, scsynth only runs with `-N`. For the product this confirms that the Windows launcher must start sclang **after** the audio backend is up, must give a hang a time limit, and must treat "no audio device" as a message to the user, not a wait.
+2. **sclang on Windows reads its command line in the ANSI code page.** With a script path containing a non-ASCII letter it printed `ERROR: Primitive '_FileExists' failed. caught exception 'bad conversion' in primitive in method Meta_File:exists` (path form `C:/Users/RUNNER~1/...`; the folder had a UTF-8 "Ünï"). It is the **path encoding**, not the slash form. Consequence for the product: the launcher starts sclang (and scsynth) **from inside the working folder with relative, ASCII-only arguments**, or with 8.3 short paths, and a user name with accented letters is a test case from M0b on. The second run tests both ways (`info-nonascii-abs`, `info-nonascii-rel`); these two are information and do not decide the green or red mark.
+
+**Hard time limits** are now in every M0b step: each sclang/scsynth call has a 300 s limit (`timeout -k 10`), the smoke step 20 minutes, the other steps 15 to 30 minutes, and stray `sclang.exe`/`scsynth.exe` are killed at the end. A job that produces no result is reported as "NO RESULT" and fails the run's mark.
+
 ## 9. Decisions still needed (recommendation first)
 
 1. **ASIO SDK licence vs. a WASAPI-only fallback build.** Steinberg added a **GPLv3 option to the ASIO SDK** (a dual licence, proprietary agreement or GPLv3) in October 2025 (web, secondary coverage; **the SDK's own `LICENSE.txt` has to be read before a release**). **Recommendation:** build ASIO with the GPLv3 option, keep a **WASAPI-only build configuration** (CMake switch) as the fallback if the licence reading comes out differently; M0 and M1 can proceed with WASAPI. The SDK is a build input downloaded in CI, never committed.
