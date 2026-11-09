@@ -60,8 +60,9 @@ add_executable(norns ${NORNS_SOURCES})
 set_target_properties(norns PROPERTIES OUTPUT_NAME "norns")
 
 target_compile_definitions(norns PRIVATE
+  # HAVE_ABLETON_LINK=1: the Lua side registers and calls the clock_link_* functions; in M1 they are the stand-ins of stubs_win.cc (no Link yet)
   NORNS_DESKTOP=1 NORNS_LINUX_DESKTOP=1 NORNS_WINDOWS=1
-  HAVE_LIBMONOME=1 HAVE_NNG=1 HAVE_LUA_CJSON=1 HAVE_ABLETON_LINK=0
+  HAVE_LIBMONOME=1 HAVE_NNG=1 HAVE_LUA_CJSON=1 HAVE_ABLETON_LINK=1
   VERSION_MAJOR=0 VERSION_MINOR=0 VERSION_PATCH=0 VERSION_HASH="${VERDANDI_VERSION_HASH}"
   _GNU_SOURCE=1)
 # the force-included compatibility header: every translation unit sees it first

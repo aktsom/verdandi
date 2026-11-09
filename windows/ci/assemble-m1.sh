@@ -32,6 +32,8 @@ assemble() {
     rm -rf "$APP/sc/tests" "$APP/update/pack.sh" "$APP/update/test-update.sh" "$APP/update/update.sh"
     cp "$REPO/windows/pack/matronrc.lua" "$APP/matronrc.lua"
     cp "$REPO/windows/pack/README-M1.txt" "$APP/README.txt"
+    # sclang runs "jack_connect ..." to wire scsynth into crone (Linux, macOS): there is no JACK server here in M1, so these stand-ins do nothing, quietly
+    cp "$REPO"/windows/pack/jack_*.cmd "$APP/"
     mkdir -p "$APP/smoke" && cp "$REPO/windows/pack/smoke/verdandi_smoke.lua" "$APP/smoke/"
     # SuperCollider, built in M0a (the zip holds one folder, SuperCollider)
     local tmp="$OUT/sc-unpacked"

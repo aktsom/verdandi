@@ -25,7 +25,7 @@ MON="${LIBMONOME_INC:-build/package/cache/libmonome/public}"
 INC="-include $REPO/matron/src/platform/windows/compat_win.h -I matron/src -iquote matron/src/hardware -iquote matron/src/device -I matron/src/platform/windows -I matron/src/platform/windows/include -I matron/src/platform/windows/jack_null/include -I matron/src/platform/macos/include -I norns -I crone -I crone/src -I crone/faust \
  -I crone/softcut/softcut-lib/include -I third-party/concurrentqueue -I third-party/readerwriterqueue -I third-party/lua-cjson -I third-party/link/extensions/abl_link/include -I $MON \
  -isystem $SHADOW -isystem $SHADOW/SDL2 -isystem $SHADOW/cairo -isystem $SHADOW/freetype2"
-DEFS=(-DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONOME=1 -DHAVE_NNG=1 -DHAVE_LUA_CJSON=1 -DHAVE_ABLETON_LINK=0 -DVERSION_MAJOR=0 -DVERSION_MINOR=0 -DVERSION_PATCH=0 '-DVERSION_HASH="xcheck"')
+DEFS=(-DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONOME=1 -DHAVE_NNG=1 -DHAVE_LUA_CJSON=1 -DHAVE_ABLETON_LINK=1 -DVERSION_MAJOR=0 -DVERSION_MINOR=0 -DVERSION_PATCH=0 '-DVERSION_HASH="xcheck"')
 # shellcheck disable=SC2206
 DEFS+=(${XC_DEFS:-})
 files="${XC_FILES:-}"

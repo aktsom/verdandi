@@ -96,6 +96,8 @@ int main() {
     CHECK(rm.outcome == SIDECAR_SHELL_EXITED && rm.code == 0, "an existing folder is not an error");
     rm = run("mkdir -p \"mk test/with space\"", &om);
     CHECK(rm.code == 0 && GetFileAttributesA("mk test\\with space") != INVALID_FILE_ATTRIBUTES, "a quoted path with a space");
+    rm = run("mkdir -p mk test2/unquoted path/x", &om);
+    CHECK(rm.code == 0 && GetFileAttributesA("mk test2\\unquoted path\\x") != INVALID_FILE_ATTRIBUTES, "an unquoted path with spaces is one path");
     // the shell runner
     Out o;
     sidecar_shell_result_t r = run("echo hello from the sidecar", &o);

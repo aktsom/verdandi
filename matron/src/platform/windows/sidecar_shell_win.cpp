@@ -92,8 +92,8 @@ static bool builtin_mkdir_p(const char *cmd, int *code) {
     if (path.size() >= 2 && ((path.front() == '"' && path.back() == '"') || (path.front() == '\'' && path.back() == '\''))) {
         path = path.substr(1, path.size() - 2);
     }
-    // more than one word, or a shell operator: not ours
-    if (path.empty() || path.find_first_of("&|<>;") != std::string::npos || (path.find(' ') != std::string::npos && p[0] != '"' && p[0] != '\'')) {
+    // a shell operator: not ours. a path with spaces is one path (norns's Lua does not quote it: "mkdir -p /home/we/dust/data/my script/", and the user folder may have spaces too)
+    if (path.empty() || path.find_first_of("&|<>;") != std::string::npos) {
         return false;
     }
     for (char &c : path) {
