@@ -9,7 +9,7 @@
  
  #define PRINT_PORTAUDIO_ERROR(function, errorcode)                                                                     \
      scprintf("SC_PortAudioDriver: PortAudio failed at %s with error: '%s'\n", #function, Pa_GetErrorText(errorcode))
-@@ -438,3 +438,134 @@
+@@ -438,3 +438,136 @@
  
      return paerror == paNoError;
  }
@@ -25,6 +25,8 @@
 +#include <vector>
 +#ifdef _WIN32
 +#    include <windows.h>
++#    include <mmsystem.h> // timeBeginPeriod
++#    pragma comment(lib, "winmm.lib")
 +#endif
 +
 +class SC_NullAudioDriver : public SC_AudioDriver {

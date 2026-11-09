@@ -19,6 +19,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+
+#include <mmsystem.h> /* timeBeginPeriod (link winmm) */
 #endif
 
 #define MAX_FRAMES 4096

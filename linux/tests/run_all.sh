@@ -113,6 +113,13 @@ jack_null_ok() {
     "$T/jack_null_test"
 }
 run "windows:JACK-compatible null backend (ring buffer, unique names, ports, physical ports, connections, processing order, block cadence, frame time, deactivate)" jack_null_ok
+# the Windows port (docs/port/phase-m1.md): needs the mingw-w64 cross compiler and Wine (apt: g++-mingw-w64-x86-64 wine64); said out loud when they are not there
+if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/wine/wine64 ]; then
+    run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
+    run "windows:every source of norns.exe compiles with mingw-w64 (syntax check, windows/ci/xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
+else
+    echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
+fi
 run "build:waf-path ignores an unknown or root SUDO_USER" linux/tests/waf_path_test.sh
 run "udev:rule syntax and narrowness (monome devices only, uaccess only)" linux/tests/udev_test.sh
 run "manual:file, table of contents, sources comments, names exist in the code" linux/tests/manual_test.sh
