@@ -1,0 +1,177 @@
+# Verdandi Windows, milestone M1: the first runnable build (norns window, matron and Lua, sclang and scsynth on a null audio device). plan: docs/port/phase-m1.md, guide: windows/README.md.
+# builds SuperCollider 3.14.1 (with Verdandi's null audio driver patch), builds norns.exe and the launcher with MSYS2, assembles the folder, starts it HEADLESS on the runner and checks the logs and a
+# screenshot, and uploads the zip. every step records PASS or FAIL in a report (windows/ci/lib.sh); the artifact "verdandi-windows-m1" holds the zip, the report, the logs of the test run and its screenshot.
+name: windows-m1
+
+on:
+  push:
+    branches: [linux-port, windows-port]
+    paths:
+      - 'windows/**'
+      - 'matron/**'
+      - 'norns/**'
+      - 'crone/**'
+      - 'lua/**'
+      - 'sc/**'
+      - '.github/workflows/windows-m1.yml'
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner image'
+        type: choice
+        default: windows-2022
+        options:
+          - windows-2022
+          - windows-latest
+
+permissions:
+  contents: read
+
+env:
+  SC_TAG: Version-3.14.1
+  M0_REQUIRE: 'sc norns assemble m1'
+
+jobs:
+  sc:
+    name: SuperCollider 3.14.1 (MSVC, with the null audio driver)
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build SuperCollider
+        env:
+          JOBS: '4'
+        run: windows/ci/build-sc.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-out-sc
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  norns:
+    name: norns.exe and Verdandi.exe (MSYS2 UCRT64)
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      # third-party/ (doctest, link, ...) and crone/softcut are git submodules
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: git base-devel
+      - name: Dependencies (packages, Lua 5.3, libmonome)
+        timeout-minutes: 30
+        env:
+          DEPS_STEPS: 'packages lua libmonome'
+        run: windows/ci/msys2-deps.sh
+      - name: Build norns.exe and the launcher
+        timeout-minutes: 30
+        run: windows/ci/build-norns.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-out-norns
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-norns-bin
+          path: m1-norns
+          retention-days: 14
+          if-no-files-found: warn
+
+  package:
+    name: Assemble, start headless, check
+    needs: [sc, norns]
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-out-sc
+          path: sc-artifact
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-norns-bin
+          path: m1-norns
+      - name: Assemble the folder and the zip
+        run: NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
+      - name: Start it headless and check
+        timeout-minutes: 15
+        run: ZIP="$PWD/m1-stage/Verdandi-windows-M1.zip" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-out-package
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-zip
+          path: m1-stage/Verdandi-windows-M1.zip
+          retention-days: 30
+          if-no-files-found: warn
+
+  report:
+    name: Report and artifact
+    needs: [sc, norns, package]
+    if: always()
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: m1-out-*
+          path: m0-out
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m1-zip
+          path: dist
+      - name: Report
+        env:
+          M0_RUN: "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} | commit ${{ github.sha }} | runner ${{ inputs.runner || 'windows-2022' }} (${{ runner.os }} ${{ runner.arch }})"
+        run: |
+          windows/ci/report.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Assemble the artifact
+        if: always()
+        run: |
+          mkdir -p dist
+          cp -r m0-out/M0-REPORT.md dist/M1-REPORT.md 2> /dev/null || true
+          cp -r m0-out/logs m0-out/status m0-out/m1-run dist/ 2> /dev/null || true
+          cp windows/pack/README-M1.txt dist/README.txt
+          find dist -maxdepth 2 | head -40
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verdandi-windows-m1
+          path: dist
+          retention-days: 30

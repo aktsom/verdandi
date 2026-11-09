@@ -22,7 +22,19 @@
 //---------------------------------
 //--- common
 
+#ifdef NORNS_WINDOWS
+// Windows: nng's ipc:// is a named pipe, not a path. the sidecar is a thread of this process, so the name carries the process id (two copies never meet)
+static char url_win[64];
+static const char *sidecar_url(void) {
+    if (url_win[0] == '\0') {
+        snprintf(url_win, sizeof url_win, "ipc://norns-sidecar-%lu", (unsigned long)getpid());
+    }
+    return url_win;
+}
+#define url sidecar_url()
+#else
 static const char *url = "ipc:///tmp/norns-sidecar.ipc";
+#endif
 
 static const char *quit_cmd = "__quit__";
 
@@ -286,6 +298,14 @@ static void sidecar_server_stream_cmd(nng_socket sock, const char *cmd, uint8_t 
 }
 
 static void sidecar_server_detach_cmd(nng_socket sock, const char *unit, const char *cmd, uint8_t req_id) {
+#ifdef NORNS_WINDOWS
+    // systemd-run does not exist here; a detached command (an update, a reboot) has no Windows meaning in M1
+    (void)unit;
+    (void)cmd;
+    frame_send_error(sock, req_id, "this command is not available on Windows");
+    return;
+}
+#else
     char unit_arg[128];
     char user_prop[96];
     char group_prop[96];
@@ -394,6 +414,7 @@ static void sidecar_server_detach_cmd(nng_socket sock, const char *unit, const c
     }
     frame_send_error(sock, req_id, output);
 }
+#endif
 
 int sidecar_server_main(int sync_fd) {
     nng_socket sock;
@@ -410,7 +431,9 @@ int sidecar_server_main(int sync_fd) {
 
     // remove stale ipc socket left behind after a hard kill.
     // safe because only one sidecar instance ever exists.
+#ifndef NORNS_WINDOWS
     unlink(url + strlen("ipc://"));
+#endif
 
     if ((rv = nng_listen(sock, url, &listener, 0)) != 0) {
         nng_close(sock);

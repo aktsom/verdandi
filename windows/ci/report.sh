@@ -16,6 +16,9 @@ group_of() {
         msys2-* | lua53-* | libmonome-* | link-* | inventory) echo "M0a toolchain and dependencies" ;;
         pt-*) echo "M0a portable tests" ;;
         smoke-*) echo "M0b boot smoke" ;;
+        norns-* | launcher-*) echo "M1 build of norns.exe and the launcher" ;;
+        assemble | package) echo "M1 runnable folder and zip" ;;
+        m1-*) echo "M1 start test (headless)" ;;
         info-*) echo "M0b findings (information)" ;;
         *) echo "other" ;;
     esac
@@ -45,8 +48,8 @@ done | sort -t "$(printf '\t')" -k1,1 -s | cut -f2- >> "$out"
 
 # a job that hung or was cancelled leaves no status at all: say so instead of staying silent
 missing=""
-for part in sc smoke; do
-    ls "$M0_OUT"/status/$part-*.status > /dev/null 2>&1 || missing="$missing $part"
+for part in ${M0_REQUIRE:-sc smoke}; do
+    ls "$M0_OUT"/status/"$part"*.status > /dev/null 2>&1 || missing="$missing $part"
 done
 {
     if [ -n "$missing" ]; then
@@ -104,7 +107,7 @@ cat "$out"
 # the job fails when a step of the CORE parts failed, so that the green/red mark of the run is meaningful: SuperCollider build and the smoke test. the rest is reported only
 core_fail=0
 [ -n "$missing" ] && core_fail=1
-for f in "$M0_OUT"/status/sc-*.status "$M0_OUT"/status/smoke-*.status; do
+for f in "$M0_OUT"/status/sc-*.status "$M0_OUT"/status/smoke-*.status "$M0_OUT"/status/norns-*.status "$M0_OUT"/status/launcher-*.status "$M0_OUT"/status/assemble.status "$M0_OUT"/status/package.status "$M0_OUT"/status/m1-*.status; do
     [ -e "$f" ] || continue
     read -r word _ < "$f"
     [ "$word" = FAIL ] && core_fail=1

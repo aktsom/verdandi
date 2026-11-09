@@ -11,6 +11,10 @@ unsigned verdandi_jack_null_ticks(void);
 unsigned verdandi_jack_null_xruns(void);
 unsigned verdandi_jack_null_frames(void);
 
+#ifdef _WIN32
+#define setenv(n, v, o) _putenv_s((n), (v))
+#endif
+
 static int fails;
 #define CHECK(c, ...)                                                                                                                                          \
     do {                                                                                                                                                       \

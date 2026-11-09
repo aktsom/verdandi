@@ -52,6 +52,7 @@ enum JackPortFlags {
     JackPortIsTerminal = 0x10
 };
 
+#define JACK_MAX_FRAMES (4294967295U)
 #define JACK_DEFAULT_AUDIO_TYPE "32 bit float mono audio"
 #define JACK_DEFAULT_MIDI_TYPE "8 bit raw midi"
 

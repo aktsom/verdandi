@@ -84,6 +84,7 @@ static void crash_leds_off(void) {
     dev_list_monome_all_off(1000);
 }
 
+#ifndef NORNS_WINDOWS
 static void on_end_signal(int sig) {
     int e = errno;
     unsigned char b = (unsigned char)sig;
@@ -128,6 +129,10 @@ static void leds_off_on_signals(void) {
     sigaction(SIGHUP, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
 }
+#else
+// Windows: no POSIX signals; the console control handler and the window close end the process, and no grids are open in M1
+static void leds_off_on_signals(void) {}
+#endif
 #endif
 
 int matron_main(int argc, char **argv) {
@@ -135,7 +140,12 @@ int matron_main(int argc, char **argv) {
     {
         // a crash leaves a report in the log and in <norns home>/logs/crash/ (the launcher sets HOME to the norns home)
         const char *home = getenv("HOME");
-        std::string dir = home != NULL && home[0] == '/' ? std::string(home) + "/logs/crash" : "";
+        #ifdef NORNS_WINDOWS
+        bool absolute = home != NULL && ((home[0] >= 'A' && home[0] <= 'z' && home[1] == ':') || home[0] == '/');
+#else
+        bool absolute = home != NULL && home[0] == '/';
+#endif
+        std::string dir = absolute ? std::string(home) + "/logs/crash" : "";
         crash_report_install(dir.empty() ? NULL : dir.c_str());
         crash_report_set_hook(crash_leds_off);
         leds_off_on_signals();

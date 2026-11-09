@@ -1,0 +1,293 @@
+/*
+ * stubs_win.cc: what the Windows build of milestone M1 does NOT have, as stand-ins with one plain log line each (the first time it is asked, never repeated):
+ *   serial devices (crow), MIDI, HID, grids and arcs (libmonome, the pty virtual grid), the hot-plug monitor, Ableton Link, listening to another program's sound,
+ *   the file picker, the MIDI auto-connect, notes that the Linux build shows about plug-ins and serialosc, the Pi's GPIO.
+ * each replaces a file of the Linux or macOS build (named at each block) with the same function names, so that the shared code links unchanged and no #ifdef is needed there.
+ * M2 and later milestones replace the stubs one by one (docs/port/windows-plan.md). the log lines are what the owner sees in logs\norns.log.
+ */
+#ifdef _WIN32
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+extern "C" {
+#include "device/device.h"
+#include "device/device_crow.h"
+#include "device/device_hid.h"
+#include "device/device_midi.h"
+#include "device/device_monitor.h"
+#include "device/device_monome.h"
+#include "device/device_serial.h"
+#include "hardware/stat.h"
+#include "platform/macos/app_audio.h"
+#include "platform/macos/open_url.h"
+#include "platform/macos/vgrid_device.h"
+}
+#include "clocks/clock_link.h"
+#include "platform/linux/aseq_out.h"
+#include "platform/linux/file_picker.h"
+#include "platform/linux/input_route.h"
+#include "platform/linux/keys_midi.h"
+#include "platform/linux/mi_foreign_note.h"
+#include "platform/linux/plugin_arch_note.h"
+#include "platform/linux/serialosc_check.h"
+
+#include <windows.h>
+#include <shellapi.h>
+
+// one line, once, per feature
+static void not_yet(const char *what) {
+    static char said[64][48];
+    static int n;
+    for (int i = 0; i < n; i++) {
+        if (strncmp(said[i], what, sizeof said[i] - 1) == 0) {
+            return;
+        }
+    }
+    if (n < 64) {
+        snprintf(said[n++], sizeof said[0], "%s", what);
+    }
+    fprintf(stderr, "windows: %s: not in this build yet (milestone M1 has no sound devices, grids, MIDI or Link)\n", what);
+}
+
+extern "C" {
+
+/* ---- device_crow.cc, device_serial.cc: serial ports ---- */
+int dev_crow_init(void *self) {
+    (void)self;
+    not_yet("crow (USB serial)");
+    return -1;
+}
+void dev_crow_send(struct dev_crow *d, const char *line) {
+    (void)d, (void)line;
+}
+int dev_serial_init(void *self, lua_State *l) {
+    (void)self, (void)l;
+    not_yet("serial devices");
+    return -1;
+}
+void dev_serial_send(struct dev_serial *d, const char *line, size_t len) {
+    (void)d, (void)line, (void)len;
+}
+
+/* ---- device_hid.cc ---- */
+int dev_hid_init(void *self) {
+    (void)self;
+    not_yet("USB keyboards and game controllers (HID)");
+    return -1;
+}
+// 16 bit words of a device id as 32 hex digits (the part of the guid the Lua side compares); device_hid_iohid.cc does the same on macOS
+void guid_to_string(uint16_t *guid, char *guidstr) {
+    static const char hex[] = "0123456789abcdef";
+    for (int i = 0; i < 8; i++) {
+        guidstr[i * 4 + 0] = hex[(guid[i] >> 4) & 15];
+        guidstr[i * 4 + 1] = hex[guid[i] & 15];
+        guidstr[i * 4 + 2] = hex[(guid[i] >> 12) & 15];
+        guidstr[i * 4 + 3] = hex[(guid[i] >> 8) & 15];
+    }
+    guidstr[32] = 0;
+}
+
+/* ---- device_midi.cc ---- */
+unsigned int dev_midi_port_count(const char *path) {
+    (void)path;
+    return 0;
+}
+int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
+    (void)self, (void)port_index, (void)multiport_device;
+    not_yet("MIDI devices");
+    return -1;
+}
+int dev_midi_virtual_init(void *self) {
+    (void)self;
+    not_yet("the virtual MIDI device");
+    return -1;
+}
+ssize_t dev_midi_send(void *self, uint8_t *data, size_t n) {
+    (void)self, (void)data, (void)n;
+    return -1;
+}
+
+/* ---- device_monitor.cc: hot-plug ---- */
+void dev_monitor_init(void) {
+    not_yet("device hot-plug detection");
+}
+void dev_monitor_deinit(void) {}
+int dev_monitor_scan(void) {
+    return 0;
+}
+
+/* ---- device_monome.cc: grids and arcs ---- */
+int dev_monome_init(void *self) {
+    (void)self;
+    not_yet("grids and arcs");
+    return -1;
+}
+void dev_monome_grid_set_led(struct dev_monome *md, uint8_t x, uint8_t y, int8_t val, bool rel) {
+    (void)md, (void)x, (void)y, (void)val, (void)rel;
+}
+void dev_monome_arc_set_led(struct dev_monome *md, uint8_t n, uint8_t x, int8_t val, bool rel) {
+    (void)md, (void)n, (void)x, (void)val, (void)rel;
+}
+void dev_monome_all_led(struct dev_monome *md, int8_t val, bool rel) {
+    (void)md, (void)val, (void)rel;
+}
+void dev_monome_refresh(struct dev_monome *md) {
+    (void)md;
+}
+int dev_monome_grid_rows(struct dev_monome *md) {
+    (void)md;
+    return 0;
+}
+int dev_monome_grid_cols(struct dev_monome *md) {
+    (void)md;
+    return 0;
+}
+void dev_monome_intensity(struct dev_monome *md, uint8_t i) {
+    (void)md, (void)i;
+}
+void dev_monome_set_rotation(struct dev_monome *md, uint8_t val) {
+    (void)md, (void)val;
+}
+void dev_monome_tilt_enable(struct dev_monome *md, uint8_t val) {
+    (void)md, (void)val;
+}
+void dev_monome_tilt_disable(struct dev_monome *md, uint8_t val) {
+    (void)md, (void)val;
+}
+
+/* ---- vgrid_device.c: the virtual grid and arc are a pty that libmonome opens; Windows has no ptys (an OSC virtual grid comes with M2, PLAN.md Phase 5.5) ---- */
+vgrid_device_t *vgrid_open(const char *id, int cols, int rows, void (*on_change)(void *ctx), void *ctx) {
+    (void)id, (void)cols, (void)rows, (void)on_change, (void)ctx;
+    not_yet("the virtual grid");
+    return NULL;
+}
+vgrid_device_t *vgrid_open_arc(const char *id, int rings, void (*on_change)(void *ctx), void *ctx) {
+    (void)id, (void)rings, (void)on_change, (void)ctx;
+    not_yet("the virtual arc");
+    return NULL;
+}
+void vgrid_close(vgrid_device_t *g) { (void)g; }
+const char *vgrid_path(const vgrid_device_t *g) {
+    (void)g;
+    return "";
+}
+void vgrid_unlink(vgrid_device_t *g) { (void)g; }
+void vgrid_key(vgrid_device_t *g, int x, int y, int down) { (void)g, (void)x, (void)y, (void)down; }
+void vgrid_enc(vgrid_device_t *g, int n, int delta) { (void)g, (void)n, (void)delta; }
+void vgrid_enc_key(vgrid_device_t *g, int n, int down) { (void)g, (void)n, (void)down; }
+void vgrid_levels(vgrid_device_t *g, uint8_t level[VGRID_MAX][VGRID_MAX], int *intensity) {
+    (void)g;
+    memset(level, 0, (size_t)VGRID_MAX * VGRID_MAX);
+    if (intensity) {
+        *intensity = 15;
+    }
+}
+void vgrid_rings(vgrid_device_t *g, uint8_t ring[VARC_RINGS][VARC_LEDS], int *intensity) {
+    (void)g;
+    memset(ring, 0, (size_t)VARC_RINGS * VARC_LEDS);
+    if (intensity) {
+        *intensity = 15;
+    }
+}
+
+/* ---- clocks/clock_link.cc: Ableton Link (a later milestone; the build defines HAVE_ABLETON_LINK=0) ---- */
+void clock_link_init() {}
+void clock_link_start() {}
+void clock_link_join_session() {
+    not_yet("Ableton Link");
+}
+void clock_link_leave_session() {}
+void clock_link_set_quantum(double quantum) { (void)quantum; }
+void clock_link_set_tempo(double tempo) { (void)tempo; }
+void clock_link_set_transport_start() {}
+void clock_link_set_transport_stop() {}
+void clock_link_set_start_stop_sync(bool sync_enabled) { (void)sync_enabled; }
+double clock_link_get_beat() { return 0.0; }
+double clock_link_get_tempo() { return 120.0; }
+uint64_t clock_link_number_of_peers() { return 0; }
+
+/* ---- platform/linux/app_audio_linux.cc, input_route: listening to another program's sound (SYS/APP input) and the MIC/OFF routing ---- */
+int app_audio_available(void) { return 0; }
+int app_audio_list(app_audio_app_t *out, int max) {
+    (void)out, (void)max;
+    return 0;
+}
+int app_audio_select(const char *bundle) {
+    (void)bundle;
+    not_yet("listening to another program's sound (SYS / APP input)");
+    return -1;
+}
+const char *app_audio_current(void) { return ""; }
+void input_route_mic(int live) {
+    (void)live;
+    not_yet("the MIC / OFF input switch (there is no sound input yet)");
+}
+int input_route_monitor_enabled(void) { return 0; }
+
+/* ---- platform/linux/aseq_out.cc, keys_midi.cc, midi_autoconnect.cc: the "Verdandi out" MIDI port, the keys as MIDI, the auto-connect ---- */
+int aseq_out_link_status(char *names, size_t n) {
+    if (names && n) {
+        names[0] = 0;
+    }
+    return 0;
+}
+int keys_midi_open(void) {
+    not_yet("the window keys as a MIDI device");
+    return -1;
+}
+void keys_midi_close(void) {}
+int keys_midi_is_open(void) { return 0; }
+void keys_midi_send(uint8_t status, uint8_t d1, uint8_t d2) { (void)status, (void)d1, (void)d2; }
+int midi_autoconnect_start(const char *prefix_list) {
+    (void)prefix_list;
+    return 0;
+}
+int midi_autoconnect_start_out(const char *prefix_list) {
+    (void)prefix_list;
+    return 0;
+}
+int midi_autoconnect_status(int *count, char *names, size_t n) {
+    if (count) {
+        *count = 0;
+    }
+    if (names && n) {
+        names[0] = 0;
+    }
+    return 0;
+}
+
+/* ---- platform/linux/file_picker.cc: the file chooser (zenity, portal on Linux; the Windows dialog comes later) ---- */
+int picker_open(int mode, const char *start_dir, const char *title, picker_done_fn done, void *ctx) {
+    (void)mode, (void)start_dir, (void)title, (void)done, (void)ctx;
+    not_yet("the file picker");
+    return -1;
+}
+void picker_close(void) {}
+
+/* ---- the notes the Linux build shows about plug-ins and serialosc: nothing to say yet ---- */
+const char *mi_foreign_note_text(void) { return ""; }
+const char *mi_foreign_fix_text(void) { return ""; }
+const char *plugin_arch_note_text(void) { return ""; }
+void serialosc_device_added(int id, const char *path, const char *serial) { (void)id, (void)path, (void)serial; }
+void serialosc_device_removed(int id) { (void)id; }
+const char *serialosc_conflict_text(void) { return ""; }
+
+/* ---- hardware/stat.cc (the Pi's temperature, disk, wifi) ---- */
+void stat_init(void) {}
+void stat_deinit(void) {}
+
+/* ---- platform/macos/open_url.c: the MAIDEN / MANUAL buttons open a page in the browser. the function keeps its macOS name because the shared code calls it ---- */
+int macos_open_url(const char *url) {
+    if (!url || !*url) {
+        return -1;
+    }
+    HINSTANCE r = ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+    return (INT_PTR)r > 32 ? 0 : -1;
+}
+
+} // extern "C"
+
+#endif

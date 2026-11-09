@@ -11,27 +11,42 @@ command -v "$CXX" > /dev/null || { CXX=x86_64-w64-mingw32-g++; CC=x86_64-w64-min
 # a folder with links to ONLY the headers of the third-party libraries (never the Linux system headers, which the cross compiler must not see)
 SHADOW="$REPO/build/xcheck-inc"
 mkdir -p "$SHADOW"
-for h in lo SDL2 cairo sndfile.h sndfile.hh nng fontconfig lua5.3 freetype2 pixman-1 libpng16 ; do
+for h in lo cairo sndfile.h sndfile.hh nng fontconfig lua5.3 freetype2 pixman-1 libpng16 ; do
     [ -e "/usr/include/$h" ] && ln -sfn "/usr/include/$h" "$SHADOW/$h"
 done
+# SDL2 on Debian has a multiarch SDL_config.h wrapper: a shadow copy of the folder with the real x86_64 config in its place
+rm -rf "$SHADOW/SDL2"; mkdir -p "$SHADOW/SDL2"
+for f in /usr/include/SDL2/*; do ln -sf "$f" "$SHADOW/SDL2/$(basename "$f")"; done
+for cfg in /usr/include/x86_64-linux-gnu/SDL2/_real_SDL_config.h /usr/include/x86_64-linux-gnu/SDL2/SDL_config.h; do [ -f "$cfg" ] && cp "$cfg" "$SHADOW/SDL2/SDL_config.h" && break; done
 ln -sfn /usr/include/lua5.3/lua.h "$SHADOW/lua.h"; ln -sfn /usr/include/lua5.3/lualib.h "$SHADOW/lualib.h"; ln -sfn /usr/include/lua5.3/lauxlib.h "$SHADOW/lauxlib.h"
 ln -sfn /usr/include/lua5.3/luaconf.h "$SHADOW/luaconf.h"; ln -sfn /usr/include/lua5.3/lua.hpp "$SHADOW/lua.hpp"
 ln -sfn /usr/include/glib-2.0/glib.h "$SHADOW/glib.h" 2> /dev/null || true
 MON="${LIBMONOME_INC:-build/package/cache/libmonome/public}"
-INC="-I matron/src -I matron/src/hardware -I matron/src/device -I matron/src/platform/windows -I matron/src/platform/windows/include -I matron/src/platform/macos/include -I norns -I crone -I crone/src -I crone/faust \
+INC="-include $REPO/matron/src/platform/windows/compat_win.h -I matron/src -iquote matron/src/hardware -iquote matron/src/device -I matron/src/platform/windows -I matron/src/platform/windows/include -I matron/src/platform/windows/jack_null/include -I matron/src/platform/macos/include -I norns -I crone -I crone/src -I crone/faust \
  -I crone/softcut/softcut-lib/include -I third-party/concurrentqueue -I third-party/readerwriterqueue -I third-party/lua-cjson -I third-party/link/extensions/abl_link/include -I $MON \
  -isystem $SHADOW -isystem $SHADOW/SDL2 -isystem $SHADOW/cairo -isystem $SHADOW/freetype2"
 DEFS=(-DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONOME=1 -DHAVE_NNG=1 -DHAVE_LUA_CJSON=1 -DHAVE_ABLETON_LINK=0 -DVERSION_MAJOR=0 -DVERSION_MINOR=0 -DVERSION_PATCH=0 '-DVERSION_HASH="xcheck"')
 # shellcheck disable=SC2206
 DEFS+=(${XC_DEFS:-})
 files="${XC_FILES:-}"
-[ -n "$files" ] || files="$(find matron/src crone/src norns -type f \( -name '*.c' -o -name '*.cc' -o -name '*.cpp' \) -not -path '*/platform/macos/*' -not -path '*/platform/linux/*' -not -path '*/hardware/screen/ssd1322.cc' -not -path '*/hardware/input/gpio.cc' | sort)"
+[ -n "$files" ] || files="$(grep -v '^#' windows/cmake/norns-sources.txt | grep -v '^$')"
 ok=0; bad=0
+# XC_LINK=1: compile to objects (build/xlink) and report the symbols that no object defines and no known library provides
+mode=-fsyntax-only; [ "${XC_LINK:-0}" = 1 ] && { mkdir -p build/xlink; rm -f build/xlink/*.o; }
 for f in $files; do
     case "$f" in *.c) cmd="$CC -std=gnu11" ;; *) cmd="$CXX -std=gnu++14" ;; esac
+    extra=""; case "$f" in */sdl_bridge.cc) extra="-include $REPO/matron/src/platform/windows/compat_sock.h" ;; esac
+    out=""; if [ "${XC_LINK:-0}" = 1 ]; then out="-o build/xlink/$(echo "$f" | tr / _).o"; mode=-c; fi
     # shellcheck disable=SC2086
-    err=$($cmd -fsyntax-only -w "${DEFS[@]}" $INC "$f" 2>&1 | grep -m1 -E "error" || true)
-    if [ -z "$err" ]; then ok=$((ok + 1)); [ "${XC_QUIET:-0}" = 1 ] || echo "OK   $f"; else bad=$((bad + 1)); echo "ERR  $f: $(printf '%s' "$err" | cut -c1-170)"; fi
+    err=$($cmd $mode $out -w "${DEFS[@]}" $INC $extra "$f" 2>&1 | grep -m1 -E "error" -B3 -A2 | tr "\n" " " || true)
+    if [ -z "$err" ]; then ok=$((ok + 1)); [ "${XC_QUIET:-0}" = 1 ] || echo "OK   $f"; else bad=$((bad + 1)); echo "ERR  $f: $(printf '%s' "$err" | cut -c1-900)"; fi
 done
 echo "xcheck: $ok compile, $bad do not"
+if [ "${XC_LINK:-0}" = 1 ] && [ "$bad" -eq 0 ]; then
+    # every symbol the objects need that neither they nor the compiler's runtime define, minus the third-party libraries that the real link adds
+    $CXX build/xlink/*.o -o /dev/null -Wl,--unresolved-symbols=report-all -lws2_32 -lpthread -lwinmm -lole32 -lshell32 -ldbghelp -lpsapi 2>&1 \
+        | grep -o "undefined reference to .*" | sed -E "s/undefined reference to .(.*).$/\1/" | sort -u \
+        | grep -v -E "^(lua|luaL|luaopen|SDL_|cairo_|lo_|nng_|sf_|monome_|FT_|abl_link|__imp_|json|cJSON)" > build/xlink/unresolved.txt || true
+    echo "unresolved project symbols: $(wc -l < build/xlink/unresolved.txt) (build/xlink/unresolved.txt)"
+fi
 [ "$bad" -eq 0 ]

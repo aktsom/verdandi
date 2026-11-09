@@ -1,6 +1,7 @@
 #include <exception>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #ifdef __APPLE__
@@ -76,6 +77,29 @@ static void *norns_thread(void *p) {
 }
 #endif
 
+#ifdef NORNS_WINDOWS
+// Windows has no fork(): the sidecar (shell commands over nng) runs as a thread of this process
+static int sidecar_sync_fd = -1;
+static void *sidecar_thread(void *p) {
+    (void)p;
+    sidecar_server_main(sidecar_sync_fd);
+    return NULL;
+}
+static int sidecar_spawn(int sync_write_fd) {
+    sidecar_sync_fd = sync_write_fd;
+    pthread_t t;
+    if (pthread_create(&t, NULL, sidecar_thread, NULL) == 0) {
+        pthread_detach(t);
+    }
+    return 1; // as the parent: the caller goes on to wait for the listener
+}
+#else
+static int sidecar_spawn(int sync_write_fd) {
+    (void)sync_write_fd;
+    return fork();
+}
+#endif
+
 int main(int argc, char **argv) {
     // update.sh gates the final reboot on this. exiting 0 before any
     // fork/jack/hardware init proves the new binary links
@@ -92,7 +116,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (fork() == 0) {
+    if (sidecar_spawn(sync_pipe[1]) == 0) {
         close(sync_pipe[0]);
 
         strncpy(argv[0], "sidecar [norns]", exec_name_size);
@@ -103,7 +127,7 @@ int main(int argc, char **argv) {
         pthread_create(&watcher, NULL, watch_parent, NULL);
 #else
         // child, set the thread name to sidecar for added clarity in gdb
-        if (prctl(PR_SET_NAME, (unsigned long)"sidecar") < 0) {
+        if (prctl(PR_SET_NAME, (uintptr_t)"sidecar") < 0) {
             perror("prctl(PR_SET_NAME)");
         }
 

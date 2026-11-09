@@ -97,8 +97,13 @@ link_probe() {
 }
 
 m0_init
-m0_run msys2-packages install_pkgs
-m0_run lua53-build build_lua
-m0_run libmonome-build build_libmonome
-m0_run link-probe link_probe
+# DEPS_STEPS: which parts to do (M0 does all, the M1 norns build needs packages, lua and libmonome only)
+for step in ${DEPS_STEPS:-packages lua libmonome link}; do
+    case "$step" in
+        packages) m0_run msys2-packages install_pkgs ;;
+        lua) m0_run lua53-build build_lua ;;
+        libmonome) m0_run libmonome-build build_libmonome ;;
+        link) m0_run link-probe link_probe ;;
+    esac
+done
 exit 0

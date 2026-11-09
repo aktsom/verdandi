@@ -1,0 +1,87 @@
+# the sources of norns.exe (Windows). one path per line, relative to the repository root; read by windows/cmake/CMakeLists.txt and by windows/ci/xcheck.sh (the mingw cross-check on Linux).
+# the same list as norns/wscript, with the Linux/Pi-only files replaced by platform/windows files (see docs/port/phase-m1.md)
+# --- norns (the sidecar for shell commands)
+norns/main.cpp
+norns/sidecar.cpp
+norns/sidecar_lines.cpp
+norns/sidecar_msg.cpp
+matron/src/platform/windows/sidecar_shell_win.cpp
+# --- matron
+matron/src/config.cc
+matron/src/device/device.cc
+matron/src/device/device_list.cc
+matron/src/osc.cc
+matron/src/hardware/input.cc
+matron/src/hardware/io.cc
+matron/src/hardware/platform.cc
+matron/src/hardware/screen.cc
+matron/src/args.cc
+matron/src/events.cc
+matron/src/hello.cc
+matron/src/input.cc
+matron/src/jack_client.cpp
+matron/src/lua_eval.cc
+matron/src/lua_shell.cc
+matron/src/main.cc
+matron/src/metro.cc
+matron/src/oracle.cc
+matron/src/weaver.cc
+matron/src/screen_events.cc
+matron/src/screen_results.cc
+matron/src/snd_file.cc
+matron/src/system_cmd.cc
+matron/src/clock.cc
+matron/src/clocks/clock_internal.cc
+matron/src/clocks/clock_midi.cc
+matron/src/clocks/clock_crow.cc
+matron/src/clocks/clock_scheduler.cc
+matron/src/time_since.cc
+matron/src/hardware/screen/sdl.cc
+matron/src/hardware/input/sdl.cc
+# --- crone and softcut
+crone/src/crone_param_dispatch.cpp
+crone/src/crone.cpp
+crone/src/main.cpp
+crone/src/BufDiskWorker.cpp
+crone/src/Commands.cpp
+crone/src/MixerClient.cpp
+crone/src/OscInterface.cpp
+crone/src/SoftcutClient.cpp
+crone/src/Taper.cpp
+crone/src/Window.cpp
+crone/softcut/softcut-lib/src/FadeCurves.cpp
+crone/softcut/softcut-lib/src/ReadWriteHead.cpp
+crone/softcut/softcut-lib/src/SubHead.cpp
+crone/softcut/softcut-lib/src/Svf.cpp
+crone/softcut/softcut-lib/src/Voice.cpp
+# --- the desktop layer shared with Linux (window, skins, box styles, toasts)
+matron/src/platform/linux/box_palette.c
+matron/src/platform/linux/box_style.c
+matron/src/platform/linux/toast_fit.c
+matron/src/platform/linux/screen_toast.c
+matron/src/platform/linux/clip_text.c
+matron/src/platform/linux/screen_window.cc
+matron/src/platform/linux/screen_window_conf.c
+matron/src/platform/linux/screen_window_geom.c
+matron/src/platform/linux/extras_layout.c
+matron/src/platform/linux/arc_keys.c
+matron/src/platform/linux/window_actions.c
+matron/src/platform/linux/menu_skin.c
+matron/src/platform/linux/hid_virtual.cc
+matron/src/platform/linux/desktop_shell_linux.cc
+matron/src/platform/macos/device_skin.c
+matron/src/platform/windows/dust_import_win.c
+matron/src/platform/macos/gif_writer.c
+matron/src/platform/macos/hardware_null.cc
+matron/src/platform/macos/sdl_bridge.cc
+matron/src/platform/macos/ui_look.c
+matron/src/platform/macos/varc_skin.c
+matron/src/platform/macos/vgrid_proto.c
+matron/src/platform/macos/vgrid_skin.c
+matron/src/platform/macos/vkeys_skin.c
+matron/src/platform/macos/window_keys.c
+# --- Windows: replacements and stubs (matron/src/platform/windows)
+matron/src/platform/windows/posix_compat.c
+matron/src/platform/windows/stubs_win.cc
+matron/src/platform/windows/crash_report_win.cc
+matron/src/platform/windows/jack_null/jack_null.c
