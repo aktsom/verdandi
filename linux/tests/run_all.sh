@@ -116,7 +116,7 @@ run "windows:JACK-compatible null backend (ring buffer, unique names, ports, phy
 # the Windows port (docs/port/phase-m1.md): needs the mingw-w64 cross compiler and Wine (apt: g++-mingw-w64-x86-64 wine64); said out loud when they are not there
 if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/wine/wine64 ]; then
     run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
-    run "windows:every source of norns.exe compiles with mingw-w64 (syntax check, windows/ci/xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
+    run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
 else
     echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
 fi
