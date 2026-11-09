@@ -86,6 +86,16 @@ int main() {
     globfree(&g);
     CHECK(glob("globtest/*.xyz", 0, NULL, &g) == GLOB_NOMATCH, "no match");
 
+    // mkdir -p is done natively (cmd.exe would make a folder called "-p")
+    Out om;
+    sidecar_shell_result_t rm = run("mkdir -p mk_test/a/b/c", &om);
+    CHECK(rm.outcome == SIDECAR_SHELL_EXITED && rm.code == 0, "mkdir -p exits 0");
+    CHECK(GetFileAttributesA("mk_test\\a\\b\\c") != INVALID_FILE_ATTRIBUTES, "every level was made");
+    CHECK(GetFileAttributesA("-p") == INVALID_FILE_ATTRIBUTES, "no folder called -p");
+    rm = run("mkdir -p mk_test/a/b/c", &om);
+    CHECK(rm.outcome == SIDECAR_SHELL_EXITED && rm.code == 0, "an existing folder is not an error");
+    rm = run("mkdir -p \"mk test/with space\"", &om);
+    CHECK(rm.code == 0 && GetFileAttributesA("mk test\\with space") != INVALID_FILE_ATTRIBUTES, "a quoted path with a space");
     // the shell runner
     Out o;
     sidecar_shell_result_t r = run("echo hello from the sidecar", &o);

@@ -27,6 +27,11 @@ on:
 permissions:
   contents: read
 
+# a newer push replaces the run in progress on the same branch (the runs are long and expensive)
+concurrency:
+  group: windows-m1-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   SC_TAG: Version-3.14.1
   M0_REQUIRE: 'sc norns assemble m1'
@@ -49,6 +54,9 @@ jobs:
         env:
           JOBS: '4'
         run: windows/ci/build-sc.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -82,6 +90,9 @@ jobs:
       - name: Build norns.exe and the launcher
         timeout-minutes: 30
         run: windows/ci/build-norns.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -120,6 +131,9 @@ jobs:
       - name: Start it headless and check
         timeout-minutes: 15
         run: ZIP="$PWD/m1-stage/Verdandi-windows-M1.zip" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

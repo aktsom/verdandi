@@ -18,15 +18,12 @@
 #endif
 #include <winsock2.h>
 #include <windows.h>
-/* windows.h defines macros that are ordinary words in the shared sources (a variable called "near", a type called "interface"): take them away right here, before anything else is included */
+
+#include <mmsystem.h> /* uses "far" in a struct: it must be included before the macros below are removed (timeBeginPeriod; link winmm) */
+/* windows.h defines macros that are ordinary words in the shared sources (a variable called "near"). IN, OUT, OPTIONAL and interface stay: the Windows headers included later need them: take them away right here, before anything else is included */
 #undef near
 #undef far
 #undef small
-#undef interface
-#undef ERROR
-#undef IN
-#undef OUT
-#undef OPTIONAL
 #include <direct.h>
 #include <errno.h>
 #include <fcntl.h>

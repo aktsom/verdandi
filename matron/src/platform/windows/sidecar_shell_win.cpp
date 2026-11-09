@@ -64,10 +64,67 @@ static bool watch_readable(int watch_fd) {
     return WSAPoll(&p, 1, 0) > 0;
 }
 
+// "mkdir -p <path>" is how norns's Lua makes folders (util.make_dir, every script's data folder). cmd.exe's mkdir would make a folder called "-p"; until busybox is bundled (M5) this one command
+// is done here, natively: every level of the path, forward or back slashes, an existing folder is not an error. returns true when cmd was exactly that command
+static bool builtin_mkdir_p(const char *cmd, int *code) {
+    const char *p = cmd;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (strncmp(p, "mkdir", 5) != 0 || (p[5] != ' ' && p[5] != '\t')) {
+        return false;
+    }
+    p += 5;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (strncmp(p, "-p", 2) != 0 || (p[2] != ' ' && p[2] != '\t')) {
+        return false;
+    }
+    p += 2;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    std::string path(p);
+    while (!path.empty() && (path.back() == ' ' || path.back() == '\t' || path.back() == '\r' || path.back() == '\n')) {
+        path.pop_back();
+    }
+    if (path.size() >= 2 && ((path.front() == '"' && path.back() == '"') || (path.front() == '\'' && path.back() == '\''))) {
+        path = path.substr(1, path.size() - 2);
+    }
+    // more than one word, or a shell operator: not ours
+    if (path.empty() || path.find_first_of("&|<>;") != std::string::npos || (path.find(' ') != std::string::npos && p[0] != '"' && p[0] != '\'')) {
+        return false;
+    }
+    for (char &c : path) {
+        if (c == '/') {
+            c = '\\';
+        }
+    }
+    *code = 0;
+    for (size_t i = (path.size() > 2 && path[1] == ':') ? 3 : 1; i <= path.size(); i++) {
+        if (i == path.size() || path[i] == '\\') {
+            std::string part = path.substr(0, i);
+            if (!part.empty() && !CreateDirectoryA(part.c_str(), NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+                *code = 1;
+                break;
+            }
+        }
+    }
+    return true;
+}
+
 void sidecar_shell_run(const char *cmd, const sidecar_shell_opts_t *opts, sidecar_shell_result_t *result) {
     result->code = 0;
     result->err = NULL;
     result->errnum = 0;
+
+    int builtin_code = 0;
+    if (builtin_mkdir_p(cmd, &builtin_code)) {
+        result->outcome = SIDECAR_SHELL_EXITED;
+        result->code = builtin_code;
+        return;
+    }
 
     SECURITY_ATTRIBUTES sa = {sizeof sa, NULL, TRUE};
     HANDLE rd = NULL, wr = NULL;
