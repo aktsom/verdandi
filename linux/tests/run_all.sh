@@ -107,6 +107,12 @@ if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
 else
     echo "SKIP  maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
 fi
+jack_null_ok() {
+    gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration -I matron/src/platform/windows/jack_null/include linux/tests/jack_null_test.c \
+        matron/src/platform/windows/jack_null/jack_null.c -lpthread -o "$T/jack_null_test" || return 1
+    "$T/jack_null_test"
+}
+run "windows:JACK-compatible null backend (ring buffer, unique names, ports, physical ports, connections, processing order, block cadence, frame time, deactivate)" jack_null_ok
 run "build:waf-path ignores an unknown or root SUDO_USER" linux/tests/waf_path_test.sh
 run "udev:rule syntax and narrowness (monome devices only, uaccess only)" linux/tests/udev_test.sh
 run "manual:file, table of contents, sources comments, names exist in the code" linux/tests/manual_test.sh

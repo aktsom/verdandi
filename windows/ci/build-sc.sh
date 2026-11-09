@@ -21,8 +21,17 @@ BLD="$WORK/sc-build"
 FFTW_DIR="${FFTW_DIR:-/c/Program Files/fftw}"
 
 fetch_source() {
-    [ -d "$SRC/.git" ] || git clone --depth 1 --branch "$SC_TAG" --recurse-submodules --shallow-submodules https://github.com/supercollider/supercollider.git "$SRC"
+    [ -d "$SRC/.git" ] || git clone -c core.autocrlf=false --depth 1 --branch "$SC_TAG" --recurse-submodules --shallow-submodules https://github.com/supercollider/supercollider.git "$SRC"
     git -C "$SRC" describe --tags
+}
+
+# Verdandi patches to SuperCollider (windows/patches): the null audio driver (VERDANDI_NULL_AUDIO=1: scsynth runs without an audio device). the clone is made with autocrlf off so that the patch applies
+apply_patches() {
+    local p
+    for p in "$HERE"/../patches/*.patch; do
+        echo "applying $p"
+        if git -C "$SRC" apply --check "$p"; then git -C "$SRC" apply "$p"; else echo "patch does not apply: $p"; return 1; fi
+    done
 }
 
 install_vcpkg_libs() {
@@ -74,6 +83,7 @@ package_tree() {
 
 m0_init
 m0_run sc-source fetch_source || exit 1
+m0_run sc-patch apply_patches || exit 1
 m0_run sc-vcpkg-libs install_vcpkg_libs || exit 1
 m0_run sc-fftw install_fftw || exit 1
 if [ "$WITH_ASIO" = 1 ]; then m0_run sc-asio install_asio || exit 1; else m0_skip sc-asio "WITH_ASIO=0 (no ASIO in M0)"; fi

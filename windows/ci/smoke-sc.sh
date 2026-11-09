@@ -118,9 +118,29 @@ nrt_step() { # dir mode
 
 run_all() { sclang_step "$1" "$2" && nrt_step "$1" "$2"; }
 
+# the REAL-TIME scsynth without an audio device: Verdandi's null audio driver (windows/patches/scsynth-null-audio.patch, VERDANDI_NULL_AUDIO=1). boots, answers /status over UDP, its clock runs at the nominal rate, quits
+PYTHON="${PYTHON:-$(command -v python3 || command -v python || command -v py)}"
+null_audio_step() {
+    local d="$T/null-audio" port=57199 pid rc plug=()
+    mkdir -p "$d"
+    if [ -n "${SC_PLUGINS:-}" ]; then plug=(-U "$(native "$SC_PLUGINS")"); fi
+    [ -n "$PYTHON" ] || { echo "no python on this machine"; return 1; }
+    (cd "$d" && VERDANDI_NULL_AUDIO=1 limited "$SCSYNTH" -u "$port" -a 1024 -i 2 -o 2 "${plug[@]}" > scsynth-rt.out 2>&1) &
+    pid=$!
+    "$PYTHON" "$(native "$HERE/osc_status.py")" "$port" --quit
+    rc=$?
+    sleep 2
+    kill "$pid" 2> /dev/null || true
+    wait "$pid" 2> /dev/null || true
+    cat "$d/scsynth-rt.out"
+    grep -q "SC_NullAudioDriver" "$d/scsynth-rt.out" || { echo "the null audio driver was not used (is the patch applied?)"; return 1; }
+    return "$rc"
+}
+
 m0_init
 m0_run smoke-tools check_tools || exit 1
 m0_run smoke-sclang-nrt run_all "$T/plain" abs
+m0_run smoke-null-audio null_audio_step
 m0_run smoke-spaces run_all "$T/path with spaces/second folder" abs
 # information only (names start with info-): not part of the pass/fail mark of the run
 m0_run info-nonascii-abs run_all "$T/non-ascii/Ünï code" abs

@@ -1,0 +1,146 @@
+--- a/server/scsynth/SC_PortAudio.cpp
++++ b/server/scsynth/SC_PortAudio.cpp
+@@ -88,7 +88,7 @@
+                           const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags);
+ };
+ 
+-SC_AudioDriver* SC_NewAudioDriver(struct World* inWorld) { return new SC_PortAudioDriver(inWorld); }
++// SC_NewAudioDriver is at the end of this file, after the null driver (Verdandi)
+ 
+ #define PRINT_PORTAUDIO_ERROR(function, errorcode)                                                                     \
+     scprintf("SC_PortAudioDriver: PortAudio failed at %s with error: '%s'\n", #function, Pa_GetErrorText(errorcode))
+@@ -438,3 +438,134 @@
+ 
+     return paerror == paNoError;
+ }
++
++// ---------------------------------------------------------------------
++// Verdandi: a null audio driver. No audio device is opened. When VERDANDI_NULL_AUDIO=1 is set in the environment,
++// a thread of this process calls the same engine step as the PortAudio callback once per block, with silent input
++// and discarded output, paced by the system clock (the same delay-locked loop that the PortAudio driver uses for its
++// OSC time). For a machine without an audio device: a CI runner, a headless test, norns on a PC without sound.
++#include <atomic>
++#include <chrono>
++#include <thread>
++#include <vector>
++#ifdef _WIN32
++#    include <windows.h>
++#endif
++
++class SC_NullAudioDriver : public SC_AudioDriver {
++    std::thread mClock;
++    std::atomic<bool> mClockRun;
++    SC_TimeDLL mDLL;
++    int mInCh, mOutCh;
++
++protected:
++    virtual bool DriverSetup(int* outNumSamplesPerCallback, double* outSampleRate) {
++        *outNumSamplesPerCallback = mWorld->mBufLength;
++        *outSampleRate = mPreferredSampleRate ? (double)mPreferredSampleRate : 48000.;
++        mInCh = (int)mWorld->mNumInputs;
++        mOutCh = (int)mWorld->mNumOutputs;
++        fprintf(stdout, "\nSC_NullAudioDriver: no audio device is used (VERDANDI_NULL_AUDIO=1)\n");
++        fprintf(stdout, "  Sample rate: %.3f, block size: %d, %d in / %d out channels\n", *outSampleRate,
++                *outNumSamplesPerCallback, mInCh, mOutCh);
++        return true;
++    }
++
++    virtual bool DriverStart() {
++        mDLL.Reset(mSampleRate, mNumSamplesPerCallback, SC_TIME_DLL_BW, sc_PAOSCTimeSeconds());
++        mClockRun = true;
++        mClock = std::thread([this]() { ClockLoop(); });
++        return true;
++    }
++
++    virtual bool DriverStop() {
++        mClockRun = false;
++        if (mClock.joinable())
++            mClock.join();
++        return true;
++    }
++
++    // one engine step: the body of the PortAudio callback with silence for input and the output left unused
++    void Tick() {
++        sc_SetDenormalFlags();
++        World* world = mWorld;
++        try {
++            mFromEngine.Free();
++            mToEngine.Perform();
++            mOscPacketsToEngine.Perform();
++
++            int bufFrames = mWorld->mBufLength;
++            int numBufs = mNumSamplesPerCallback / bufFrames;
++            float* inBuses = mWorld->mAudioBus + mWorld->mNumOutputs * bufFrames;
++            int32* inTouched = mWorld->mAudioBusTouched + mWorld->mNumOutputs;
++
++            mDLL.Update(sc_PAOSCTimeSeconds());
++            int64 oscTime = mOSCbuftime = (uint64)(mDLL.PeriodTime() * kSecondsToOSCunits + .5);
++            int64 oscInc = mOSCincrement = (uint64)((mDLL.Period() / numBufs) * kSecondsToOSCunits + .5);
++            mSmoothSampleRate = mDLL.SampleRate();
++            double oscToSamples = mOSCtoSamples = mSmoothSampleRate * kOSCtoSecs;
++
++            for (int i = 0; i < numBufs; ++i, mWorld->mBufCounter++) {
++                int32 bufCounter = mWorld->mBufCounter;
++                int32* tch = inTouched;
++                for (int k = 0; k < mInCh; ++k) {
++                    memset(inBuses + k * bufFrames, 0, bufFrames * sizeof(float));
++                    *tch++ = bufCounter;
++                }
++                int64 schedTime;
++                int64 nextTime = oscTime + oscInc;
++                while ((schedTime = mScheduler.NextTime()) <= nextTime) {
++                    float diffTime = (float)(schedTime - oscTime) * oscToSamples + 0.5;
++                    float diffTimeFloor = floor(diffTime);
++                    world->mSampleOffset = (int)diffTimeFloor;
++                    world->mSubsampleOffset = diffTime - diffTimeFloor;
++                    if (world->mSampleOffset < 0)
++                        world->mSampleOffset = 0;
++                    else if (world->mSampleOffset >= world->mBufLength)
++                        world->mSampleOffset = world->mBufLength - 1;
++                    SC_ScheduledEvent event = mScheduler.Remove();
++                    event.Perform();
++                }
++                world->mSampleOffset = 0;
++                world->mSubsampleOffset = 0.0f;
++                World_Run(world);
++                oscTime = mOSCbuftime = nextTime;
++            }
++        } catch (std::exception& exc) {
++            scprintf("SC_NullAudioDriver: exception in real time: %s\n", exc.what());
++        } catch (...) { scprintf("SC_NullAudioDriver: unknown exception in real time\n"); }
++        mAvgCPU = 0.;
++        mAudioSync.Signal();
++    }
++
++    void ClockLoop() {
++#ifdef _WIN32
++        // a 1 ms timer resolution: the default 15.6 ms would make every 128 frame block (2.7 ms) late
++        timeBeginPeriod(1);
++#endif
++        const double period = (double)mNumSamplesPerCallback / mSampleRate;
++        auto start = std::chrono::steady_clock::now();
++        uint64_t n = 0;
++        while (mClockRun) {
++            ++n;
++            std::this_thread::sleep_until(
++                start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(n * period)));
++            if (!mClockRun)
++                break;
++            Tick();
++        }
++#ifdef _WIN32
++        timeEndPeriod(1);
++#endif
++    }
++
++public:
++    SC_NullAudioDriver(struct World* inWorld): SC_AudioDriver(inWorld), mClockRun(false), mInCh(0), mOutCh(0) {}
++    virtual ~SC_NullAudioDriver() { DriverStop(); }
++};
++
++SC_AudioDriver* SC_NewAudioDriver(struct World* inWorld) {
++    const char* nul = getenv("VERDANDI_NULL_AUDIO");
++    if (nul && nul[0] == '1')
++        return new SC_NullAudioDriver(inWorld);
++    return new SC_PortAudioDriver(inWorld);
++}
