@@ -54,6 +54,13 @@ build_lua() {
         rm -f liblua.a && ar rcs liblua.a "${objs[@]}" || exit 1
         gcc -O2 -std=c99 -DLUA_COMPAT_5_2 ${LUA_PLATFORM_FLAGS:-} lua.c liblua.a -o "$PREFIX/bin/lua${EXE:-}" -lm ${LUA_PLATFORM_LIBS:-} || exit 1
         cp lua.h luaconf.h lualib.h lauxlib.h "$PREFIX/include/" && cp liblua.a "$PREFIX/lib/"
+        # norns includes these from C++ files and (like the Debian and Homebrew packages) expects C linkage (first M1 link: "undefined reference to lua_settop(lua_State*, int)", C++ names):
+        # the three API headers are kept as *_c.h and the names norns uses are tiny wrappers that include them inside extern "C"
+        local h
+        for h in lua lualib lauxlib; do
+            mv "$PREFIX/include/$h.h" "$PREFIX/include/${h}_c.h"
+            printf '#ifdef __cplusplus\nextern "C" {\n#endif\n#include "%s_c.h"\n#ifdef __cplusplus\n}\n#endif\n' "$h" > "$PREFIX/include/$h.h"
+        done
     ) || return 1
     # pkg-config file with the name the wscript asks for
     # the .pc is read by the native Windows CMake of MSYS2: the prefix must be a Windows path (D:/a/...), not /d/a/... (first M1 run: "includes non-existent path")

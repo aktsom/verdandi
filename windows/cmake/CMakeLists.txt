@@ -26,6 +26,8 @@ pkg_check_modules(LUA53 REQUIRED IMPORTED_TARGET lua53)
 pkg_check_modules(LIBLO REQUIRED IMPORTED_TARGET liblo)
 pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
+# box_style.c uses FreeType directly (cairo's pkg-config file does not pass it on)
+pkg_check_modules(FREETYPE2 REQUIRED IMPORTED_TARGET freetype2)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 # nng: MSYS2 ships a CMake package, not a pkg-config file (first M1 run: "Package nng not found"); header and library are searched directly
 find_path(NNG_INC nng/nng.h REQUIRED)
@@ -87,7 +89,7 @@ set_source_files_properties(${REPO}/matron/src/platform/macos/sdl_bridge.cc PROP
 target_compile_options(norns PRIVATE -Wno-unused-parameter)
 target_link_libraries(norns PRIVATE
   lua-cjson ${MONOME_LIB}
-  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::SDL2 ${NNG_LIB}
+  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 ${NNG_LIB}
   ws2_32 mswsock advapi32 setupapi winmm ole32 shell32 dbghelp psapi stdc++ pthread m)
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
