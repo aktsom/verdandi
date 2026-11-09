@@ -56,13 +56,16 @@ build_lua() {
         cp lua.h luaconf.h lualib.h lauxlib.h "$PREFIX/include/" && cp liblua.a "$PREFIX/lib/"
     ) || return 1
     # pkg-config file with the name the wscript asks for
+    # the .pc is read by the native Windows CMake of MSYS2: the prefix must be a Windows path (D:/a/...), not /d/a/... (first M1 run: "includes non-existent path")
+    local wprefix="$PREFIX"
+    if command -v cygpath > /dev/null 2>&1; then wprefix="$(cygpath -m "$PREFIX")"; fi
     cat > "$PREFIX/lib/pkgconfig/lua53.pc" <<PC
-prefix=$PREFIX
+prefix=$wprefix
 Name: lua53
 Description: Lua 5.3.6
 Version: 5.3.6
-Cflags: -I$PREFIX/include
-Libs: -L$PREFIX/lib -llua
+Cflags: -I$wprefix/include
+Libs: -L$wprefix/lib -llua
 PC
     "$PREFIX/bin/lua${EXE:-}" -e 'print(_VERSION)' | tee /dev/stderr | grep -q "Lua 5.3"
 }

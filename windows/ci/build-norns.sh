@@ -16,7 +16,9 @@ export PATH="$PREFIX/bin:$PATH"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
 configure() {
-    cmake -S "$REPO/windows/cmake" -B "$BLD" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX" \
+    local wprefix="$PREFIX"
+    if command -v cygpath > /dev/null 2>&1; then wprefix="$(cygpath -m "$PREFIX")"; fi
+    cmake -S "$REPO/windows/cmake" -B "$BLD" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$wprefix" \
         -DVERDANDI_VERSION_HASH="$(git -C "$REPO" rev-parse --short HEAD 2> /dev/null || echo unknown)"
 }
 
