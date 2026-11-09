@@ -61,7 +61,7 @@ static void say(const wchar_t *fmt, ...) {
 }
 
 /* a message for the person: a dialog (the same words go to the log). headless: log only */
-static void tell(const wchar_t *title, UINT icon, const wchar_t *fmt, ...) {
+static void tell_user(const wchar_t *title, UINT icon, const wchar_t *fmt, ...) {
     wchar_t msg[2048];
     va_list ap;
     va_start(ap, fmt);
@@ -166,7 +166,7 @@ static int link_program_folder(void) {
         if (a & FILE_ATTRIBUTE_REPARSE_POINT) {
             RemoveDirectoryW(link); /* removes the link only; made again below, in case the program folder moved */
         } else {
-            tell(L"Verdandi", MB_ICONERROR, L"The folder %ls already exists and is not a link to the Verdandi program folder.\n\nRename or move it (it may hold files of yours), then start Verdandi again.", link);
+            tell_user(L"Verdandi", MB_ICONERROR, L"The folder %ls already exists and is not a link to the Verdandi program folder.\n\nRename or move it (it may hold files of yours), then start Verdandi again.", link);
             return 0;
         }
     }
@@ -174,7 +174,7 @@ static int link_program_folder(void) {
     _snwprintf(cmd, MAX_PATH * 5, L"cmd.exe /d /c mklink /J \"%ls\" \"%ls\"", link, g_app);
     DWORD code = 1;
     if (!run_hidden(cmd, &code) || code != 0 || !exists(link)) {
-        tell(L"Verdandi", MB_ICONERROR, L"Verdandi could not link its program folder into %ls (mklink /J failed).\n\nIs the folder on a drive that does not allow links (a network drive, FAT)? Unpack Verdandi on a normal local drive.", g_home);
+        tell_user(L"Verdandi", MB_ICONERROR, L"Verdandi could not link its program folder into %ls (mklink /J failed).\n\nIs the folder on a drive that does not allow links (a network drive, FAT)? Unpack Verdandi on a normal local drive.", g_home);
         return 0;
     }
     return 1;
@@ -251,7 +251,7 @@ static void bring_running_copy_forward(void) {
         SetForegroundWindow(w);
         say(L"Verdandi is already running: its window was brought to the front");
     } else {
-        tell(L"Verdandi", MB_ICONINFORMATION, L"Verdandi is already running (it may still be starting). Only one copy can run at a time.");
+        tell_user(L"Verdandi", MB_ICONINFORMATION, L"Verdandi is already running (it may still be starting). Only one copy can run at a time.");
     }
 }
 
@@ -301,13 +301,13 @@ int wmain(int argc, wchar_t **argv) {
     } else if (GetEnvironmentVariableW(L"VERDANDI_HOME", g_home, MAX_PATH * 2) == 0) {
         wchar_t prof[MAX_PATH * 2];
         if (GetEnvironmentVariableW(L"USERPROFILE", prof, MAX_PATH * 2) == 0) {
-            tell(L"Verdandi", MB_ICONERROR, L"Windows did not tell Verdandi where your user folder is (USERPROFILE). Set VERDANDI_HOME to a folder for Verdandi's files and start again.");
+            tell_user(L"Verdandi", MB_ICONERROR, L"Windows did not tell Verdandi where your user folder is (USERPROFILE). Set VERDANDI_HOME to a folder for Verdandi's files and start again.");
             return 2;
         }
         join(g_home, MAX_PATH * 2, prof, L"Verdandi");
     }
     if (!make_dirs(g_home)) {
-        tell(L"Verdandi", MB_ICONERROR, L"Verdandi cannot create its folder %ls.\n\nIs the drive full or write-protected? Set VERDANDI_HOME to another folder.", g_home);
+        tell_user(L"Verdandi", MB_ICONERROR, L"Verdandi cannot create its folder %ls.\n\nIs the drive full or write-protected? Set VERDANDI_HOME to another folder.", g_home);
         return 2;
     }
     wchar_t logs[MAX_PATH * 2], crash[MAX_PATH * 2], dust[MAX_PATH * 2], cache[MAX_PATH * 2], scconf[MAX_PATH * 2];
@@ -357,14 +357,14 @@ int wmain(int argc, wchar_t **argv) {
     join(sclang, MAX_PATH * 2, g_app, L"supercollider\\sclang.exe");
     join(lua, MAX_PATH * 2, g_app, L"lua\\core\\config.lua");
     if (!exists(norns) || !exists(lua)) {
-        tell(L"Verdandi", MB_ICONERROR,
+        tell_user(L"Verdandi", MB_ICONERROR,
              L"Verdandi cannot start: a part of the program is missing (%ls).\n\nUnpack the whole zip file into a folder of its own (do not start Verdandi.exe from inside the zip), then start it again.",
              !exists(norns) ? norns : lua);
         return 4;
     }
     int have_sclang = exists(sclang) && !no_sclang;
     if (!exists(sclang) && !no_sclang) {
-        tell(L"Verdandi", MB_ICONWARNING,
+        tell_user(L"Verdandi", MB_ICONWARNING,
              L"The sound engine part of Verdandi (SuperCollider) is missing: %ls.\n\nVerdandi starts without engines. Scripts that need an engine will say so. Unpack the whole zip again to get it back.",
              sclang);
     }
@@ -412,7 +412,7 @@ int wmain(int argc, wchar_t **argv) {
     DWORD err = 0;
     HANDLE pn = start_child(norns, L"", g_app, logs, L"norns", &err);
     if (!pn) {
-        tell(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
+        tell_user(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
         return 6;
     }
     say(L"norns.exe started");
@@ -426,7 +426,7 @@ int wmain(int argc, wchar_t **argv) {
             ps = start_child(sclang, L"-D -l sclang_conf.yaml", scconf, logs, L"sclang", &err);
             /* the working folder is the SuperCollider config folder, so the configuration file is named by a plain relative name */
             if (!ps) {
-                tell(L"Verdandi", MB_ICONWARNING, L"Windows could not start sclang.exe (error %lu). Verdandi goes on without engines.", (unsigned long)err);
+                tell_user(L"Verdandi", MB_ICONWARNING, L"Windows could not start sclang.exe (error %lu). Verdandi goes on without engines.", (unsigned long)err);
             } else {
                 say(L"sclang.exe started");
             }
@@ -454,7 +454,7 @@ int wmain(int argc, wchar_t **argv) {
 
     int ret = 0;
     if (code != 0 && w != WAIT_TIMEOUT) {
-        tell(L"Verdandi", MB_ICONERROR, L"%ls\n\nThe log is %ls\\norns.log. A crash report, if one was made, is in %ls.", crash_hint(code), logs, crash);
+        tell_user(L"Verdandi", MB_ICONERROR, L"%ls\n\nThe log is %ls\\norns.log. A crash report, if one was made, is in %ls.", crash_hint(code), logs, crash);
         ret = 7;
     }
     CloseHandle(mutex);
