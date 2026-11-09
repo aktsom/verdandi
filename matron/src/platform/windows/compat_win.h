@@ -76,7 +76,8 @@ static inline char *realpath(const char *path, char *resolved) {
     }
     return _fullpath(resolved, path, resolved ? 4096 : 0);
 }
-static inline char *strndup(const char *s, size_t n) {
+/* MSYS2's newer MinGW-w64 declares strndup itself (first M1 compile: "declared extern and later static"); the cross compiler of Ubuntu does not. one name for ours, used instead of both */
+static inline char *norns_strndup(const char *s, size_t n) {
     size_t l = 0;
     while (l < n && s[l]) {
         l++;
@@ -88,6 +89,7 @@ static inline char *strndup(const char *s, size_t n) {
     }
     return p;
 }
+#define strndup(s, n) norns_strndup((s), (n))
 #ifdef __cplusplus
 }
 #endif
