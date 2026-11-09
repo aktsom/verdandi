@@ -27,10 +27,13 @@ fetch_source() {
 
 # Verdandi patches to SuperCollider (windows/patches): the null audio driver (VERDANDI_NULL_AUDIO=1: scsynth runs without an audio device). the clone is made with autocrlf off so that the patch applies
 apply_patches() {
-    local p
+    local p tmp
+    tmp="$WORK/patch.tmp"
     for p in "$HERE"/../patches/*.patch; do
         echo "applying $p"
-        if git -C "$SRC" apply --check "$p"; then git -C "$SRC" apply "$p"; else echo "patch does not apply: $p"; return 1; fi
+        # a checkout on Windows may have given the patch CRLF line ends (core.autocrlf): the source files have LF
+        tr -d '\r' < "$p" > "$tmp"
+        if git -C "$SRC" apply --check "$tmp"; then git -C "$SRC" apply "$tmp"; else echo "patch does not apply: $p"; git -C "$SRC" apply --check -v "$tmp" 2>&1 | head -20; return 1; fi
     done
 }
 

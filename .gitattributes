@@ -1,0 +1,3 @@
+# patches and shell scripts must keep LF line ends on Windows checkouts (git apply, bash)
+*.patch -text
+*.sh text eol=lf
