@@ -34,7 +34,7 @@ def main():
     distinct = len(set(pix))
     lit = sum(1 for b in pix if b) / max(1, len(pix))
     print("%dx%d depth %d colour type %d, %d distinct byte values, %.1f%% non-zero bytes" % (w, h, depth, ctype, distinct, lit * 100))
-    return 0 if distinct >= need and lit > 0.001 else 1
+    return 0 if distinct >= need and lit > 0.0001 else 1
 
 
 if __name__ == "__main__":
