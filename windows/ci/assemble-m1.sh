@@ -35,6 +35,18 @@ assemble() {
     # sclang runs "jack_connect ..." to wire scsynth into crone (Linux, macOS): there is no JACK server here in M1, so these stand-ins do nothing, quietly
     cp "$REPO"/windows/pack/jack_*.cmd "$APP/"
     mkdir -p "$APP/smoke" && cp "$REPO/windows/pack/smoke/verdandi_smoke.lua" "$APP/smoke/"
+    # a small set of scripts for the first tests, copied into dust\code on the first start when that folder is empty (launcher). fetched here, not kept in the repository; not fatal:
+    # without them the zip is the same, SELECT then says "no scripts found". awake: https://github.com/tehn/awake (licence to be checked by the owner); the commit is written next to it
+    mkdir -p "$APP/dust-seed/code"
+    if command -v git > /dev/null 2>&1 && git clone --quiet --depth 1 https://github.com/tehn/awake "$OUT/awake-src" 2> /dev/null; then
+        mv "$OUT/awake-src" "$APP/dust-seed/code/awake"
+        git -C "$APP/dust-seed/code/awake" rev-parse HEAD > "$APP/dust-seed/code/awake/SOURCE-COMMIT.txt" 2> /dev/null || true
+        rm -rf "$APP/dust-seed/code/awake/.git"
+        if [ -f "$APP/dust-seed/code/awake/awake.lua" ]; then echo "found: dust-seed/code/awake/awake.lua"; else echo "NOTE: awake fetched but awake.lua is not in it"; rm -rf "$APP/dust-seed/code/awake"; fi
+    else
+        echo "NOTE: awake could not be fetched; the zip has no seeded scripts"
+        rm -rf "$OUT/awake-src"
+    fi
     # SuperCollider, built in M0a (the zip holds one folder, SuperCollider)
     local tmp="$OUT/sc-unpacked"
     mkdir -p "$tmp"

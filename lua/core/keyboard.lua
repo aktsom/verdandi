@@ -47,7 +47,10 @@ local km = keyboard.keymap[keyboard.selected_map]
 
 function keyboard.load_enabled()
   local m_fn, err = loadfile(_path.keyboard_layout)
-  if err or m_fn == nil or m_fn() == nil then
+  if m_fn == nil and err and tostring(err):find("cannot open", 1, true) then
+    -- no saved layout yet (a fresh install): the default stays, and that is not an error
+    print("no saved keyboard layout, using: "..keyboard.selected_map)
+  elseif err or m_fn == nil or m_fn() == nil then
     -- NB: curently keeping current value
     print("error loading keyboard layout, using old value: "..keyboard.selected_map)
     -- could also fall back to US w/:

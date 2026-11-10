@@ -57,6 +57,11 @@ m.init = function()
     m.favorites = {}
     tabutil.save(m.favorites, paths.favorites)
   end
+  if _norns.listdir then
+    -- no find/grep/sort here (the Windows build): the same scan in lua
+    sort_select_tree(util.script_tree(paths.code, _norns.listdir))
+    return
+  end
   -- weird command, but it is fast, recursive, skips hidden dirs, and sorts
   norns.system_cmd('find ~/dust/code/ -mindepth 2 ' ..
                    '-name .git -prune -o -type f -name "*.lua" -printf "%P\n" | ' ..
@@ -76,7 +81,7 @@ m.key = function(n,z)
   -- select
   elseif n==3 and z==1 then
     -- return if the current "file" is the split between favorites and all scripts
-    if m.list[m.pos+1].file == nil then return end
+    if m.len == "scan" or m.len == 0 or m.list[m.pos+1] == nil or m.list[m.pos+1].file == nil then return end
     -- make sure the file still exists
     local previewfile = m.list[m.pos+1].file
     if util.file_exists(previewfile) then
@@ -116,7 +121,10 @@ m.redraw = function()
     screen.text_center("scanning...")
   elseif m.len == 0 then
     screen.move(64,40)
-    screen.text_center("no files")
+    screen.text_center("no scripts found")
+    screen.move(64,52)
+    screen.level(4)
+    screen.text_center("install some from maiden")
   else
     for i=1,6 do
       if (i > 2 - m.pos) and (i < m.len - m.pos + 3) then
@@ -138,7 +146,7 @@ end
 
 m.add_favorite = function()
   -- don't add the '-' split as a favorite.
-  if m.list[m.pos+1].name == '-' then
+  if m.list[m.pos+1] == nil or m.list[m.pos+1].name == '-' then
     return
   end
   if not contains(m.favorites, m.list[m.pos+1]) then
@@ -148,6 +156,7 @@ m.add_favorite = function()
 end
 
 m.remove_favorite = function()
+  if m.list[m.pos+1] == nil then return end
   for i, v in pairs(m.favorites) do
     if v.file == m.list[m.pos+1].file then
       table.remove(m.favorites, i)

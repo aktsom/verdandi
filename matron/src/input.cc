@@ -27,7 +27,12 @@ static void *input_run(void *p) {
         while (!newline) {
             if (nb < RX_BUF_LEN) {
                 if (read(STDIN_FILENO, &b, 1) < 1) {
+#ifdef NORNS_WINDOWS
+                    // started by the launcher: no console, so stdin is closed; nothing to type into, not an error
+                    fprintf(stderr, "no console input (maiden and the norns window are the way in)\n");
+#else
                     fprintf(stderr, "failed to read from stdin\n");
+#endif
                     return NULL;
                 }
 

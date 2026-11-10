@@ -72,5 +72,11 @@ M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It op
 ## What you should see
 The norns window within about 20 seconds; the home screen; the menus (F10 or the right mouse button). The checklist of what to try is in `docs/port/HARDWARE-CHECKLIST.md` ("Windows M1").
 
+## Scripts and maiden in M1
+- The zip carries a small set of scripts (awake) in `dust-seed\code`; on the first start they are copied to `%USERPROFILE%\Verdandi\dust\code` when that folder is empty (a folder that already has anything is never touched).
+- **Maiden is not in this build yet**; the MAIDEN button says so on the screen. To add scripts, copy a script folder (for example `awake`, from its GitHub page: Code > Download ZIP, unpack so that `awake.lua` is in `dust\code\awake\`) into `%USERPROFILE%\Verdandi\dust\code`, then open SELECT. Scripts that use a shared library (`lib`) bring it in their own folder.
+- When maiden comes to Windows its project installer needs `git` (it clones the script repositories) or at least `curl`. Both can be provided without administrator rights: `curl.exe` is part of Windows 10 (1803) and 11 already; MinGit (the portable Git for Windows zip, GPL-2.0) can be unpacked next to the program and found through the program's own PATH. Neither is needed for M1.
+- Windows Firewall may ask about `norns.exe` and `sclang.exe` (they listen for OSC messages). Everything works if you cancel the prompt; nothing leaves your computer in M1.
+
 ## What to send back
 `M1-REPORT.md` (always), and from `%USERPROFILE%\Verdandi\logs` the files `launcher.log`, `norns.log`, `sclang.log` (and everything in `crash\` if there is something), plus what you saw. Windows version (`winver`), and whether an antivirus window appeared.

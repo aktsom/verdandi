@@ -14,6 +14,7 @@ typedef enum {
     PLATFORM_PI4,
     PLATFORM_CM4,
     PLATFORM_CM4S,
+    PLATFORM_WINDOWS, // the Windows build of this fork (a computer; not a norns or shield)
 } platform_t;
 
 extern void init_platform(void);

@@ -24,6 +24,9 @@ end
 -- @treturn table
 util.scandir = function(directory)
   local i, t = 0, {}
+  if _norns.listdir then -- Windows build: a native listing, same shape as `ls -p` (folders first, "/" after a folder name, no hidden names)
+    return _norns.listdir(directory) or t
+  end
   local text = _norns.execute('ls -pL --group-directories-first "'..directory..'"')
     for filename in text:gmatch("[^\r\n]+") do
     i = i + 1
@@ -280,6 +283,57 @@ function util.wrap_max(n, min, max)
     return min
   end
   return util.wrap(n, min, max)
+end
+
+--- list the scripts below a code folder, as `find ... | grep -Ev "/(lib|data|crow|test|docs)/" | sort` does.
+-- used where there is no find/grep (the Windows build); `listdir` is _norns.listdir, a parameter so that it can be tested.
+-- @tparam string root path of the code folder, with a trailing "/"
+-- @tparam function listdir function(path) -> table of names, folders with a trailing "/"
+-- @treturn string the relative paths of the .lua files, one per line (at least one folder deep)
+util.script_tree = function(root, listdir)
+  listdir = listdir or _norns.listdir
+  local out = {}
+  local skip = {lib = true, data = true, crow = true, test = true, docs = true}
+  local function walk(rel, depth)
+    for _, name in ipairs(listdir(root .. rel) or {}) do
+      if name:sub(-1) == "/" then
+        local dir = name:sub(1, -2)
+        if dir:sub(1, 1) ~= "." and not skip[dir] then
+          walk(rel .. name, depth + 1)
+        end
+      elseif depth >= 1 and name:sub(-4) == ".lua" and name:sub(1, 1) ~= "." then
+        out[#out + 1] = rel .. name
+      end
+    end
+  end
+  walk("", 0)
+  table.sort(out)
+  return table.concat(out, "\n")
+end
+
+--- names in a folder, one per line (instead of `ls`); "" when there is no native listing (not the Windows build)
+util.ls_text = function(directory)
+  if not _norns.listdir then return "" end
+  return table.concat(_norns.listdir(directory) or {}, "\n")
+end
+
+--- copy a file by reading and writing it (instead of `cp`).
+util.copy_file = function(from, to)
+  local text = util.read_text(from)
+  local f = io.open(to, "wb")
+  if not f then return false end
+  f:write(text)
+  f:close()
+  return true
+end
+
+--- read a whole text file, "" when it cannot be read (instead of `cat`).
+util.read_text = function(name)
+  local f = io.open(name, "rb")
+  if not f then return "" end
+  local text = f:read("a") or ""
+  f:close()
+  return text
 end
 
 return util

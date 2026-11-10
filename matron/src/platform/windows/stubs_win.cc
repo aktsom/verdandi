@@ -19,7 +19,9 @@ extern "C" {
 #include "device/device_midi.h"
 #include "device/device_monitor.h"
 #include "device/device_monome.h"
+#include "device/device_list.h"
 #include "device/device_serial.h"
+#include "platform/linux/hid_virtual.h"
 #include "hardware/stat.h"
 #include "platform/macos/app_audio.h"
 #include "platform/macos/open_url.h"
@@ -72,12 +74,7 @@ void dev_serial_send(struct dev_serial *d, const char *line, size_t len) {
     (void)d, (void)line, (void)len;
 }
 
-/* ---- device_hid.cc ---- */
-int dev_hid_init(void *self) {
-    (void)self;
-    not_yet("USB keyboards and game controllers (HID)");
-    return -1;
-}
+/* ---- device_hid.cc: see hid_win.cc (the window keyboard is the only HID device for now) ---- */
 // 16 bit words of a device id as 32 hex digits (the part of the guid the Lua side compares); device_hid_iohid.cc does the same on macOS
 void guid_to_string(uint16_t *guid, char *guidstr) {
     static const char hex[] = "0123456789abcdef";
@@ -116,6 +113,8 @@ void dev_monitor_init(void) {
 }
 void dev_monitor_deinit(void) {}
 int dev_monitor_scan(void) {
+    // the computer keyboard, through the norns window (hid_win.cc), as the Linux scan does
+    dev_list_add(DEV_TYPE_HID, LINUX_SDL_KEYBOARD_PATH, strdup("keyboard"), NULL);
     return 0;
 }
 

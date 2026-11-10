@@ -114,6 +114,67 @@ int fnmatch(const char *pattern, const char *s, int flags) {
 
 #ifdef _WIN32
 
+#include <time.h>
+
+/* list a folder for lua (_norns.listdir): calls back with each UTF-8 name, isdir set for a folder; hidden names and "." ".." are left out, as `ls -p` does.
+ * returns 0, or -1 when the folder cannot be opened. */
+int norns_win_listdir(const char *dir_utf8, void (*cb)(const char *name, int isdir, void *ud), void *ud) {
+    wchar_t wdir[MAX_PATH * 2];
+    if (MultiByteToWideChar(CP_UTF8, 0, dir_utf8, -1, wdir, MAX_PATH * 2 - 3) <= 0) {
+        return -1;
+    }
+    size_t n = wcslen(wdir);
+    while (n > 0 && (wdir[n - 1] == L'/' || wdir[n - 1] == L'\\')) {
+        wdir[--n] = 0;
+    }
+    wcscat(wdir, L"\\*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(wdir, &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return -1;
+    }
+    do {
+        if (fd.cFileName[0] == L'.' || (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)) {
+            continue;
+        }
+        char name[MAX_PATH * 4];
+        if (WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, name, (int)sizeof name, NULL, NULL) > 0) {
+            cb(name, (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0, ud);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return 0;
+}
+
+/* sleep until an absolute CLOCK_MONOTONIC time (nanoseconds), on a high resolution waitable timer (Windows 10 1803 and later; otherwise a 1 ms timer resolution and a normal timer).
+ * used by the metros: matron/src/metro.cc. one timer per thread. */
+void norns_win_sleep_until_ns(int64_t target) {
+    static __thread HANDLE timer;
+    static __thread int tried;
+    struct timespec ts;
+    if (!tried) {
+        tried = 1;
+        timer = CreateWaitableTimerExW(NULL, NULL, 0x2 /* CREATE_WAITABLE_TIMER_HIGH_RESOLUTION */, TIMER_ALL_ACCESS);
+        if (!timer) {
+            timer = CreateWaitableTimerW(NULL, FALSE, NULL);
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    int64_t d = target - ((int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec);
+    if (d <= 0) {
+        return;
+    }
+    if (timer) {
+        LARGE_INTEGER due;
+        due.QuadPart = -(d / 100);
+        if (SetWaitableTimer(timer, &due, 0, NULL, NULL, FALSE)) {
+            WaitForSingleObject(timer, INFINITE);
+            return;
+        }
+    }
+    Sleep((DWORD)(d / 1000000));
+}
+
 static int cmp_str(const void *a, const void *b) { return strcmp(*(char *const *)a, *(char *const *)b); }
 
 int glob(const char *pattern, int flags, int (*errfunc)(const char *, int), glob_t *pglob) {

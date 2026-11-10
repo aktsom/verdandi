@@ -2455,6 +2455,15 @@ static void open_maiden() {
     if (port <= 0 || port > 65535) {
         port = 5000;
     }
+#ifdef NORNS_WINDOWS
+    // maiden is not in the Windows build yet (M1): whatever else listens on the port (another program on 5000) is not maiden, so the page is not opened.
+    // VERDANDI_MAIDEN=1 (set by the launcher once maiden is part of the build) turns the check on
+    const char *have_maiden = getenv("VERDANDI_MAIDEN");
+    if (have_maiden == NULL || strcmp(have_maiden, "1") != 0) {
+        post_window_button(9);
+        return;
+    }
+#endif
     if (maiden_listening(port)) {
         char url[64];
         snprintf(url, sizeof url, "http://127.0.0.1:%d/maiden", port);

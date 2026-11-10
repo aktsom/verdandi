@@ -21,6 +21,9 @@
 // norns
 #include "events.h"
 #include "metro.h"
+#ifdef NORNS_WINDOWS
+extern "C" void norns_win_sleep_until_ns(int64_t monotonic_ns);
+#endif
 
 #define MAX_NUM_METROS_OK 36
 
@@ -37,6 +40,7 @@ struct metro {
     uint64_t time;               // current time (in nsec)
     uint64_t delta;              // current delta (in nsec)
     pthread_t tid;               // thread id
+    unsigned generation;         // Windows: bumped at every start and stop; a loop whose number is not the current one ends (no pthread_cancel there)
     pthread_mutex_t stage_lock;  // mutex protecting stage number
     pthread_mutex_t status_lock; // mutex protecting status
 };
@@ -186,6 +190,9 @@ void metro_init(struct metro *t, uint64_t nsec, int count) {
 
     t->delta = nsec;
     t->count = count;
+#ifdef NORNS_WINDOWS
+    t->generation++;
+#endif
     res = pthread_create(&(t->tid), &attr, &metro_thread_loop, (void *)t);
 #ifdef NORNS_LINUX_DESKTOP
     pthread_attr_destroy(&attr);
@@ -229,6 +236,9 @@ void metro_init(struct metro *t, uint64_t nsec, int count) {
 void *metro_thread_loop(void *metro) {
     struct metro *t = (struct metro *)metro;
     int stop = 0;
+#ifdef NORNS_WINDOWS
+    unsigned my_generation = t->generation;
+#endif
 
     pthread_mutex_lock(&(t->status_lock));
     t->status = METRO_STATUS_RUNNING;
@@ -246,6 +256,11 @@ void *metro_thread_loop(void *metro) {
         if (stop) {
             break;
         }
+#ifdef NORNS_WINDOWS
+        if (my_generation != t->generation) {
+            return NULL; // stopped (or started again, by a newer loop) while this one slept: leave the status alone
+        }
+#endif
         pthread_testcancel();
 
         pthread_mutex_lock(&(t->stage_lock));
@@ -254,7 +269,13 @@ void *metro_thread_loop(void *metro) {
         pthread_mutex_unlock(&(t->stage_lock));
     }
     pthread_mutex_lock(&(t->status_lock));
+#ifdef NORNS_WINDOWS
+    if (my_generation == t->generation) {
+        t->status = METRO_STATUS_STOPPED;
+    }
+#else
     t->status = METRO_STATUS_STOPPED;
+#endif
     pthread_mutex_unlock(&(t->status_lock));
     return NULL;
 }
@@ -277,7 +298,11 @@ void metro_sleep(struct metro *t) {
     t->time += t->delta;
     ts.tv_sec = t->time / 1000000000;
     ts.tv_nsec = t->time % 1000000000;
+#ifdef NORNS_WINDOWS
+    norns_win_sleep_until_ns((int64_t)t->time); // a high resolution timer: clock_nanosleep of winpthreads sleeps whole milliseconds (Sleep)
+#else
     clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL);
+#endif
 }
 
 void metro_wait(int idx) {
@@ -291,6 +316,13 @@ void metro_cancel(struct metro *t) {
         fprintf(stderr, "metro_cancel(): already stopped. shouldn't get here\n");
         return;
     }
+#ifdef NORNS_WINDOWS
+    // Windows: the metro threads are detached and end by themselves (count reached) or when the generation moves on; pthread_cancel of a thread that is gone
+    // is an error ("specified thread does not exist", hundreds of times in the first Windows log) and winpthreads cannot cancel a sleeping thread reliably anyway
+    t->generation++;
+    t->status = METRO_STATUS_STOPPED;
+    return;
+#endif
     int ret = pthread_cancel(t->tid);
     if (ret) {
         fprintf(stderr, "metro_stop(): pthread_cancel() failed; error: ");

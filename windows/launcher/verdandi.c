@@ -199,11 +199,110 @@ static void write_sclang_conf(const wchar_t *dir) {
     fclose(f);
 }
 
+/* the output of a program goes through a pipe to a thread of the launcher that writes the log: a line that repeats (a message every few milliseconds when something is wrong)
+ * is written once with a note "(repeated N more times)", so the log stays readable and small. what comes after a crash is still written (the pipe is read to its end). */
+typedef struct {
+    HANDLE read;
+    HANDLE file;
+    HANDLE thread;
+} pump_t;
+static pump_t g_pumps[4];
+static int g_npumps;
+
+static void pump_write(HANDLE file, const char *text, size_t n) {
+    DWORD done;
+    WriteFile(file, text, (DWORD)n, &done, NULL);
+}
+
+static void pump_flush_repeat(HANDLE file, unsigned long repeats) {
+    if (repeats > 0) {
+        char note[96];
+        int n = snprintf(note, sizeof note, "   (the line above repeated %lu more times)\n", repeats);
+        pump_write(file, note, (size_t)n);
+    }
+}
+
+static DWORD WINAPI pump_thread(LPVOID arg) {
+    pump_t *pt = (pump_t *)arg;
+    char buf[4096];
+    char line[2048], last[2048];
+    size_t len = 0, lastlen = 0;
+    unsigned long repeats = 0;
+    DWORD got;
+    last[0] = 0;
+    for (;;) {
+        BOOL ok = ReadFile(pt->read, buf, sizeof buf, &got, NULL);
+        if (!ok || got == 0) {
+            break;
+        }
+        for (DWORD i = 0; i < got; i++) {
+            char c = buf[i];
+            if (c != '\n' && len < sizeof line - 2) {
+                line[len++] = c;
+            }
+            if (c == '\n') {
+                line[len++] = '\n';
+                if (len == lastlen && memcmp(line, last, len) == 0) {
+                    repeats++;
+                } else {
+                    pump_flush_repeat(pt->file, repeats);
+                    repeats = 0;
+                    pump_write(pt->file, line, len);
+                    memcpy(last, line, len);
+                    lastlen = len;
+                }
+                len = 0;
+            }
+        }
+    }
+    pump_flush_repeat(pt->file, repeats);
+    if (len > 0) {
+        pump_write(pt->file, line, len); /* the last line without a newline */
+    }
+    CloseHandle(pt->read);
+    CloseHandle(pt->file);
+    return 0;
+}
+
+/* the write end of a pipe for a child (inheritable); the read end goes to a pump thread that writes name.log */
 static HANDLE open_log_for_child(const wchar_t *dir, const wchar_t *name) {
     wchar_t p[MAX_PATH * 2];
     _snwprintf(p, MAX_PATH * 2, L"%ls\\%ls.log", dir, name);
     SECURITY_ATTRIBUTES sa = {sizeof sa, NULL, TRUE};
-    return CreateFileW(p, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE file = CreateFileW(p, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE rd = NULL, wr = NULL;
+    if (file == INVALID_HANDLE_VALUE || g_npumps >= 4 || !CreatePipe(&rd, &wr, &sa, 0)) {
+        if (file != INVALID_HANDLE_VALUE) {
+            /* no pipe: the child writes the file itself, as before */
+            HANDLE dup = INVALID_HANDLE_VALUE;
+            DuplicateHandle(GetCurrentProcess(), file, GetCurrentProcess(), &dup, 0, TRUE, DUPLICATE_SAME_ACCESS);
+            CloseHandle(file);
+            return dup;
+        }
+        return INVALID_HANDLE_VALUE;
+    }
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+    pump_t *pt = &g_pumps[g_npumps];
+    pt->read = rd;
+    pt->file = file;
+    pt->thread = CreateThread(NULL, 0, pump_thread, pt, 0, NULL);
+    if (!pt->thread) {
+        CloseHandle(rd);
+        CloseHandle(file);
+        CloseHandle(wr);
+        return INVALID_HANDLE_VALUE;
+    }
+    g_npumps++;
+    return wr;
+}
+
+/* after the children are gone: the pumps have read their pipes to the end; waits a moment for the last lines to be written */
+static void pumps_finish(void) {
+    for (int i = 0; i < g_npumps; i++) {
+        WaitForSingleObject(g_pumps[i].thread, 3000);
+        CloseHandle(g_pumps[i].thread);
+    }
+    g_npumps = 0;
 }
 
 /* starts a program in the job object with its output in a log. cwd is the working folder; cmdline uses relative names when the program is sclang */
@@ -240,6 +339,59 @@ static HANDLE start_child(const wchar_t *exe, const wchar_t *args, const wchar_t
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
     return pi.hProcess;
+}
+
+/* copy a folder tree (the seeded scripts); existing files are left alone */
+static void copy_tree(const wchar_t *from, const wchar_t *to) {
+    wchar_t pat[MAX_PATH * 2];
+    join(pat, MAX_PATH * 2, from, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    make_dirs(to);
+    do {
+        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) {
+            continue;
+        }
+        wchar_t a[MAX_PATH * 2], b[MAX_PATH * 2];
+        join(a, MAX_PATH * 2, from, fd.cFileName);
+        join(b, MAX_PATH * 2, to, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            copy_tree(a, b);
+        } else {
+            CopyFileW(a, b, TRUE);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+/* first start: dust\code is empty and the program folder has dust-seed\code, so SELECT has something to show. a folder with anything in it is never touched */
+static void seed_scripts(const wchar_t *dust) {
+    wchar_t seed[MAX_PATH * 2], code[MAX_PATH * 2], pat[MAX_PATH * 2];
+    join(seed, MAX_PATH * 2, g_app, L"dust-seed\\code");
+    join(code, MAX_PATH * 2, dust, L"code");
+    if (!exists(seed)) {
+        return;
+    }
+    join(pat, MAX_PATH * 2, code, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        int any = 0;
+        do {
+            if (wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L"..")) {
+                any = 1;
+            }
+        } while (!any && FindNextFileW(h, &fd));
+        FindClose(h);
+        if (any) {
+            return;
+        }
+    }
+    copy_tree(seed, code);
+    say(L"first start: the scripts of dust-seed were copied to %ls", code);
 }
 
 static void bring_running_copy_forward(void) {
@@ -335,6 +487,7 @@ int wmain(int argc, wchar_t **argv) {
             CopyFileW(from, to, FALSE);
         }
     }
+    seed_scripts(dust);
     make_dirs(cache);
     make_dirs(scconf);
 
@@ -451,6 +604,7 @@ int wmain(int argc, wchar_t **argv) {
         CloseHandle(ps);
     }
     CloseHandle(pn);
+    pumps_finish();
 
     int ret = 0;
     if (code != 0 && w != WAIT_TIMEOUT) {

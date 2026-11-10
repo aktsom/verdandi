@@ -8,6 +8,16 @@ function init()
   print("VERDANDI_SMOKE init")
   clock.run(function()
     clock.sleep(2)
+    -- the window keyboard must be a HID device (it was missing in the first Windows build: keys did nothing), and a key that is pressed reaches keyboard.code
+    local have = false
+    for _, d in pairs(hid.devices) do if d.name and d.name:find("keyboard") then have = true end end
+    print("VERDANDI_SMOKE keyboard device " .. (have and "yes" or "NO"))
+    local got = nil
+    keyboard.code = function(key, value) got = key end
+    for id, d in pairs(hid.devices) do
+      if d.name and d.name:find("keyboard") then _norns.hid.event(id, 1, 30, 1) end
+    end
+    print("VERDANDI_SMOKE key event " .. tostring(got))
     redraw()
     screen.export_screenshot("verdandi_smoke")
     print("VERDANDI_SMOKE screenshot " .. norns.state.data .. "verdandi_smoke.png")

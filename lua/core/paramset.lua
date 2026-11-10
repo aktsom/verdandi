@@ -588,7 +588,7 @@ function ParamSet:delete(filename, name, pset_number)
     filename = filename .. "-" .. string.format("%02d",n) .. ".pset"
   end
   print("pset >> delete: "..filename, name, pset_number)
-  norns.system_cmd("rm "..filename)
+  if _norns.listdir then os.remove(filename) else norns.system_cmd("rm "..filename) end
   if self.action_delete ~= nil then
     self.action_delete(filename, name, pset_number)
   end

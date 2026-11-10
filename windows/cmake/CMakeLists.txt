@@ -59,11 +59,12 @@ target_compile_options(lua-cjson PRIVATE -w)
 add_executable(norns ${NORNS_SOURCES})
 set_target_properties(norns PROPERTIES OUTPUT_NAME "norns")
 
+# the version of the Windows build: 0.1.0 = milestone M1 (matron VERSION_*; the norns update number on the home screen comes from update/version.txt)
 target_compile_definitions(norns PRIVATE
   # HAVE_ABLETON_LINK=1: the Lua side registers and calls the clock_link_* functions; in M1 they are the stand-ins of stubs_win.cc (no Link yet)
   NORNS_DESKTOP=1 NORNS_LINUX_DESKTOP=1 NORNS_WINDOWS=1
   HAVE_LIBMONOME=1 HAVE_NNG=1 HAVE_LUA_CJSON=1 HAVE_ABLETON_LINK=1
-  VERSION_MAJOR=0 VERSION_MINOR=0 VERSION_PATCH=0 VERSION_HASH="${VERDANDI_VERSION_HASH}"
+  VERSION_MAJOR=0 VERSION_MINOR=1 VERSION_PATCH=0 VERSION_HASH="${VERDANDI_VERSION_HASH}"
   _GNU_SOURCE=1)
 # the force-included compatibility header: every translation unit sees it first
 target_compile_options(norns PRIVATE "SHELL:-include ${REPO}/matron/src/platform/windows/compat_win.h")

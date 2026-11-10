@@ -8,6 +8,10 @@
 static platform_t p = PLATFORM_UNKNOWN;
 
 void init_platform() {
+#ifdef NORNS_WINDOWS
+    p = PLATFORM_WINDOWS;
+    return;
+#endif
     if (access("/sys/firmware/devicetree/base/model", F_OK) != -1) {
 
         FILE *fptr = fopen("/sys/firmware/devicetree/base/model", "r");
@@ -49,6 +53,8 @@ const char *platform_name() {
         return "pi4";
     case PLATFORM_OTHER:
         return "other";
+    case PLATFORM_WINDOWS:
+        return "windows";
     default:
         break;
     }

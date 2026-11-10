@@ -368,4 +368,19 @@ function Wifi.update()
   end
 end
 
+if _norns.listdir then
+  -- the Windows build: no nmcli (NetworkManager) and no network menu to drive; every query answers "nothing", with one line in the log
+  local function none() return nil end
+  local function empty() return {} end
+  Wifi.init = function() print("network connections: not available on Windows") Wifi.update() end
+  Wifi.update = function()
+    Wifi.connection_name, Wifi.ip, Wifi.signal, Wifi.status, Wifi.state = "", "", "", "", 0
+    Wifi.conn_list, Wifi.conn_count, Wifi.conn_active = {}, 0, -1
+  end
+  Wifi.off, Wifi.hotspot, Wifi.on, Wifi.add, Wifi.delete = none, none, none, none, none
+  Wifi.connections, Wifi.ssids, Wifi.devices = empty, empty, empty
+  Wifi.active_connection, Wifi.ensure_radio_is_on = none, none
+  Wifi.radio_state = function() return "disabled" end
+end
+
 return Wifi

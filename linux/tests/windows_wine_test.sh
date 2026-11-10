@@ -32,6 +32,7 @@ $CXX "$T/wpt.o" "$T/pc.o" "$T/ssw.o" -static -lws2_32 -o "$T/windows_posix_test.
 echo "== launcher"
 $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static || exit 1; }
 mkdir -p "$T/app/lua/core" "$T/app/supercollider" "$T/app/update"
+mkdir -p "$T/app/dust-seed/code/awake/lib"; echo "-- seed" > "$T/app/dust-seed/code/awake/awake.lua"; echo "-- lib" > "$T/app/dust-seed/code/awake/lib/x.lua"
 touch "$T/app/lua/core/config.lua"; echo "test" > "$T/app/update/version.txt"
 cat > "$T/stub.c" <<'STUB'
 #include <stdio.h>
@@ -41,6 +42,7 @@ cat > "$T/stub.c" <<'STUB'
 int main(int argc, char **argv) {
     printf("stub %s\nHOME=%s\nNORNS_PLATFORM=%s\nVERDANDI_NULL_AUDIO=%s\nSDL_VIDEODRIVER=%s\n", argv[0], getenv("HOME"), getenv("NORNS_PLATFORM"), getenv("VERDANDI_NULL_AUDIO"), getenv("SDL_VIDEODRIVER"));
     for (int i = 1; i < argc; i++) printf("arg %s\n", argv[i]);
+    for (int i = 0; i < 500; i++) printf("same line every time\n");
     char cwd[500]; GetCurrentDirectoryA(500, cwd); printf("cwd %s\n", cwd); fflush(stdout);
     Sleep(strstr(argv[0], "norns") ? 8000 : 500);
     return 0;
@@ -56,6 +58,11 @@ ck "sclang started with relative ASCII arguments from the SuperCollider config f
 ck "sclang_conf.yaml names the norns classes and dust" "grep -q '/sc/core' '$T/vhome/.config/SuperCollider/sclang_conf.yaml' && grep -q '/dust' '$T/vhome/.config/SuperCollider/sclang_conf.yaml'"
 ck "dust/code, dust/audio, dust/data, logs/crash and version.txt exist" "[ -d '$T/vhome/dust/code' ] && [ -d '$T/vhome/dust/audio' ] && [ -d '$T/vhome/dust/data' ] && [ -d '$L/crash' ] && [ -f '$T/vhome/version.txt' ]"
 ck "--exit-after stopped norns.exe" "grep -q 'exit-after=3' '$L/launcher.log' || grep -q 'norns.exe ended' '$L/launcher.log'"
+ck "a line that repeats 500 times is in the log once, with a note" "[ \$(grep -c 'same line every time' '$L/norns.log') -eq 1 ] && grep -q 'repeated 499 more times' '$L/norns.log'"
+ck "first start: the seeded scripts were copied to dust/code" "[ -f '$T/vhome/dust/code/awake/awake.lua' ] && [ -f '$T/vhome/dust/code/awake/lib/x.lua' ]"
+echo "-- edited by the user" > "$T/vhome/dust/code/awake/awake.lua"
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=2 --home="Z:$T/vhome" > "$T/launcher1b.out" 2>&1)
+ck "a second start leaves the scripts alone" "grep -q 'edited by the user' '$T/vhome/dust/code/awake/awake.lua'"
 # a missing piece is said in plain words (headless: in the log), and nothing is started
 rm -f "$T/app/norns.exe"
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --home="Z:$T/vhome2" > "$T/launcher2.out" 2>&1); rc=$?

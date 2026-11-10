@@ -94,7 +94,7 @@ _norns.startup_status.timeout = function()
   norns.script.clear()
   print("norns.startup_status.timeout")
   local cmd="find ~/dust -name *.sc -type f -printf '%p %f\n' | sort -k2 | uniq -f1 --all-repeated=separate"
-  local results = util.os_capture(cmd,true)
+  local results = _norns.listdir and "" or util.os_capture(cmd,true) -- (no find/sort/uniq in the Windows build)
   if results ~= "" then
     print("DUPLICATE ENGINES:\n" .. results)
     norns.scripterror("DUPLICATE ENGINES")

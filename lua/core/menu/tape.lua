@@ -107,7 +107,7 @@ end
 
 local function file_read_tape_index()
   util.make_dir(_path.tape)
-  local tape = util.os_capture("ls " .. _path.tape, true)
+  local tape = _norns.listdir and util.ls_text(_path.tape) or util.os_capture("ls " .. _path.tape, true)
   local t = {}
   for f in tape:gmatch("([^\n]+)") do
     -- a take is named with four digits first ("0007.wav"); any other file whose first four characters happen to read as a number ("0.50 take.wav", "1e02", " 7 b") is not one: a fraction here made

@@ -65,6 +65,12 @@ has() { # file pattern what
 chk_launcher() { has "$LOGS/launcher.log" "norns.exe started" "norns.exe started" && has "$LOGS/launcher.log" "sclang.exe started" "sclang.exe started"; }
 chk_lua() { has "$LOGS/norns.log" "norns.startup_status.ok|startup_status" "matron's Lua reached the start-up handshake with the SuperCollider side"; }
 chk_script() { has "$LOGS/norns.log" "VERDANDI_SMOKE init" "the smoke script was resumed and its init ran" && has "$LOGS/norns.log" "VERDANDI_SMOKE_OK" "the smoke script drew and exported its screen"; }
+chk_keyboard() { has "$LOGS/norns.log" "VERDANDI_SMOKE keyboard device yes" "the window keyboard is a HID device" && has "$LOGS/norns.log" "VERDANDI_SMOKE key event A" "a key event reaches keyboard.code"; }
+# the shared Lua must not run Linux tools on Windows: "'ls' is not recognized" and the like, and no metro_stop spam, and no select.lua error
+chk_noise() {
+    if grep -n -E "is not recognized|pthread_cancel|menu key handler error|failed to read from stdin|unknown \(0\)" "$LOGS/norns.log" | head -10 | grep .; then return 1; fi
+    echo "none of: not recognized, pthread_cancel, menu key handler error, failed to read from stdin, unknown (0)"
+}
 chk_sclang() {
     has "$LOGS/sclang.log" "Norns startup" "norns's Crone class started in sclang" \
         && has "$LOGS/sclang.log" "SC_NullAudioDriver" "scsynth ran on the null audio driver (no sound device)" \
@@ -99,6 +105,8 @@ m0_run m1-run run_program
 collect > /dev/null 2>&1
 m0_run m1-check-launcher chk_launcher
 m0_run m1-check-lua chk_lua
+m0_run m1-check-keyboard chk_keyboard
+m0_run m1-check-noise chk_noise
 m0_run m1-check-sclang chk_sclang
 m0_run m1-check-script chk_script
 m0_run m1-check-screen chk_png

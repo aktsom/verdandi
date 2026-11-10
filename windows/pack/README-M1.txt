@@ -6,6 +6,11 @@ Unpack the WHOLE zip into a folder of its own first (do not start it from inside
 What you should see: the norns window with its screen, keys and encoders. The first start takes some seconds
 (SuperCollider compiles its class library). Your files live in  %USERPROFILE%\Verdandi  (dust, logs).
 
+Scripts: awake is included and appears in SELECT on the first start. To add more, copy a script folder into
+%USERPROFILE%\Verdandi\dust\code (so that, for example, dust\code\awake\awake.lua exists).
+The MAIDEN button says that maiden is not in this build yet. Windows Firewall may ask about norns.exe and sclang.exe:
+you can cancel the prompt, nothing needs the network.
+
 Not in this build: sound (scsynth runs on a silent null audio device), grids and arcs, MIDI, USB devices, Ableton Link,
 maiden, an installer. Dropping files on the window and the file picker are not available yet.
 

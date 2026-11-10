@@ -233,7 +233,13 @@ Script.load = function(filename)
       print("### initializing data folder")
       util.make_dir(norns.state.data)
       if util.file_exists(norns.state.path.."/data") then
-        _norns.execute("cp "..norns.state.path.."/data/*.pset "..norns.state.data)
+        if _norns.listdir then
+          for _, name in ipairs(_norns.listdir(norns.state.path.."/data/") or {}) do
+            if name:match("%.pset$") then util.copy_file(norns.state.path.."/data/"..name, norns.state.data..name) end
+          end
+        else
+          _norns.execute("cp "..norns.state.path.."/data/*.pset "..norns.state.data)
+        end
         print("### copied default psets")
       end
     end

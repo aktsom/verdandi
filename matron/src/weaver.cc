@@ -12,6 +12,11 @@
 
 // linux / posix
 #include <glob.h>
+#ifdef NORNS_WINDOWS
+#include <algorithm>
+#include <string>
+#include <vector>
+#endif
 #include <pthread.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -315,6 +320,9 @@ static int _system_cmd(lua_State *l);
 /// launch a named system action detached in a transient systemd unit
 static int _system_action(lua_State *l);
 static int _system_glob(lua_State *l);
+#ifdef NORNS_WINDOWS
+static int _listdir(lua_State *l);
+#endif
 /// run command in child process, blocking (replaces `os.execute`)
 static int _execute(lua_State *l);
 
@@ -553,6 +561,9 @@ void w_init(void) {
     lua_register_norns("system_cmd", &_system_cmd);
     lua_register_norns("system_action", &_system_action);
     lua_register_norns("system_glob", &_system_glob);
+#ifdef NORNS_WINDOWS
+    lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
+#endif
     lua_register_norns("execute", &_execute);
 
     // low-level monome grid control
@@ -3753,6 +3764,51 @@ int _system_glob(lua_State *l) {
     globfree(&g);
     return 1;
 }
+
+#ifdef NORNS_WINDOWS
+extern "C" int norns_win_listdir(const char *dir, void (*cb)(const char *name, int isdir, void *ud), void *ud);
+
+struct listdir_state {
+    std::vector<std::string> dirs, files;
+};
+
+static void listdir_add(const char *name, int isdir, void *ud) {
+    listdir_state *st = (listdir_state *)ud;
+    if (isdir) {
+        st->dirs.push_back(std::string(name) + "/");
+    } else {
+        st->files.push_back(name);
+    }
+}
+
+/***
+ * names in a folder, folders first (with a "/" after the name), then files; hidden names left out; sorted. nil when it cannot be opened.
+ * @function listdir
+ * @tparam string path
+ */
+int _listdir(lua_State *l) {
+    lua_check_num_args(1);
+    const char *dir = luaL_checkstring(l, 1);
+    listdir_state st;
+    if (norns_win_listdir(dir, listdir_add, &st) != 0) {
+        lua_pushnil(l);
+        return 1;
+    }
+    std::sort(st.dirs.begin(), st.dirs.end());
+    std::sort(st.files.begin(), st.files.end());
+    lua_newtable(l);
+    int i = 1;
+    for (const auto &d : st.dirs) {
+        lua_pushstring(l, d.c_str());
+        lua_rawseti(l, -2, i++);
+    }
+    for (const auto &f : st.files) {
+        lua_pushstring(l, f.c_str());
+        lua_rawseti(l, -2, i++);
+    }
+    return 1;
+}
+#endif
 
 int _execute(lua_State *l) {
     lua_check_num_args(1);

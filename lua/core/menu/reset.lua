@@ -11,11 +11,16 @@ m.key = function(n,z)
   elseif n==3 and z==1 then
     m.confirmed = true
     _menu.redraw()
+    if _norns.listdir then
+      -- no rm in the Windows build
+      for _, f in ipairs({paths.dust.."data/system.pset", paths.dust.."data/system.state", paths.favorites, paths.enabled_mods, paths.display_settings}) do os.remove(f) end
+    else
     _norns.execute("rm ~/dust/data/system.pset")
     _norns.execute("rm ~/dust/data/system.state")
     _norns.execute("rm "..paths.favorites)
     _norns.execute("rm "..paths.enabled_mods)
     _norns.execute("rm "..paths.display_settings)
+    end
     _norns.reset()
   end
 end

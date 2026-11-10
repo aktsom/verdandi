@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <vector>
+#include <time.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -54,6 +56,11 @@ static sidecar_shell_result_t run(const char *cmd, Out *o, uint32_t silence_ms =
     return r;
 }
 
+#ifdef _WIN32
+extern "C" int norns_win_listdir(const char *dir, void (*cb)(const char *name, int isdir, void *ud), void *ud);
+extern "C" void norns_win_sleep_until_ns(int64_t target);
+#endif
+
 int main() {
     // fnmatch: the patterns scripts use
     CHECK(fnmatch("*.lua", "init.lua", 0) == 0, "star");
@@ -86,6 +93,43 @@ int main() {
     globfree(&g);
     CHECK(glob("globtest/*.xyz", 0, NULL, &g) == GLOB_NOMATCH, "no match");
 
+    // listdir (_norns.listdir): folders first, "/" after them, hidden names and . .. left out
+    {
+        CreateDirectoryA("lsdir", NULL);
+        CreateDirectoryA("lsdir/sub", NULL);
+        CreateDirectoryA("lsdir/.hid", NULL);
+        for (const char *f : {"lsdir/b.lua", "lsdir/a.lua", "lsdir/.dot"}) {
+            FILE *fp = fopen(f, "w");
+            if (fp) {
+                fputs("x", fp);
+                fclose(fp);
+            }
+        }
+        std::vector<std::string> names;
+        int rc = norns_win_listdir("lsdir/", [](const char *n, int isdir, void *ud) { ((std::vector<std::string> *)ud)->push_back(std::string(n) + (isdir ? "/" : "")); }, &names);
+        CHECK(rc == 0 && names.size() == 3, "listdir: three visible names, got %zu", names.size());
+        CHECK(norns_win_listdir("no_such_folder", [](const char *, int, void *) {}, NULL) == -1, "listdir of a missing folder");
+    }
+    // the metro sleep: an absolute time on the monotonic clock, ticks 10 ms apart must not drift or run early
+    {
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        int64_t t = (int64_t)t0.tv_sec * 1000000000LL + t0.tv_nsec;
+        int64_t worst_late = 0;
+        int early = 0;
+        for (int i = 0; i < 100; i++) {
+            t += 10000000LL;
+            norns_win_sleep_until_ns(t);
+            struct timespec n;
+            clock_gettime(CLOCK_MONOTONIC, &n);
+            int64_t now = (int64_t)n.tv_sec * 1000000000LL + n.tv_nsec;
+            if (now < t - 100000) early++;
+            if (now - t > worst_late) worst_late = now - t;
+        }
+        CHECK(early == 0, "metro sleep: %d ticks came early", early);
+        CHECK(worst_late < 50000000LL, "metro sleep: worst lateness %lld us", (long long)(worst_late / 1000));
+        printf("metro sleep: 100 ticks of 10 ms, worst lateness %lld us\n", (long long)(worst_late / 1000));
+    }
     // mkdir -p is done natively (cmd.exe would make a folder called "-p")
     Out om;
     sidecar_shell_result_t rm = run("mkdir -p mk_test/a/b/c", &om);

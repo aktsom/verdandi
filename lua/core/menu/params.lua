@@ -100,6 +100,18 @@ end
 
 local function init_pset()
   print("scanning psets...")
+  if _norns.listdir then
+    -- no ls/sort here (the Windows build)
+    local found = {}
+    for _, name in ipairs(_norns.listdir(norns.state.data) or {}) do
+      if name:sub(1, #norns.state.shortname) == norns.state.shortname and name:match("%.pset$") then
+        found[#found + 1] = norns.state.data .. name
+      end
+    end
+    table.sort(found)
+    pset_list(table.concat(found, "\n"))
+    return
+  end
   norns.system_cmd('ls -1 '..norns.state.data..norns.state.shortname..'*.pset | sort', pset_list)
 end
 

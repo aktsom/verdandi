@@ -160,7 +160,7 @@ local PATH_FUNCTIONS = {
   'cut_buffer_read_mono', 'cut_buffer_read_stereo', 'cut_buffer_write_mono', 'cut_buffer_write_stereo',
   'tape_record_open', 'tape_play_open',
   'screen_display_png', 'screen_load_png', 'screen_export_png', 'screen_export_screenshot',
-  'choose_file',
+  'choose_file', 'listdir',
 }
 
 -- a glob pattern goes out real and the matches come back virtual (SYSTEM > MODS and the mod loader scan "<code>*/lib/mod.lua" with it)
