@@ -20,9 +20,9 @@ int verdandi_audio_boot(void) {
     vaud_config_load(&CFG, home);
     const char *list = getenv("VERDANDI_AUDIO_LIST");
     if (list && list[0] == '1') {
-        char text[8192];
+        char text[16384];
         int n = vaud_list_text(&vaud_backend_portaudio, text, sizeof text);
-        printf("%d output devices\n%s", n, text);
+        printf("%d devices\n%s", n, text);
         fflush(stdout);
         return 1;
     }
@@ -57,15 +57,31 @@ void verdandi_audio_shutdown(void) { vaud_stop(); }
 
 int verdandi_audio_devices_text(char *out, size_t n) { return vaud_list_text(&vaud_backend_portaudio, out, n); }
 
+int verdandi_audio_input(int mic_on, int sys_on) { return vaud_input_set(mic_on, sys_on); }
+
+void verdandi_audio_measure(void) { vaud_measure_start(); }
+
 void verdandi_audio_info(verdandi_audio_info_t *out) {
     memset(out, 0, sizeof *out);
     const vaud_state *s = vaud_get_state();
-    out->mode = s->mode == VAUD_MODE_DEVICE ? "device" : (s->mode == VAUD_MODE_FALLBACK ? "fallback" : "null");
-    snprintf(out->device, sizeof out->device, "%s", s->mode == VAUD_MODE_DEVICE ? s->opened.device_name : "");
-    snprintf(out->host_api, sizeof out->host_api, "%s", s->mode == VAUD_MODE_DEVICE ? s->opened.host_api : "");
+    int dev = s->mode == VAUD_MODE_DEVICE;
+    out->mode = dev ? "device" : (s->mode == VAUD_MODE_FALLBACK ? "fallback" : "null");
+    snprintf(out->device, sizeof out->device, "%s", dev ? s->opened.device_name : "");
+    snprintf(out->in_device, sizeof out->in_device, "%s", dev ? s->opened.in_name : "");
+    snprintf(out->host_api, sizeof out->host_api, "%s", dev ? s->opened.host_api : "");
+    snprintf(out->host_apis, sizeof out->host_apis, "%s", s->host_apis);
+    out->input = s->input == VAUD_IN_MIC ? "mic" : (s->input == VAUD_IN_SYS ? "system" : "off");
     out->rate = s->rate;
     out->frames = s->frames;
-    out->latency_ms = s->mode == VAUD_MODE_DEVICE ? s->opened.latency_ms : 0.0;
+    out->out_latency_ms = dev ? s->opened.out_latency_ms : 0.0;
+    out->in_latency_ms = dev ? s->opened.in_latency_ms : 0.0;
+    out->block_ms = s->rate ? 1000.0 * s->frames / s->rate : 0.0;
+    out->engine_ms = out->block_ms; /* the bridge keeps one block between crone and scsynth */
+    out->peak_db = s->in_peak_db;
+    out->measured_ms = s->measured_ms;
+    out->in_active = dev && s->opened.in_active;
     snprintf(out->note, sizeof out->note, "%s", s->note);
+    snprintf(out->in_note, sizeof out->in_note, "%s", dev ? s->opened.in_note : "");
+    snprintf(out->sys_note, sizeof out->sys_note, "%s", s->sys_note);
     vaud_bridge_stats(&out->to_sc, &out->from_sc, &out->underruns, &out->drops, &out->scsynth_attached);
 }

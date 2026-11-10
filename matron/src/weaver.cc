@@ -324,6 +324,10 @@ static int _system_glob(lua_State *l);
 static int _listdir(lua_State *l);
 static int _audio_devices(lua_State *l);
 static int _audio_info(lua_State *l);
+static int _audio_measure(lua_State *l);
+static int _mic_input(lua_State *l);
+static int _app_input(lua_State *l);
+static int _audio_input(lua_State *l);
 #endif
 /// run command in child process, blocking (replaces `os.execute`)
 static int _execute(lua_State *l);
@@ -567,6 +571,10 @@ void w_init(void) {
     lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
     lua_register_norns("audio_devices", &_audio_devices); // M2: the output devices for SYSTEM > AUDIO
     lua_register_norns("audio_info", &_audio_info);       // M2: what the audio is running on
+    lua_register_norns("mic_input", &_mic_input);         // M3: MIC on or off
+    lua_register_norns("app_input", &_app_input);         // M3: SYS (WASAPI loopback)
+    lua_register_norns("audio_measure", &_audio_measure); // M3: the measured round trip
+    lua_register_norns("audio_input", &_audio_input);     // M3: what the input is now (after mic_input / app_input)
 #endif
     lua_register_norns("execute", &_execute);
 
@@ -743,10 +751,14 @@ void w_init(void) {
     lua_register_norns("show_control", &_show_control);
     lua_register_norns("open_url", &_open_url);
     lua_register_norns("grid_window", &_grid_window);
+#ifndef NORNS_WINDOWS
     lua_register_norns("app_input", &_app_input);
+#endif
     lua_register_norns("monitor_out", &_monitor_out);
 #ifdef NORNS_LINUX_DESKTOP
+#ifndef NORNS_WINDOWS
     lua_register_norns("mic_input", &_mic_input);
+#endif
     lua_register_norns("app_list", &_app_list);
     lua_register_norns("midi_in_from", &_midi_in_from);
     lua_register_norns("midi_out_to", &_midi_out_to);
@@ -3829,7 +3841,8 @@ int _audio_devices(lua_State *l) {
 }
 
 /***
- * Windows: what the audio runs on: a table {mode = "device" | "null" | "fallback", device, host_api, rate, frames, latency_ms, note, to_scsynth, from_scsynth, underruns, drops, scsynth}
+ * Windows: what the audio runs on: a table {mode = "device" | "null" | "fallback", device, in_device, host_api, host_apis, input = "off" | "mic" | "system", rate, frames, out_latency_ms, in_latency_ms,
+ * block_ms, engine_ms, peak_db, measured_ms, in_active, note, in_note, sys_note, to_scsynth, from_scsynth, underruns, drops, scsynth}
  * @function audio_info
  * @treturn table
  */
@@ -3838,31 +3851,87 @@ int _audio_info(lua_State *l) {
     verdandi_audio_info_t a;
     verdandi_audio_info(&a);
     lua_newtable(l);
-    lua_pushstring(l, a.mode);
-    lua_setfield(l, -2, "mode");
-    lua_pushstring(l, a.device);
-    lua_setfield(l, -2, "device");
-    lua_pushstring(l, a.host_api);
-    lua_setfield(l, -2, "host_api");
-    lua_pushinteger(l, a.rate);
-    lua_setfield(l, -2, "rate");
-    lua_pushinteger(l, a.frames);
-    lua_setfield(l, -2, "frames");
-    lua_pushnumber(l, a.latency_ms);
-    lua_setfield(l, -2, "latency_ms");
-    lua_pushstring(l, a.note);
-    lua_setfield(l, -2, "note");
-    lua_pushinteger(l, (lua_Integer)a.to_sc);
-    lua_setfield(l, -2, "to_scsynth");
-    lua_pushinteger(l, (lua_Integer)a.from_sc);
-    lua_setfield(l, -2, "from_scsynth");
-    lua_pushinteger(l, (lua_Integer)a.underruns);
-    lua_setfield(l, -2, "underruns");
-    lua_pushinteger(l, (lua_Integer)a.drops);
-    lua_setfield(l, -2, "drops");
+#define SET_S(k, v) lua_pushstring(l, v), lua_setfield(l, -2, k)
+#define SET_N(k, v) lua_pushnumber(l, v), lua_setfield(l, -2, k)
+#define SET_I(k, v) lua_pushinteger(l, (lua_Integer)(v)), lua_setfield(l, -2, k)
+    SET_S("mode", a.mode);
+    SET_S("device", a.device);
+    SET_S("in_device", a.in_device);
+    SET_S("host_api", a.host_api);
+    SET_S("host_apis", a.host_apis);
+    SET_S("input", a.input);
+    SET_I("rate", a.rate);
+    SET_I("frames", a.frames);
+    SET_N("out_latency_ms", a.out_latency_ms);
+    SET_N("in_latency_ms", a.in_latency_ms);
+    SET_N("block_ms", a.block_ms);
+    SET_N("engine_ms", a.engine_ms);
+    SET_N("peak_db", a.peak_db);
+    SET_N("measured_ms", a.measured_ms);
+    SET_S("note", a.note);
+    SET_S("in_note", a.in_note);
+    SET_S("sys_note", a.sys_note);
+    SET_I("to_scsynth", a.to_sc);
+    SET_I("from_scsynth", a.from_sc);
+    SET_I("underruns", a.underruns);
+    SET_I("drops", a.drops);
+    lua_pushboolean(l, a.in_active);
+    lua_setfield(l, -2, "in_active");
     lua_pushboolean(l, a.scsynth_attached);
     lua_setfield(l, -2, "scsynth");
+#undef SET_S
+#undef SET_N
+#undef SET_I
     return 1;
+}
+
+static int win_mic_on = 0, win_sys_on = 0;
+
+/***
+ * Windows: the sound card's input on or off crone's input (the MIC / OFF / SYS button, lua/core/menu.lua). SYS has priority
+ * @function mic_input
+ * @tparam boolean live
+ */
+int _mic_input(lua_State *l) {
+    win_mic_on = lua_toboolean(l, 1);
+    lua_pushboolean(l, verdandi_audio_input(win_mic_on, win_sys_on) == 0);
+    return 1;
+}
+
+/***
+ * Windows: SYS: what the system plays, by WASAPI loopback ("system"), or nothing (nil). the label is not used here
+ * @function app_input
+ * @tparam string target
+ */
+int _app_input(lua_State *l) {
+    const char *target = lua_gettop(l) >= 1 && !lua_isnil(l, 1) ? luaL_checkstring(l, 1) : NULL;
+    win_sys_on = target && !strcmp(target, "system");
+    lua_pushboolean(l, verdandi_audio_input(win_mic_on, win_sys_on) == 0);
+    return 1;
+}
+
+/***
+ * Windows: what the input really is now ("off", "mic", "system") and why a choice did not work (a note, "" if all is well)
+ * @function audio_input
+ * @treturn string
+ * @treturn string
+ */
+int _audio_input(lua_State *l) {
+    verdandi_audio_info_t a;
+    verdandi_audio_info(&a);
+    lua_pushstring(l, a.input);
+    lua_pushstring(l, a.sys_note[0] ? a.sys_note : a.in_note);
+    return 2;
+}
+
+/***
+ * Windows: measure the round trip (a click out, watched on the input)
+ * @function audio_measure
+ */
+int _audio_measure(lua_State *l) {
+    (void)l;
+    verdandi_audio_measure();
+    return 0;
 }
 #endif
 
@@ -4123,10 +4192,12 @@ int _set_warning(lua_State *l) {
  * @tparam boolean live
  */
 #ifdef NORNS_LINUX_DESKTOP
+#ifndef NORNS_WINDOWS
 int _mic_input(lua_State *l) {
     input_route_mic(lua_toboolean(l, 1));
     return 0;
 }
+#endif
 
 /***
  * Linux desktop: the applications that can be heard as input (names without the stream number), then whether
@@ -4281,12 +4352,14 @@ int _midi_in_status(lua_State *l) {
  * @tparam string target "system" (every other app), an app's bundle id, or nil for none
  * @tparam string label for a note on the device ("input: <label>"), nil for none
  */
+#ifndef NORNS_WINDOWS
 int _app_input(lua_State *l) {
     const char *target = lua_gettop(l) >= 1 && !lua_isnil(l, 1) ? luaL_checkstring(l, 1) : NULL;
     const char *label = lua_gettop(l) >= 2 && !lua_isnil(l, 2) ? luaL_checkstring(l, 2) : NULL;
     sdl_bridge_app_input(target, label);
     return 0;
 }
+#endif
 
 /***
  * macOS: whether the input monitor is heard (true) or goes to TAPE only (false: the input

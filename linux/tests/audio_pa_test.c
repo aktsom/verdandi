@@ -3,6 +3,7 @@
  * does not exist is refused with VAUD_NOT_FOUND and a plain error (no hang, no crash), and vaud_start() with this backend always ends with a running chain (a card, or null audio with a note).
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "audio/audio_device.h"
@@ -28,15 +29,32 @@ int main(void) {
     vaud_device dev[64];
     int n = vaud_backend_portaudio.list(dev, 64);
     CHECK(n >= 0, "list");
-    printf("%d output devices\n", n);
+    printf("%d devices\n", n);
     char text[8192];
     int m = vaud_list_text(&vaud_backend_portaudio, text, sizeof text);
     CHECK(m == n, "list text count");
     vaud_opened res;
     char err[256] = "";
     memset(&res, 0, sizeof res);
-    vaud_error e = vaud_backend_portaudio.open("wasapi:No Such Speakers 12345", 48000, 512, NULL, NULL, &res, err, sizeof err);
+    vaud_open_req rq;
+    memset(&rq, 0, sizeof rq);
+    snprintf(rq.out_uid, sizeof rq.out_uid, "wasapi:No Such Speakers 12345");
+    rq.rate = 48000; rq.frames = 512; rq.out_first = 1; rq.in_l = 1; rq.in_r = 2;
+    vaud_error e = vaud_backend_portaudio.open(&rq, NULL, NULL, &res, err, sizeof err);
     CHECK(e == VAUD_NOT_FOUND && err[0], "an unknown device is refused as not found (%d '%s')", e, err);
+    memset(&rq, 0, sizeof rq);
+    snprintf(rq.out_uid, sizeof rq.out_uid, "asio:No Such Driver 12345");
+    rq.rate = 48000; rq.frames = 512; rq.out_first = 1; rq.in_l = 1; rq.in_r = 2;
+    e = vaud_backend_portaudio.open(&rq, NULL, NULL, &res, err, sizeof err);
+    CHECK(e == VAUD_NOT_FOUND, "an ASIO driver that does not exist (or a build without ASIO) is not found (%d '%s')", e, err);
+    int has_asio = strstr(desc, "ASIO") && !strstr(desc, "no ASIO");
+    for (int i = 0; i < n; i++) CHECK(has_asio || strcmp(dev[i].api, "ASIO") != 0, "no ASIO device in a build without ASIO");
+    CHECK(strstr(desc, "host APIs:") != NULL, "describe() lists the host APIs for the log: %s", desc);
+    /* the SYS (loopback) stream: opens or says why, never hangs */
+    char sysname[128] = "", syserr[200] = "";
+    int sr = vaud_backend_portaudio.open_sys(48000, 512, sysname, sizeof sysname, syserr, sizeof syserr);
+    CHECK(sr == 0 || syserr[0], "open_sys: %d '%s'", sr, syserr);
+    if (sr == 0) vaud_backend_portaudio.close_sys();
     vaud_config cfg;
     memset(&cfg, 0, sizeof cfg);
     cfg.output[0] = 0;

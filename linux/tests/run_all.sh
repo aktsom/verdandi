@@ -164,7 +164,7 @@ audio_chain_ok() {
     gcc -std=gnu11 -O1 -I matron/src/platform/windows/jack_null/include -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c \
         matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/audio/exit_win.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
     local sc
-    for sc in config device small noguest busy notfound badrate latecrone preconnected null; do
+    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone; do
         "$T/audio_chain_test" "$sc" 2> /dev/null || return 1
     done
     for sc in 1 2 3 4 5 6 7 8; do
@@ -173,7 +173,7 @@ audio_chain_ok() {
     done
     return 0
 }
-run "windows:audio chain with a fake sound card (card -> crone stand-in -> bridge -> scsynth stand-in -> card; device busy, missing or at another rate falls back with a note; audio.conf values; device list)" audio_chain_ok
+run "windows:audio chain with a fake sound card (card -> crone stand-in -> bridge -> scsynth stand-in -> card; device busy, missing or at another rate falls back with a note; audio.conf values; device list; M3: ASIO driver busy falls back to WASAPI with the plain words, input MIC / OFF / SYS with channel mapping, separate input stream, loopback, no feedback at start, measured round trip)" audio_chain_ok
 audio_pa_ok() {
     pkg-config --exists portaudio-2.0 || { echo "SKIP: no libportaudio-dev"; return 0; }
     gcc -std=gnu11 -I matron/src/platform/windows linux/tests/audio_pa_test.c matron/src/platform/windows/audio/audio_device.c matron/src/platform/windows/audio/audio_backend_pa.c \
@@ -186,7 +186,8 @@ hello_late_ok() {
 }
 run "windows:start-up wait for SuperCollider (a time limit, the question every 100 ms, a late ready message from crone completes the start-up instead of staying SUPERCOLLIDER FAIL)" hello_late_ok
 run "windows:the PortAudio backend on Linux (list, an unknown device is refused as not found, start ends in a card or null audio with a note, no hang)" audio_pa_ok
-run "windows:SYSTEM > AUDIO with the program's own device list (output= rate= period= in audio.conf, restart, input read only, busy or missing device said, bottom line)" lua5.3 linux/tests/audio_page_windows_test.lua
+run "windows:SYSTEM > AUDIO with the program's own device list (host APIs, devices, channels, output= input= rate= period= out_first= in_l= in_r= in audio.conf, restart, latency / measured / level rows, busy or missing device said)" lua5.3 linux/tests/audio_page_windows_test.lua
+run "windows:MIC / OFF / SYS switch (OFF at every start, nothing remembered, no input device or no loopback stays OFF with the reason)" lua5.3 linux/tests/input_windows_test.lua
 run "windows:scsynth with the Verdandi bridge driver against the bridge host (needs a patched scsynth: VERDANDI_SCSYNTH)" bash linux/tests/scsynth_bridge_test.sh
 hid_virtual_ok() {
     g++ -std=c++14 -I matron/src -I matron/src/device $(pkg-config --cflags libevdev glib-2.0 lua5.3 cairo) linux/tests/hid_virtual_test.cc matron/src/platform/linux/hid_virtual.cc -o "$T/hid_virtual_test" || return 1

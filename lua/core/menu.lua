@@ -228,7 +228,7 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.error_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.heal_note or _menu.mi_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.input_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.heal_note or _menu.mi_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -291,15 +291,26 @@ function _menu.set_input(mode, bundle, name, quiet)
       _norns.app_input(nil, label)
     end
   end
+  -- Windows (docs/port/phase-m3.md): the program says what the input really is now; MIC with no input device, SYS with no loopback stay OFF, with the reason on the device window
+  _menu.input_note = nil
+  if _norns.audio_input then
+    local actual, why = _norns.audio_input()
+    if actual ~= mode and (mode == "mic" or mode == "system") then
+      _menu.input_note = "INPUT: " .. (why ~= "" and why or "not available") .. " (off)"
+      mode = actual
+    end
+  end
   _menu.input = mode
   _menu.show_note()
-  if mode == "mic" then
+  if mode == "mic" and not _norns.audio_input then
     os.remove(MIC_OFF)
-  else
+  elseif not _norns.audio_input then
     local f = io.open(MIC_OFF, "w")
     if f then f:close() end
   end
-  if mode == "system" or mode == "app" or mode == "monitor" then
+  if _norns.audio_input then
+    -- Windows: the input is OFF at every start (nothing is remembered: a microphone next to the speakers would feed back before anyone could reach the button)
+  elseif mode == "system" or mode == "app" or mode == "monitor" then
     local f = io.open(INPUT_KEPT, "w")
     if f then
       f:write(mode, "\n", bundle or "", "\n", name or "", "\n")
@@ -344,6 +355,11 @@ end
 function _menu.check_mic()
   if mic_checked or not _norns.show_control then return end
   mic_checked = true
+  if _norns.audio_input then
+    -- Windows: always OFF at the start, whatever audio.conf says about the input device (the device is opened, the input is not routed until the owner presses MIC)
+    _menu.set_input("off", nil, nil, true)
+    return
+  end
   local f = io.open(INPUT_KEPT)
   if f then
     local mode, bundle, name = f:read("l"), f:read("l"), f:read("l")

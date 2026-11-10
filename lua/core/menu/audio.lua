@@ -11,6 +11,9 @@
 --   jack      a JACK server we did not start: nothing here can be changed
 -- crone's warning (no sound card ports ...) is shown at the bottom in every mode.
 
+-- Windows has its own page (the host APIs, channels, latency numbers): core/menu/audio_win.lua
+if _norns.audio_devices ~= nil then return require 'core/menu/audio_win' end
+
 local util = require 'util'
 
 local CONF = "/home/we/audio.conf"
