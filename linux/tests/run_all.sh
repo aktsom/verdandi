@@ -152,7 +152,7 @@ run "lua:file dialog setting (off by default, ticked, unticked at once, saved, d
 run "lua:box settings and looks (hex, box.conf, built-in and own looks, files, names, both styles take colours)" lua5.3 linux/tests/box_settings_test.lua
 run "lua:text entry (6-digit hex limit and hint, clean redraw, every way of closing hands the page back, double enter, long names; device path unchanged)" env NORNS_PLATFORM=1 lua5.3 linux/tests/textentry_test.lua
 run "lua:THEME and SCREEN pages under random keys, the colour picker and the clipboard (every state change is drawn, handlers stay the page's own, selection in range, modal flags, ESC always leaves; handler errors logged)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/menu_stress_test.lua 120 500
-run "windows:lua side without ls/find/grep/cp/rm/nmcli (script scan, empty SELECT list, pset and tape listings, network page)" lua5.3 linux/tests/windows_lua_test.lua
+run "windows:lua side without the Linux tools ls, find, grep, cp, rm, nmcli (script scan, empty SELECT list, pset and tape listings, network page)" lua5.3 linux/tests/windows_lua_test.lua
 hid_virtual_ok() {
     g++ -std=c++14 -I matron/src -I matron/src/device $(pkg-config --cflags libevdev glib-2.0 lua5.3 cairo) linux/tests/hid_virtual_test.cc matron/src/platform/linux/hid_virtual.cc -o "$T/hid_virtual_test" || return 1
     "$T/hid_virtual_test"
