@@ -418,6 +418,14 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **A plug-in installed while norns runs** (install a script with a Raspberry Pi plug-in, or copy any such `.so` into the extension folder): within ten seconds the window shows the note, SYSTEM > CLEAN UP has an ARM PLUG-INS line, K3 K3 moves it, a restart starts SuperCollider; and without that, the next start moves it by itself. `verdandi tidy list` and `verdandi tidy restore <id>` put it back.
 - [ ] **The settings:** `namamp=0` (no seeding, the shims step aside), `plugin_heal=0` (nothing is moved; the PLUGINS note says what is wrong), `namamp_gain=-6` (quieter by 6 dB after a restart).
 
+## Windows M2, second round (fixes after your first test): what to check
+
+New zip from the newest run of the workflow windows-m1 (the program is still 0.2.0; the log's first lines name the git commit).
+1. **Ten restarts:** SYSTEM > AUDIO > APPLY (or SYSTEM > RESTART) ten times in a row: every time the window comes back, there is **no "norns CRASHED"** in `logs\norns.log`, `logs\crash` stays empty, and Task Manager shows no old `norns.exe`, `sclang.exe`, `scsynth.exe` after a restart or after closing the window.
+2. **Start-up:** four cold starts in a row: no SUPERCOLLIDER FAIL. If SuperCollider is slow the log says `waiting for SuperCollider` (15 s) and, if it answers late, `SuperCollider answered late ... completing the start-up`; the script then loads by itself. `audio bridge:` lines: `crone is connected` (once), no "ports were not found", no `sidecar: ... Connection refused` (at most `not listening yet, trying again` followed by success).
+3. **AUDIO default:** choose another device, APPLY; then choose `default` (the first entry), APPLY: the sound is on the Windows default device again, `audio.conf` has no `output=` line, the log says `audio: output chosen: the Windows default device`, and the bottom line of the page says `playing: <name>`. Tell me if not, with `audio.conf` and the `audio:` lines.
+4. **If it still crashes:** send the whole `crash-....txt`; it now holds the function names (also resolvable with `python windows\ci\resolve_crash.py norns.exe --report crash-....txt` and the exe of the same build), and it is written even if the process dies at once.
+
 ## Windows M2 (real audio output, WASAPI): what only your PC can show
 
 Same download as M1 (workflow windows-m1, artifact m1-zip; the program inside is 0.2.0). Click-by-click and what to send back: `windows/README.md` ("Windows M2").
