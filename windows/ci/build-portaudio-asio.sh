@@ -6,6 +6,7 @@
 # every step is recorded for the report (lib.sh). the sources are pinned by commit (windows/ci/asio-sdk.env); an empty pin prints the commit it used.
 # shellcheck disable=SC2329
 set -u
+export GIT_TERMINAL_PROMPT=0 # a repository that does not exist must fail, not ask for a user name (the first run hung 39 minutes on that)
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=windows/ci/lib.sh
 . "$HERE/lib.sh"
@@ -32,7 +33,12 @@ sources() {
     : > "$OUT/PA-ASIO-BUILD.txt"
     echo "PortAudio ASIO build for Verdandi, $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/PA-ASIO-BUILD.txt"
     fetch "$PA_REPO" "$PA_TAG" "$WORK/portaudio" "$PA_COMMIT" "portaudio $PA_TAG" || return 1
-    fetch "$ASIO_SDK_REPO" "" "$WORK/asiosdk" "$ASIO_SDK_COMMIT" "asiosdk (default branch)" || return 1
+    local r ok=1
+    for r in $ASIO_SDK_REPOS; do
+        echo "SDK source: $r"
+        if timeout 120 bash -c "$(declare -f fetch); OUT='$OUT'; fetch '$r' '' '$WORK/asiosdk' '$ASIO_SDK_COMMIT' 'asiosdk $r'"; then ok=0; echo "SDK from: $r" >> "$OUT/PA-ASIO-BUILD.txt"; break; fi
+    done
+    [ "$ok" -eq 0 ] || { echo "no ASIO SDK source could be cloned"; return 1; }
     [ -f "$WORK/asiosdk/common/asio.h" ] || { echo "the SDK has no common/asio.h (a different layout?): $(find "$WORK/asiosdk" -maxdepth 2 | head -20 | tr '\n' ' ')"; return 1; }
     [ -f "$WORK/asiosdk/LICENSE.txt" ] || { echo "the SDK has no LICENSE.txt: stopped (the licence text must travel with the build)"; return 1; }
     echo "--- LICENSE.txt of the SDK, the first 12 lines:"

@@ -155,7 +155,7 @@ jobs:
   asio:
     name: PortAudio with ASIO (MSYS2 UCRT64)
     runs-on: ${{ inputs.runner || 'windows-2022' }}
-    timeout-minutes: 40
+    timeout-minutes: 20
     continue-on-error: true
     defaults:
       run:
