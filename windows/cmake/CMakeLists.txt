@@ -58,6 +58,17 @@ target_compile_definitions(lua-cjson PRIVATE NDEBUG)
 target_link_libraries(lua-cjson PRIVATE PkgConfig::LUA53)
 target_compile_options(lua-cjson PRIVATE -w)
 
+# the version of the Windows build: windows/VERSION ("0.2.0"), the one place; the zip name, BUILD.txt, the logs and the pages show it
+file(STRINGS ${REPO}/windows/VERSION VERDANDI_VERSION_LINE LIMIT_COUNT 1)
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _v "${VERDANDI_VERSION_LINE}")
+if(NOT _v)
+  message(FATAL_ERROR "windows/VERSION must start with major.minor.patch, got '${VERDANDI_VERSION_LINE}'")
+endif()
+set(VERDANDI_VERSION_MAJOR ${CMAKE_MATCH_1})
+set(VERDANDI_VERSION_MINOR ${CMAKE_MATCH_2})
+set(VERDANDI_VERSION_PATCH ${CMAKE_MATCH_3})
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${REPO}/windows/VERSION)
+
 add_executable(norns ${NORNS_SOURCES})
 set_target_properties(norns PROPERTIES OUTPUT_NAME "norns")
 
@@ -66,7 +77,7 @@ target_compile_definitions(norns PRIVATE
   # HAVE_ABLETON_LINK=1: the Lua side registers and calls the clock_link_* functions; in M1 they are the stand-ins of stubs_win.cc (no Link yet)
   NORNS_DESKTOP=1 NORNS_LINUX_DESKTOP=1 NORNS_WINDOWS=1
   HAVE_LIBMONOME=1 HAVE_NNG=1 HAVE_LUA_CJSON=1 HAVE_ABLETON_LINK=1
-  VERSION_MAJOR=0 VERSION_MINOR=2 VERSION_PATCH=0 VERSION_HASH="${VERDANDI_VERSION_HASH}"
+  VERSION_MAJOR=${VERDANDI_VERSION_MAJOR} VERSION_MINOR=${VERDANDI_VERSION_MINOR} VERSION_PATCH=${VERDANDI_VERSION_PATCH} VERSION_HASH="${VERDANDI_VERSION_HASH}"
   _GNU_SOURCE=1)
 # the force-included compatibility header: every translation unit sees it first
 target_compile_options(norns PRIVATE "SHELL:-include ${REPO}/matron/src/platform/windows/compat_win.h")

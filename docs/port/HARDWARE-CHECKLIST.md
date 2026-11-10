@@ -418,6 +418,14 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **A plug-in installed while norns runs** (install a script with a Raspberry Pi plug-in, or copy any such `.so` into the extension folder): within ten seconds the window shows the note, SYSTEM > CLEAN UP has an ARM PLUG-INS line, K3 K3 moves it, a restart starts SuperCollider; and without that, the next start moves it by itself. `verdandi tidy list` and `verdandi tidy restore <id>` put it back.
 - [ ] **The settings:** `namamp=0` (no seeding, the shims step aside), `plugin_heal=0` (nothing is moved; the PLUGINS note says what is wrong), `namamp_gain=-6` (quieter by 6 dB after a restart).
 
+## Windows distribution (Releases and update-and-run): what to check
+
+1. After the next push to `linux-port` has finished its run: the **Releases** box on the repository front page shows *Verdandi for Windows: the newest build*; its page lists the commit message, the checks, the known limits and the zip `Verdandi-windows-<version>-<hash>.zip`. If the publish step failed (red job *Publish the zip to GitHub Releases*), do the setting in `windows/README.md` ("One-time setup") and re-run the job; send the log of the failed step.
+2. Download the zip from that page, unblock, extract: you get a folder `Verdandi-<version>-<hash>`. Double-click `Verdandi.exe`: the home page shows `<version> <hash>` at the bottom right; `logs\launcher.log` and `norns.log` start with the same build line.
+3. Push another commit (or wait for the next build). In the old build folder double-click `update-and-run.cmd`: it says which build it holds and which is newest, downloads, unpacks next to the old one, asks about older builds (answer no the first time, check that nothing was removed), starts the new Verdandi. Your scripts and settings in `%USERPROFILE%\Verdandi` are as before. Run it once more from the **new** folder and answer yes to removing the older build.
+4. Break it on purpose: switch off the internet and run it: a plain message, nothing changed, and it offers to start the build you have. If curl.exe is missing on your Windows, tell me (it then uses PowerShell: `update-and-run.ps1`, not yet run anywhere).
+5. Send back: which of these steps worked, the text of the window if a step failed, the build line.
+
 ## Windows M2, second round (fixes after your first test): what to check
 
 New zip from the newest run of the workflow windows-m1 (the program is still 0.2.0; the log's first lines name the git commit).
@@ -428,7 +436,7 @@ New zip from the newest run of the workflow windows-m1 (the program is still 0.2
 
 ## Windows M2 (real audio output, WASAPI): what only your PC can show
 
-Same download as M1 (workflow windows-m1, artifact m1-zip; the program inside is 0.2.0). Click-by-click and what to send back: `windows/README.md` ("Windows M2").
+Download the newest build from the Releases page (the link to bookmark and the updater: top of `windows/README.md`; the old way, artifact m1-zip of the workflow windows-m1, still works). Click-by-click and what to send back: `windows/README.md` ("Windows M2").
 1. **Sound:** awake (SELECT) is heard through the Windows default output with no crackle at the default block (512). Note the delay you feel.
 2. **SYSTEM > AUDIO:** OUTPUT lists your playback devices by their Windows names; E3 chooses; APPLY restarts Verdandi (window closes and opens, about 30 s) and the chosen device is the one you hear; the bottom line shows the rate, a latency in ms and the device name; `audio.conf` in `%USERPROFILE%\Verdandi` has `output=wasapi:<name>`, `rate=`, `period=`. INPUT says "none yet".
 3. **Block sizes:** 256 and 128: the smallest that stays clean on your PC; what you hear at 64.

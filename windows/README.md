@@ -56,6 +56,42 @@ A push that happened before you switched Actions on does not start anything. Sta
 
 ---
 
+# Get the newest Windows build (releases, the updater, which build is running)
+
+Every successful run of the workflow **windows-m1** on the branch `linux-port` publishes its zip to **GitHub Releases**. You do not have to dig through Actions artifacts any more, and a build can no longer be mistaken for an older one: the zip, the folder inside it, the home screen and the logs all carry the version and the short git hash.
+
+## The one link to bookmark
+`https://github.com/<owner>/<repository>/releases/tag/windows-latest`  (use the address of your fork: open the repository in the browser and add `/releases/tag/windows-latest`). That page is **always the newest build**. It lists the commit message, the checks of the run that passed, the known limits, and the zip: `Verdandi-windows-<version>-<short hash>.zip`. Every commit also keeps a page of its own (`/releases/tag/windows-<short hash>`, marked pre-release; the newest 20 are kept).
+
+## Get it, the easy way: update-and-run.cmd
+The zip contains `update-and-run.cmd` (and `update-and-run.ps1`, the PowerShell variant it falls back to). Double-click it in any build folder:
+1. It reads which build this folder is and which one is newest (a few bytes: `BUILD.txt` of the release).
+2. If the newest is not here yet, it downloads the zip (curl.exe of Windows 10/11), checks its SHA-256 (certutil), and unpacks it into a **new folder** `Verdandi-<version>-<hash>` next to the old one (tar.exe). Nothing is overwritten.
+3. If Verdandi is running it asks to close it. It lists the older unpacked builds and asks whether to remove them (default: no; the folder you started it from is never removed by itself; the data folder never).
+4. It starts the new `Verdandi.exe`.
+No administrator rights, no installation. **Your files stay in `%USERPROFILE%\Verdandi`** (dust, logs, settings): the script never touches that folder. If the download fails it says why in plain words (no internet, nothing published yet, the repository is private, a damaged file), changes nothing and offers to start the build you have. It needs the repository to be **public** (a private repository cannot be read without logging in: download the zip in the browser then).
+
+## By hand
+Open the bookmark, download the zip, right-click it > Properties > tick **Unblock** > OK, Extract All into a folder of your own, double-click `Verdandi.exe` in the folder `Verdandi-<version>-<hash>`.
+
+## Which build is running?
+- On the norns screen: the **home page** shows `<version> <hash>` at the bottom right; **SYSTEM** shows it at the top right while the list is scrolled to the top.
+- In `%USERPROFILE%\Verdandi\logs`: the first lines of `launcher.log` (`Verdandi build 0.2.0 4c82066`) and of `norns.log` (`Verdandi Windows build ...`, then `norns version`, `git hash`).
+- In the folder: `BUILD.txt` (the build, the time, the commit and its message).
+
+## What to send back
+`launcher.log`, `norns.log`, `sclang.log` and everything in `logs\crash\` from `%USERPROFILE%\Verdandi\logs`, **the build line** (version and hash, from the log or the home page), and what you did and saw. If you ran `update-and-run.cmd`, the text of its window if something went wrong.
+
+## One-time setup in the repository settings (click by click)
+The workflow asks for the one permission it needs, `contents: write`, for the one job that publishes (the other jobs stay read-only). Usually nothing has to be changed. Check it like this (the names are those of GitHub's pages as I know them, **not verified in your repository**):
+1. Open the repository on github.com. Click **Settings** (the tab on the right of *Pull requests*, *Actions*; if you do not see it you are not the owner).
+2. On the left click **Actions**, then **General**.
+3. Scroll to **Workflow permissions**. If the first publish ends with the error *Resource not accessible by integration* (HTTP 403), choose **Read and write permissions** and click **Save**. Then open **Actions**, the failed run, and click **Re-run all jobs**.
+4. Still in **Actions > General**, make sure **Actions permissions** allows actions (*Allow all actions and reusable workflows*, or at least `actions/*` and `ilammy/*`, `msys2/*` which the workflow uses).
+5. Only if you have rules for tags: **Settings > Rules > Rulesets** (or *Tags* under *Code and automation*): a rule must not block creating or deleting tags that start with `windows-`.
+6. To let `update-and-run.cmd` download without a login the repository has to be **public**: **Settings > General**, scroll to the bottom, *Danger Zone*, **Change visibility**. This is your decision; with a private repository download the zip in the browser (the Releases page works while you are logged in).
+7. Check it worked: **Actions** tab > the newest run of *windows-m1* > the job **Publish the zip to GitHub Releases** is green; then the front page of the repository, the box **Releases** on the right: *Verdandi for Windows: the newest build (...)*.
+
 # Windows M1: the first runnable build (no sound yet)
 
 M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It opens the norns window, boots norns's Lua side, starts SuperCollider in the background on a silent "null" audio device and lets you run scripts and click through the menus. **Not in M1:** sound, grids, MIDI, Link, maiden, an installer. Approach: `docs/port/phase-m1.md`.
@@ -64,7 +100,7 @@ M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It op
 
 1. Actions (as in step 1 above, once). The workflow **windows-m1** starts by itself when a push changes the program (or `windows/`); you can see it in **Actions** on the left under "windows-m1". It takes roughly 20 to 30 minutes (a guess; the first M0 run took 20 minutes for SuperCollider and MinGW together).
 2. Open the finished run, scroll to **Artifacts** at the bottom:
-   - **m1-zip**: `Verdandi-windows-M1.zip`, the program (about 100 to 150 MB, a guess).
+   - **m1-zip**: `Verdandi-windows-<version>-<hash>.zip`, the program (about 20 MB). The same zip is on the Releases page now (see the top of this file).
    - **verdandi-windows-m1**: `M1-REPORT.md` (every step PASS or FAIL), the logs of the automatic test run and its screenshot (`m1-run`).
 3. Right-click the downloaded zip, Properties, tick **Unblock**, OK. Extract all into a folder of your own (not Downloads\ inside the zip viewer).
 4. Double-click **Verdandi.exe**. Windows may say it protected your PC: More info, Run anyway (the build is not signed).
@@ -73,7 +109,7 @@ M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It op
 The norns window within about 20 seconds; the home screen; the menus (F10 or the right mouse button). The checklist of what to try is in `docs/port/HARDWARE-CHECKLIST.md` ("Windows M1").
 
 ## Windows M2: sound (what to click, what you should hear, what to send back)
-The same workflow (**windows-m1** in Actions; it builds M2 now) and the same zip (`Verdandi-windows-M1.zip` in artifact **m1-zip**: the name did not change, the program inside is version 0.2.0). Unpack it into a new folder as before.
+The same workflow (**windows-m1** in Actions; it builds M2 now) and the same zip (`Verdandi-windows-<version>-<hash>.zip` in artifact **m1-zip**, and on the Releases page). Unpack it; the zip holds one folder named after the version and the hash.
 1. Start `Verdandi.exe`. Before you start, **close programs that hold the sound device in exclusive mode** (Ableton with its RME driver in ASIO is fine; WASAPI shared mode works next to it).
 2. Open the menu (F10 or right mouse button) > SYSTEM > **AUDIO**. OUTPUT lists your Windows playback devices (E3 changes it); the bottom line shows `48000 Hz <ms> <device>`. INPUT says "none yet" (no input in M2). Pick your speakers or headphones, K3 on **APPLY**: Verdandi restarts itself (the window closes and opens again, 20 to 30 seconds).
 3. Load **awake** (SELECT, K3). **You should hear the notes** through the device you chose. Turn the volume of the MIX page (and Windows) up if not. K2/K3/E1-E3 change the sound as on a norns.

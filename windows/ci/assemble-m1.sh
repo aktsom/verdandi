@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # windows/ci/assemble-m1.sh (M1): the runnable folder and its zip. bash (Git Bash on the runner, or Linux for a dry run with fake inputs).
 #   NORNS_BIN   folder with Verdandi.exe, norns.exe and the DLLs (build-norns.sh output)   SC_ZIP   sc-win64.zip of build-sc.sh   OUT   result folder (default ./m1-stage)
-# result: $OUT/Verdandi/ (the program folder as the user gets it) and $OUT/Verdandi-windows-M1.zip
+# result: $OUT/Verdandi-<version>-<short hash>/ (the program folder as the user gets it: the zip has this one folder, so that every build unpacks into a folder of its own and an old build is never
+# overwritten or mistaken for the new one) and $OUT/Verdandi-windows-<version>-<short hash>.zip; $OUT/ZIPNAME holds the file name, $OUT/BUILD.txt a copy of the zip's BUILD.txt.
+#   VERDANDI_VERSION  (default: the first line of windows/VERSION)   VERDANDI_HASH (default: the first 7 characters of git rev-parse HEAD)   VERDANDI_REPO (owner/name, for update-and-run; default $GITHUB_REPOSITORY)
 # shellcheck disable=SC2329
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,7 +13,13 @@ REPO="$(cd "$HERE/../.." && pwd)"
 NORNS_BIN="${NORNS_BIN:?NORNS_BIN is not set}"
 SC_ZIP="${SC_ZIP:?SC_ZIP is not set}"
 OUT="${OUT:-$PWD/m1-stage}"
-APP="$OUT/Verdandi"
+VERSION="${VERDANDI_VERSION:-$(head -n 1 "$REPO/windows/VERSION" | tr -d '\r ')}"
+HASH="${VERDANDI_HASH:-$(git -C "$REPO" rev-parse HEAD 2> /dev/null | cut -c1-7)}"
+[ -n "$HASH" ] || HASH=nohash # (the first 7 characters of the commit: the same rule as windows/ci/publish-release.sh, so that the names agree)
+BUILD="$VERSION $HASH"
+APPNAME="Verdandi-$VERSION-$HASH"
+ZIPNAME="Verdandi-windows-$VERSION-$HASH.zip"
+APP="$OUT/$APPNAME"
 
 unzip_to() { # zip dir
     if command -v 7z > /dev/null 2>&1; then 7z x "$1" "-o$2" -y > /dev/null; else unzip -q -o "$1" -d "$2"; fi
@@ -31,6 +39,17 @@ assemble() {
     done
     rm -rf "$APP/sc/tests" "$APP/update/pack.sh" "$APP/update/test-update.sh" "$APP/update/update.sh"
     cp "$REPO/windows/pack/matronrc.lua" "$APP/matronrc.lua"
+    # which build this is: the launcher logs it and norns shows it; update-and-run compares it with the newest release
+    {
+        echo "$BUILD"
+        echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "commit: $(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)"
+        echo "message: $(git -C "$REPO" log -1 --format=%s 2> /dev/null || echo unknown)"
+    } > "$APP/BUILD.txt"
+    # the updater: update-and-run.cmd (curl.exe and tar.exe of Windows 10/11) and update-and-run.ps1 (PowerShell); UPDATE-SOURCE.txt says where the releases are
+    cp "$REPO/windows/update-and-run.cmd" "$REPO/windows/update-and-run.ps1" "$APP/" || return 1
+    echo "${VERDANDI_REPO:-${GITHUB_REPOSITORY:-}}" > "$APP/UPDATE-SOURCE.txt"
+    cp "$APP/BUILD.txt" "$OUT/BUILD.txt"
     cp "$REPO/windows/pack/README-M1.txt" "$APP/README.txt"
     # sclang runs "jack_connect ..." to wire scsynth into crone (Linux, macOS): there is no JACK server here in M1, so these stand-ins do nothing, quietly
     cp "$REPO"/windows/pack/jack_*.cmd "$APP/"
@@ -67,7 +86,8 @@ assemble() {
 }
 
 package() {
-    zip_dir "$OUT" Verdandi "$OUT/Verdandi-windows-M1.zip" && find "$OUT" -maxdepth 1 -name 'Verdandi-windows-M1.zip' -size +1k
+    echo "$ZIPNAME" > "$OUT/ZIPNAME"
+    zip_dir "$OUT" "$APPNAME" "$OUT/$ZIPNAME" && find "$OUT" -maxdepth 1 -name "$ZIPNAME" -size +1k
 }
 
 m0_init

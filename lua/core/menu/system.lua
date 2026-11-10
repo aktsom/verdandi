@@ -41,6 +41,13 @@ m.redraw = function()
       screen.text(line)
     end
   end
+  -- the build that runs (Windows: "0.2.0 4c82066"), at the top while the list leaves that line free
+  local build = os.getenv("VERDANDI_BUILD")
+  if build and build ~= "" and m.pos <= 2 then
+    screen.level(2)
+    screen.move(127,10)
+    screen.text_right(build)
+  end
   screen.update()
 end
 

@@ -77,6 +77,14 @@ local draw_stats = function()
   end
   screen.move(127,45)
   screen.text_right(norns.version.update)
+  -- Windows build: which build is running ("0.2.0 4c82066", the first line of BUILD.txt; the same as in the first lines of norns.log and launcher.log)
+  local build = os.getenv("VERDANDI_BUILD")
+  if build and build ~= "" then
+    screen.level(2)
+    screen.move(127,55)
+    screen.text_right(build)
+    screen.level(15)
+  end
 
   screen.level(15)
   screen.move(127,35)

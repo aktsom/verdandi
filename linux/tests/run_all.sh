@@ -117,8 +117,13 @@ run "windows:JACK-compatible null backend (ring buffer, unique names, ports, phy
 if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/wine/wine64 ]; then
     run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
     run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
+    run "windows:update-and-run.cmd under Wine with stand-ins for curl, tar and the questions (a newer build unpacked into its own folder, old builds kept or removed on request, the data folder never touched, plain messages when the download fails)" linux/tests/update_and_run_test.sh
 else
     echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
+fi
+run "windows:publishing a build to GitHub Releases (tags, assets, windows-latest updated in place and only when no check failed, old releases pruned, the notes) with a stand-in for gh" bash linux/tests/release_publish_test.sh
+if command -v actionlint > /dev/null 2>&1 || [ -x "$HOME/go/bin/actionlint" ]; then
+    run "windows:the workflows pass actionlint" bash -c 'PATH="$PATH:$HOME/go/bin" actionlint .github/workflows/windows-m0.yml .github/workflows/windows-m1.yml'
 fi
 run "build:waf-path ignores an unknown or root SUDO_USER" linux/tests/waf_path_test.sh
 run "udev:rule syntax and narrowness (monome devices only, uaccess only)" linux/tests/udev_test.sh

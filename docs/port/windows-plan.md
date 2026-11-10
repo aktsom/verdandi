@@ -280,6 +280,10 @@ Numbering note: the table in section 8 predates the work; in practice **M1 was t
 - **WASAPI-only cost (estimate, unmeasured):** engine voices roughly 40 to 55 ms key-to-sound at 512 frames (shared-mode period 10 ms, two to three buffers, crone block, bridge block), 30 to 40 ms at 256; ASIO on the RME about 5 to 12 ms. Exclusive WASAPI is not offered (it blocks Ableton).
 - **Verified without Windows:** see `phase-m2.md`, last section. **Open:** is WASAPI compiled into MSYS2's PortAudio (the log's `host APIs:` line shows it; if it is missing the build falls back to the other host API and the plan needs a different PortAudio build), real latency, device names with accents, device unplug while running (PortAudio stops the stream; norns keeps running silently, to be handled in M3 with the doctor).
 
+## 8d. Distribution convenience (after M2)
+
+The owner downloaded each build from Actions artifacts by hand and sometimes ran an old one. Now: GitHub Releases (`windows-<hash>` per commit, `windows-latest` updated in place), the zip named `Verdandi-windows-<version>-<hash>.zip` with one folder of the same name, `update-and-run.cmd`/`.ps1` inside it, and the build id on the home page, in `BUILD.txt` and in the first log lines. Details, tests and what is untested: STATUS.md ("Windows distribution"); owner steps: `windows/README.md`. Licence note: nothing new is bundled.
+
 ## 9. Decisions still needed (recommendation first)
 
 1. **ASIO SDK licence vs. a WASAPI-only fallback build.** Steinberg added a **GPLv3 option to the ASIO SDK** (a dual licence, proprietary agreement or GPLv3) in October 2025 (web, secondary coverage; **the SDK's own `LICENSE.txt` has to be read before a release**). **Recommendation:** build ASIO with the GPLv3 option, keep a **WASAPI-only build configuration** (CMake switch) as the fallback if the licence reading comes out differently; M0 and M1 can proceed with WASAPI. The SDK is a build input downloaded in CI, never committed.

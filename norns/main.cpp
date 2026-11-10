@@ -116,6 +116,11 @@ int main(int argc, char **argv) {
     }
 
 #ifdef NORNS_WINDOWS
+    {
+        // the first line of norns.log: which build runs (the launcher read BUILD.txt)
+        const char *build = getenv("VERDANDI_BUILD");
+        fprintf(stderr, "Verdandi Windows build %s\n", build && *build ? build : "unknown");
+    }
     // the sound card (WASAPI through PortAudio) or null audio, and the bridge to scsynth: before crone makes its first JACK client
     if (verdandi_audio_boot() != 0) {
         return 0; // VERDANDI_AUDIO_LIST=1: the device list was printed

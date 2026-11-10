@@ -131,7 +131,7 @@ jobs:
         run: NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check
         timeout-minutes: 45
-        run: ZIP="$PWD/m1-stage/Verdandi-windows-M1.zip" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
+        run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
       - name: What failed
         if: always()
         run: windows/ci/show-failures.sh
@@ -146,9 +146,40 @@ jobs:
         if: always()
         with:
           name: m1-zip
-          path: m1-stage/Verdandi-windows-M1.zip
+          path: m1-stage/Verdandi-windows-*.zip
           retention-days: 30
           if-no-files-found: warn
+
+  # a successful run on linux-port publishes its zip to GitHub Releases: windows-<short hash> for every commit (kept: the newest 20) and windows-latest (replaced each time, only when no check failed).
+  # the workflow's own token, the one permission this job needs: contents: write (create and delete releases and their tags). nothing else in the workflow gets write access.
+  release:
+    name: Publish the zip to GitHub Releases
+    needs: [package, report]
+    if: ${{ github.ref == 'refs/heads/linux-port' && needs.package.result == 'success' && needs.report.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: windows-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-zip
+          path: release-zip
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: verdandi-windows-m1
+          path: release-report
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP_DIR: release-zip
+          STATUS_DIR: release-report/status
+        run: windows/ci/publish-release.sh
 
   report:
     name: Report and artifact

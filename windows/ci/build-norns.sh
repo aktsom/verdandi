@@ -19,7 +19,7 @@ configure() {
     local wprefix="$PREFIX"
     if command -v cygpath > /dev/null 2>&1; then wprefix="$(cygpath -m "$PREFIX")"; fi
     cmake -S "$REPO/windows/cmake" -B "$BLD" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$wprefix" \
-        -DVERDANDI_VERSION_HASH="$(git -C "$REPO" rev-parse --short HEAD 2> /dev/null || echo unknown)"
+        -DVERDANDI_VERSION_HASH="$(git -C "$REPO" rev-parse HEAD 2> /dev/null | cut -c1-7)"
 }
 
 build() {

@@ -623,6 +623,27 @@ int wmain(int argc, wchar_t **argv) {
     join(lp, MAX_PATH * 2, logs, L"launcher.log");
     g_log = _wfopen(lp, L"ab");
     say(L"Verdandi launcher %hs, program folder %ls, user folder %ls%ls", VERDANDI_LAUNCHER_VERSION, g_app, g_home, g_headless ? L", headless" : L"");
+    /* which build is this: the first line of BUILD.txt next to the program ("0.2.0 4c82066"), written when the zip was made. in the log (first lines), in norns.log, and on the pages of norns */
+    {
+        wchar_t bp[MAX_PATH * 2];
+        join(bp, MAX_PATH * 2, g_app, L"BUILD.txt");
+        wchar_t build[200];
+        build[0] = 0;
+        FILE *bf = _wfopen(bp, L"rb");
+        if (bf) {
+            char line[200];
+            if (fgets(line, sizeof line, bf)) {
+                line[strcspn(line, "\r\n")] = 0;
+                MultiByteToWideChar(CP_UTF8, 0, line, -1, build, 199);
+            }
+            fclose(bf);
+        }
+        if (!build[0]) {
+            wcscpy(build, L"unknown (no BUILD.txt next to Verdandi.exe)");
+        }
+        say(L"Verdandi build %ls", build);
+        SetEnvironmentVariableW(L"VERDANDI_BUILD", build);
+    }
 
     /* one copy */
     HANDLE mutex = CreateMutexW(NULL, TRUE, L"Local\\VerdandiLauncher");

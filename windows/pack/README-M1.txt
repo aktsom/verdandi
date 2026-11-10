@@ -1,6 +1,6 @@
 Verdandi for Windows, milestone M1 (first runnable build, no sound yet)
 
-START: double-click Verdandi.exe in this folder. No installation and no administrator rights are needed.
+START: double-click Verdandi.exe in this folder. To get the newest build instead, double-click update-and-run.cmd here: it downloads it, unpacks it into a new folder next to this one and starts it (your files in %USERPROFILE%\Verdandi stay as they are). BUILD.txt says which build this is. No installation and no administrator rights are needed.
 Unpack the WHOLE zip into a folder of its own first (do not start it from inside the zip).
 
 What you should see: the norns window with its screen, keys and encoders. The first start takes some seconds

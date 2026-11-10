@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # windows/ci/smoke-m1.sh (M1): start the built program headless and look at what it did. bash (Git Bash on the runner).
-#   ZIP   Verdandi-windows-M1.zip (assemble-m1.sh)     WORK   a scratch folder (default: a temp folder)     SMOKE_SECONDS   how long the program runs (default 90)
+#   ZIP   Verdandi-windows-<version>-<hash>.zip (assemble-m1.sh)     WORK   a scratch folder (default: a temp folder)     SMOKE_SECONDS   how long the program runs (default 90)
 # the program is unpacked into a folder whose name has SPACES, started with the launcher in its headless mode (SDL dummy video driver, no dialogs; the null audio driver is always used in M1), with a
 # seeded system.state that makes norns resume the script smoke/verdandi_smoke.lua, which draws, saves its screen as a PNG and prints VERDANDI_SMOKE_OK. then the logs and the picture are checked.
 # what this proves: the exe starts, matron boots Lua, sclang compiles the class library with norns's classes, scsynth runs with no audio device, the sidecar and the logs work, a script runs and draws.
@@ -19,15 +19,21 @@ case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) EXE=".exe" ;; esac
 native() { if command -v cygpath > /dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 
 APPPARENT="$WORK/Verdandi test folder"
-APP="$APPPARENT/Verdandi"
+APP="$APPPARENT/Verdandi" # (set again by unpack: the zip holds one folder, Verdandi-<version>-<hash>)
 HOMEDIR="$WORK/user home"
 LOGS="$HOMEDIR/logs"
+
+# the zip holds one folder, Verdandi-<version>-<hash> (m0_run runs a step in a subshell: the main script calls this again after unpack)
+set_app() { APP="$(find "$APPPARENT" -maxdepth 1 -mindepth 1 -type d -name 'Verdandi*' | head -n 1)"; }
 
 unpack() {
     rm -rf "$APPPARENT" "$HOMEDIR"
     mkdir -p "$APPPARENT"
     if command -v 7z > /dev/null 2>&1; then 7z x "$ZIP" "-o$APPPARENT" -y > /dev/null; else unzip -q -o "$ZIP" -d "$APPPARENT"; fi
-    [ -f "$APP/Verdandi$EXE" ] || { echo "no Verdandi$EXE in $APP"; return 1; }
+    set_app
+    [ -n "$APP" ] && [ -f "$APP/Verdandi$EXE" ] || { echo "no Verdandi$EXE in a folder of $APPPARENT"; return 1; }
+    echo "unpacked: $APP"
+    [ -f "$APP/BUILD.txt" ] && head -n 1 "$APP/BUILD.txt"
 }
 
 seed() {
@@ -191,6 +197,7 @@ collect() {
 
 m0_init
 m0_run m1-unpack unpack || exit 0
+set_app
 m0_run m1-seed seed
 m0_run m1-run run_program
 collect > /dev/null 2>&1

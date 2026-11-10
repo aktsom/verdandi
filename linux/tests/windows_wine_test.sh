@@ -75,6 +75,7 @@ echo "== launcher"
 $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 || exit 1; }
 mkdir -p "$T/app/lua/core" "$T/app/supercollider" "$T/app/update"
 mkdir -p "$T/app/dust-seed/code/awake/lib"; echo "-- seed" > "$T/app/dust-seed/code/awake/awake.lua"; echo "-- lib" > "$T/app/dust-seed/code/awake/lib/x.lua"
+printf "9.9.9 abcdef1\nbuilt: test\n" > "$T/app/BUILD.txt"
 touch "$T/app/lua/core/config.lua"; echo "test" > "$T/app/update/version.txt"
 cat > "$T/stub.c" <<'STUB'
 #include <stdio.h>
@@ -106,6 +107,7 @@ ck "first start: the seeded scripts were copied to dust/code" "[ -f '$T/vhome/du
 echo "-- edited by the user" > "$T/vhome/dust/code/awake/awake.lua"
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=2 --home="Z:$T/vhome" > "$T/launcher1b.out" 2>&1)
 ck "a second start leaves the scripts alone" "grep -q 'edited by the user' '$T/vhome/dust/code/awake/awake.lua'"
+ck "the launcher log names the build (BUILD.txt) in its first lines" "head -n 3 '$L/launcher.log' | grep -q 'Verdandi build 9.9.9 abcdef1'"
 ck "norns.exe and sclang got the name of the audio bridge" "grep -q '^BRIDGE=VerdandiBridge-[0-9]*-1' '$L/norns.log' && grep -q '^BRIDGE=VerdandiBridge-[0-9]*-1' '$L/sclang.log'"
 # M2: exit code 42 from norns.exe (SYSTEM > RESTART, a new audio device) starts everything again, with a new bridge name; --null-audio tells norns not to open a sound card
 cat > "$T/stub42.c" <<'STUB'
