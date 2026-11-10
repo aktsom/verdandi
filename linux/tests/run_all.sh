@@ -170,7 +170,7 @@ audio_pa_ok() {
     "$T/audio_pa_test" 2> /dev/null
 }
 run "windows:the PortAudio backend on Linux (list, an unknown device is refused as not found, start ends in a card or null audio with a note, no hang)" audio_pa_ok
-run "windows:SYSTEM > AUDIO with the program's own device list (output= rate= period= in audio.conf, restart, input read only, busy/missing device said, bottom line)" lua5.3 linux/tests/audio_page_windows_test.lua
+run "windows:SYSTEM > AUDIO with the program's own device list (output= rate= period= in audio.conf, restart, input read only, busy or missing device said, bottom line)" lua5.3 linux/tests/audio_page_windows_test.lua
 run "windows:scsynth with the Verdandi bridge driver against the bridge host (needs a patched scsynth: VERDANDI_SCSYNTH)" bash linux/tests/scsynth_bridge_test.sh
 hid_virtual_ok() {
     g++ -std=c++14 -I matron/src -I matron/src/device $(pkg-config --cflags libevdev glib-2.0 lua5.3 cairo) linux/tests/hid_virtual_test.cc matron/src/platform/linux/hid_virtual.cc -o "$T/hid_virtual_test" || return 1
