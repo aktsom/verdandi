@@ -334,6 +334,8 @@ local function invariants(w)
   if lb0 then
     local idx = 0
     for i, n in ipairs(w.box.PIXEL_LOOKS) do if n == w.box.state.pixel_look then idx = i - 1 end end
+    local sel = w.pages.BOX and w.pages.BOX.sel -- (a look selected on the PIXEL LOOK row is shown, not kept)
+    if sel ~= nil then for i, n in ipairs(w.box.PIXEL_LOOKS) do if n == sel then idx = i - 1 end end end
     if lb0[8] ~= idx then return "preview: the window has pixel look " .. tostring(lb0[8]) .. " but the stored one is " .. idx end
   end
   -- MIDI MAP: the window is armed exactly while a pick or a listen is open, the ring is off exactly when no learn is open, a learn does not outlive the page, no mapping is written while a learn waits,
@@ -689,20 +691,19 @@ do
   w.box.set_style("pixel")
   local f0 = frame_text(w.shown)
   tap(w, "EQUAL")
-  is(w.box.state.pixel_look == "retro", "= steps to RETRO")
-  is(frame_text(w.shown) ~= f0, "and the screen shows it at once (the handler ends with a redraw)")
-  is(w.box_calls[#w.box_calls][8] == 1, "the window is told")
+  is(w.box.state.pixel_look == "pixel", "= only selects RETRO: nothing is kept")
+  is(frame_text(w.shown) ~= f0, "and the screen shows the selection at once (the handler ends with a redraw)")
+  is(w.box_calls[#w.box_calls][8] == 1, "the window shows it as a preview")
   send(w, "EQUAL", 0)
-  is(w.box.state.pixel_look == "retro", "a release changes nothing")
+  is(w.box.state.pixel_look == "pixel", "a release changes nothing")
   send(w, "EQUAL", 1) send(w, "EQUAL", 2) send(w, "EQUAL", 0)
-  is(w.box.state.pixel_look == "16-bit", "a press and a repeat: two more steps (8-BIT, 16-BIT)")
+  is(w.box_calls[#w.box_calls][8] == 3 and w.box.state.pixel_look == "pixel", "a press and a repeat: two more selections (8-BIT, 16-BIT), still nothing kept")
+  tap(w, "RIGHT")
+  is(w.box.state.pixel_look == "16-bit", "RIGHT (K3) keeps 16-BIT")
   tap(w, "MINUS") tap(w, "MINUS") tap(w, "MINUS")
-  is(w.box.state.pixel_look == "pixel", "- steps back")
+  is(w.box.state.pixel_look == "16-bit" and w.box_calls[#w.box_calls][8] == 0, "- selects back to PIXEL without keeping")
   tap(w, "RIGHT")
-  is(w.box.state.pixel_look == "retro", "RIGHT (K3) steps and redraws")
-  w.box.set_pixel_look("16-bit")
-  tap(w, "RIGHT")
-  is(w.box.state.pixel_look == "pixel", "K3 goes round from 16-BIT to PIXEL")
+  is(w.box.state.pixel_look == "pixel", "K3 keeps PIXEL")
   -- the live colour preview carries the pixel look
   w.box.set_pixel_look("8-bit")
   pg.pos = 5
@@ -726,9 +727,9 @@ do
   tap(w, "EQUAL") tap(w, "EQUAL")
   local hex = colourm.value_hex(w.pages.PICKER.val)
   tap(w, "ENTER")
-  is(_menu.page == "BOX" and w.pages.BOX.msg == "saved #" .. hex, "K3 shows 'saved #" .. hex .. "' on the THEME page (" .. tostring(w.pages.BOX.msg) .. ")")
+  is(_menu.page == "BOX" and w.pages.BOX.msg == "kept: colour #" .. hex, "K3 shows 'kept: colour #" .. hex .. "' on the THEME page (" .. tostring(w.pages.BOX.msg) .. ")")
   w.pages.BOX.redraw()
-  is(w.shown and table.concat(w.shown, "|"):find("saved #" .. hex, 1, true) ~= nil, "the message is on the norns screen")
+  is(w.shown and table.concat(w.shown, "|"):find("kept: colour #" .. hex, 1, true) ~= nil, "the message is on the norns screen")
   is(count(w.toasts, "restored, not saved") == 0, "keeping shows no 'not saved'")
   tap(w, "DOWN")
   is(w.pages.BOX.msg == nil, "the message goes with the next key (the same life as 'copied')")
@@ -763,13 +764,13 @@ do
   _menu.set_page("UI") w5.pages.UI.pos = 2
   tap(w5, "RIGHT") tap(w5, "C") tap(w5, "2")
   is(w5.pages.UI.msg == "restored", "SCREEN: 'restored' after K2")
-  -- a contrast warning is kept next to 'saved'
+  -- a contrast warning is kept next to 'kept'
   local w6 = world()
   w6.box.set_part("buttons", "808080")
   open_box(w6, 8) -- FONT
   for _ = 1, 40 do tap(w6, "MINUS") end
   tap(w6, "ENTER")
-  is(w6.pages.BOX.msg and w6.pages.BOX.msg:find("^saved #") ~= nil, "a colour that gives low contrast is still 'saved'")
+  is(w6.pages.BOX.msg and w6.pages.BOX.msg:find("^kept: #") ~= nil and w6.pages.BOX.msg:find("low contrast", 1, true) ~= nil, "a colour that gives low contrast is still 'kept', with the warning")
   -- the hint line: K3 keeps, K2 cancels, and it fits
   local w7 = world()
   open_box(w7, 5)

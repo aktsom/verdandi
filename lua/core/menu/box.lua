@@ -47,7 +47,10 @@ end
 local function value_text(row)
   local st = box.state
   if row == "STYLE" then return st.style:upper()
-  elseif row == "PIXEL LOOK" then return st.pixel_look:upper()
+  elseif row == "PIXEL LOOK" then
+    -- while scrolling: the look shown on the box (not kept yet) with a ? after it
+    if m.sel and m.sel ~= st.pixel_look then return m.sel:upper() .. "?" end
+    return st.pixel_look:upper()
   elseif row == "PRESET" then return preset_text()
   elseif row == "SAVE" then return "name..."
   elseif row == "DELETE" then local l = in_use_look() return l and ("* " .. l.name) or ""
@@ -78,7 +81,15 @@ m.init = function()
   m.pos, m.top, m.msg, m.mode, m.confirm = 1, 1, nil, "rows", nil
 end
 
-m.deinit = norns.none
+-- PIXEL LOOK: E3 / arrows only move a selection, shown on the box but neither kept nor saved; K3 keeps it. leaving the row or the page gives the kept look back
+local function look_cancel()
+  if m.sel ~= nil then
+    m.sel = nil
+    box.apply()
+  end
+end
+
+m.deinit = function() look_cancel() end
 
 -- ---- the list of looks (K3 on PRESET) ----
 local function list_items()
@@ -159,7 +170,7 @@ function m.open_picker(row)
     ok = function(hex)
       local ok, why = box.set_part(part, hex)
       if not ok then m.msg = "bad hex: " .. tostring(why)
-      else m.msg = "saved #" .. hex .. (why and ", low contrast" or "") end
+      else m.msg = (why and ("kept: #" .. hex .. ", low contrast") or ("kept: colour #" .. hex)) end
     end,
     note = function(text) m.msg = text end,
     return_page = "BOX",
@@ -211,6 +222,7 @@ local function key_raw(n, z)
     return
   end
   if n == 2 then
+    look_cancel()
     _menu.set_page("SYSTEM")
     return
   end
@@ -224,9 +236,11 @@ local function key_raw(n, z)
     if box.state.style ~= "pixel" then
       m.msg = "needs STYLE PIXEL"
     else
-      -- K3 steps to the next look and goes round from the last to the first
-      local i = box.pixel_look_index(box.state.pixel_look) + 1
-      box.set_pixel_look(box.PIXEL_LOOKS[i % #box.PIXEL_LOOKS + 1])
+      -- K3 keeps the look that E3 selected (the colours are not touched)
+      local name = m.sel or box.state.pixel_look
+      m.sel = nil
+      box.set_pixel_look(name)
+      m.msg = "kept: look " .. box.state.pixel_look:upper()
     end
   elseif row == "PRESET" then
     open_list()
@@ -253,6 +267,7 @@ local function enc_raw(n, delta)
     return
   end
   if n == 2 then
+    look_cancel()
     m.pos = m.pos + delta
     clamp_rows(true) -- scrolling past either end is not an error
   elseif n == 3 then
@@ -261,7 +276,16 @@ local function enc_raw(n, delta)
       if delta > 0 then box.set_style("pixel") elseif delta < 0 then box.set_style("aluminium") end
     elseif row == "PIXEL LOOK" then
       if delta ~= 0 then
-        if box.state.style ~= "pixel" then m.msg = "needs STYLE PIXEL" else box.step_pixel_look(delta) end
+        if box.state.style ~= "pixel" then
+          m.msg = "needs STYLE PIXEL"
+        else
+          local from = m.sel or box.state.pixel_look
+          local i = box.pixel_look_index(from) + 1
+          i = math.max(1, math.min(#box.PIXEL_LOOKS, i + (delta > 0 and 1 or -1)))
+          m.sel = box.PIXEL_LOOKS[i]
+          box.preview_pixel_look(m.sel)
+          m.msg = m.sel == box.state.pixel_look and nil or ("K3 keeps look " .. m.sel:upper())
+        end
       end
     elseif row == "PRESET" then
       box.step_preset(delta)

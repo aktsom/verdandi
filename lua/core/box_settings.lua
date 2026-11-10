@@ -336,6 +336,17 @@ function M.apply()
   _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0, pixel_look_index(M.state.pixel_look))
 end
 
+--- PIXEL LOOK while scrolling: show a look on the window without storing or saving anything (state and file stay); the colours are the owner's and are sent as they are.
+-- restore with M.apply()
+function M.preview_pixel_look(name)
+  if _norns == nil or _norns.box_look == nil then return false end
+  local l = parse_pixel_look(name)
+  if l == nil then return false end
+  local c = M.state.colours
+  _norns.box_look(M.state.style == "pixel" and 1 or 0, c.box, c.keys, c.encoders, c.buttons, c.font, M.state.show_buttons and 1 or 0, pixel_look_index(l))
+  return true
+end
+
 --- the colour picker: show one colour on the window without storing or saving anything (the state and the file stay as they are); restore with M.apply()
 function M.preview_part(part, text)
   if _norns == nil or _norns.box_look == nil then return false end
