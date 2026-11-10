@@ -710,6 +710,11 @@ int wmain(int argc, wchar_t **argv) {
     wchar_t bridge[64];
     _snwprintf(bridge, 64, L"VerdandiBridge-%lu-%d", (unsigned long)GetCurrentProcessId(), round);
     set_env(L"VERDANDI_BRIDGE", bridge); /* M2: the name of the audio bridge between norns.exe (it owns the sound card) and scsynth */
+    {
+        wchar_t rn[16];
+        _snwprintf(rn, 16, L"%d", round);
+        set_env(L"VERDANDI_ROUND", rn); /* the number of this start (1, 2, ...): the start/restart cycle test of the CI uses it (lua/core/test_cycles.lua) */
+    }
     g_job = CreateJobObjectW(NULL, NULL);
     if (g_job) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;

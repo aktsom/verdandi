@@ -1,0 +1,178 @@
+Verdandi Windows build 0.2.0 0c0efc1
+audio: PortAudio PortAudio V19.7.0-devel, revision 147dd722548358763a8b649b3e4b41dfffbcfbb6; host APIs: MME(0) Windows DirectSound(0) Windows WASAPI(0) Windows WDM-KS(0)
+audio: output chosen: the Windows default device, 48000 Hz, block 512
+audio: no sound: audio device (default) was not found. null audio is used (Windows has no default output device (no sound card, or all are disabled))
+audio: null clock, 48000 Hz, 512 frames per block
+audio bridge: 'VerdandiBridge-2000-1' ready, 48000 Hz, 512 frames per block
+constructed Client: crone
+constructed Client: softcut
+initializing buffer management worker..
+setting up jack clients..
+engine sample rate: 48000
+   (the line above repeated 1 more times)
+starting jack clients..
+connecting ports... 
+crone: input connected to 'system'
+crone: output connected to 'system'
+starting OSC interface...
+osc methods: 
+/hello []
+/goodbye []
+/quit []
+no user matronrc file (D:/a/_temp/m1/user home cycles/matronrc.lua) found, using default
+loading matronrc file: D:/a/_temp/m1/user home cycles/norns/matronrc.lua
+setup IO screen:sdl
+IO setup OK.
+font setup OK.
+dns_sd: the OSC service is not announced on Windows (no Bonjour); use localhost
+init oracle...
+OSC rx port: 8888 
+OSC ext port: 57120
+OSC remote port: 10111
+init weaver...
+starting main lua vm
+running lua config file: dofile('D:/a/_temp/m1/user home cycles/norns/lua/core/config.lua')
+MATRON
+norns version: 0.2.0
+git hash: 0c0efc1
+
+platform: windows (7)
+virtual /home/we -> D:/a/_temp/m1/user home cycles
+init dev_monitor...
+windows: device hot-plug detection: not in this build yet (milestone M1 has no sound devices, grids, MIDI or Link)
+setting cleanup...
+init input...
+running startup...
+no console input (maiden and the norns window are the way in)
+no saved keyboard layout, using: us
+ui.conf: not found, using defaults
+box.conf: not found, using defaults
+midimap.conf: not found, using defaults
+start_audio(): 
+mods: none found in /home/we/dust/code/
+scanning devices...
+handling pending events...
+HID device was added:	1	keyboard	06000000000000000000000000000000
+this appears to be an ASCII keyboard!
+running post-startup...
+_norns._post_startup
+calling: menu-audio-fallback
+audio: no sound: audio device (default) was not found. null audio is used
+calling: menu-audio-warning
+calling: menu-grid-conflict
+
+calling: menu-mic
+calling: menu-midi-autolink
+calling: menu-out
+audio bridge: crone is connected to the SuperCollider bridge ports
+norns.startup_status.ok
+last file loaded: /home/we/dust/code/verdandi_cycle/verdandi_cycle.lua
+# script clear
+# script load: /home/we/dust/code/verdandi_cycle/verdandi_cycle.lua
+### initializing data folder
+# script run
+>> reading PMAP /home/we/dust/data/verdandi_cycle/verdandi_cycle.pmap
+m.read: /home/we/dust/data/verdandi_cycle/verdandi_cycle.pmap not read, using defaults.
+network connections: not available on Windows
+Engine.register_commands; count: 0
+___ engine commands ___
+___ polls ___
+amp_in_l
+amp_in_r
+amp_out_l
+amp_out_r
+cpu_avg
+cpu_peak
+pitch_in_l
+pitch_in_r
+# script init
+VERDANDI_CYCLE 1 of 10
+available engines (5): 
+  PolySub
+  SimplePassThru
+  PolyPerc
+  TestSine
+  None
+VERDANDI_CYCLE_RESTART 1
+RESTARTING
+# script clear
+system_action: reset, norns.exe ends with exit code 42
+norns.exe ends with exit code 42 (card stopped first, no atexit handlers)
+Verdandi Windows build 0.2.0 0c0efc1
+audio: PortAudio PortAudio V19.7.0-devel, revision 147dd722548358763a8b649b3e4b41dfffbcfbb6; host APIs: MME(0) Windows DirectSound(0) Windows WASAPI(0) Windows WDM-KS(0)
+audio: output chosen: the Windows default device, 48000 Hz, block 512
+audio: no sound: audio device (default) was not found. null audio is used (Windows has no default output device (no sound card, or all are disabled))
+audio: null clock, 48000 Hz, 512 frames per block
+audio bridge: 'VerdandiBridge-2000-2' ready, 48000 Hz, 512 frames per block
+constructed Client: crone
+constructed Client: softcut
+initializing buffer management worker..
+setting up jack clients..
+engine sample rate: 48000
+   (the line above repeated 1 more times)
+starting jack clients..
+connecting ports... 
+crone: input connected to 'system'
+crone: output connected to 'system'
+starting OSC interface...
+osc methods: 
+/hello []
+/goodbye []
+/quit []
+no user matronrc file (D:/a/_temp/m1/user home cycles/matronrc.lua) found, using default
+loading matronrc file: D:/a/_temp/m1/user home cycles/norns/matronrc.lua
+setup IO screen:sdl
+IO setup OK.
+font setup OK.
+dns_sd: the OSC service is not announced on Windows (no Bonjour); use localhost
+init oracle...
+OSC rx port: 8888 
+OSC ext port: 57120
+OSC remote port: 10111
+init weaver...
+starting main lua vm
+running lua config file: dofile('D:/a/_temp/m1/user home cycles/norns/lua/core/config.lua')
+MATRON
+norns version: 0.2.0
+git hash: 0c0efc1
+
+platform: windows (7)
+virtual /home/we -> D:/a/_temp/m1/user home cycles
+init dev_monitor...
+windows: device hot-plug detection: not in this build yet (milestone M1 has no sound devices, grids, MIDI or Link)
+setting cleanup...
+init input...
+running startup...
+no console input (maiden and the norns window are the way in)
+no saved keyboard layout, using: us
+ui.conf: not found, using defaults
+box.conf: not found, using defaults
+midimap.conf: not found, using defaults
+start_audio(): 
+mods: none found in /home/we/dust/code/
+scanning devices...
+handling pending events...
+HID device was added:	1	keyboard	06000000000000000000000000000000
+this appears to be an ASCII keyboard!
+running post-startup...
+_norns._post_startup
+calling: menu-audio-fallback
+audio: no sound: audio device (default) was not found. null audio is used
+calling: menu-audio-warning
+calling: menu-grid-conflict
+
+calling: menu-mic
+calling: menu-midi-autolink
+calling: menu-out
+audio bridge: crone is connected to the SuperCollider bridge ports (after the wait)
+audio bridge: crone's ports appeared 1 s after the bridge
+norns.startup_status.ok
+# script clear
+### SCRIPT ERROR: NO SCRIPT
+network connections: not available on Windows
+available engines (5): 
+  PolySub
+  SimplePassThru
+  PolyPerc
+  TestSine
+  None

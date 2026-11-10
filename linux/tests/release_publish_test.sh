@@ -74,6 +74,22 @@ ck "it says so" "grep -q 'windows-latest is left as it was' '$T/out.txt'"
 VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" bash windows/ci/release-notes.sh > "$WORK_NOTES"
 ck "the notes carry a warning that names the failed check" "grep -q 'WARNING: 1 check' '$WORK_NOTES' && grep -q 'm1-check-keyboard' '$WORK_NOTES'"
 
+echo "== only the known red check (the cycle test) failed: windows-latest is still published"
+rm -f "$T/status/m1-check-keyboard.status"; echo "FAIL 1" > "$T/status/m2-check-cycles.status"
+: > "$T/gh.log"; LATEST_EXISTS=1 run
+ck "windows-latest is updated although m2-check-cycles is red" "grep -q 'release upload windows-latest' '$T/gh.log' && grep -q 'published windows-latest' '$T/out.txt'"
+ck "it says that the check is on the list of those that do not block" "grep -q 'check m2-check-cycles is red, but it is on the list' '$T/out.txt'"
+VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" NONBLOCKING_CHECKS="m2-check-cycles m2-run-cycles" bash windows/ci/release-notes.sh > "$WORK_NOTES"
+ck "the notes name it as a known red check that does not hold the build back" "grep -q 'Known red check, not holding this build back' '$WORK_NOTES' && grep -q 'm2-check-cycles' '$WORK_NOTES' && ! grep -q 'WARNING' '$WORK_NOTES'"
+echo "== another check fails together with the cycle test: windows-latest is NOT updated"
+echo "FAIL 1" > "$T/status/m1-check-keyboard.status"
+: > "$T/gh.log"; LATEST_EXISTS=1 run
+ck "a blocking red check still holds windows-latest back" "! grep -q 'windows-latest' '$T/gh.log'"
+echo "== the list can be emptied (NONBLOCKING_CHECKS='')"
+rm -f "$T/status/m1-check-keyboard.status"
+: > "$T/gh.log"; NONBLOCKING_CHECKS="" LATEST_EXISTS=1 run
+ck "then the cycle test blocks like any other check" "! grep -q 'windows-latest' '$T/gh.log'"
+rm -f "$T/status/m2-check-cycles.status"
 echo "== the zip is missing"
 rm -f "$T/zip/"*.zip
 run; rc=$?

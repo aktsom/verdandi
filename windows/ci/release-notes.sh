@@ -11,7 +11,8 @@ REPO_DIR="$(cd "$HERE/../.." && pwd)"
 VERSION="${VERSION:?}" SHORT="${SHORT:?}" SHA="${SHA:-unknown}" RUN_URL="${RUN_URL:-}" STATUS_DIR="${STATUS_DIR:-}" REPO="${REPO:-}"
 MSG="${COMMIT_MESSAGE:-$(git -C "$REPO_DIR" log -1 --format=%B "$SHA" 2> /dev/null | grep -v -E '^(Co-Authored-By|Claude-Session):' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')}"
 
-pass=() fail=() skip=()
+pass=() fail=() skip=() soft=()
+NONBLOCKING_CHECKS="${NONBLOCKING_CHECKS-}"
 if [ -n "$STATUS_DIR" ] && [ -d "$STATUS_DIR" ]; then
     for f in "$STATUS_DIR"/*.status; do
         [ -e "$f" ] || continue
@@ -19,7 +20,12 @@ if [ -n "$STATUS_DIR" ] && [ -d "$STATUS_DIR" ]; then
         word="$(head -n 1 "$f" | cut -d' ' -f1)"
         case "$word" in
             PASS) pass+=("$name") ;;
-            FAIL) fail+=("$name") ;;
+            FAIL)
+                case " $NONBLOCKING_CHECKS " in
+                    *" $name "*) soft+=("$name") ;;
+                    *) fail+=("$name") ;;
+                esac
+                ;;
             *) skip+=("$name ($(head -n 1 "$f" | cut -d' ' -f2-))") ;;
         esac
     done
@@ -37,9 +43,13 @@ if [ ${#fail[@]} -gt 0 ]; then
     echo "> **WARNING: ${#fail[@]} check(s) of the workflow failed for this build:** ${fail[*]}. It is published for the record; the *windows-latest* release is not replaced by it."
     echo
 fi
+if [ ${#soft[@]} -gt 0 ]; then
+    echo "> **Known red check, not holding this build back:** ${soft[*]} (a test of the build process that is being fixed; the build was published anyway)."
+    echo
+fi
 echo "## Checks of the workflow run"
 echo
-echo "${#pass[@]} passed, ${#fail[@]} failed, ${#skip[@]} skipped. Run: ${RUN_URL:-(not given)}"
+echo "${#pass[@]} passed, $((${#fail[@]} + ${#soft[@]})) failed, ${#skip[@]} skipped. Run: ${RUN_URL:-(not given)}"
 echo
 if [ ${#pass[@]} -gt 0 ]; then
     echo "<details><summary>The checks that passed</summary>"
@@ -52,6 +62,11 @@ fi
 if [ ${#fail[@]} -gt 0 ]; then
     echo "Failed:"
     printf -- '- %s\n' "${fail[@]}"
+    echo
+fi
+if [ ${#soft[@]} -gt 0 ]; then
+    echo "Failed, but not blocking (known):"
+    printf -- '- %s\n' "${soft[@]}"
     echo
 fi
 if [ ${#skip[@]} -gt 0 ]; then

@@ -116,7 +116,7 @@ cat > "$T/stub42.c" <<'STUB'
 #include <windows.h>
 int main(int argc, char **argv) {
     (void)argc;
-    printf("stub %s BRIDGE=%s AUDIO=%s\n", argv[0], getenv("VERDANDI_BRIDGE"), getenv("VERDANDI_AUDIO") ? getenv("VERDANDI_AUDIO") : "-"); fflush(stdout);
+    printf("stub %s BRIDGE=%s AUDIO=%s ROUND=%s\n", argv[0], getenv("VERDANDI_BRIDGE"), getenv("VERDANDI_AUDIO") ? getenv("VERDANDI_AUDIO") : "-", getenv("VERDANDI_ROUND")); fflush(stdout);
     { const char *bn = getenv("VERDANDI_BRIDGE"); if (bn) { char nm[200]; snprintf(nm, sizeof nm, "Local\\%s", bn); CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, nm); } } /* what norns.exe does: the launcher waits for it before it starts sclang */
     char marker[600]; snprintf(marker, sizeof marker, "%s/restarted.txt", getenv("HOME"));
     FILE *f = fopen(marker, "r");
@@ -132,6 +132,7 @@ rm -rf "$T/vhome3"; mkdir -p "$T/vhome3"
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --null-audio --home="Z:$T/vhome3" > "$T/launcher3.out" 2>&1)
 ck "norns.exe exit code 42 starts another round" "grep -q 'asked for a restart' '$T/vhome3/logs/launcher.log' && [ \$(grep -c 'norns.exe started' '$T/vhome3/logs/launcher.log') -eq 2 ]"
 ck "the second round has another bridge name, and --null-audio reaches norns.exe" "grep -q 'BRIDGE=VerdandiBridge-[0-9]*-2' '$T/vhome3/logs/norns.log' && grep -q 'AUDIO=null' '$T/vhome3/logs/norns.log'"
+ck "the launcher numbers the starts for the children: ROUND=1, then ROUND=2" "grep -q 'ROUND=1' '$T/vhome3/logs/norns.log' && grep -q 'ROUND=2' '$T/vhome3/logs/norns.log'"
 ck "the launcher ends with code 0 after the second round" "grep -q 'norns.exe ended with exit code 0x00000000' '$T/vhome3/logs/launcher.log'"
 # M2: the start order. norns.exe makes the audio bridge (a named memory) 1.5 s after it starts; sclang must not start before. a stale norns.exe of this folder from an earlier start must be stopped first.
 cat > "$T/stubB.c" <<'STUB'

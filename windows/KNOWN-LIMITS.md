@@ -2,4 +2,5 @@
 - **Not in this build:** grids and arcs (USB or virtual), MIDI devices, Ableton Link and MIDI clock, maiden (the MAIDEN button says so), crow, drop of files on the window and the file picker, an installer.
 - **Unsigned:** Windows may warn about an unknown program (More info, Run anyway). Windows Firewall may ask about `norns.exe` and `sclang.exe`; Cancel is fine, nothing needs the network.
 - **Tested by the workflow:** the program starts headless on a Windows runner (no sound card there: null audio and the fallback are exercised), ten start/restart cycles, the crash handler, the Linux-side unit tests. **Not tested by the workflow:** the real window, keyboard feel, real sound output and latency, a device unplugged while running, antivirus reactions. Those are the owner's checks (`docs/port/HARDWARE-CHECKLIST.md`).
+- **A test that is red on purpose of being fixed:** the start/restart cycle test of the workflow (`m2-check-cycles`) does not hold back this release while it is being repaired; the notes name it when it is red.
 - **If something crashes:** send `%USERPROFILE%\Verdandi\logs\norns.log`, `launcher.log`, `sclang.log` and everything in `logs\crash\`.

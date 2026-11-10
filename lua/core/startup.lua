@@ -76,6 +76,9 @@ _norns.monome.remove = function(id)
   else _norns.grid.remove(id) end
 end
 
+-- start/restart cycle test of the Windows CI: inactive unless VERDANDI_TEST_CYCLES is set (lua/core/test_cycles.lua)
+local test_cycles = os.getenv("VERDANDI_TEST_CYCLES") and require('core/test_cycles') or nil
+
 -- sc init callbacks
 _norns.startup_status.ok = function()
   print("norns.startup_status.ok")
@@ -88,6 +91,7 @@ _norns.startup_status.ok = function()
   -- report engines
   _norns.report_engines()
   wifi.init()
+  if test_cycles then test_cycles.after_startup("ok") end
 end
 
 _norns.startup_status.timeout = function()
@@ -110,6 +114,7 @@ _norns.startup_status.timeout = function()
     end
     norns.scripterror("SUPERCOLLIDER FAIL")
   end
+  if test_cycles then test_cycles.after_startup("timeout") end
 end
 
 -- initial screen state

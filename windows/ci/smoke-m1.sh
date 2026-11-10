@@ -118,7 +118,9 @@ chk_fallback() {
         && has "$WORK/user home fallback/logs/sclang.log" "SC_BridgeAudioDriver: audio from norns.exe" "scsynth still runs, on the bridge" \
         && [ -f "$WORK/user home fallback/audio.conf.failed" ] && echo "found: audio.conf.failed (the AUDIO page says it)"
 }
-# M2: ten starts and restarts in a row (norns.exe exit code 42 = restart, then a normal end): every round must come up, no crash, no program left behind
+# M2: ten starts and restarts in a row. norns.exe ends with exit code 42 when it asks for a restart (SYSTEM > RESTART, APPLY on the AUDIO page), the launcher starts everything again.
+# the restarts are asked for by lua/core/test_cycles.lua, switched on by VERDANDI_TEST_CYCLES (the launcher numbers the starts in VERDANDI_ROUND): not by a script. (the first version seeded a script that
+# asked for the restart: but a restart clears the script before it saves the state, as on a norns, so only the first start ran it and the run hung in the second: "NO SCRIPT", 27 minutes, then the time limit.)
 CYCLES="${SMOKE_CYCLES:-10}"
 CYCLE_HOME="$WORK/user home cycles"
 leftovers() { # the programs of the zoo that are still alive
@@ -126,23 +128,13 @@ leftovers() { # the programs of the zoo that are still alive
 }
 run_cycles() {
     rm -rf "$CYCLE_HOME"
-    mkdir -p "$CYCLE_HOME/dust/code/verdandi_cycle" "$CYCLE_HOME/dust/data/verdandi_cycle"
-    cp "$APP/smoke/verdandi_cycle.lua" "$CYCLE_HOME/dust/code/verdandi_cycle/verdandi_cycle.lua"
-    echo "$CYCLES" > "$CYCLE_HOME/dust/data/verdandi_cycle/cycles.txt"
-    cat > "$CYCLE_HOME/dust/data/system.state" <<'ST'
--- norns system state (seeded by the smoke test)
-norns.state.clean_shutdown = true
-norns.state.script = '/home/we/dust/code/verdandi_cycle/verdandi_cycle.lua'
-norns.state.name = 'verdandi_cycle'
-norns.state.shortname = 'verdandi_cycle'
-norns.state.path = '/home/we/dust/code/verdandi_cycle/'
-norns.state.data = '/home/we/dust/data/verdandi_cycle/'
-ST
-    local limit=$((CYCLES * 150 + 120)) rc
+    mkdir -p "$CYCLE_HOME"
+    # every start may take as long as the 150 s start-up wait of matron plus the restart itself; a hang is cut after cycles * 100 s + 2 minutes, never after half an hour
+    local limit=$((CYCLES * 100 + 120)) rc
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 10 "$limit" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
+        VERDANDI_TEST_CYCLES="$CYCLES" timeout -k 10 "$limit" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
     else
-        "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
+        VERDANDI_TEST_CYCLES="$CYCLES" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
     fi
     rc=$?
     echo "launcher exit code $rc"
@@ -153,20 +145,40 @@ ST
     cp -r "$CYCLE_HOME/logs" "$M0_OUT/m2-cycle-logs" 2> /dev/null || true
     return 0
 }
+# what went wrong, from the logs: the launcher log, and the log of the LAST round (norns.log and sclang.log are appended by every round: from the last start line on), without the lists of OSC commands
+cycle_failure_report() {
+    local L="$CYCLE_HOME/logs" first
+    echo "=== the failing round: the logs of the last start ==="
+    echo "--- launcher.log (all):"
+    tr -d '\r' < "$L/launcher.log" 2> /dev/null
+    first=$(grep -n '^Verdandi Windows build' "$L/norns.log" 2> /dev/null | tail -n 1 | cut -d: -f1)
+    echo "--- norns.log of the last start (from line ${first:-1}, the lists of OSC commands left out, the last 150 lines):"
+    tail -n +"${first:-1}" "$L/norns.log" 2> /dev/null | tr -d '\r' | grep -v -E '^/(set|softcut|poll|tape)/|^/(hello|goodbye|quit) ' | tail -n 150
+    first=$(grep -n -i 'compiling class library' "$L/sclang.log" 2> /dev/null | tail -n 1 | cut -d: -f1)
+    echo "--- sclang.log of the last start (from line ${first:-1}, the last 80 lines):"
+    tail -n +"${first:-1}" "$L/sclang.log" 2> /dev/null | tr -d '\r' | tail -n 80
+    echo "--- crash reports: $(find "$L/crash" -type f 2> /dev/null | tr '\n' ' ')"
+    echo "--- programs still running: $(tr -d '\r' < "$CYCLE_HOME/leftovers.txt" 2> /dev/null | tr '\n' ' ')"
+}
+cnt() { local n; n=$(grep -c "$1" "$2" 2> /dev/null || true); echo "${n:-0}"; } # (grep -c prints 0 and fails when nothing matches)
 chk_cycles() {
-    local L="$CYCLE_HOME/logs" starts restarts
-    starts=$(grep -c "norns.exe started" "$L/launcher.log" 2> /dev/null || echo 0)
-    restarts=$(grep -c "asked for a restart" "$L/launcher.log" 2> /dev/null || echo 0)
+    local L="$CYCLE_HOME/logs" starts restarts ok=0
+    starts=$(cnt "norns.exe started" "$L/launcher.log")
+    restarts=$(cnt "asked for a restart" "$L/launcher.log")
     echo "norns.exe started $starts times, restarted $restarts times (wanted $CYCLES and $((CYCLES - 1)))"
-    echo "stale programs stopped before a start: $(grep -c "of an earlier start that is still there" "$L/launcher.log" 2> /dev/null || echo 0) (should be 0: every round ends clean)"
-    echo "rounds that ended with the exit code 42: $(grep -c "norns.exe ended with exit code 0x0000002a" "$L/launcher.log" 2> /dev/null || echo 0)"
-    [ "$starts" -eq "$CYCLES" ] && [ "$restarts" -eq $((CYCLES - 1)) ] \
-        && has "$L/norns.log" "VERDANDI_CYCLE_DONE $CYCLES" "the last round ran its script and shut down" \
-        && ! grep -q -E "norns CRASHED|0xc0000005" "$L/norns.log" \
-        && ! ls "$L/crash"/* > /dev/null 2>&1 \
-        && [ "$(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null)" = "0" ] \
-        && [ ! -s "$CYCLE_HOME/leftovers.txt" ] \
-        && echo "found: no crash report, the launcher ended with 0 and no norns.exe, sclang.exe or scsynth.exe is left"
+    echo "stale programs stopped before a start: $(cnt "of an earlier start that is still there" "$L/launcher.log") (should be 0: every round ends clean)"
+    echo "rounds that ended with the exit code 42: $(cnt "norns.exe ended with exit code 0x0000002a" "$L/launcher.log")"
+    [ "$starts" -eq "$CYCLES" ] && [ "$restarts" -eq $((CYCLES - 1)) ] || ok=1
+    grep -q "VERDANDI_CYCLE_DONE $CYCLES" "$L/norns.log" 2> /dev/null || { echo "NOT FOUND: the last round did not reach its end (VERDANDI_CYCLE_DONE $CYCLES)"; ok=1; }
+    if grep -q -E "norns CRASHED|0xc0000005" "$L/norns.log" 2> /dev/null; then echo "a crash is in norns.log"; ok=1; fi
+    if ls "$L/crash"/* > /dev/null 2>&1; then echo "crash reports exist"; ok=1; fi
+    [ "$(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null)" = "0" ] || { echo "the launcher did not end with 0 (it ended with $(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null))"; ok=1; }
+    [ ! -s "$CYCLE_HOME/leftovers.txt" ] || { echo "programs are left behind"; ok=1; }
+    if [ "$ok" -ne 0 ]; then
+        cycle_failure_report
+        return 1
+    fi
+    echo "found: $CYCLES starts, $((CYCLES - 1)) restarts with exit code 42, no crash report, the launcher ended with 0 and no norns.exe, sclang.exe or scsynth.exe is left"
 }
 chk_sclang() {
     has "$LOGS/sclang.log" "Norns startup" "norns's Crone class started in sclang" \

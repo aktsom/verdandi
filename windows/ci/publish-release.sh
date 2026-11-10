@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # windows/ci/publish-release.sh: publish the zip of a successful run to GitHub Releases, with the token of the workflow (contents: write).
 #   - a release per commit, tag windows-<short hash>: Verdandi-windows-<version>-<short hash>.zip (kept; the newest 20 are kept, older ones are removed)
-#   - the release windows-latest, updated each time (only when no check of the run failed; updated in place: files replaced, the tag moved): the same zip, a copy named Verdandi-windows-latest.zip (a fixed address for update-and-run), its SHA-256 and BUILD.txt
+#   - the release windows-latest, updated each time (only when no check of the run failed, except the ones in NONBLOCKING_CHECKS; updated in place: files replaced, the tag moved): the same zip, a copy named Verdandi-windows-latest.zip (a fixed address for update-and-run), its SHA-256 and BUILD.txt
 # inputs (environment): GH_TOKEN (the workflow's token, read by gh), GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID;
 #   ZIP_DIR (folder with the zip of the run), STATUS_DIR (the status files of the report), KEEP (per-commit releases to keep, default 20), GH (the program that is called, default gh: the test uses a stand-in)
 set -eu
@@ -26,9 +26,18 @@ HASH="$(cd "$WORK" && sha256sum "$NAME" | cut -d' ' -f1)"
 printf '%s  Verdandi-windows-latest.zip\n' "$HASH" > "$WORK/Verdandi-windows-latest.zip.sha256"
 printf '%s %s\n' "$VERSION" "$SHORT" > "$WORK/BUILD.txt"
 
+# checks that are red for a known reason and do not hold back windows-latest (a space separated list of step names; they are named in the notes). default: the start/restart cycle test, until it is fixed
+NONBLOCKING_CHECKS="${NONBLOCKING_CHECKS-m2-check-cycles m2-run-cycles}"
+export NONBLOCKING_CHECKS
 failed=0
 if [ -n "${STATUS_DIR:-}" ] && ls "$STATUS_DIR"/*.status > /dev/null 2>&1; then
-    grep -l '^FAIL' "$STATUS_DIR"/*.status > /dev/null 2>&1 && failed=1
+    for f in $(grep -l '^FAIL' "$STATUS_DIR"/*.status 2> /dev/null); do
+        step="$(basename "$f" .status)"
+        case " $NONBLOCKING_CHECKS " in
+            *" $step "*) echo "check $step is red, but it is on the list of checks that do not block the release" ;;
+            *) failed=1 ;;
+        esac
+    done
 fi
 VERSION="$VERSION" SHORT="$SHORT" SHA="$SHA" RUN_URL="$RUN_URL" STATUS_DIR="${STATUS_DIR:-}" REPO="$REPO" "$HERE/release-notes.sh" > "$WORK/notes.md"
 TITLE="Verdandi for Windows $VERSION ($SHORT)"

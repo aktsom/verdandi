@@ -1,0 +1,148 @@
+compiling class library...
+	Found 733 primitives.
+	Compiling directory 'D:\a\_temp\m1\Verdandi test folder\Verdandi-0.2.0-0c0efc1\supercollider\SCClassLibrary'
+	Compiling directory 'C:\ProgramData\SuperCollider\Extensions'
+	Compiling directory 'C:\Users\runneradmin\AppData\Local\SuperCollider\Extensions'
+	Compiling directory 'D:/a/_temp/m1/Verdandi test folder/Verdandi-0.2.0-0c0efc1/sc/core'
+	Compiling directory 'D:/a/_temp/m1/Verdandi test folder/Verdandi-0.2.0-0c0efc1/sc/engines'
+	Compiling directory 'D:/a/_temp/m1/Verdandi test folder/Verdandi-0.2.0-0c0efc1/sc/linux-compat'
+	Compiling directory 'D:/a/_temp/m1/user home cycles/dust'
+	numentries = 695427 / 7750076 = 0.09
+	4118 method selectors, 1882 classes
+	method table size 10115512 bytes, big table size 62000608
+	Number of Symbols 9510
+	Byte Code Size 274219
+	compiled 246 files in 0.13 seconds
+
+Info: 2 methods are currently overwritten by extensions. To see which, execute:
+MethodOverride.printAll
+
+compile done
+localhost : setting clientID to 0.
+internal : setting clientID to 0.
+Class tree inited in 0.07 seconds
+
+-------------------------------------------------
+ Norns startup
+
+ OSC rx port: 57120
+ OSC tx port: 8888
+ server port: 57110
+ crone port: 9999
+--------------------------------------------------
+
+   (the line above repeated 2 more times)
+*** Welcome to SuperCollider 3.14.1. *** For help press F1.
+Booting server 'localhost' on address 127.0.0.1:57110.
+
+SC_BridgeAudioDriver: audio from norns.exe through the bridge 'VerdandiBridge-2000-1'
+  Sample rate: 48000.000, block size: 512, 2 in / 2 out channels (2 bridged)
+SC_AudioDriver: sample rate = 48000.000000, driver's block size = 512
+SuperCollider 3 server ready.
+SC_BridgeAudioDriver: the first block was computed
+Requested notification messages from server 'localhost'
+localhost: server process's maxLogins (1) matches with my options.
+localhost: keeping clientID (0) as confirmed by server process.
+Shared memory server interface initialized
+CroneDefs: sending defs
+play_fade
+patch_mono
+patch_mono_fb
+patch_stereo
+patch_pan
+rec_smooth
+adc
+amp_env
+pitch
+polySub
+patch_mono_gate_pause
+patch_mono_gate_pause_fb
+AudioContext: in_b[0] index: 4
+AudioContext: in_b[1] index: 5
+AudioContext: out_b index (stereo): 0
+AudioContext: initPolls
+>>> /crone/ready
+a CroneAudioContext
+-----------------------
+-- crone: done loading engine, starting reports
+--------
+engine: an Engine_None
+cpu_peak
+cpu_avg
+amp_in_l
+amp_in_r
+amp_out_l
+amp_out_r
+pitch_in_l
+pitch_in_r
+engines: [PolySub, SimplePassThru, PolyPerc, TestSine, None]
+free engine: an Engine_None
+CroneEngine.free
+SC_BridgeAudioDriver: norns.exe has closed the bridge after 538 blocks
+compiling class library...
+	Found 733 primitives.
+	Compiling directory 'D:\a\_temp\m1\Verdandi test folder\Verdandi-0.2.0-0c0efc1\supercollider\SCClassLibrary'
+	Compiling directory 'C:\ProgramData\SuperCollider\Extensions'
+	Compiling directory 'C:\Users\runneradmin\AppData\Local\SuperCollider\Extensions'
+	Compiling directory 'D:/a/_temp/m1/Verdandi test folder/Verdandi-0.2.0-0c0efc1/sc/core'
+	Compiling directory 'D:/a/_temp/m1/Verdandi test folder/Verdandi-0.2.0-0c0efc1/sc/engines'
+	Compiling directory 'D:/a/_temp/m1/Verdandi test folder/Verdandi-0.2.0-0c0efc1/sc/linux-compat'
+	Compiling directory 'D:/a/_temp/m1/user home cycles/dust'
+	numentries = 695427 / 7750076 = 0.09
+	4118 method selectors, 1882 classes
+	method table size 10115512 bytes, big table size 62000608
+	Number of Symbols 9510
+	Byte Code Size 274219
+	compiled 246 files in 0.14 seconds
+
+Info: 2 methods are currently overwritten by extensions. To see which, execute:
+MethodOverride.printAll
+
+compile done
+localhost : setting clientID to 0.
+internal : setting clientID to 0.
+Class tree inited in 0.08 seconds
+
+-------------------------------------------------
+ Norns startup
+
+ OSC rx port: 57120
+ OSC tx port: 8888
+ server port: 57110
+ crone port: 9999
+--------------------------------------------------
+
+   (the line above repeated 2 more times)
+*** Welcome to SuperCollider 3.14.1. *** For help press F1.
+Booting server 'localhost' on address 127.0.0.1:57110.
+
+SC_BridgeAudioDriver: audio from norns.exe through the bridge 'VerdandiBridge-2000-2'
+  Sample rate: 48000.000, block size: 512, 2 in / 2 out channels (2 bridged)
+SC_AudioDriver: sample rate = 48000.000000, driver's block size = 512
+SuperCollider 3 server ready.
+SC_BridgeAudioDriver: the first block was computed
+Requested notification messages from server 'localhost'
+localhost: server process's maxLogins (1) matches with my options.
+localhost: keeping clientID (0) as confirmed by server process.
+Shared memory server interface initialized
+CroneDefs: sending defs
+play_fade
+patch_mono
+patch_mono_fb
+patch_stereo
+patch_pan
+rec_smooth
+adc
+amp_env
+pitch
+polySub
+patch_mono_gate_pause
+patch_mono_gate_pause_fb
+AudioContext: in_b[0] index: 4
+AudioContext: in_b[1] index: 5
+AudioContext: out_b index (stereo): 0
+AudioContext: initPolls
+>>> /crone/ready
+engines: [PolySub, SimplePassThru, PolyPerc, TestSine, None]
+Server 'localhost' exited with exit code -1073740791.
+server 'localhost' disconnected shared memory interface

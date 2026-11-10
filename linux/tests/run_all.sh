@@ -121,6 +121,8 @@ if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/win
 else
     echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
 fi
+run "windows:start/restart cycle test hook (VERDANDI_TEST_CYCLES: a restart after each start-up until the start number is reached, then a shutdown; inactive without the variable)" lua5.3 linux/tests/test_cycles_test.lua
+run "windows:the cycle test check passes a good run and fails the real failing run with the log of the failing round in the report" bash linux/tests/cycle_check_test.sh
 run "windows:publishing a build to GitHub Releases (tags, assets, windows-latest updated in place and only when no check failed, old releases pruned, the notes) with a stand-in for gh" bash linux/tests/release_publish_test.sh
 if command -v actionlint > /dev/null 2>&1 || [ -x "$HOME/go/bin/actionlint" ]; then
     run "windows:the workflows pass actionlint" bash -c 'PATH="$PATH:$HOME/go/bin" actionlint .github/workflows/windows-m0.yml .github/workflows/windows-m1.yml'

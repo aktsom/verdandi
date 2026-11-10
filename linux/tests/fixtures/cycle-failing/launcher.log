@@ -1,0 +1,14 @@
+2026-11-10 17:46:18 launcher: Verdandi launcher 0.2 (M2), program folder D:\a\_temp\m1\Verdandi test folder\Verdandi-0.2.0-0c0efc1, user folder D:\a\_temp\m1\user home cycles, headless
+2026-11-10 17:46:18 launcher: Verdandi build 0.2.0 0c0efc1
+2026-11-10 17:46:18 launcher: norns.exe started
+2026-11-10 17:46:18 launcher: the audio bridge of norns.exe is ready after 50 ms
+2026-11-10 17:46:18 launcher: sclang.exe started
+2026-11-10 17:46:24 launcher: norns.exe ended with exit code 0x0000002a
+2026-11-10 17:46:24 launcher: norns.exe asked for a restart (exit code 42): starting everything again (round 2)
+2026-11-10 17:46:24 launcher: norns.exe started
+2026-11-10 17:46:24 launcher: the audio bridge of norns.exe is ready after 50 ms
+2026-11-10 17:46:24 launcher: sclang.exe started
+2026-11-10 18:13:18 launcher: norns.exe ended with exit code 0x0000008f
+2026-11-10 18:13:18 launcher: Verdandi: Verdandi ended with an error.
+
+The log is D:\a\_temp\m1\user home cycles\logs\norns.log. A crash report, if one was made, is in D:\a\_temp\m1\user home cycles\logs\crash.
