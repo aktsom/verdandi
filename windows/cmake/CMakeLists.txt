@@ -29,6 +29,8 @@ pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 # box_style.c uses FreeType directly (cairo's pkg-config file does not pass it on)
 pkg_check_modules(FREETYPE2 REQUIRED IMPORTED_TARGET freetype2)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+# M2: the sound card (WASAPI host API of PortAudio)
+pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
 # nng: MSYS2 ships a CMake package, not a pkg-config file (first M1 run: "Package nng not found"); header and library are searched directly
 find_path(NNG_INC nng/nng.h REQUIRED)
 find_library(NNG_LIB NAMES nng libnng REQUIRED)
@@ -59,12 +61,12 @@ target_compile_options(lua-cjson PRIVATE -w)
 add_executable(norns ${NORNS_SOURCES})
 set_target_properties(norns PROPERTIES OUTPUT_NAME "norns")
 
-# the version of the Windows build: 0.1.0 = milestone M1 (matron VERSION_*; the norns update number on the home screen comes from update/version.txt)
+# the version of the Windows build: 0.2.0 = milestone M2 (real audio; 0.1.0 was M1) (matron VERSION_*; the norns update number on the home screen comes from update/version.txt)
 target_compile_definitions(norns PRIVATE
   # HAVE_ABLETON_LINK=1: the Lua side registers and calls the clock_link_* functions; in M1 they are the stand-ins of stubs_win.cc (no Link yet)
   NORNS_DESKTOP=1 NORNS_LINUX_DESKTOP=1 NORNS_WINDOWS=1
   HAVE_LIBMONOME=1 HAVE_NNG=1 HAVE_LUA_CJSON=1 HAVE_ABLETON_LINK=1
-  VERSION_MAJOR=0 VERSION_MINOR=1 VERSION_PATCH=0 VERSION_HASH="${VERDANDI_VERSION_HASH}"
+  VERSION_MAJOR=0 VERSION_MINOR=2 VERSION_PATCH=0 VERSION_HASH="${VERDANDI_VERSION_HASH}"
   _GNU_SOURCE=1)
 # the force-included compatibility header: every translation unit sees it first
 target_compile_options(norns PRIVATE "SHELL:-include ${REPO}/matron/src/platform/windows/compat_win.h")
@@ -91,7 +93,7 @@ set_source_files_properties(${REPO}/matron/src/platform/macos/sdl_bridge.cc PROP
 target_compile_options(norns PRIVATE -Wno-unused-parameter)
 target_link_libraries(norns PRIVATE
   lua-cjson ${MONOME_LIB}
-  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 ${NNG_LIB}
+  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 PkgConfig::PORTAUDIO ${NNG_LIB}
   ws2_32 mswsock advapi32 setupapi winmm ole32 shell32 dbghelp psapi pthread m)
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 

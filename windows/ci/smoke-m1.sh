@@ -71,9 +71,50 @@ chk_noise() {
     if grep -n -E "is not recognized|pthread_cancel|menu key handler error|failed to read from stdin|unknown \(0\)" "$LOGS/norns.log" | head -10 | grep .; then return 1; fi
     echo "none of: not recognized, pthread_cancel, menu key handler error, failed to read from stdin, unknown (0)"
 }
+# M2: the audio chain on the runner (it has no sound card, so null audio or a card, whichever it is, is reported)
+chk_audio() {
+    has "$LOGS/norns.log" "^audio: PortAudio .*host APIs:" "PortAudio and its host APIs are listed in the log" \
+        && has "$LOGS/norns.log" "^audio: (device '|null audio|.*null audio is used)" "the audio decision (device or null audio) is in the log" \
+        && has "$LOGS/norns.log" "^audio bridge: '.*' ready" "norns.exe made the audio bridge" \
+        && has "$LOGS/sclang.log" "SC_BridgeAudioDriver: the first block was computed" "scsynth computed its first block from the bridge" \
+        && has "$LOGS/norns.log" "VERDANDI_SMOKE_AUDIO mode=(device|null|fallback) .*scsynth=true" "scsynth is attached to the bridge" \
+        && awk '/VERDANDI_SMOKE_AUDIO mode=/ { for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }; if (v["blocks_to_scsynth"] + 0 > 50 && v["blocks_from_scsynth"] + 0 > 50 && v["drops"] + 0 <= 5) ok = 1 } END { exit ok ? 0 : 1 }' "$LOGS/norns.log" \
+        && echo "found: blocks flow both ways (more than 50 in 3 s) with at most 5 drops (underruns are reported, not judged: a loaded runner)"
+}
+chk_audio_numbers() { grep -h -E "^audio: |^audio bridge: |VERDANDI_SMOKE_AUDIO" "$LOGS/norns.log" 2> /dev/null | head -20; }
+# the list of output devices, with no program running: norns.exe alone, VERDANDI_AUDIO_LIST=1
+list_audio() {
+    local out
+    out=$(cd "$APP" && VERDANDI_AUDIO_LIST=1 HOME="$HOMEDIR" timeout 60 "./norns$EXE" 2>&1) || true
+    echo "$out" | head -20
+    echo "$out" | grep -q -E "^[0-9]+ output devices"
+}
+# a device that does not exist: no hang, a plain note, null audio, and the bridge still works
+run_fallback() {
+    local h2="$WORK/user home fallback"
+    rm -rf "$h2"
+    mkdir -p "$h2"
+    printf 'output=wasapi:No Such Speakers 4711\nrate=48000\nperiod=512\n' > "$h2/audio.conf"
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 120 "$APP/Verdandi$EXE" --headless --exit-after=45 --home="$(native "$h2")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=45 --home="$(native "$h2")"
+    fi
+    echo "launcher exit code $?"
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$h2/logs" "$M0_OUT/m2-fallback-logs" 2> /dev/null || true
+    return 0
+}
+chk_fallback() {
+    local l="$WORK/user home fallback/logs/norns.log"
+    has "$l" "not found.*null audio is used|null audio is used" "a device that does not exist is said in plain words, with null audio instead" \
+        && has "$l" "^audio bridge: '.*' ready" "the bridge was made anyway" \
+        && has "$WORK/user home fallback/logs/sclang.log" "SC_BridgeAudioDriver: audio from norns.exe" "scsynth still runs, on the bridge" \
+        && [ -f "$WORK/user home fallback/audio.conf.failed" ] && echo "found: audio.conf.failed (the AUDIO page says it)"
+}
 chk_sclang() {
     has "$LOGS/sclang.log" "Norns startup" "norns's Crone class started in sclang" \
-        && has "$LOGS/sclang.log" "SC_NullAudioDriver" "scsynth ran on the null audio driver (no sound device)" \
+        && has "$LOGS/sclang.log" "SC_BridgeAudioDriver: audio from norns.exe" "scsynth took its audio from norns.exe through the bridge (no sound device of its own)" \
         && ! grep -q -E "^ERROR: Class not defined|Device unavailable" "$LOGS/sclang.log"
 }
 chk_png() {
@@ -105,6 +146,11 @@ m0_run m1-run run_program
 collect > /dev/null 2>&1
 m0_run m1-check-launcher chk_launcher
 m0_run m1-check-lua chk_lua
+m0_run m2-list-audio list_audio
+m0_run m2-check-audio chk_audio
+m0_run m2-audio-numbers chk_audio_numbers
+m0_run m2-run-fallback run_fallback
+m0_run m2-check-fallback chk_fallback
 m0_run m1-check-keyboard chk_keyboard
 m0_run m1-check-noise chk_noise
 m0_run m1-check-sclang chk_sclang

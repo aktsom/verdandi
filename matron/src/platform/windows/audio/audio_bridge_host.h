@@ -1,0 +1,18 @@
+/* audio_bridge_host.h (M2): norns.exe's side of the audio bridge as a JACK client of the null backend named "SuperCollider", with the ports sclang's jack_connect lines wire on Linux. */
+#ifndef VERDANDI_AUDIO_BRIDGE_HOST_H
+#define VERDANDI_AUDIO_BRIDGE_HOST_H
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* creates the shared memory `name` and the client; a helper thread connects crone:output_5/6 -> SuperCollider:in_1/2 and SuperCollider:out_1/2 -> crone:input_5/6 as soon as crone's ports exist.
+ * 0 = ok. rate and frames must be the ones of the audio (jack_null) */
+int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames);
+void verdandi_bridge_host_stop(void);
+/* counters: blocks handed to scsynth, blocks taken from it, underruns, drops, scsynth attached */
+void verdandi_bridge_host_stats(unsigned long long *to_sc, unsigned long long *from_sc, unsigned long long *underruns, unsigned long long *drops, int *attached);
+
+#ifdef __cplusplus
+}
+#endif
+#endif

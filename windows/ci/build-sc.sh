@@ -25,7 +25,7 @@ fetch_source() {
     git -C "$SRC" describe --tags
 }
 
-# Verdandi patches to SuperCollider (windows/patches): the null audio driver (VERDANDI_NULL_AUDIO=1: scsynth runs without an audio device). the clone is made with autocrlf off so that the patch applies
+# Verdandi patches to SuperCollider (windows/patches): the Verdandi audio driver (M1: VERDANDI_NULL_AUDIO=1, scsynth runs without an audio device; M2: VERDANDI_BRIDGE=<name>, scsynth is clocked and fed by norns.exe through the audio bridge). the clone is made with autocrlf off so that the patch applies
 apply_patches() {
     local p tmp
     tmp="$WORK/patch.tmp"
@@ -35,6 +35,8 @@ apply_patches() {
         tr -d '\r' < "$p" > "$tmp"
         if git -C "$SRC" apply --check "$tmp"; then git -C "$SRC" apply "$tmp"; else echo "patch does not apply: $p"; git -C "$SRC" apply --check -v "$tmp" 2>&1 | head -20; return 1; fi
     done
+    # M2: the driver of the patch includes the audio bridge header, which is shared with norns.exe (one file, one protocol)
+    cp "$HERE/../../matron/src/platform/windows/audio/verdandi_bridge.h" "$SRC/server/scsynth/verdandi_bridge.h" || return 1
 }
 
 install_vcpkg_libs() {

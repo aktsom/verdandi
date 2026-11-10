@@ -20,7 +20,7 @@ export PATH="$PREFIX/bin:$PATH"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
 # package names as the MSYS2 UCRT64 repository names them; a missing one is a finding, not a failure of the job
-PKGS="gcc cmake ninja make pkgconf liblo cairo freetype libsndfile SDL2 nng libsamplerate fftw readline"
+PKGS="gcc cmake ninja make pkgconf liblo cairo freetype libsndfile SDL2 nng libsamplerate fftw readline portaudio"
 install_pkgs() {
     local p rc=0
     : > "$M0_OUT/msys2-packages.txt"

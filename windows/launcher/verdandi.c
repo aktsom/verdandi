@@ -9,7 +9,7 @@
  *      sclang gets only RELATIVE ASCII arguments and its own folder as the working directory: it reads its command line in the ANSI code page (M0 finding).
  *      no sound device is used in M1: scsynth runs on Verdandi's null audio driver (VERDANDI_NULL_AUDIO=1).
  *   5. waits for norns.exe; when it ends, everything it started ends (a job object). a crash is reported with the place of the crash report.
- * options: --headless (no windows: SDL dummy video driver, messages only in the log; for tests), --no-sclang, --no-norns (prepare and stop), --home=DIR, --exit-after=SECONDS, --version.
+ * options: --headless (no windows: SDL dummy video driver, messages only in the log; for tests), --null-audio (no sound card), --no-sclang, --no-norns (prepare and stop), --home=DIR, --exit-after=SECONDS, --version.
  */
 #ifndef UNICODE
 #define UNICODE
@@ -25,7 +25,7 @@
 #include <string.h>
 #include <wchar.h>
 
-#define VERDANDI_LAUNCHER_VERSION "0.1 (M1)"
+#define VERDANDI_LAUNCHER_VERSION "0.2 (M2)"
 
 static wchar_t g_app[MAX_PATH * 2];  /* program folder, no trailing backslash */
 static wchar_t g_home[MAX_PATH * 2]; /* user's folder */
@@ -108,6 +108,7 @@ static void fwd(const wchar_t *in, wchar_t *out, size_t n) {
     }
 }
 
+#define VERDANDI_EXIT_RESTART 42 /* norns.exe: SYSTEM > RESTART (matron/src/system_cmd.cc) */
 static void set_env(const wchar_t *k, const wchar_t *v) { SetEnvironmentVariableW(k, v); }
 
 /* keep the last logs: name.log -> name.1.log -> name.2.log -> name.3.log */
@@ -418,13 +419,15 @@ static const wchar_t *crash_hint(DWORD code) {
 }
 
 int wmain(int argc, wchar_t **argv) {
-    int no_sclang = 0, no_norns = 0, exit_after = 0;
+    int no_sclang = 0, no_norns = 0, exit_after = 0, null_audio = 0;
     wchar_t home_arg[MAX_PATH * 2] = L"";
     for (int i = 1; i < argc; i++) {
         if (!wcscmp(argv[i], L"--headless")) {
             g_headless = 1;
         } else if (!wcscmp(argv[i], L"--no-sclang")) {
             no_sclang = 1;
+        } else if (!wcscmp(argv[i], L"--null-audio")) {
+            null_audio = 1;
         } else if (!wcscmp(argv[i], L"--no-norns")) {
             no_norns = 1;
         } else if (!wcsncmp(argv[i], L"--home=", 7)) {
@@ -535,7 +538,11 @@ int wmain(int argc, wchar_t **argv) {
     set_env(L"NORNS_HARDWARE_KEYS", L"1");
     set_env(L"NORNS_DISPLAY_NAME", L"Verdandi Windows");
     set_env(L"SDL_NO_SIGNAL_HANDLERS", L"1");
-    set_env(L"VERDANDI_NULL_AUDIO", L"1"); /* M1: no sound device; scsynth uses its null audio driver */
+    /* scsynth never opens a sound device (norns.exe owns the card, M2): its driver takes the audio bridge (VERDANDI_BRIDGE, set for every round below), or, without it, the null clock */
+    set_env(L"VERDANDI_NULL_AUDIO", L"1");
+    if (null_audio) {
+        set_env(L"VERDANDI_AUDIO", L"null"); /* --null-audio: no sound card either (tests, a machine with a problem card) */
+    }
     if (g_headless) {
         set_env(L"SDL_VIDEODRIVER", L"dummy");
     }
@@ -550,6 +557,14 @@ int wmain(int argc, wchar_t **argv) {
         return 0;
     }
 
+    DWORD code = 0, w = 0;
+    DWORD err = 0;
+    HANDLE pn = NULL, ps = NULL;
+    for (int round = 1;; round++) {
+    /* one round = norns.exe and sclang from the start to the end of norns.exe. SYSTEM > RESTART (and a changed audio device) ends norns.exe with exit code 42: another round */
+    wchar_t bridge[64];
+    _snwprintf(bridge, 64, L"VerdandiBridge-%lu-%d", (unsigned long)GetCurrentProcessId(), round);
+    set_env(L"VERDANDI_BRIDGE", bridge); /* M2: the name of the audio bridge between norns.exe (it owns the sound card) and scsynth */
     g_job = CreateJobObjectW(NULL, NULL);
     if (g_job) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
@@ -558,12 +573,13 @@ int wmain(int argc, wchar_t **argv) {
         SetInformationJobObject(g_job, JobObjectExtendedLimitInformation, &info, sizeof info);
     }
 
-    rotate(logs, L"norns");
-    rotate(logs, L"sclang");
+    if (round == 1) {
+        rotate(logs, L"norns");
+        rotate(logs, L"sclang");
+    }
 
     /* norns.exe first (matron, crone, softcut) */
-    DWORD err = 0;
-    HANDLE pn = start_child(norns, L"", g_app, logs, L"norns", &err);
+    pn = start_child(norns, L"", g_app, logs, L"norns", &err);
     if (!pn) {
         tell_user(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
         return 6;
@@ -571,7 +587,7 @@ int wmain(int argc, wchar_t **argv) {
     say(L"norns.exe started");
 
     /* then sclang, from inside its own folder with relative ASCII arguments. norns.exe has had a moment to start crone */
-    HANDLE ps = NULL;
+    ps = NULL;
     if (have_sclang) {
         for (int i = 0; i < 30 && WaitForSingleObject(pn, 100) == WAIT_TIMEOUT; i++) {
         }
@@ -588,13 +604,12 @@ int wmain(int argc, wchar_t **argv) {
 
     /* wait for norns */
     DWORD wait = exit_after > 0 ? (DWORD)exit_after * 1000 : INFINITE;
-    DWORD w = WaitForSingleObject(pn, wait);
+    w = WaitForSingleObject(pn, wait);
     if (w == WAIT_TIMEOUT) {
         say(L"--exit-after=%d: stopping norns.exe", exit_after);
         TerminateProcess(pn, 0);
         WaitForSingleObject(pn, 5000);
     }
-    DWORD code = 0;
     GetExitCodeProcess(pn, &code);
     say(L"norns.exe ended with exit code 0x%08lx", (unsigned long)code);
     if (g_job) {
@@ -605,6 +620,16 @@ int wmain(int argc, wchar_t **argv) {
     }
     CloseHandle(pn);
     pumps_finish();
+    if (g_job) {
+        CloseHandle(g_job);
+        g_job = NULL;
+    }
+    if (code == VERDANDI_EXIT_RESTART && w != WAIT_TIMEOUT && round < 50) {
+        say(L"norns.exe asked for a restart (exit code %d): starting everything again (round %d)", VERDANDI_EXIT_RESTART, round + 1);
+        continue;
+    }
+    break;
+    }
 
     int ret = 0;
     if (code != 0 && w != WAIT_TIMEOUT) {

@@ -213,7 +213,28 @@ bool system_cmd_detached(const char *cmd, const char *unit, int cb_ref) {
     return sidecar_client_detach_async(cmd, unit, (void *)(intptr_t)cb_ref, post_launch_done);
 }
 
+#ifdef NORNS_WINDOWS
+// Windows (the launcher Verdandi.exe supervises norns.exe): RESTART ends norns.exe with exit code 42, and the launcher then stops sclang and starts everything again (new audio settings, a new script
+// state); SLEEP (shutdown) ends it with 0 and the launcher ends too. the exit runs from a thread after a moment, so that the Lua side has finished the save it does before asking.
+#include <pthread.h>
+static void *windows_exit_thread(void *arg) {
+    struct timespec ts = {0, 400 * 1000 * 1000};
+    nanosleep(&ts, NULL);
+    exit((int)(intptr_t)arg);
+    return NULL;
+}
+#endif
+
 bool system_action(const char *action, int cb_ref) {
+#ifdef NORNS_WINDOWS
+    if (strcmp(action, "reset") == 0 || strcmp(action, "shutdown") == 0) {
+        pthread_t t;
+        intptr_t code = strcmp(action, "reset") == 0 ? 42 : 0;
+        fprintf(stderr, "system_action: %s, norns.exe ends with exit code %d\n", action, (int)code);
+        (void)cb_ref;
+        return pthread_create(&t, NULL, windows_exit_thread, (void *)code) == 0;
+    }
+#endif
     for (size_t i = 0; i < sizeof(system_actions) / sizeof(system_actions[0]); ++i) {
         const system_action_t *a = &system_actions[i];
         if (strcmp(a->name, action) != 0) {

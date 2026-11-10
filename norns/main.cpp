@@ -15,6 +15,9 @@
 #include <unistd.h>
 
 #include "crone_main.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/audio/audio_win.h"
+#endif
 #include "matron_main.h"
 #include "platform/common/desktop_platform.h"
 
@@ -107,6 +110,14 @@ int main(int argc, char **argv) {
         printf("norns: --check ok\n");
         return 0;
     }
+
+#ifdef NORNS_WINDOWS
+    // the sound card (WASAPI through PortAudio) or null audio, and the bridge to scsynth: before crone makes its first JACK client
+    if (verdandi_audio_boot() != 0) {
+        return 0; // VERDANDI_AUDIO_LIST=1: the device list was printed
+    }
+    atexit(verdandi_audio_shutdown);
+#endif
 
     int exec_name_size = strlen(argv[0]);
 

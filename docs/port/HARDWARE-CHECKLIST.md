@@ -418,6 +418,20 @@ The window, the JACK MIDI path, the mouse-versus-MIDI comparison, the master swi
 - [ ] **A plug-in installed while norns runs** (install a script with a Raspberry Pi plug-in, or copy any such `.so` into the extension folder): within ten seconds the window shows the note, SYSTEM > CLEAN UP has an ARM PLUG-INS line, K3 K3 moves it, a restart starts SuperCollider; and without that, the next start moves it by itself. `verdandi tidy list` and `verdandi tidy restore <id>` put it back.
 - [ ] **The settings:** `namamp=0` (no seeding, the shims step aside), `plugin_heal=0` (nothing is moved; the PLUGINS note says what is wrong), `namamp_gain=-6` (quieter by 6 dB after a restart).
 
+## Windows M2 (real audio output, WASAPI): what only your PC can show
+
+Same download as M1 (workflow windows-m1, artifact m1-zip; the program inside is 0.2.0). Click-by-click and what to send back: `windows/README.md` ("Windows M2").
+1. **Sound:** awake (SELECT) is heard through the Windows default output with no crackle at the default block (512). Note the delay you feel.
+2. **SYSTEM > AUDIO:** OUTPUT lists your playback devices by their Windows names; E3 chooses; APPLY restarts Verdandi (window closes and opens, about 30 s) and the chosen device is the one you hear; the bottom line shows the rate, a latency in ms and the device name; `audio.conf` in `%USERPROFILE%\Verdandi` has `output=wasapi:<name>`, `rate=`, `period=`. INPUT says "none yet".
+3. **Block sizes:** 256 and 128: the smallest that stays clean on your PC; what you hear at 64.
+4. **Rate:** 44100 and 96000 (the Windows mixer converts if the device runs at 48000): sound correct pitch, no crackle; the log says the rate that really runs.
+5. **Device busy or gone:** a program with exclusive access, or the chosen headset unplugged before the start: Verdandi starts (no hang) with a note on the window and the AUDIO page, scripts run silently; after fixing the cause and APPLY the sound is back. A device unplugged **while running**: tell me what happens (not handled yet).
+6. **Next to other programs:** with Ableton Live (ASIO) open: does Verdandi's sound still work through WASAPI, and does Live stay unaffected? Is the Windows volume mixer entry named "Verdandi" or "norns"?
+7. **Engine vs. no engine:** a script with an engine (awake: PolyPerc) AND the MIX page's levels and the tape/softcut parts of a script (e.g. record and play a loop): both are heard (engine sound goes through the bridge, softcut straight in the mixer).
+8. **Logs to send:** `norns.log` lines starting `audio:` / `audio bridge:`, the `sclang.log` lines `SC_BridgeAudioDriver`, and `audio.conf`.
+9. **Firewall:** no new prompt should appear in M2 (nothing new listens on the network); tell me if one does.
+10. **Latency feeling:** key to sound for an engine voice at 512 and 256: not noticeable / noticeable / annoying (my estimate is 40 to 55 ms at 512).
+
 ## Windows M1 (first runnable build, no sound): what only your PC can show
 
 Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the program) and **verdandi-windows-m1** (the report, the logs of the test run and its screenshot); steps in `windows/README.md`. Unblock the zip (right-click, Properties) and unpack the WHOLE zip into a folder of its own.

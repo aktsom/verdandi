@@ -29,6 +29,24 @@ $CXX -std=gnu++14 -O1 "${INC[@]}" -c linux/tests/windows_posix_test.cpp -o "$T/w
 $CXX "$T/wpt.o" "$T/pc.o" "$T/ssw.o" -static -lws2_32 -o "$T/windows_posix_test.exe" || exit 1
 (cd "$T" && timeout 120 "$WINE" ./windows_posix_test.exe) || fail=1
 
+echo "== audio bridge between two programs, and the audio chain with a fake sound card"
+$CC -std=gnu11 -O1 -I matron/src/platform/windows linux/tests/bridge_host_tool.c -o "$T/bridge_host.exe" -static -lwinpthread || exit 1
+$CC -std=gnu11 -O1 -I matron/src/platform/windows linux/tests/bridge_guest_tool.c -o "$T/bridge_guest.exe" -static -lwinpthread || exit 1
+BN="vd-wine-$$"
+(cd "$T" || exit 1
+ timeout 60 "$WINE" ./bridge_guest.exe "$BN" > bridge_guest.out 2>&1 &
+ timeout 60 "$WINE" ./bridge_host.exe "$BN" 8 > bridge_host.out 2>&1; wait)
+cat "$T/bridge_host.out" "$T/bridge_guest.out"
+if grep -q 'mean 0.200 peak 0.50' "$T/bridge_host.out" && grep -Eq 'freq (43[0-9]|44[0-9])\.' "$T/bridge_host.out" && grep -Eq 'underruns [0-2] drops 0' "$T/bridge_host.out" && grep -q 'the host closed the bridge' "$T/bridge_guest.out"; then
+    echo "bridge (two Windows processes, named memory and event): ok"
+else
+    echo "FAIL bridge between two processes"; fail=1
+fi
+$CC -std=gnu11 -O1 "${INC[@]}" -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/jack_null/jack_null.c -static -lwinmm -o "$T/audio_chain_test.exe" || exit 1
+for sc in device small noguest busy notfound badrate; do
+    (cd "$T" && timeout 90 "$WINE" ./audio_chain_test.exe "$sc" 2> /dev/null | grep -E '^FAIL|passed') || fail=1
+done
+
 echo "== launcher"
 $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static || exit 1; }
 mkdir -p "$T/app/lua/core" "$T/app/supercollider" "$T/app/update"
@@ -40,7 +58,7 @@ cat > "$T/stub.c" <<'STUB'
 #include <string.h>
 #include <windows.h>
 int main(int argc, char **argv) {
-    printf("stub %s\nHOME=%s\nNORNS_PLATFORM=%s\nVERDANDI_NULL_AUDIO=%s\nSDL_VIDEODRIVER=%s\n", argv[0], getenv("HOME"), getenv("NORNS_PLATFORM"), getenv("VERDANDI_NULL_AUDIO"), getenv("SDL_VIDEODRIVER"));
+    printf("stub %s\nHOME=%s\nNORNS_PLATFORM=%s\nVERDANDI_NULL_AUDIO=%s\nSDL_VIDEODRIVER=%s\nBRIDGE=%s\nAUDIO=%s\n", argv[0], getenv("HOME"), getenv("NORNS_PLATFORM"), getenv("VERDANDI_NULL_AUDIO"), getenv("SDL_VIDEODRIVER"), getenv("VERDANDI_BRIDGE"), getenv("VERDANDI_AUDIO"));
     for (int i = 1; i < argc; i++) printf("arg %s\n", argv[i]);
     for (int i = 0; i < 500; i++) printf("same line every time\n");
     char cwd[500]; GetCurrentDirectoryA(500, cwd); printf("cwd %s\n", cwd); fflush(stdout);
@@ -63,6 +81,31 @@ ck "first start: the seeded scripts were copied to dust/code" "[ -f '$T/vhome/du
 echo "-- edited by the user" > "$T/vhome/dust/code/awake/awake.lua"
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=2 --home="Z:$T/vhome" > "$T/launcher1b.out" 2>&1)
 ck "a second start leaves the scripts alone" "grep -q 'edited by the user' '$T/vhome/dust/code/awake/awake.lua'"
+ck "norns.exe and sclang got the name of the audio bridge" "grep -q '^BRIDGE=VerdandiBridge-[0-9]*-1' '$L/norns.log' && grep -q '^BRIDGE=VerdandiBridge-[0-9]*-1' '$L/sclang.log'"
+# M2: exit code 42 from norns.exe (SYSTEM > RESTART, a new audio device) starts everything again, with a new bridge name; --null-audio tells norns not to open a sound card
+cat > "$T/stub42.c" <<'STUB'
+#include <stdio.h>
+#include <stdlib.h>
+#include <windows.h>
+int main(int argc, char **argv) {
+    (void)argc;
+    printf("stub %s BRIDGE=%s AUDIO=%s\n", argv[0], getenv("VERDANDI_BRIDGE"), getenv("VERDANDI_AUDIO") ? getenv("VERDANDI_AUDIO") : "-"); fflush(stdout);
+    char marker[600]; snprintf(marker, sizeof marker, "%s/restarted.txt", getenv("HOME"));
+    FILE *f = fopen(marker, "r");
+    if (!f) { f = fopen(marker, "w"); if (f) { fputs("x", f); fclose(f); } return 42; }
+    fclose(f);
+    Sleep(1500);
+    return 0;
+}
+STUB
+cp "$T/app/norns.exe" "$T/app/norns.real.exe" 2> /dev/null
+$CC "$T/stub42.c" -o "$T/app/norns.exe" -static || exit 1
+rm -rf "$T/vhome3"; mkdir -p "$T/vhome3"
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --null-audio --home="Z:$T/vhome3" > "$T/launcher3.out" 2>&1)
+ck "norns.exe exit code 42 starts another round" "grep -q 'asked for a restart' '$T/vhome3/logs/launcher.log' && [ \$(grep -c 'norns.exe started' '$T/vhome3/logs/launcher.log') -eq 2 ]"
+ck "the second round has another bridge name, and --null-audio reaches norns.exe" "grep -q 'BRIDGE=VerdandiBridge-[0-9]*-2' '$T/vhome3/logs/norns.log' && grep -q 'AUDIO=null' '$T/vhome3/logs/norns.log'"
+ck "the launcher ends with code 0 after the second round" "grep -q 'norns.exe ended with exit code 0x00000000' '$T/vhome3/logs/launcher.log'"
+rm -f "$T/app/norns.exe"
 # a missing piece is said in plain words (headless: in the log), and nothing is started
 rm -f "$T/app/norns.exe"
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --home="Z:$T/vhome2" > "$T/launcher2.out" 2>&1); rc=$?

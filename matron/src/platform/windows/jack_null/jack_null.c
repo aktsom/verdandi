@@ -51,6 +51,7 @@ struct _jack_client {
     void *portreg_arg;
     JackClientRegistrationCallback clientreg_cb;
     void *clientreg_arg;
+    int loop_breaker; /* its output is read one block late: the connections it feeds do not count for the processing order (a feedback loop) */
 };
 
 struct conn {
@@ -76,6 +77,9 @@ static struct {
     _Atomic double cpu;     /* percent of the block period spent in the callbacks, smoothed */
     atomic_uint ticks;
     atomic_uint xruns;
+    int external;          /* M2: a sound card callback runs the blocks (verdandi_jack_null_process), there is no clock thread */
+    unsigned pre_rate;     /* verdandi_jack_null_configure, used by init_locked instead of the environment */
+    unsigned pre_frames;
 } G = {.lock = PTHREAD_MUTEX_INITIALIZER};
 
 static int64_t now_ns(void) {
@@ -174,8 +178,8 @@ static void init_locked(void) {
         return;
     }
     G.inited = 1;
-    G.rate = env_uint("VERDANDI_JACK_NULL_RATE", 48000, 8000, 192000);
-    G.frames = env_uint("VERDANDI_JACK_NULL_FRAMES", 128, 16, MAX_FRAMES);
+    G.rate = G.pre_rate ? G.pre_rate : env_uint("VERDANDI_JACK_NULL_RATE", 48000, 8000, 192000);
+    G.frames = G.pre_frames ? G.pre_frames : env_uint("VERDANDI_JACK_NULL_FRAMES", 128, 16, MAX_FRAMES);
     G.start_ns = now_ns();
     /* the sound card: two physical capture ports (they carry silence) and two physical playback ports (what is written to them is dropped) */
     struct _jack_client *sys = new_client_locked("system");
@@ -194,7 +198,7 @@ static void compute_order_locked(void) {
         int changed = 0;
         for (int k = 0; k < G.nconns; k++) {
             struct _jack_client *s = G.conns[k].src->owner, *d = G.conns[k].dst->owner;
-            if (s != d && d->depth < s->depth + 1 && s->depth < G.nclients) {
+            if (s != d && !s->loop_breaker && d->depth < s->depth + 1 && s->depth < G.nclients) {
                 d->depth = s->depth + 1;
                 changed = 1;
             }
@@ -354,7 +358,7 @@ int jack_activate(jack_client_t *client) {
     }
     pthread_mutex_lock(&G.lock);
     client->active = 1;
-    int start = !G.thread_running;
+    int start = !G.thread_running && !G.external;
     if (start) {
         G.thread_running = 1;
         atomic_store(&G.stop, 0);
@@ -578,6 +582,75 @@ jack_nframes_t jack_frame_time(const jack_client_t *client) {
 jack_nframes_t jack_last_frame_time(const jack_client_t *client) {
     (void)client;
     return atomic_load(&G.last_frame);
+}
+
+/* ---- M2: a sound card runs the blocks ----
+ * the Windows build opens the sound card (platform/windows/audio/audio_device.c) and calls verdandi_jack_null_process from its callback instead of the timer thread
+ * of the null backend: capture ports get what the card delivers (silence while there is no input), the blocks run, what is connected to the playback ports goes back. */
+void verdandi_jack_null_configure(unsigned rate, unsigned frames) {
+    pthread_mutex_lock(&G.lock);
+    if (!G.inited) {
+        G.pre_rate = rate;
+        G.pre_frames = frames > MAX_FRAMES ? MAX_FRAMES : frames;
+    }
+    pthread_mutex_unlock(&G.lock);
+}
+
+void verdandi_jack_null_external_clock(int on) {
+    pthread_mutex_lock(&G.lock);
+    G.external = on ? 1 : 0;
+    pthread_mutex_unlock(&G.lock);
+}
+
+void verdandi_jack_null_loop_breaker(jack_client_t *client) {
+    pthread_mutex_lock(&G.lock);
+    if (client) {
+        client->loop_breaker = 1;
+    }
+    pthread_mutex_unlock(&G.lock);
+}
+
+int verdandi_jack_null_process(unsigned nframes, const float *cap_l, const float *cap_r, float *play_l, float *play_r) {
+    int64_t begin = now_ns();
+    pthread_mutex_lock(&G.lock);
+    init_locked();
+    if (nframes != G.frames) {
+        pthread_mutex_unlock(&G.lock);
+        return -1;
+    }
+    struct _jack_port *c1 = find_port_locked("system:capture_1"), *c2 = find_port_locked("system:capture_2");
+    if (c1) {
+        if (cap_l) memcpy(c1->buf, cap_l, nframes * sizeof(float)); else memset(c1->buf, 0, nframes * sizeof(float));
+    }
+    if (c2) {
+        if (cap_r) memcpy(c2->buf, cap_r, nframes * sizeof(float)); else memset(c2->buf, 0, nframes * sizeof(float));
+    }
+    compute_order_locked();
+    atomic_store(&G.last_frame, (unsigned)((uint64_t)(begin - G.start_ns) * G.rate / 1000000000ULL));
+    run_block_locked();
+    for (int i = 0; i < 2; i++) {
+        float *out = i == 0 ? play_l : play_r;
+        struct _jack_port *p = find_port_locked(i == 0 ? "system:playback_1" : "system:playback_2");
+        if (!out) {
+            continue;
+        }
+        memset(out, 0, nframes * sizeof(float));
+        for (int k = 0; p && k < G.nconns; k++) {
+            if (G.conns[k].dst == p) {
+                const float *src = G.conns[k].src->buf;
+                for (unsigned j = 0; j < nframes; j++) {
+                    out[j] += src[j];
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&G.lock);
+    double period = (double)nframes * 1e9 / (double)G.rate;
+    double used = 100.0 * (double)(now_ns() - begin) / period;
+    double c = atomic_load(&G.cpu);
+    atomic_store(&G.cpu, c + 0.1 * (used - c));
+    atomic_fetch_add(&G.ticks, 1);
+    return 0;
 }
 
 /* test and diagnostics: how many blocks ran, how many were missed */

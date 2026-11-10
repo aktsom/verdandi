@@ -299,5 +299,6 @@ Nothing is shipped in a product yet; these are the build inputs and what the M1 
 | `matron/src/platform/windows/include/sys/queue.h` | BSD list macros that MinGW lacks (copied from the C library headers of a Linux system) | BSD-3-Clause |
 | `matron/src/platform/windows/jack_null/` | a JACK-**compatible** interface written for this project (names and values of the JACK API, no JACK code) | GPL-3.0 (ours) |
 | Wine 9 and mingw-w64 cross compiler (apt) | only to test Windows code on Linux; not shipped | LGPL-2.1+ / GPL |
+| PortAudio 19.7 (MSYS2 package `mingw-w64-ucrt-x86_64-portaudio`; WASAPI host API) | the sound card of norns.exe (M2); `portaudio.dll` is shipped | MIT-style PortAudio licence (GPL-compatible) |
 | ASIO SDK | **not used in M1** (decision in `docs/port/windows-plan.md` section 9) | Steinberg dual licence |
 | awake (script by tehn, fetched by CI into `dust-seed/code`, test content only) | seeded example script | licence stated in its repository; **owner to check** before any public release |

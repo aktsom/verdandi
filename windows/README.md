@@ -72,6 +72,16 @@ M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It op
 ## What you should see
 The norns window within about 20 seconds; the home screen; the menus (F10 or the right mouse button). The checklist of what to try is in `docs/port/HARDWARE-CHECKLIST.md` ("Windows M1").
 
+## Windows M2: sound (what to click, what you should hear, what to send back)
+The same workflow (**windows-m1** in Actions; it builds M2 now) and the same zip (`Verdandi-windows-M1.zip` in artifact **m1-zip**: the name did not change, the program inside is version 0.2.0). Unpack it into a new folder as before.
+1. Start `Verdandi.exe`. Before you start, **close programs that hold the sound device in exclusive mode** (Ableton with its RME driver in ASIO is fine; WASAPI shared mode works next to it).
+2. Open the menu (F10 or right mouse button) > SYSTEM > **AUDIO**. OUTPUT lists your Windows playback devices (E3 changes it); the bottom line shows `48000 Hz <ms> <device>`. INPUT says "none yet" (no input in M2). Pick your speakers or headphones, K3 on **APPLY**: Verdandi restarts itself (the window closes and opens again, 20 to 30 seconds).
+3. Load **awake** (SELECT, K3). **You should hear the notes** through the device you chose. Turn the volume of the MIX page (and Windows) up if not. K2/K3/E1-E3 change the sound as on a norns.
+4. Try BUFFER (64 to 1024) on the AUDIO page: smaller = lower delay but more risk of crackles; 512 is the default. Say which is the smallest that stays clean.
+5. **Break it on purpose:** (a) play audio in another program in **exclusive mode** (or unplug the headset you had chosen) and start Verdandi: it must not hang; the window shows a note (`NO SOUND. ... device busy ...`) and the AUDIO page says "no sound: device busy/missing, null audio"; scripts still run, silently. (b) Choose the device again after it is free and APPLY.
+6. **Send back:** `%USERPROFILE%\Verdandi\logs\norns.log` and `sclang.log` (the lines starting `audio:` and `audio bridge:` say the device name, the rate, the block and the latency Windows reports), the file `audio.conf` from `%USERPROFILE%\Verdandi`, the **name of the device** as Windows shows it (Settings > Sound), whether the sound crackled at 512 and at 256, how long the delay between a key and the sound feels (roughly: not noticeable / noticeable / annoying), and the `M1-REPORT.md` of the run.
+Nothing is changed in Windows' sound settings by Verdandi. No ASIO in M2 (M3).
+
 ## Scripts and maiden in M1
 - The zip carries a small set of scripts (awake) in `dust-seed\code`; on the first start they are copied to `%USERPROFILE%\Verdandi\dust\code` when that folder is empty (a folder that already has anything is never touched).
 - **Maiden is not in this build yet**; the MAIDEN button says so on the screen. To add scripts, copy a script folder (for example `awake`, from its GitHub page: Code > Download ZIP, unpack so that `awake.lua` is in `dust\code\awake\`) into `%USERPROFILE%\Verdandi\dust\code`, then open SELECT. Scripts that use a shared library (`lib`) bring it in their own folder.

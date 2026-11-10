@@ -86,3 +86,8 @@ matron/src/platform/windows/hid_win.cc
 matron/src/platform/windows/stubs_win.cc
 matron/src/platform/windows/crash_report_win.cc
 matron/src/platform/windows/jack_null/jack_null.c
+# --- Windows M2: the sound card (WASAPI through PortAudio) and the bridge to scsynth
+matron/src/platform/windows/audio/audio_device.c
+matron/src/platform/windows/audio/audio_bridge_host.c
+matron/src/platform/windows/audio/audio_backend_pa.c
+matron/src/platform/windows/audio/audio_win.c

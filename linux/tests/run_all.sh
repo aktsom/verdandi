@@ -153,6 +153,25 @@ run "lua:box settings and looks (hex, box.conf, built-in and own looks, files, n
 run "lua:text entry (6-digit hex limit and hint, clean redraw, every way of closing hands the page back, double enter, long names; device path unchanged)" env NORNS_PLATFORM=1 lua5.3 linux/tests/textentry_test.lua
 run "lua:THEME and SCREEN pages under random keys, the colour picker and the clipboard (every state change is drawn, handlers stay the page's own, selection in range, modal flags, ESC always leaves; handler errors logged)" env NORNS_PLATFORM=linux NORNS_HARDWARE_KEYS=1 lua5.3 linux/tests/menu_stress_test.lua 120 500
 run "windows:lua side without the Linux tools ls, find, grep, cp, rm, nmcli (script scan, empty SELECT list, pset and tape listings, network page)" lua5.3 linux/tests/windows_lua_test.lua
+audio_chain_ok() {
+    gcc -std=gnu11 -O1 -I matron/src/platform/windows/jack_null/include -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c \
+        matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
+    local sc
+    for sc in config device small noguest busy notfound badrate null; do
+        "$T/audio_chain_test" "$sc" 2> /dev/null || return 1
+    done
+    return 0
+}
+run "windows:audio chain with a fake sound card (card -> crone stand-in -> bridge -> scsynth stand-in -> card; device busy, missing or at another rate falls back with a note; audio.conf values; device list)" audio_chain_ok
+audio_pa_ok() {
+    pkg-config --exists portaudio-2.0 || { echo "SKIP: no libportaudio-dev"; return 0; }
+    gcc -std=gnu11 -I matron/src/platform/windows linux/tests/audio_pa_test.c matron/src/platform/windows/audio/audio_device.c matron/src/platform/windows/audio/audio_backend_pa.c \
+        -lpthread -lm $(pkg-config --libs portaudio-2.0) -o "$T/audio_pa_test" || return 1
+    "$T/audio_pa_test" 2> /dev/null
+}
+run "windows:the PortAudio backend on Linux (list, an unknown device is refused as not found, start ends in a card or null audio with a note, no hang)" audio_pa_ok
+run "windows:SYSTEM > AUDIO with the program's own device list (output= rate= period= in audio.conf, restart, input read only, busy/missing device said, bottom line)" lua5.3 linux/tests/audio_page_windows_test.lua
+run "windows:scsynth with the Verdandi bridge driver against the bridge host (needs a patched scsynth: VERDANDI_SCSYNTH)" bash linux/tests/scsynth_bridge_test.sh
 hid_virtual_ok() {
     g++ -std=c++14 -I matron/src -I matron/src/device $(pkg-config --cflags libevdev glib-2.0 lua5.3 cairo) linux/tests/hid_virtual_test.cc matron/src/platform/linux/hid_virtual.cc -o "$T/hid_virtual_test" || return 1
     "$T/hid_virtual_test"

@@ -22,6 +22,21 @@ function init()
     screen.export_screenshot("verdandi_smoke")
     print("VERDANDI_SMOKE screenshot " .. norns.state.data .. "verdandi_smoke.png")
     print("VERDANDI_SMOKE_OK frames=" .. frames .. " clock=" .. tostring(clock.get_beats and clock.get_beats() or "n/a"))
+    -- M2: the audio chain. scsynth starts a while after norns (sclang compiles first): wait for it to attach to the bridge, let some blocks flow, then say what the audio runs on and how the bridge did
+    if _norns.audio_info then
+      local a = _norns.audio_info()
+      for _ = 1, 70 do
+        if a.scsynth then break end
+        clock.sleep(1)
+        a = _norns.audio_info()
+      end
+      local a0 = a
+      clock.sleep(3)
+      a = _norns.audio_info()
+      print(string.format("VERDANDI_SMOKE_AUDIO mode=%s device=[%s] rate=%d frames=%d latency_ms=%.1f scsynth=%s blocks_to_scsynth=%d blocks_from_scsynth=%d underruns=%d drops=%d",
+        a.mode, a.device, a.rate, a.frames, a.latency_ms, tostring(a.scsynth), a.to_scsynth - a0.to_scsynth, a.from_scsynth - a0.from_scsynth, a.underruns, a.drops))
+      print("VERDANDI_SMOKE_AUDIO_NOTE [" .. a.note .. "]")
+    end
   end)
 end
 

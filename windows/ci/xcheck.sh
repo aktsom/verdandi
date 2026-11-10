@@ -21,6 +21,7 @@ for cfg in /usr/include/x86_64-linux-gnu/SDL2/_real_SDL_config.h /usr/include/x8
 ln -sfn /usr/include/lua5.3/lua.h "$SHADOW/lua.h"; ln -sfn /usr/include/lua5.3/lualib.h "$SHADOW/lualib.h"; ln -sfn /usr/include/lua5.3/lauxlib.h "$SHADOW/lauxlib.h"
 ln -sfn /usr/include/lua5.3/luaconf.h "$SHADOW/luaconf.h"; ln -sfn /usr/include/lua5.3/lua.hpp "$SHADOW/lua.hpp"
 ln -sfn /usr/include/glib-2.0/glib.h "$SHADOW/glib.h" 2> /dev/null || true
+ln -sfn /usr/include/portaudio.h "$SHADOW/portaudio.h" 2> /dev/null || true # (M2: the header of PortAudio is the same on every system)
 MON="${LIBMONOME_INC:-build/package/cache/libmonome/public}"
 INC="-include $REPO/matron/src/platform/windows/compat_win.h -I matron/src -iquote matron/src/hardware -iquote matron/src/device -I matron/src/platform/windows -I matron/src/platform/windows/include -I matron/src/platform/windows/jack_null/include -I matron/src/platform/macos/include -I norns -I crone -I crone/src -I crone/faust \
  -I crone/softcut/softcut-lib/include -I third-party/concurrentqueue -I third-party/readerwriterqueue -I third-party/lua-cjson -I third-party/link/extensions/abl_link/include -I $MON \
@@ -46,7 +47,7 @@ if [ "${XC_LINK:-0}" = 1 ] && [ "$bad" -eq 0 ]; then
     # every symbol the objects need that neither they nor the compiler's runtime define, minus the third-party libraries that the real link adds
     $CXX build/xlink/*.o -o /dev/null -Wl,--unresolved-symbols=report-all -lws2_32 -lpthread -lwinmm -lole32 -lshell32 -ldbghelp -lpsapi 2>&1 \
         | grep -o "undefined reference to .*" | sed -E "s/undefined reference to .(.*).$/\1/" | sort -u \
-        | grep -v -E "^(lua|luaL|luaopen|SDL_|cairo_|lo_|nng_|sf_|monome_|FT_|abl_link|__imp_|json|cJSON)" > build/xlink/unresolved.txt || true
+        | grep -v -E "^(lua|luaL|luaopen|SDL_|cairo_|lo_|nng_|sf_|monome_|FT_|Pa_|abl_link|__imp_|json|cJSON)" > build/xlink/unresolved.txt || true
     echo "unresolved project symbols: $(wc -l < build/xlink/unresolved.txt) (build/xlink/unresolved.txt)"
 fi
 [ "$bad" -eq 0 ]

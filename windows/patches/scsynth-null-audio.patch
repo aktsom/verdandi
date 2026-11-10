@@ -9,16 +9,18 @@
  
  #define PRINT_PORTAUDIO_ERROR(function, errorcode)                                                                     \
      scprintf("SC_PortAudioDriver: PortAudio failed at %s with error: '%s'\n", #function, Pa_GetErrorText(errorcode))
-@@ -438,3 +438,136 @@
+@@ -438,3 +438,213 @@
  
      return paerror == paNoError;
  }
 +
 +// ---------------------------------------------------------------------
-+// Verdandi: a null audio driver. No audio device is opened. When VERDANDI_NULL_AUDIO=1 is set in the environment,
-+// a thread of this process calls the same engine step as the PortAudio callback once per block, with silent input
-+// and discarded output, paced by the system clock (the same delay-locked loop that the PortAudio driver uses for its
-+// OSC time). For a machine without an audio device: a CI runner, a headless test, norns on a PC without sound.
++// Verdandi: the audio driver of the Windows build. scsynth opens NO audio device. Two modes of one driver:
++//  - bridge (VERDANDI_BRIDGE=<name> in the environment): norns.exe owns the sound card; each time its card callback has a block it hands scsynth the signal crone sends to the
++//    engines and takes the block scsynth made before (verdandi_bridge.h, a named shared memory and a named event). This thread computes one block per hand-over, so scsynth runs on the
++//    card's clock without a device of its own. If norns.exe does not make the bridge within VERDANDI_BRIDGE_WAIT seconds (default 20) the driver says so and runs as the null driver.
++//  - null (VERDANDI_NULL_AUDIO=1, or the bridge missing): a thread of this process calls the same engine step once per block with silent input and discarded output, paced by the system clock.
++// Both call the same engine step as the PortAudio callback. The PortAudio driver stays for other uses of this scsynth, but is never used by Verdandi (no device is opened, nothing can hang on one).
 +#include <atomic>
 +#include <chrono>
 +#include <thread>
@@ -28,20 +30,45 @@
 +#    include <mmsystem.h> // timeBeginPeriod
 +#    pragma comment(lib, "winmm.lib")
 +#endif
++#include "verdandi_bridge.h"
 +
 +class SC_NullAudioDriver : public SC_AudioDriver {
 +    std::thread mClock;
 +    std::atomic<bool> mClockRun;
 +    SC_TimeDLL mDLL;
 +    int mInCh, mOutCh;
++    vb_t mBridge;
++    bool mUseBridge;
++    std::vector<float> mInL, mInR, mOutL, mOutR;
 +
 +protected:
 +    virtual bool DriverSetup(int* outNumSamplesPerCallback, double* outSampleRate) {
-+        *outNumSamplesPerCallback = mWorld->mBufLength;
-+        *outSampleRate = mPreferredSampleRate ? (double)mPreferredSampleRate : 48000.;
 +        mInCh = (int)mWorld->mNumInputs;
 +        mOutCh = (int)mWorld->mNumOutputs;
-+        fprintf(stdout, "\nSC_NullAudioDriver: no audio device is used (VERDANDI_NULL_AUDIO=1)\n");
++        mUseBridge = false;
++        const char* bridge = getenv("VERDANDI_BRIDGE");
++        *outNumSamplesPerCallback = mWorld->mBufLength;
++        *outSampleRate = mPreferredSampleRate ? (double)mPreferredSampleRate : 48000.;
++        if (bridge && bridge[0]) {
++            const char* w = getenv("VERDANDI_BRIDGE_WAIT");
++            unsigned waitMs = (w && atoi(w) > 0) ? (unsigned)atoi(w) * 1000u : 20000u;
++            if (vb_guest_open(&mBridge, bridge, waitMs) == 0 && mBridge.sh->frames % mWorld->mBufLength == 0) {
++                mUseBridge = true;
++                *outNumSamplesPerCallback = (int)mBridge.sh->frames;
++                *outSampleRate = (double)mBridge.sh->rate;
++                mInL.assign(mBridge.sh->frames, 0.f);
++                mInR.assign(mBridge.sh->frames, 0.f);
++                mOutL.assign(mBridge.sh->frames, 0.f);
++                mOutR.assign(mBridge.sh->frames, 0.f);
++                fprintf(stdout, "\nSC_BridgeAudioDriver: audio from norns.exe through the bridge '%s'\n", bridge);
++                fprintf(stdout, "  Sample rate: %.3f, block size: %d, %d in / %d out channels (2 bridged)\n", *outSampleRate,
++                        *outNumSamplesPerCallback, mInCh, mOutCh);
++                return true;
++            }
++            fprintf(stdout, "\nSC_BridgeAudioDriver: the bridge '%s' was not found (norns.exe is not running or has no audio): falling back to the null driver\n", bridge);
++            vb_close(&mBridge);
++        }
++        fprintf(stdout, "\nSC_NullAudioDriver: no audio device is used%s\n", bridge ? " (no bridge)" : " (VERDANDI_NULL_AUDIO=1)");
 +        fprintf(stdout, "  Sample rate: %.3f, block size: %d, %d in / %d out channels\n", *outSampleRate,
 +                *outNumSamplesPerCallback, mInCh, mOutCh);
 +        return true;
@@ -50,7 +77,11 @@
 +    virtual bool DriverStart() {
 +        mDLL.Reset(mSampleRate, mNumSamplesPerCallback, SC_TIME_DLL_BW, sc_PAOSCTimeSeconds());
 +        mClockRun = true;
-+        mClock = std::thread([this]() { ClockLoop(); });
++        if (mUseBridge) {
++            mClock = std::thread([this]() { BridgeLoop(); });
++        } else {
++            mClock = std::thread([this]() { ClockLoop(); });
++        }
 +        return true;
 +    }
 +
@@ -58,11 +89,16 @@
 +        mClockRun = false;
 +        if (mClock.joinable())
 +            mClock.join();
++        if (mUseBridge) {
++            vb_guest_detach(&mBridge);
++            vb_close(&mBridge);
++            mUseBridge = false;
++        }
 +        return true;
 +    }
 +
-+    // one engine step: the body of the PortAudio callback with silence for input and the output left unused
-+    void Tick() {
++    // one engine step: the body of the PortAudio callback. inL / inR (mNumSamplesPerCallback frames) go to input buses 0 and 1, outputs 0 and 1 go to outL / outR; null pointers: silence, discarded
++    void Tick(const float* inL, const float* inR, float* outL, float* outR) {
 +        sc_SetDenormalFlags();
 +        World* world = mWorld;
 +        try {
@@ -72,6 +108,8 @@
 +
 +            int bufFrames = mWorld->mBufLength;
 +            int numBufs = mNumSamplesPerCallback / bufFrames;
++            float* outBuses = mWorld->mAudioBus;
++            int32* outTouched = mWorld->mAudioBusTouched;
 +            float* inBuses = mWorld->mAudioBus + mWorld->mNumOutputs * bufFrames;
 +            int32* inTouched = mWorld->mAudioBusTouched + mWorld->mNumOutputs;
 +
@@ -85,7 +123,11 @@
 +                int32 bufCounter = mWorld->mBufCounter;
 +                int32* tch = inTouched;
 +                for (int k = 0; k < mInCh; ++k) {
-+                    memset(inBuses + k * bufFrames, 0, bufFrames * sizeof(float));
++                    const float* src = k == 0 ? inL : (k == 1 ? inR : nullptr);
++                    if (src)
++                        memcpy(inBuses + k * bufFrames, src + i * bufFrames, bufFrames * sizeof(float));
++                    else
++                        memset(inBuses + k * bufFrames, 0, bufFrames * sizeof(float));
 +                    *tch++ = bufCounter;
 +                }
 +                int64 schedTime;
@@ -105,6 +147,15 @@
 +                world->mSampleOffset = 0;
 +                world->mSubsampleOffset = 0.0f;
 +                World_Run(world);
++                for (int k = 0; k < 2 && k < mOutCh; ++k) {
++                    float* dst = k == 0 ? outL : outR;
++                    if (!dst)
++                        continue;
++                    if (outTouched[k] == bufCounter)
++                        memcpy(dst + i * bufFrames, outBuses + k * bufFrames, bufFrames * sizeof(float));
++                    else
++                        memset(dst + i * bufFrames, 0, bufFrames * sizeof(float));
++                }
 +                oscTime = mOSCbuftime = nextTime;
 +            }
 +        } catch (std::exception& exc) {
@@ -112,6 +163,29 @@
 +        } catch (...) { scprintf("SC_NullAudioDriver: unknown exception in real time\n"); }
 +        mAvgCPU = 0.;
 +        mAudioSync.Signal();
++    }
++
++    // bridge mode: wait for norns.exe's block, compute, hand the result back
++    void BridgeLoop() {
++#ifdef _WIN32
++        // (the wait is on an event: no timer resolution needed; a higher priority keeps the engine ahead of other programs)
++        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
++#endif
++        vb_guest_attach(&mBridge);
++        unsigned long long blocks = 0;
++        while (mClockRun) {
++            int r = vb_guest_wait(&mBridge, 20, mInL.data(), mInR.data());
++            if (r < 0) {
++                fprintf(stdout, "SC_BridgeAudioDriver: norns.exe has closed the bridge after %llu blocks\n", blocks);
++                break;
++            }
++            if (r == 0)
++                continue;
++            Tick(mInL.data(), mInR.data(), mOutL.data(), mOutR.data());
++            vb_guest_push(&mBridge, mOutL.data(), mOutR.data());
++            if (++blocks == 1)
++                fprintf(stdout, "SC_BridgeAudioDriver: the first block was computed\n");
++        }
 +    }
 +
 +    void ClockLoop() {
@@ -128,7 +202,7 @@
 +                start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(n * period)));
 +            if (!mClockRun)
 +                break;
-+            Tick();
++            Tick(nullptr, nullptr, nullptr, nullptr);
 +        }
 +#ifdef _WIN32
 +        timeEndPeriod(1);
@@ -136,13 +210,16 @@
 +    }
 +
 +public:
-+    SC_NullAudioDriver(struct World* inWorld): SC_AudioDriver(inWorld), mClockRun(false), mInCh(0), mOutCh(0) {}
++    SC_NullAudioDriver(struct World* inWorld): SC_AudioDriver(inWorld), mClockRun(false), mInCh(0), mOutCh(0), mUseBridge(false) {
++        memset(&mBridge, 0, sizeof mBridge);
++    }
 +    virtual ~SC_NullAudioDriver() { DriverStop(); }
 +};
 +
 +SC_AudioDriver* SC_NewAudioDriver(struct World* inWorld) {
 +    const char* nul = getenv("VERDANDI_NULL_AUDIO");
-+    if (nul && nul[0] == '1')
++    const char* bridge = getenv("VERDANDI_BRIDGE");
++    if ((nul && nul[0] == '1') || (bridge && bridge[0]))
 +        return new SC_NullAudioDriver(inWorld);
 +    return new SC_PortAudioDriver(inWorld);
 +}

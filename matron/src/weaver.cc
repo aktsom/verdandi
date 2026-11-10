@@ -322,6 +322,8 @@ static int _system_action(lua_State *l);
 static int _system_glob(lua_State *l);
 #ifdef NORNS_WINDOWS
 static int _listdir(lua_State *l);
+static int _audio_devices(lua_State *l);
+static int _audio_info(lua_State *l);
 #endif
 /// run command in child process, blocking (replaces `os.execute`)
 static int _execute(lua_State *l);
@@ -563,6 +565,8 @@ void w_init(void) {
     lua_register_norns("system_glob", &_system_glob);
 #ifdef NORNS_WINDOWS
     lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
+    lua_register_norns("audio_devices", &_audio_devices); // M2: the output devices for SYSTEM > AUDIO
+    lua_register_norns("audio_info", &_audio_info);       // M2: what the audio is running on
 #endif
     lua_register_norns("execute", &_execute);
 
@@ -3806,6 +3810,58 @@ int _listdir(lua_State *l) {
         lua_pushstring(l, f.c_str());
         lua_rawseti(l, -2, i++);
     }
+    return 1;
+}
+
+#include "platform/windows/audio/audio_win.h"
+
+/***
+ * Windows: the sound card's output devices, one per line: uid, name, inputs (0), outputs, separated by tabs (the format of the macOS audio tool, read by SYSTEM > AUDIO)
+ * @function audio_devices
+ * @treturn string
+ */
+int _audio_devices(lua_State *l) {
+    lua_check_num_args(0);
+    static char text[8192];
+    verdandi_audio_devices_text(text, sizeof text);
+    lua_pushstring(l, text);
+    return 1;
+}
+
+/***
+ * Windows: what the audio runs on: a table {mode = "device" | "null" | "fallback", device, host_api, rate, frames, latency_ms, note, to_scsynth, from_scsynth, underruns, drops, scsynth}
+ * @function audio_info
+ * @treturn table
+ */
+int _audio_info(lua_State *l) {
+    lua_check_num_args(0);
+    verdandi_audio_info_t a;
+    verdandi_audio_info(&a);
+    lua_newtable(l);
+    lua_pushstring(l, a.mode);
+    lua_setfield(l, -2, "mode");
+    lua_pushstring(l, a.device);
+    lua_setfield(l, -2, "device");
+    lua_pushstring(l, a.host_api);
+    lua_setfield(l, -2, "host_api");
+    lua_pushinteger(l, a.rate);
+    lua_setfield(l, -2, "rate");
+    lua_pushinteger(l, a.frames);
+    lua_setfield(l, -2, "frames");
+    lua_pushnumber(l, a.latency_ms);
+    lua_setfield(l, -2, "latency_ms");
+    lua_pushstring(l, a.note);
+    lua_setfield(l, -2, "note");
+    lua_pushinteger(l, (lua_Integer)a.to_sc);
+    lua_setfield(l, -2, "to_scsynth");
+    lua_pushinteger(l, (lua_Integer)a.from_sc);
+    lua_setfield(l, -2, "from_scsynth");
+    lua_pushinteger(l, (lua_Integer)a.underruns);
+    lua_setfield(l, -2, "underruns");
+    lua_pushinteger(l, (lua_Integer)a.drops);
+    lua_setfield(l, -2, "drops");
+    lua_pushboolean(l, a.scsynth_attached);
+    lua_setfield(l, -2, "scsynth");
     return 1;
 }
 #endif

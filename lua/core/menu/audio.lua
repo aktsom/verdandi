@@ -24,9 +24,13 @@ if MODE == "jack" then
   ROWS = {"INPUT", "OUTPUT", "RATE", "BUFFER"}
 end
 local SYSTEM_RATE = tonumber(os.getenv("NORNS_AUDIO_RATE") or "") or 48000
+-- Windows build (docs/port/windows-plan.md, M2): the output devices come from the program itself (WASAPI through PortAudio), the input is not used yet, the default block is 512
+local WINDOWS = _norns.audio_devices ~= nil
+local DEFAULT_PERIOD = WINDOWS and 512 or 256
 
 -- read-only rows: the system (PipeWire) or a server we do not own decides
 local function readonly(row)
+  if WINDOWS and row == 1 then return true end -- INPUT: no input from the sound card yet
   return MODE == "jack" or (MODE == "pipewire" and row <= 3)
 end
 
@@ -47,7 +51,7 @@ local m = {
 }
 
 local function read_conf(path)
-  local c = {input = "", output = "", rate = 48000, period = 256, extra = {}}
+  local c = {input = "", output = "", rate = 48000, period = DEFAULT_PERIOD, extra = {}}
   local f = io.open(path)
   if f then
     for line in f:lines() do
@@ -62,11 +66,11 @@ local function read_conf(path)
 end
 
 local function devices()
-  m.inputs = {{uid = "", name = "default"}}
+  m.inputs = {{uid = "", name = WINDOWS and "none yet" or "default"}}
   m.outputs = {{uid = "", name = "default"}}
   local tool = os.getenv("NORNS_AUDIO_TOOL")
-  if tool == nil then return end
-  local out = util.os_capture('"' .. tool .. '"', true) or ""
+  if tool == nil and not WINDOWS then return end
+  local out = WINDOWS and _norns.audio_devices() or util.os_capture('"' .. tool .. '"', true) or ""
   for line in out:gmatch("[^\n]+") do
     local uid, name, ins, outs = line:match("^([^\t]*)\t([^\t]*)\t(%d+)\t(%d+)")
     if uid and uid ~= "" then
@@ -187,9 +191,23 @@ m.redraw = function()
     end
   end
   local warning = status()
+  local info = WINDOWS and _norns.audio_info() or nil
+  if info and info.note ~= "" and warning == "" then
+    -- the whole sentence is on the window as a toast and in the log; here the line is short
+    if info.mode ~= "fallback" then warning = info.note
+    elseif info.note:find("busy", 1, true) then warning = "no sound: device busy, null audio"
+    elseif info.note:find("not found", 1, true) then warning = "no sound: device missing, null audio"
+    else warning = "no sound: null audio" end
+  end
   screen.level(m.applying and 10 or (warning ~= "" and 15 or 2))
   screen.move(0, 62)
-  if warning ~= "" and not m.applying then
+  if info and not m.applying and warning == "" and not m.failed then
+    if info.mode == "device" then
+      screen.text(fit(string.format("%d Hz %.0f ms %s", info.rate, info.latency_ms, info.device), 128))
+    else
+      screen.text(fit(string.format("null audio (silent) %d Hz", info.rate), 128))
+    end
+  elseif warning ~= "" and not m.applying then
     screen.text(fit(warning, 128))
   elseif m.applying then
     screen.text("restarting audio.")

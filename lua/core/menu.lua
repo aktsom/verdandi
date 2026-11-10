@@ -567,6 +567,18 @@ if _norns.audio_status and _norns.set_warning then
   end)
 end
 
+-- Windows: when the sound card could not be opened (busy, gone) norns runs on null audio; say so on the window until the next start, in plain words (the page SYSTEM > AUDIO has the details)
+if _norns.audio_info and _norns.set_warning then
+  hook.system_post_startup:register("menu-audio-fallback", function()
+    local a = _norns.audio_info()
+    if a.mode == "fallback" or (a.mode == "device" and a.note ~= "") then
+      print("audio: " .. a.note)
+      _menu.audio_note = (a.mode == "fallback" and "NO SOUND. " or "AUDIO: ") .. a.note:gsub("^no sound: ", "")
+      _menu.show_note()
+    end
+  end)
+end
+
 -- the mouse on the oled (x 0-127, y 0-63; kind "down", "drag", "up", "wheel" with its
 -- steps), for the menu page that takes it (MIX)
 _norns.screen_mouse = function(x, y, kind, value)
