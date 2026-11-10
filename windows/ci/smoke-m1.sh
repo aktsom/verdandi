@@ -36,11 +36,13 @@ unpack() {
     [ -f "$APP/BUILD.txt" ] && head -n 1 "$APP/BUILD.txt"
 }
 
-seed() {
-    mkdir -p "$HOMEDIR/dust/code/verdandi_smoke" "$HOMEDIR/dust/data/verdandi_smoke"
-    cp "$APP/smoke/verdandi_smoke.lua" "$HOMEDIR/dust/code/verdandi_smoke/verdandi_smoke.lua"
+seed() { seed_home "$HOMEDIR"; }
+seed_home() { # a home folder in which norns resumes the smoke script
+    local H="$1"
+    mkdir -p "$H/dust/code/verdandi_smoke" "$H/dust/data/verdandi_smoke"
+    cp "$APP/smoke/verdandi_smoke.lua" "$H/dust/code/verdandi_smoke/verdandi_smoke.lua"
     # norns resumes the last script when it shut down cleanly (lua/core/state.lua): the seeded state says so. the script paths are the virtual /home/we ones
-    cat > "$HOMEDIR/dust/data/system.state" <<'ST'
+    cat > "$H/dust/data/system.state" <<'ST'
 -- norns system state (seeded by the smoke test)
 norns.state.clean_shutdown = true
 norns.state.script = '/home/we/dust/code/verdandi_smoke/verdandi_smoke.lua'
@@ -131,8 +133,8 @@ chk_fallback() {
 IN_HOME="$WORK/user home input"
 run_input() {
     rm -rf "$IN_HOME"
-    mkdir -p "$IN_HOME/dust/code/verdandi_smoke" "$IN_HOME/dust/data/verdandi_smoke"
-    cp -r "$HOMEDIR/dust/code/verdandi_smoke" "$IN_HOME/dust/code/" && cp "$HOMEDIR/dust/data/system.state" "$IN_HOME/dust/data/system.state"
+    # a freshly seeded home (the first version copied system.state from the first run's home: after that run norns had rewritten it, no script was resumed, and the probe never ran)
+    seed_home "$IN_HOME"
     printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nperiod=256\n' > "$IN_HOME/audio.conf"
     if command -v timeout > /dev/null 2>&1; then
         VERDANDI_SMOKE_INPUT=1 timeout -k 10 150 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$IN_HOME")"
@@ -146,7 +148,12 @@ run_input() {
 }
 chk_input() {
     local l="$IN_HOME/logs/norns.log"
-    grep -h -E "^audio: |VERDANDI_SMOKE_INPUT" "$l" 2> /dev/null | head -30
+    # the lines that explain a failure, always in the report: what the program decided, what the probe printed, whether the script ran at all
+    echo "--- relevant lines of norns.log ($l):"
+    grep -a -E "^audio: |VERDANDI_SMOKE|SCRIPT|script clear|norns.state|error|ERROR" "$l" 2> /dev/null | head -60
+    echo "--- system.state of this home:"; head -n 12 "$IN_HOME/dust/data/system.state" 2> /dev/null
+    echo "--- launcher.log (last 15):"; tail -n 15 "$IN_HOME/logs/launcher.log" 2> /dev/null
+    echo "---"
     has "$l" "^audio: output chosen: 'asio:No Such Driver 4711'" "the ASIO choice is in the log" \
         && has "$l" "null audio is used|not found, using the default device" "an ASIO driver that is not there is said in plain words (null audio, or the default device)" \
         && has "$l" "VERDANDI_SMOKE_INPUT start ok=true state=off" "the input is off at the start" \
