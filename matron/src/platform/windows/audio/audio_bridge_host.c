@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 
@@ -35,6 +36,9 @@ static int process(jack_nframes_t n, void *arg) {
     return 0;
 }
 
+/* crone's ports come a while after this client (crone starts with the window, on a loaded or first start up to tens of seconds later). this thread connects them as soon as they exist and then keeps
+ * an eye on them: a connection that is already there (crone or a script made it) counts as done (EEXIST was once taken for a failure: "ports were not found" although engine audio flowed), a connection
+ * that goes missing is made again. it says what it does once, never claims a failure before 120 s and never gives up. */
 static void *connect_thread(void *arg) {
     (void)arg;
     static const char *pairs[4][2] = {
@@ -43,27 +47,35 @@ static void *connect_thread(void *arg) {
         {"SuperCollider:out_1", "crone:input_5"},
         {"SuperCollider:out_2", "crone:input_6"},
     };
-    int done[4] = {0, 0, 0, 0};
-    for (int tries = 0; tries < 600 && !atomic_load(&H.stop); tries++) { /* up to 60 s: crone starts a moment after this client */
+    int told_wait = 0, told_late = 0, connected = 0;
+    time_t t0 = time(NULL);
+    while (!atomic_load(&H.stop)) {
         int all = 1;
         for (int i = 0; i < 4; i++) {
-            if (!done[i]) {
-                if (jack_port_by_name(H.client, pairs[i][0]) && jack_port_by_name(H.client, pairs[i][1]) && jack_connect(H.client, pairs[i][0], pairs[i][1]) == 0) {
-                    done[i] = 1;
-                } else {
-                    all = 0;
-                }
+            int rc = jack_port_by_name(H.client, pairs[i][0]) && jack_port_by_name(H.client, pairs[i][1]) ? jack_connect(H.client, pairs[i][0], pairs[i][1]) : -1;
+            if (rc != 0 && rc != EEXIST) {
+                all = 0;
             }
         }
-        if (all) {
-            fprintf(stderr, "audio bridge: crone is connected to the SuperCollider bridge ports\n");
-            return NULL;
+        long waited = (long)(time(NULL) - t0);
+        if (all && !connected) {
+            connected = 1;
+            fprintf(stderr, "audio bridge: crone is connected to the SuperCollider bridge ports%s\n", waited > 0 ? " (after the wait)" : "");
+            if (waited > 0) {
+                fprintf(stderr, "audio bridge: crone's ports appeared %ld s after the bridge\n", waited);
+            }
+        } else if (!all && connected) {
+            connected = 0; /* made again at the next round, said once more when it works */
+            fprintf(stderr, "audio bridge: a connection to crone was lost, making it again\n");
+        } else if (!all && !told_wait && waited >= 20) {
+            told_wait = 1;
+            fprintf(stderr, "audio bridge: still waiting for crone's ports (%ld s); engine audio starts when they exist\n", waited);
+        } else if (!all && !told_late && waited >= 120) {
+            told_late = 1;
+            fprintf(stderr, "audio bridge: crone's ports have not appeared after %ld s: engine audio will not reach the mixer until they do\n", waited);
         }
-        struct timespec ts = {0, 100000000L};
+        struct timespec ts = {0, all ? 1000000000L : 200000000L};
         nanosleep(&ts, NULL);
-    }
-    if (!atomic_load(&H.stop)) {
-        fprintf(stderr, "audio bridge: crone's ports were not found, engine audio will not reach the mixer\n");
     }
     return NULL;
 }

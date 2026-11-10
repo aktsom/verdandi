@@ -17,6 +17,7 @@
 #include "crone_main.h"
 #ifdef NORNS_WINDOWS
 #include "platform/windows/audio/audio_win.h"
+#include "platform/windows/audio/exit_win.h"
 #endif
 #include "matron_main.h"
 #include "platform/common/desktop_platform.h"
@@ -55,6 +56,9 @@ static void crone_at_exit(void) {
     // condition variable crone::BufDiskWorker::qCv, whose worker thread never leaves it: without
     // this exit() hangs in the static destructors (macOS does not wait)
     fflush(NULL);
+#ifdef NORNS_WINDOWS
+    verdandi_win_exit(0); // (stops the card first; exit_win.h)
+#endif
     _exit(0);
 #endif
 }
@@ -154,7 +158,11 @@ int main(int argc, char **argv) {
 
         sidecar_server_main(sync_pipe[1]);
     } else {
+#ifndef NORNS_WINDOWS
         close(sync_pipe[1]); // Parent closes write end
+#endif
+        // (Windows: the sidecar is a thread of this process and owns the write end. closing it here, before the thread had written its byte, made the read below return at once: the client then dialled a
+        // listener that did not exist yet: "sidecar: establishing connection failed: Connection refused", from time to time)
 
         // block here until the child writes a byte (meaning NNG listener is up)
         char b;

@@ -36,6 +36,10 @@ static int rate_ok(unsigned r) { return r == 44100 || r == 48000 || r == 88200 |
 static int period_ok(unsigned p) { return p >= 64 && p <= 2048 && p % 64 == 0; }
 
 void vaud_config_check(vaud_config *cfg) {
+    /* "default" in every spelling is the Windows default device: no name */
+    if (!strcmp(cfg->output, "default") || !strcmp(cfg->output, "wasapi:default") || !strcmp(cfg->output, "wasapi:")) {
+        cfg->output[0] = 0;
+    }
     if (!rate_ok(cfg->rate)) {
         if (cfg->rate != 0) {
             note_add(cfg->notes, sizeof cfg->notes, "rate %u is not 44100, 48000, 88200 or 96000: using %u. ", cfg->rate, DEFAULT_RATE);
@@ -146,6 +150,8 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
     if (cfg.notes[0]) {
         fprintf(stderr, "audio: %s\n", cfg.notes);
     }
+    fprintf(stderr, "audio: output chosen: %s%s%s, %u Hz, block %u%s\n", cfg.output[0] ? "'" : "", cfg.output[0] ? cfg.output : "the Windows default device", cfg.output[0] ? "'" : "", cfg.rate, cfg.period,
+            cfg.force_null ? " (null audio forced)" : "");
     int use_card = !cfg.force_null && be != NULL;
     char err[256] = "";
     if (use_card) {

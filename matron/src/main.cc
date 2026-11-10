@@ -42,6 +42,9 @@
 
 #include "oracle.h"
 #include "weaver.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/audio/exit_win.h"
+#endif
 
 void print_version(void);
 
@@ -52,6 +55,12 @@ void matron_cleanup(void) {
         return;
     }
     done = true;
+#ifdef NORNS_WINDOWS
+    // Windows: every way out ends here (window close, SLEEP, an exit() somewhere). the orderly shutdown below closes the Lua state, the OSC servers and the devices while the card's callback, the metro,
+    // clock, sidecar and window threads still run: an access violation after "shutting down lua vm". the Lua side has saved its state before it gets here; the process ends at once (exit_win.h)
+    fprintf(stderr, "matron shutdown (fast exit on Windows)\n");
+    verdandi_win_exit(0);
+#endif
 #ifdef NORNS_LINUX_DESKTOP
     dev_list_monome_all_off(800); // the grids' and arcs' LEDs off before the devices are closed (a quit, a window close, a restart)
 #endif

@@ -130,7 +130,7 @@ jobs:
       - name: Assemble the folder and the zip
         run: NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check
-        timeout-minutes: 15
+        timeout-minutes: 45
         run: ZIP="$PWD/m1-stage/Verdandi-windows-M1.zip" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
       - name: What failed
         if: always()

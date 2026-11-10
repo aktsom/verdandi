@@ -34,7 +34,7 @@ assemble() {
     cp "$REPO/windows/pack/README-M1.txt" "$APP/README.txt"
     # sclang runs "jack_connect ..." to wire scsynth into crone (Linux, macOS): there is no JACK server here in M1, so these stand-ins do nothing, quietly
     cp "$REPO"/windows/pack/jack_*.cmd "$APP/"
-    mkdir -p "$APP/smoke" && cp "$REPO/windows/pack/smoke/verdandi_smoke.lua" "$APP/smoke/"
+    mkdir -p "$APP/smoke" && cp "$REPO"/windows/pack/smoke/verdandi_*.lua "$APP/smoke/"
     # a small set of scripts for the first tests, copied into dust\code on the first start when that folder is empty (launcher). fetched here, not kept in the repository; not fatal:
     # without them the zip is the same, SELECT then says "no scripts found". awake: https://github.com/tehn/awake (licence to be checked by the owner); the commit is written next to it
     mkdir -p "$APP/dust-seed/code"

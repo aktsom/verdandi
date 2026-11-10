@@ -516,6 +516,27 @@ static struct client_state cs;
 static pthread_mutex_t run_cmd_lock = PTHREAD_MUTEX_INITIALIZER;
 static union request *quit_request = NULL;
 
+#ifdef NORNS_WINDOWS
+// Windows: the listener is a thread of this process; if the client is first a moment too early ("Connection refused") it tries again for up to 10 s instead of giving the sidecar up for the whole run
+static int sidecar_dial(nng_socket sock, nng_dialer *dialer) {
+    int rv = 0;
+    for (int i = 0; i < 100; i++) {
+        rv = nng_dial(sock, url, dialer, 0);
+        if (rv != NNG_ECONNREFUSED && rv != NNG_ENOENT) {
+            return rv;
+        }
+        if (i == 0) {
+            fprintf(stderr, "sidecar: not listening yet, trying again\n");
+        }
+        Sleep(100);
+    }
+    return rv;
+}
+#define SIDECAR_DIAL(sock, dialer) sidecar_dial((sock), (dialer))
+#else
+#define SIDECAR_DIAL(sock, dialer) nng_dial((sock), url, (dialer), 0)
+#endif
+
 static void client_apply_timeouts() {
     nng_socket_set_ms(cs.sock, NNG_OPT_SENDTIMEO, SIDECAR_CLIENT_SENDTIMEO_MS);
 }
@@ -535,7 +556,7 @@ static void client_resync() {
         return;
     }
     client_apply_timeouts();
-    if (nng_dial(cs.sock, url, &cs.dialer, 0) != 0) {
+    if (SIDECAR_DIAL(cs.sock, &cs.dialer) != 0) {
         fprintf(stderr, "sidecar: resync dial failed\n");
         return;
     }
@@ -716,7 +737,7 @@ int sidecar_client_init() {
 
     client_apply_timeouts();
 
-    if ((rv = nng_dial(cs.sock, url, &cs.dialer, 0)) != 0) {
+    if ((rv = SIDECAR_DIAL(cs.sock, &cs.dialer)) != 0) {
         sidecar_nng_error("sidecar: establishing connection failed", rv);
         return -1;
     }

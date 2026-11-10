@@ -133,7 +133,10 @@ local function apply()
   for _, line in ipairs(m.extra) do f:write(line .. "\n") end
   if MODE ~= "pipewire" then
     f:write("input=" .. m.inputs[m.sel[1]].uid .. "\n")
-    f:write("output=" .. m.outputs[m.sel[2]].uid .. "\n")
+    -- Windows: "default" means no output= line at all (the program then follows the Windows default device, whichever it is at the time); a line with an empty value says the same
+    if not (WINDOWS and m.outputs[m.sel[2]].uid == "") then
+      f:write("output=" .. m.outputs[m.sel[2]].uid .. "\n")
+    end
     f:write("rate=" .. RATES[m.sel[3]] .. "\n")
   end
   f:write("period=" .. PERIODS[m.sel[4]] .. "\n")
@@ -203,7 +206,7 @@ m.redraw = function()
   screen.move(0, 62)
   if info and not m.applying and warning == "" and not m.failed then
     if info.mode == "device" then
-      screen.text(fit(string.format("%d Hz %.0f ms %s", info.rate, info.latency_ms, info.device), 128))
+      screen.text(fit("playing: " .. info.device, 128)) -- (rate and latency are in the log and on the RATE and BUFFER rows)
     else
       screen.text(fit(string.format("null audio (silent) %d Hz", info.rate), 128))
     end

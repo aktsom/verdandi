@@ -42,13 +42,37 @@ if grep -q 'mean 0.200 peak 0.50' "$T/bridge_host.out" && grep -Eq 'freq (43[0-9
 else
     echo "FAIL bridge between two processes"; fail=1
 fi
-$CC -std=gnu11 -O1 "${INC[@]}" -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/jack_null/jack_null.c -static -lwinmm -o "$T/audio_chain_test.exe" || exit 1
-for sc in device small noguest busy notfound badrate; do
+$CC -std=gnu11 -O1 "${INC[@]}" -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/audio/exit_win.c matron/src/platform/windows/jack_null/jack_null.c -static -lwinmm -o "$T/audio_chain_test.exe" || exit 1
+# the way norns.exe ends (SYSTEM > RESTART: exit code 42) with the card callback, crone, the bridge and scsynth running: ten times, always the code and never a crash
+bad=0
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    (cd "$T" && timeout 60 "$WINE" ./audio_chain_test.exe exit > /dev/null 2>&1); rc=$?
+    [ "$rc" -eq 42 ] || { echo "FAIL fast exit $i: exit code $rc"; bad=1; }
+done
+[ "$bad" -eq 0 ] && echo "fast exit (TerminateProcess) ten times: exit code 42, no crash: ok" || fail=1
+for sc in device small noguest busy notfound badrate latecrone preconnected; do
     (cd "$T" && timeout 90 "$WINE" ./audio_chain_test.exe "$sc" 2> /dev/null | grep -E '^FAIL|passed') || fail=1
 done
 
+echo "== crash report (a crash in nested calls; a crash with the stdio locks held by another thread)"
+$CXX -std=gnu++14 -O1 -g0 -fno-omit-frame-pointer "${INC[@]}" linux/tests/crash_report_win_test.cc matron/src/platform/windows/crash_report_win.cc -static -ldbghelp -lpsapi -lwinpthread -o "$T/crash_test.exe" 2> "$T/crash_build.log" || { cat "$T/crash_build.log"; exit 1; }
+for mode in null locked; do
+    rm -rf "$T/crash_$mode"; mkdir -p "$T/crash_$mode"
+    (cd "$T" && timeout 90 "$WINE" ./crash_test.exe "crash_$mode" "$mode" > "crash_$mode.out" 2>&1)
+    rep=$(find "$T/crash_$mode" -name "*.txt" 2> /dev/null | head -1)
+    if [ -n "$rep" ] && grep -q 'access violation' "$rep" && grep -q 'tried to write 0x0000000000000000' "$rep" && grep -q 'vd_test_inner_crash' "$rep" && grep -q 'vd_test_crash_target' "$rep" && grep -q '^modules:' "$rep" && grep -q 'crash_test.exe+0x' "$rep"; then
+        echo "crash report ($mode): complete, with function names: ok"
+        if [ "$mode" = null ]; then
+            sed 's/crash_test\.exe+/norns.exe+/' "$rep" > "$T/crash_as_norns.txt"
+            if python3 windows/ci/resolve_crash.py "$T/crash_test.exe" --report "$T/crash_as_norns.txt" | grep -q 'vd_test_inner_crash'; then echo "resolve_crash.py: the offsets of the report give the function names offline: ok"; else echo "FAIL resolve_crash.py"; fail=1; fi
+        fi
+    else
+        echo "FAIL crash report ($mode)"; fail=1; [ -n "$rep" ] && cat "$rep"; cat "$T/crash_$mode.out" | head -20
+    fi
+done
+
 echo "== launcher"
-$CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static || exit 1; }
+$CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 || exit 1; }
 mkdir -p "$T/app/lua/core" "$T/app/supercollider" "$T/app/update"
 mkdir -p "$T/app/dust-seed/code/awake/lib"; echo "-- seed" > "$T/app/dust-seed/code/awake/awake.lua"; echo "-- lib" > "$T/app/dust-seed/code/awake/lib/x.lua"
 touch "$T/app/lua/core/config.lua"; echo "test" > "$T/app/update/version.txt"
@@ -59,6 +83,7 @@ cat > "$T/stub.c" <<'STUB'
 #include <windows.h>
 int main(int argc, char **argv) {
     printf("stub %s\nHOME=%s\nNORNS_PLATFORM=%s\nVERDANDI_NULL_AUDIO=%s\nSDL_VIDEODRIVER=%s\nBRIDGE=%s\nAUDIO=%s\n", argv[0], getenv("HOME"), getenv("NORNS_PLATFORM"), getenv("VERDANDI_NULL_AUDIO"), getenv("SDL_VIDEODRIVER"), getenv("VERDANDI_BRIDGE"), getenv("VERDANDI_AUDIO"));
+    { const char *bn = getenv("VERDANDI_BRIDGE"); if (bn) { char nm[200]; snprintf(nm, sizeof nm, "Local\\%s", bn); CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, nm); } } /* what norns.exe does: the launcher waits for it before it starts sclang */
     for (int i = 1; i < argc; i++) printf("arg %s\n", argv[i]);
     for (int i = 0; i < 500; i++) printf("same line every time\n");
     char cwd[500]; GetCurrentDirectoryA(500, cwd); printf("cwd %s\n", cwd); fflush(stdout);
@@ -90,6 +115,7 @@ cat > "$T/stub42.c" <<'STUB'
 int main(int argc, char **argv) {
     (void)argc;
     printf("stub %s BRIDGE=%s AUDIO=%s\n", argv[0], getenv("VERDANDI_BRIDGE"), getenv("VERDANDI_AUDIO") ? getenv("VERDANDI_AUDIO") : "-"); fflush(stdout);
+    { const char *bn = getenv("VERDANDI_BRIDGE"); if (bn) { char nm[200]; snprintf(nm, sizeof nm, "Local\\%s", bn); CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, nm); } } /* what norns.exe does: the launcher waits for it before it starts sclang */
     char marker[600]; snprintf(marker, sizeof marker, "%s/restarted.txt", getenv("HOME"));
     FILE *f = fopen(marker, "r");
     if (!f) { f = fopen(marker, "w"); if (f) { fputs("x", f); fclose(f); } return 42; }
@@ -105,6 +131,34 @@ rm -rf "$T/vhome3"; mkdir -p "$T/vhome3"
 ck "norns.exe exit code 42 starts another round" "grep -q 'asked for a restart' '$T/vhome3/logs/launcher.log' && [ \$(grep -c 'norns.exe started' '$T/vhome3/logs/launcher.log') -eq 2 ]"
 ck "the second round has another bridge name, and --null-audio reaches norns.exe" "grep -q 'BRIDGE=VerdandiBridge-[0-9]*-2' '$T/vhome3/logs/norns.log' && grep -q 'AUDIO=null' '$T/vhome3/logs/norns.log'"
 ck "the launcher ends with code 0 after the second round" "grep -q 'norns.exe ended with exit code 0x00000000' '$T/vhome3/logs/launcher.log'"
+# M2: the start order. norns.exe makes the audio bridge (a named memory) 1.5 s after it starts; sclang must not start before. a stale norns.exe of this folder from an earlier start must be stopped first.
+cat > "$T/stubB.c" <<'STUB'
+#include <stdio.h>
+#include <stdlib.h>
+#include <windows.h>
+int main(int argc, char **argv) {
+    (void)argc;
+    printf("stub %s pid %lu\n", argv[0], (unsigned long)GetCurrentProcessId()); fflush(stdout);
+    const char *b = getenv("VERDANDI_BRIDGE");
+    if (b && argc == 1) {
+        Sleep(1500);
+        char name[200]; snprintf(name, sizeof name, "Local\\%s", b);
+        CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, name); /* (the handle stays open for the life of the process) */
+        printf("bridge made\n"); fflush(stdout);
+    }
+    Sleep(argc > 1 ? 30000 : 3000);
+    return 0;
+}
+STUB
+$CC "$T/stubB.c" -o "$T/app/norns.exe" -static || exit 1
+cp "$T/app/norns.exe" "$T/app/supercollider/sclang.exe"
+rm -rf "$T/vhome4"; mkdir -p "$T/vhome4"
+# a stale copy: the same program, started outside the launcher, sleeping 30 s
+(cd "$T/app" && timeout 40 "$WINE" ./norns.exe stale > "$T/stale.out" 2>&1 &)
+sleep 2
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=8 --home="Z:$T/vhome4" > "$T/launcher4.out" 2>&1)
+ck "a stale norns.exe of an earlier start is stopped before the new one starts" "grep -q 'stopping norns.exe (process [0-9]*) of an earlier start' '$T/vhome4/logs/launcher.log'"
+ck "sclang starts only after norns.exe has made the audio bridge" "[ \$(grep -n 'audio bridge of norns.exe is ready' '$T/vhome4/logs/launcher.log' | cut -d: -f1) -lt \$(grep -n 'sclang.exe started' '$T/vhome4/logs/launcher.log' | cut -d: -f1) ] && grep -Eq 'ready after 1[4-9][0-9][0-9] ms' '$T/vhome4/logs/launcher.log'"
 rm -f "$T/app/norns.exe"
 # a missing piece is said in plain words (headless: in the log), and nothing is started
 rm -f "$T/app/norns.exe"

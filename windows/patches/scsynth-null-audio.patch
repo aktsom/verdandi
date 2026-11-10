@@ -9,7 +9,7 @@
  
  #define PRINT_PORTAUDIO_ERROR(function, errorcode)                                                                     \
      scprintf("SC_PortAudioDriver: PortAudio failed at %s with error: '%s'\n", #function, Pa_GetErrorText(errorcode))
-@@ -438,3 +438,213 @@
+@@ -438,3 +438,246 @@
  
      return paerror == paNoError;
  }
@@ -23,6 +23,7 @@
 +// Both call the same engine step as the PortAudio callback. The PortAudio driver stays for other uses of this scsynth, but is never used by Verdandi (no device is opened, nothing can hang on one).
 +#include <atomic>
 +#include <chrono>
++#include <string>
 +#include <thread>
 +#include <vector>
 +#ifdef _WIN32
@@ -39,6 +40,7 @@
 +    int mInCh, mOutCh;
 +    vb_t mBridge;
 +    bool mUseBridge;
++    std::string mBridgeName; // set when the bridge was not there at the start: ClockLoop looks for it
 +    std::vector<float> mInL, mInR, mOutL, mOutR;
 +
 +protected:
@@ -51,7 +53,8 @@
 +        *outSampleRate = mPreferredSampleRate ? (double)mPreferredSampleRate : 48000.;
 +        if (bridge && bridge[0]) {
 +            const char* w = getenv("VERDANDI_BRIDGE_WAIT");
-+            unsigned waitMs = (w && atoi(w) > 0) ? (unsigned)atoi(w) * 1000u : 20000u;
++            // the launcher starts sclang when the bridge exists, so this is a safety net: 60 s, then the null clock (which keeps looking for the bridge, see ClockLoop)
++            unsigned waitMs = (w && atoi(w) > 0) ? (unsigned)atoi(w) * 1000u : 60000u;
 +            if (vb_guest_open(&mBridge, bridge, waitMs) == 0 && mBridge.sh->frames % mWorld->mBufLength == 0) {
 +                mUseBridge = true;
 +                *outNumSamplesPerCallback = (int)mBridge.sh->frames;
@@ -65,8 +68,15 @@
 +                        *outNumSamplesPerCallback, mInCh, mOutCh);
 +                return true;
 +            }
-+            fprintf(stdout, "\nSC_BridgeAudioDriver: the bridge '%s' was not found (norns.exe is not running or has no audio): falling back to the null driver\n", bridge);
++            fprintf(stdout, "\nSC_BridgeAudioDriver: the bridge '%s' was not found (norns.exe is not running or has no audio yet): running on the null clock until it appears\n", bridge);
 +            vb_close(&mBridge);
++            mBridgeName = bridge;
++            *outNumSamplesPerCallback = 512; // the usual block of norns.exe: a bridge with the same rate and block can be taken over later
++            *outSampleRate = mPreferredSampleRate ? (double)mPreferredSampleRate : 48000.;
++            mInL.assign(512, 0.f);
++            mInR.assign(512, 0.f);
++            mOutL.assign(512, 0.f);
++            mOutR.assign(512, 0.f);
 +        }
 +        fprintf(stdout, "\nSC_NullAudioDriver: no audio device is used%s\n", bridge ? " (no bridge)" : " (VERDANDI_NULL_AUDIO=1)");
 +        fprintf(stdout, "  Sample rate: %.3f, block size: %d, %d in / %d out channels\n", *outSampleRate,
@@ -196,7 +206,30 @@
 +        const double period = (double)mNumSamplesPerCallback / mSampleRate;
 +        auto start = std::chrono::steady_clock::now();
 +        uint64_t n = 0;
++        auto lastLook = std::chrono::steady_clock::now();
++        bool toldMismatch = false;
 +        while (mClockRun) {
++            if (!mBridgeName.empty() && std::chrono::steady_clock::now() - lastLook > std::chrono::milliseconds(500)) {
++                lastLook = std::chrono::steady_clock::now();
++                if (vb_guest_open(&mBridge, mBridgeName.c_str(), 0) == 0) {
++                    if ((int)mBridge.sh->frames == mNumSamplesPerCallback && (double)mBridge.sh->rate == mSampleRate) {
++                        mUseBridge = true;
++                        mBridgeName.clear();
++                        fprintf(stdout, "SC_BridgeAudioDriver: the bridge appeared: switching from the null clock to norns.exe's audio\n");
++#ifdef _WIN32
++                        timeEndPeriod(1);
++#endif
++                        BridgeLoop();
++                        return;
++                    }
++                    if (!toldMismatch) {
++                        toldMismatch = true;
++                        fprintf(stdout, "SC_BridgeAudioDriver: the bridge appeared with %u Hz and %u frames, this server runs at %.0f Hz and %d: it needs a restart to use it\n",
++                                (unsigned)mBridge.sh->rate, (unsigned)mBridge.sh->frames, mSampleRate, mNumSamplesPerCallback);
++                    }
++                    vb_close(&mBridge);
++                }
++            }
 +            ++n;
 +            std::this_thread::sleep_until(
 +                start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(n * period)));

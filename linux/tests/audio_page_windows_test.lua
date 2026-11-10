@@ -38,7 +38,7 @@ local function go(row) for _ = 1, 10 do page.enc(2, -1) end for _ = 2, row do pa
 
 page.init(); page.redraw()
 check(shown("default") and shown("512"), "the default block is 512 and the output is the default device")
-check(shown("48000 Hz 21 ms Speakers (Realtek)"), "the bottom line names the device, the rate and the latency")
+check(shown("playing: Speakers (Realtek)"), "the bottom line names the device that is playing")
 go(1); page.enc(3, 1); page.redraw()
 check(shown("none yet"), "INPUT cannot be changed (no input from the sound card yet)")
 go(2); page.enc(3, 1); page.redraw()
@@ -58,6 +58,25 @@ check(restarted, "and restarts norns (the launcher starts it again with the new 
 restarted = false
 page.init(); page.redraw()
 check(shown("USB DAC"), "the saved device is selected when the page opens again")
+
+-- "default" again: APPLY leaves no output= line (the Windows default device is followed), and the page shows "default" after a restart
+page.init(); page.redraw()
+go(2); page.enc(3, -5); page.redraw()
+check(shown("default") and not shown("USB DAC"), "E3 back to the first entry: default")
+go(5); page.key(3, 1)
+c = conf()
+check(c and not c:find("output=", 1, true) and c:find("rate=", 1, true), "APPLY with default writes no output= line: " .. tostring(c))
+check(restarted, "and restarts")
+restarted = false
+page.init(); page.redraw()
+check(shown("default"), "the page shows default after a restart")
+-- an old file with output= empty or with the name of a device that is gone selects default too
+local f = real_open(tmp .. "/audio.conf", "w") f:write("output=\nrate=48000\nperiod=512\n") f:close()
+page.init(); page.redraw()
+check(shown("default"), "an empty output= is default")
+f = real_open(tmp .. "/audio.conf", "w") f:write("output=wasapi:Gone Speakers\nrate=48000\nperiod=512\n") f:close()
+page.init(); page.redraw()
+check(shown("default"), "a device that is gone is shown as default (the program says it fell back)")
 
 -- a fallback: the plain words are on the page
 info = {mode = "fallback", device = "", host_api = "", rate = 48000, frames = 512, latency_ms = 0, note = "no sound: audio device 'USB DAC' is busy or in use by another program. null audio is used"}

@@ -16,6 +16,7 @@
 #include <jack/jack.h>
 
 #include "audio/audio_device.h"
+#include "audio/exit_win.h"
 #include "audio/verdandi_bridge.h"
 
 extern unsigned verdandi_jack_null_ticks(void);
@@ -32,6 +33,7 @@ static float *rec_l, *rec_r; /* what the card played: recorded */
 static size_t rec_n, rec_cap;
 static atomic_int card_blocks;
 static int dev_mode; /* 0 all fine, 1 "Busy" is busy, 2 only 48000 */
+static int crone_delay_ms, crone_preconnect; /* crone starts late (the window and crone come a while after the bridge); something else already made the connections */
 
 static void sleep_ms_f(double ms) {
     struct timespec ts = {(time_t)(ms / 1000), (long)(fmod(ms, 1000.0) * 1e6)};
@@ -139,6 +141,7 @@ static pthread_t sc_thread;
 static atomic_int sc_run;
 static const char *bridge_name;
 static atomic_int sc_blocks;
+static int sc_ignore_close; /* the exit scenario: the stand-in goes on until the process ends (Wine takes the exit status of whichever thread ends last; Windows takes the one of TerminateProcess) */
 static void *sc_loop(void *a) {
     (void)a;
     vb_t g;
@@ -153,7 +156,10 @@ static void *sc_loop(void *a) {
     vb_guest_attach(&g);
     while (atomic_load(&sc_run)) {
         int r = vb_guest_wait(&g, 50, il, ir);
-        if (r < 0) break;
+        if (r < 0) {
+            if (sc_ignore_close) { sleep_ms_f(5); continue; }
+            break;
+        }
         if (r == 0) continue;
         for (unsigned i = 0; i < n; i++, ph += 440.0 / rate) {
             float s = 0.5f * sinf((float)(2 * M_PI * ph));
@@ -194,19 +200,25 @@ static void run_chain(const char *scenario, int with_guest, const char *output, 
     snprintf(cfg.output, sizeof cfg.output, "%s", output);
     cfg.rate = rate; cfg.period = period;
     cfg.force_null = getenv("VERDANDI_AUDIO") != NULL;
-    rec_cap = 48000 * 6; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    rec_cap = 48000 * 10; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
     vaud_state st;
     vaud_start(&FAKE, &cfg, name, &st);
     CHECK((int)st.mode == expect_mode, "%s: mode %d, expected %d (note: %s)", scenario, st.mode, expect_mode, st.note);
+    if (crone_delay_ms) sleep_ms_f(crone_delay_ms);
     crone_start();
+    if (crone_preconnect) {
+        jack_connect(crone, "crone:output_5", "SuperCollider:in_1"); jack_connect(crone, "crone:output_6", "SuperCollider:in_2");
+        jack_connect(crone, "SuperCollider:out_1", "crone:input_5"); jack_connect(crone, "SuperCollider:out_2", "crone:input_6");
+    }
     if (with_guest) {
         atomic_store(&sc_run, 1);
         pthread_create(&sc_thread, NULL, sc_loop, NULL);
     }
     unsigned t0 = verdandi_jack_null_ticks();
-    sleep_ms_f(2200);
+    double run_ms = 3400 + 2.0 * crone_delay_ms; /* (the connection thread looks once per second) */
+    sleep_ms_f(run_ms);
     unsigned ticks = verdandi_jack_null_ticks() - t0;
-    double expected = 2.2 * st.rate / st.frames;
+    double expected = run_ms / 1000.0 * st.rate / st.frames;
     CHECK(ticks > expected * 0.8 && ticks < expected * 1.2, "%s: %u blocks in 2.2 s, expected about %.0f", scenario, ticks, expected);
     unsigned long long to_sc, from_sc, under, drops; int att;
     vaud_bridge_stats(&to_sc, &from_sc, &under, &drops, &att);
@@ -277,6 +289,15 @@ static void scenario_config(void) {
     vaud_config_load(&c, dir);
     CHECK(c.force_null, "VERDANDI_AUDIO=null forces null audio");
     unsetenv("VERDANDI_AUDIO");
+    f = fopen(path, "w"); fputs("output=default\nrate=48000\n", f); fclose(f);
+    vaud_config_load(&c, dir);
+    CHECK(c.output[0] == 0, "output=default is the default device (%s)", c.output);
+    f = fopen(path, "w"); fputs("output=\nrate=48000\n", f); fclose(f);
+    vaud_config_load(&c, dir);
+    CHECK(c.output[0] == 0, "an empty output= is the default device");
+    f = fopen(path, "w"); fputs("rate=48000\r\noutput=wasapi:Fake Speakers\r\n", f); fclose(f);
+    vaud_config_load(&c, dir);
+    CHECK(!strcmp(c.output, "wasapi:Fake Speakers"), "a file with Windows line ends is read (%s)", c.output);
     vaud_config_load(&c, "/nonexistent");
     CHECK(c.output[0] == 0 && c.rate == 48000 && c.period == 512, "no audio.conf: the defaults");
     char text[1024];
@@ -295,6 +316,27 @@ int main(int argc, char **argv) {
     else if (!strcmp(sc, "busy")) run_chain(sc, 1, "wasapi:Busy Headset", 48000, 512, VAUD_MODE_FALLBACK);
     else if (!strcmp(sc, "notfound")) run_chain(sc, 1, "wasapi:Gone Speakers", 48000, 512, VAUD_MODE_DEVICE);
     else if (!strcmp(sc, "badrate")) { dev_mode = 2; run_chain(sc, 1, "", 44100, 512, VAUD_MODE_DEVICE); }
+    else if (!strcmp(sc, "latecrone")) { crone_delay_ms = 1500; run_chain(sc, 1, "", 48000, 512, VAUD_MODE_DEVICE); }
+    else if (!strcmp(sc, "preconnected")) { crone_preconnect = 1; run_chain(sc, 1, "", 48000, 512, VAUD_MODE_DEVICE); }
+    else if (!strcmp(sc, "exit")) {
+        /* the way norns.exe ends (restart = 42): with the card callback, crone, the bridge and scsynth running. the process must end with the code, at once, without a crash */
+        char name[64];
+        snprintf(name, sizeof name, "AudioChainExit-%d", (int)getpid());
+        bridge_name = name;
+        vaud_config cfg;
+        memset(&cfg, 0, sizeof cfg);
+        cfg.rate = 48000; cfg.period = 256;
+        rec_cap = 48000; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+        vaud_state st;
+        vaud_start(&FAKE, &cfg, name, &st);
+        crone_start();
+        sc_ignore_close = 1;
+        atomic_store(&sc_run, 1);
+        pthread_create(&sc_thread, NULL, sc_loop, NULL);
+        sleep_ms_f(700 + (getpid() % 7) * 130); /* another moment of the blocks every time */
+        verdandi_win_exit(42);
+        return 99; /* never */
+    }
     else if (!strcmp(sc, "null")) {
 #ifndef _WIN32
         setenv("VERDANDI_AUDIO", "null", 1);

@@ -28,7 +28,7 @@ build() {
 
 launcher() {
     mkdir -p "$BLD"
-    gcc -municode -mwindows -O2 -Wall -Wextra "$REPO/windows/launcher/verdandi.c" -o "$BLD/Verdandi.exe" -static
+    gcc -municode -mwindows -O2 -Wall -Wextra "$REPO/windows/launcher/verdandi.c" -o "$BLD/Verdandi.exe" -static -lws2_32
 }
 
 # the DLLs of norns.exe that are not Windows's own (ldd lists them recursively); the result is a flat folder

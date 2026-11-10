@@ -17,9 +17,11 @@
 #ifndef _UNICODE
 #define _UNICODE
 #endif
+#include <winsock2.h> /* (before windows.h) */
 #include <windows.h>
 
 #include <shellapi.h>
+#include <tlhelp32.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -395,6 +397,128 @@ static void seed_scripts(const wchar_t *dust) {
     say(L"first start: the scripts of dust-seed were copied to %ls", code);
 }
 
+/* ---- the start order and the clean ends of every round (M2) ----
+ * a stale norns.exe, sclang.exe or scsynth.exe of this program folder (an earlier launcher that was killed, a copy that hung while it crashed) holds the OSC ports, the audio bridge and the sound device and made the
+ * next start fail in odd ways. before every round: stop them, wait until the ports are free. between norns.exe and sclang: wait until norns.exe has made the audio bridge (scsynth needs it). after every round:
+ * wait until the job is empty. */
+static int is_our_program(const wchar_t *exe_name) {
+    return !_wcsicmp(exe_name, L"norns.exe") || !_wcsicmp(exe_name, L"sclang.exe") || !_wcsicmp(exe_name, L"scsynth.exe");
+}
+
+static int kill_stale_programs(void) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    int killed = 0;
+    size_t applen = wcslen(g_app);
+    PROCESSENTRY32W pe;
+    pe.dwSize = sizeof pe;
+    for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+        if (!is_our_program(pe.szExeFile) || pe.th32ProcessID == GetCurrentProcessId()) {
+            continue;
+        }
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pe.th32ProcessID);
+        if (!h) {
+            continue;
+        }
+        wchar_t image[MAX_PATH * 2];
+        DWORD n = MAX_PATH * 2;
+        if (QueryFullProcessImageNameW(h, 0, image, &n) && n > applen && !_wcsnicmp(image, g_app, applen)) {
+            say(L"stopping %ls (process %lu) of an earlier start that is still there", pe.szExeFile, (unsigned long)pe.th32ProcessID);
+            TerminateProcess(h, 1);
+            if (WaitForSingleObject(h, 5000) != WAIT_OBJECT_0) {
+                say(L"  it did not end within 5 s");
+            }
+            killed++;
+        }
+        CloseHandle(h);
+    }
+    CloseHandle(snap);
+    return killed;
+}
+
+/* the UDP ports of norns (matron 10111, crone 9999, sclang 57120, scsynth 57110) can be bound again: tried on the loopback address (no firewall question). waits up to `ms` */
+static void wait_ports_free(DWORD ms) {
+    static const unsigned short ports[] = {10111, 9999, 57120, 57110};
+    WSADATA wd;
+    if (WSAStartup(MAKEWORD(2, 2), &wd) != 0) {
+        return;
+    }
+    DWORD waited = 0;
+    for (;;) {
+        int busy = 0;
+        unsigned short which = 0;
+        for (size_t i = 0; i < sizeof ports / sizeof ports[0]; i++) {
+            SOCKET sk = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            if (sk == INVALID_SOCKET) {
+                continue;
+            }
+            struct sockaddr_in a;
+            memset(&a, 0, sizeof a);
+            a.sin_family = AF_INET;
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            a.sin_port = htons(ports[i]);
+            if (bind(sk, (struct sockaddr *)&a, sizeof a) != 0 && WSAGetLastError() == WSAEADDRINUSE) {
+                busy = 1;
+                which = ports[i];
+            }
+            closesocket(sk);
+        }
+        if (!busy) {
+            if (waited > 0) {
+                say(L"the ports are free after %lu ms", (unsigned long)waited);
+            }
+            break;
+        }
+        if (waited >= ms) {
+            say(L"port %u is still in use by another program after %lu ms: starting anyway (it may need that program to be closed)", (unsigned)which, (unsigned long)waited);
+            break;
+        }
+        Sleep(100);
+        waited += 100;
+    }
+    WSACleanup();
+}
+
+static void wait_job_empty(HANDLE job, DWORD ms) {
+    if (!job) {
+        return;
+    }
+    for (DWORD waited = 0;; waited += 50) {
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION info;
+        memset(&info, 0, sizeof info);
+        if (!QueryInformationJobObject(job, JobObjectBasicAccountingInformation, &info, sizeof info, NULL) || info.ActiveProcesses == 0) {
+            return;
+        }
+        if (waited >= ms) {
+            say(L"%lu program(s) of the round are still running after %lu ms", (unsigned long)info.ActiveProcesses, (unsigned long)waited);
+            return;
+        }
+        Sleep(50);
+    }
+}
+
+/* norns.exe makes the audio bridge (a named shared memory) before crone starts: the signal that it is ready for scsynth. 0 = there, 1 = not within `ms`, 2 = norns.exe ended */
+static int wait_for_bridge(const wchar_t *name, HANDLE norns, DWORD ms) {
+    wchar_t full[128];
+    char narrow[256];
+    _snwprintf(full, 128, L"Local\\%ls", name);
+    WideCharToMultiByte(CP_UTF8, 0, full, -1, narrow, sizeof narrow, NULL, NULL);
+    for (DWORD waited = 0; waited <= ms; waited += 50) {
+        HANDLE m = OpenFileMappingA(FILE_MAP_READ, FALSE, narrow);
+        if (m) {
+            CloseHandle(m);
+            say(L"the audio bridge of norns.exe is ready after %lu ms", (unsigned long)waited);
+            return 0;
+        }
+        if (WaitForSingleObject(norns, 50) != WAIT_TIMEOUT) {
+            return 2;
+        }
+    }
+    return 1;
+}
+
 static void bring_running_copy_forward(void) {
     HWND w = FindWindowW(NULL, L"Verdandi Windows");
     if (w) {
@@ -579,6 +703,12 @@ int wmain(int argc, wchar_t **argv) {
     }
 
     /* norns.exe first (matron, crone, softcut) */
+    {
+        int stale = kill_stale_programs();
+        if (stale || round > 1) {
+            wait_ports_free(8000);
+        }
+    }
     pn = start_child(norns, L"", g_app, logs, L"norns", &err);
     if (!pn) {
         tell_user(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
@@ -589,7 +719,9 @@ int wmain(int argc, wchar_t **argv) {
     /* then sclang, from inside its own folder with relative ASCII arguments. norns.exe has had a moment to start crone */
     ps = NULL;
     if (have_sclang) {
-        for (int i = 0; i < 30 && WaitForSingleObject(pn, 100) == WAIT_TIMEOUT; i++) {
+        int ready = wait_for_bridge(bridge, pn, 30000);
+        if (ready == 1) {
+            say(L"norns.exe has not made its audio bridge within 30 s: starting sclang anyway (scsynth then runs on its own clock until the bridge appears)");
         }
         if (WaitForSingleObject(pn, 0) == WAIT_TIMEOUT) {
             ps = start_child(sclang, L"-D -l sclang_conf.yaml", scconf, logs, L"sclang", &err);
@@ -614,6 +746,7 @@ int wmain(int argc, wchar_t **argv) {
     say(L"norns.exe ended with exit code 0x%08lx", (unsigned long)code);
     if (g_job) {
         TerminateJobObject(g_job, 0); /* sclang, scsynth and anything else started from here */
+        wait_job_empty(g_job, 10000);
     }
     if (ps) {
         CloseHandle(ps);

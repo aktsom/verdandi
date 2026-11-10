@@ -43,6 +43,23 @@ struct {
     int y;
 } black;
 
+#ifdef NORNS_WINDOWS
+// Windows: sclang starts after norns.exe and compiles its class library first, so the SuperCollider side is ready after tens of seconds, not after 12 (the Pi starts it a minute before matron).
+// The wait is a time, not a number of ticks (the tick is a Windows sleep of 5 ms, in fact about 15), the default is 150 s (NORNS_STARTUP_TIMEOUT: seconds), the question to sclang is asked every
+// 100 ms and not every tick, and a /crone/ready that comes after the timeout is not lost: the thread goes on asking and the start-up is completed late (the message "SUPERCOLLIDER FAIL" goes away
+// when the script is resumed).
+#include <time.h>
+static long long now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+static long long startup_timeout_ms(void) {
+    const char *e = getenv("NORNS_STARTUP_TIMEOUT");
+    long v = e ? atol(e) : 0;
+    return (v > 0 ? v : 150) * 1000LL;
+}
+#endif
 static int count = 0;
 static int start = 1;
 
@@ -58,15 +75,36 @@ void *hello_loop(void *p) {
     (void)p;
 
     thread_running = true;
+#ifdef NORNS_WINDOWS
+    const long long began = now_ms(), limit = startup_timeout_ms();
+    int told = 0;
+#endif
 
     while (!ok && !timeout) {
 
         norns_hello(1);
+#ifdef NORNS_WINDOWS
+        if (count % 20 == 0) {
+            o_query_startup();
+        }
+        long long waited = now_ms() - began;
+        if (waited > 15000 && told == 0) {
+            told = 1;
+            fprintf(stderr, "waiting for SuperCollider (sclang compiles its class library at the start, this can take a while)\n");
+        } else if (waited > 60000 && told == 1) {
+            told = 2;
+            fprintf(stderr, "still waiting for SuperCollider after %lld s (timeout %lld s)\n", waited / 1000, limit / 1000);
+        }
+        if (waited > limit) {
+            timeout = 1;
+        }
+#else
         o_query_startup();
 
         if (count > timeout_ticks) {
             timeout = 1;
         }
+#endif
 
         usleep(tick_us);
         count++;
@@ -79,6 +117,17 @@ void *hello_loop(void *p) {
 
     if (timeout) {
         event_post(event_data_new(EVENT_STARTUP_READY_TIMEOUT));
+#ifdef NORNS_WINDOWS
+        // a late answer completes the start-up (up to 10 more minutes, then the failure stands)
+        for (int i = 0; !ok && i < 2400; i++) {
+            o_query_startup();
+            usleep(250000);
+        }
+        if (ok) {
+            fprintf(stderr, "SuperCollider answered late (after %lld s): completing the start-up\n", (now_ms() - began) / 1000);
+            event_post(event_data_new(EVENT_STARTUP_READY_OK));
+        }
+#endif
     } else {
         event_post(event_data_new(EVENT_STARTUP_READY_OK));
     }

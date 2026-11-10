@@ -155,10 +155,14 @@ run "lua:THEME and SCREEN pages under random keys, the colour picker and the cli
 run "windows:lua side without the Linux tools ls, find, grep, cp, rm, nmcli (script scan, empty SELECT list, pset and tape listings, network page)" lua5.3 linux/tests/windows_lua_test.lua
 audio_chain_ok() {
     gcc -std=gnu11 -O1 -I matron/src/platform/windows/jack_null/include -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c \
-        matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
+        matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/audio/exit_win.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
     local sc
-    for sc in config device small noguest busy notfound badrate null; do
+    for sc in config device small noguest busy notfound badrate latecrone preconnected null; do
         "$T/audio_chain_test" "$sc" 2> /dev/null || return 1
+    done
+    for sc in 1 2 3 4 5 6 7 8; do
+        "$T/audio_chain_test" exit > /dev/null 2>&1
+        [ $? -eq 42 ] || return 1
     done
     return 0
 }
@@ -169,6 +173,11 @@ audio_pa_ok() {
         -lpthread -lm $(pkg-config --libs portaudio-2.0) -o "$T/audio_pa_test" || return 1
     "$T/audio_pa_test" 2> /dev/null
 }
+hello_late_ok() {
+    g++ -std=c++14 -DNORNS_WINDOWS -I matron/src -I matron/src/hardware -I matron/src/device $(pkg-config --cflags lua5.3 glib-2.0 liblo libevdev cairo) linux/tests/hello_late_test.cc matron/src/hello.cc -lpthread -o "$T/hello_late_test" || return 1
+    "$T/hello_late_test" late && "$T/hello_late_test" ok
+}
+run "windows:start-up wait for SuperCollider (a time limit, the question every 100 ms, a late /crone/ready completes the start-up instead of staying SUPERCOLLIDER FAIL)" hello_late_ok
 run "windows:the PortAudio backend on Linux (list, an unknown device is refused as not found, start ends in a card or null audio with a note, no hang)" audio_pa_ok
 run "windows:SYSTEM > AUDIO with the program's own device list (output= rate= period= in audio.conf, restart, input read only, busy or missing device said, bottom line)" lua5.3 linux/tests/audio_page_windows_test.lua
 run "windows:scsynth with the Verdandi bridge driver against the bridge host (needs a patched scsynth: VERDANDI_SCSYNTH)" bash linux/tests/scsynth_bridge_test.sh

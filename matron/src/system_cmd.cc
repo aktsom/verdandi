@@ -217,10 +217,11 @@ bool system_cmd_detached(const char *cmd, const char *unit, int cb_ref) {
 // Windows (the launcher Verdandi.exe supervises norns.exe): RESTART ends norns.exe with exit code 42, and the launcher then stops sclang and starts everything again (new audio settings, a new script
 // state); SLEEP (shutdown) ends it with 0 and the launcher ends too. the exit runs from a thread after a moment, so that the Lua side has finished the save it does before asking.
 #include <pthread.h>
+#include "platform/windows/audio/exit_win.h"
 static void *windows_exit_thread(void *arg) {
     struct timespec ts = {0, 400 * 1000 * 1000};
     nanosleep(&ts, NULL);
-    exit((int)(intptr_t)arg);
+    verdandi_win_exit((int)(intptr_t)arg); // (not exit(): see exit_win.h)
     return NULL;
 }
 #endif

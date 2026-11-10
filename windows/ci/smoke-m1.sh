@@ -68,7 +68,7 @@ chk_script() { has "$LOGS/norns.log" "VERDANDI_SMOKE init" "the smoke script was
 chk_keyboard() { has "$LOGS/norns.log" "VERDANDI_SMOKE keyboard device yes" "the window keyboard is a HID device" && has "$LOGS/norns.log" "VERDANDI_SMOKE key event A" "a key event reaches keyboard.code"; }
 # the shared Lua must not run Linux tools on Windows: "'ls' is not recognized" and the like, and no metro_stop spam, and no select.lua error
 chk_noise() {
-    if grep -n -E "is not recognized|pthread_cancel|menu key handler error|failed to read from stdin|unknown \(0\)" "$LOGS/norns.log" | head -10 | grep .; then return 1; fi
+    if grep -n -E "norns CRASHED|is not recognized|pthread_cancel|menu key handler error|failed to read from stdin|unknown \(0\)" "$LOGS/norns.log" | head -10 | grep .; then return 1; fi
     echo "none of: not recognized, pthread_cancel, menu key handler error, failed to read from stdin, unknown (0)"
 }
 # M2: the audio chain on the runner (it has no sound card, so null audio or a card, whichever it is, is reported)
@@ -112,6 +112,56 @@ chk_fallback() {
         && has "$WORK/user home fallback/logs/sclang.log" "SC_BridgeAudioDriver: audio from norns.exe" "scsynth still runs, on the bridge" \
         && [ -f "$WORK/user home fallback/audio.conf.failed" ] && echo "found: audio.conf.failed (the AUDIO page says it)"
 }
+# M2: ten starts and restarts in a row (norns.exe exit code 42 = restart, then a normal end): every round must come up, no crash, no program left behind
+CYCLES="${SMOKE_CYCLES:-10}"
+CYCLE_HOME="$WORK/user home cycles"
+leftovers() { # the programs of the zoo that are still alive
+    if command -v tasklist > /dev/null 2>&1; then tasklist //FO CSV //NH 2> /dev/null | grep -i -E '"(norns|sclang|scsynth|Verdandi)\.exe"' || true; fi
+}
+run_cycles() {
+    rm -rf "$CYCLE_HOME"
+    mkdir -p "$CYCLE_HOME/dust/code/verdandi_cycle" "$CYCLE_HOME/dust/data/verdandi_cycle"
+    cp "$APP/smoke/verdandi_cycle.lua" "$CYCLE_HOME/dust/code/verdandi_cycle/verdandi_cycle.lua"
+    echo "$CYCLES" > "$CYCLE_HOME/dust/data/verdandi_cycle/cycles.txt"
+    cat > "$CYCLE_HOME/dust/data/system.state" <<'ST'
+-- norns system state (seeded by the smoke test)
+norns.state.clean_shutdown = true
+norns.state.script = '/home/we/dust/code/verdandi_cycle/verdandi_cycle.lua'
+norns.state.name = 'verdandi_cycle'
+norns.state.shortname = 'verdandi_cycle'
+norns.state.path = '/home/we/dust/code/verdandi_cycle/'
+norns.state.data = '/home/we/dust/data/verdandi_cycle/'
+ST
+    local limit=$((CYCLES * 150 + 120)) rc
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 "$limit" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
+    else
+        "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
+    fi
+    rc=$?
+    echo "launcher exit code $rc"
+    echo "$rc" > "$CYCLE_HOME/launcher.rc"
+    sleep 2
+    leftovers > "$CYCLE_HOME/leftovers.txt"
+    if [ -s "$CYCLE_HOME/leftovers.txt" ] && command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$CYCLE_HOME/logs" "$M0_OUT/m2-cycle-logs" 2> /dev/null || true
+    return 0
+}
+chk_cycles() {
+    local L="$CYCLE_HOME/logs" starts restarts
+    starts=$(grep -c "norns.exe started" "$L/launcher.log" 2> /dev/null || echo 0)
+    restarts=$(grep -c "asked for a restart" "$L/launcher.log" 2> /dev/null || echo 0)
+    echo "norns.exe started $starts times, restarted $restarts times (wanted $CYCLES and $((CYCLES - 1)))"
+    echo "stale programs stopped before a start: $(grep -c "of an earlier start that is still there" "$L/launcher.log" 2> /dev/null || echo 0) (should be 0: every round ends clean)"
+    echo "rounds that ended with the exit code 42: $(grep -c "norns.exe ended with exit code 0x0000002a" "$L/launcher.log" 2> /dev/null || echo 0)"
+    [ "$starts" -eq "$CYCLES" ] && [ "$restarts" -eq $((CYCLES - 1)) ] \
+        && has "$L/norns.log" "VERDANDI_CYCLE_DONE $CYCLES" "the last round ran its script and shut down" \
+        && ! grep -q -E "norns CRASHED|0xc0000005" "$L/norns.log" \
+        && ! ls "$L/crash"/* > /dev/null 2>&1 \
+        && [ "$(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null)" = "0" ] \
+        && [ ! -s "$CYCLE_HOME/leftovers.txt" ] \
+        && echo "found: no crash report, the launcher ended with 0 and no norns.exe, sclang.exe or scsynth.exe is left"
+}
 chk_sclang() {
     has "$LOGS/sclang.log" "Norns startup" "norns's Crone class started in sclang" \
         && has "$LOGS/sclang.log" "SC_BridgeAudioDriver: audio from norns.exe" "scsynth took its audio from norns.exe through the bridge (no sound device of its own)" \
@@ -151,6 +201,8 @@ m0_run m2-check-audio chk_audio
 m0_run m2-audio-numbers chk_audio_numbers
 m0_run m2-run-fallback run_fallback
 m0_run m2-check-fallback chk_fallback
+m0_run m2-run-cycles run_cycles
+m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard
 m0_run m1-check-noise chk_noise
 m0_run m1-check-sclang chk_sclang
