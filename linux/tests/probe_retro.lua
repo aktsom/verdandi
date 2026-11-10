@@ -1,5 +1,5 @@
 # the pixel looks in the real window (run_all.sh, retro_scenario; docs/port/retro-look-plan.md). the home starts with box.conf: pixel style, the DARK look, pixel_look=retro. the THEME page is open on its
-# PIXEL LOOK row; each look is picked with E3 (live in the window, saved), a picture is taken of each, then RETRO in the COLOUR look, a live colour change in the picker with RETRO, and 16-BIT after a restart
+# PIXEL LOOK row; each look is selected with E3 (shown live in the window, not saved) and kept with K3 (saved), a picture is taken of each, then RETRO in the COLOUR look, a live colour change in the picker with RETRO, and 16-BIT after a restart
 #sleep 5
 norns.script.load("code/probe/window_probe.lua")
 #sleep 3
@@ -17,18 +17,21 @@ print("PROBE start look", box.state.pixel_look)
 #shot @home/rt-retro.png
 page.enc(3, -1)
 #sleep 2
-print("PROBE look after E3 left", box.state.pixel_look)
+print("PROBE look after E3 left", page.sel, "kept", box.state.pixel_look)
 #shot @home/rt-pixel.png
 page.enc(3, 2)
 #sleep 2
-print("PROBE look after E3 right x2", box.state.pixel_look)
+print("PROBE look after E3 right x2", page.sel, "kept", box.state.pixel_look)
 #shot @home/rt-8bit.png
 page.enc(3, 1)
 #sleep 2
-print("PROBE look after E3 right", box.state.pixel_look)
+print("PROBE look after E3 right", page.sel, "kept", box.state.pixel_look)
 #shot @home/rt-16bit.png
+page.key(3, 1) -- K3 keeps 16-BIT (E3 only selected; saved only now)
+#sleep 1
 #sh grep -q '^pixel_look=16-bit' "$NORNS_HOME/box.conf" && echo "saved_16bit=yes" >> "$MARKS" || echo "saved_16bit=no" >> "$MARKS"
 page.enc(3, -2)
+page.key(3, 1) -- keep RETRO
 #sleep 1
 box.select_look("COLOUR")
 page.init()
@@ -47,6 +50,7 @@ pk.key(2, 1)
 #sleep 1
 page.pos = 2
 page.enc(3, 1)
+page.key(3, 1) -- keep 8-BIT
 #sleep 1
 print("PROBE before restart", box.state.pixel_look)
 #xdo key ctrl+q

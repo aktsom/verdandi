@@ -1362,7 +1362,7 @@ PY
             live="$(sed -n 's/^PROBE picker live[[:space:]]\([0-9A-F]*\).*/\1/p' "$RLOG1" | tail -1)"
             chk "the probe ran" 'grep -q "PROBE before restart" "$RLOG1"'
             chk "box.conf pixel_look=retro is read at start" 'grep -q "PROBE start look.retro" "$RLOG1"'
-            chk "E3 on PIXEL LOOK: pixel, 8-bit, 16-bit in turn (live)" 'grep -q "PROBE look after E3 left.pixel" "$RLOG1" && grep -q "PROBE look after E3 right x2.8-bit" "$RLOG1" && grep -q "PROBE look after E3 right.16-bit" "$RLOG1"'
+            chk "E3 on PIXEL LOOK: selects pixel, 8-bit, 16-bit in turn, shown live, nothing kept (RETRO stays the kept look)" 'grep -q "PROBE look after E3 left.pixel.kept.retro" "$RLOG1" && grep -q "PROBE look after E3 right x2.8-bit.kept.retro" "$RLOG1" && grep -q "PROBE look after E3 right.16-bit.kept.retro" "$RLOG1"'
             chk "every look is another picture (6 pairs)" 'rdiff rt-pixel.png rt-retro.png && rdiff rt-pixel.png rt-8bit.png && rdiff rt-pixel.png rt-16bit.png && rdiff rt-retro.png rt-8bit.png && rdiff rt-retro.png rt-16bit.png && rdiff rt-8bit.png rt-16bit.png'
             chk "PIXEL in the window: the box face is the BOX colour and a key is the KEYS colour" '[ "$(rpx rt-pixel.png 676 300)" = 2C2E33 ] && [ "$(rpx rt-pixel.png 260 273)" = 444853 ]'
             chk "the retro looks keep the colours: the key is the KEYS colour" '[ "$(rpx rt-retro.png 260 273)" = 444853 ] && [ "$(rpx rt-8bit.png 260 273)" = 444853 ]'

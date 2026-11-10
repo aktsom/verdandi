@@ -281,7 +281,7 @@ local function enc_raw(n, delta)
         else
           local from = m.sel or box.state.pixel_look
           local i = box.pixel_look_index(from) + 1
-          i = math.max(1, math.min(#box.PIXEL_LOOKS, i + (delta > 0 and 1 or -1)))
+          i = math.max(1, math.min(#box.PIXEL_LOOKS, i + math.floor(delta + 0.5)))
           m.sel = box.PIXEL_LOOKS[i]
           box.preview_pixel_look(m.sel)
           m.msg = m.sel == box.state.pixel_look and nil or ("K3 keeps look " .. m.sel:upper())
