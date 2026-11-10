@@ -3,6 +3,8 @@
 #   NORNS_BIN   folder with Verdandi.exe, norns.exe and the DLLs (build-norns.sh output)   SC_ZIP   sc-win64.zip of build-sc.sh   OUT   result folder (default ./m1-stage)
 # result: $OUT/Verdandi-<version>-<short hash>/ (the program folder as the user gets it: the zip has this one folder, so that every build unpacks into a folder of its own and an old build is never
 # overwritten or mistaken for the new one) and $OUT/Verdandi-windows-<version>-<short hash>.zip; $OUT/ZIPNAME holds the file name, $OUT/BUILD.txt a copy of the zip's BUILD.txt.
+#   FLAVOR  "" (default: WASAPI only, no ASIO code in the zip) or "asio": the zip that has the ASIO build of PortAudio (ASIO_DIR: the output of build-portaudio-asio.sh: libportaudio-2.dll, source/, PA-ASIO-BUILD.txt) and the
+#           GPLv3 notices and sources that go with it (docs/port/asio-licence.md). its names: Verdandi-asio-<version>-<hash>/ and Verdandi-windows-asio-<version>-<hash>.zip
 #   VERDANDI_VERSION  (default: the first line of windows/VERSION)   VERDANDI_HASH (default: the first 7 characters of git rev-parse HEAD)   VERDANDI_REPO (owner/name, for update-and-run; default $GITHUB_REPOSITORY)
 # shellcheck disable=SC2329
 set -u
@@ -17,8 +19,15 @@ VERSION="${VERDANDI_VERSION:-$(head -n 1 "$REPO/windows/VERSION" | tr -d '\r ')}
 HASH="${VERDANDI_HASH:-$(git -C "$REPO" rev-parse HEAD 2> /dev/null | cut -c1-7)}"
 [ -n "$HASH" ] || HASH=nohash # (the first 7 characters of the commit: the same rule as windows/ci/publish-release.sh, so that the names agree)
 BUILD="$VERSION $HASH"
-APPNAME="Verdandi-$VERSION-$HASH"
-ZIPNAME="Verdandi-windows-$VERSION-$HASH.zip"
+FLAVOR="${FLAVOR:-}"
+case "$FLAVOR" in
+    "") APPNAME="Verdandi-$VERSION-$HASH"; ZIPNAME="Verdandi-windows-$VERSION-$HASH.zip" ;;
+    asio)
+        APPNAME="Verdandi-asio-$VERSION-$HASH"; ZIPNAME="Verdandi-windows-asio-$VERSION-$HASH.zip"
+        ASIO_DIR="${ASIO_DIR:?ASIO_DIR is not set (FLAVOR=asio)}"
+        ;;
+    *) echo "FLAVOR must be empty or asio"; exit 1 ;;
+esac
 APP="$OUT/$APPNAME"
 
 unzip_to() { # zip dir
@@ -39,9 +48,21 @@ assemble() {
     done
     rm -rf "$APP/sc/tests" "$APP/update/pack.sh" "$APP/update/test-update.sh" "$APP/update/update.sh"
     cp "$REPO/windows/pack/matronrc.lua" "$APP/matronrc.lua"
+    # the ASIO build: its PortAudio takes the place of the MSYS2 one (the same file name, the loader goes by it), the licence text of the SDK, the notices and the sources
+    if [ "$FLAVOR" = asio ]; then
+        [ -f "$ASIO_DIR/libportaudio-2.dll" ] || { echo "no libportaudio-2.dll in $ASIO_DIR"; return 1; }
+        cp "$ASIO_DIR/libportaudio-2.dll" "$APP/libportaudio-2.dll" || return 1
+        mkdir -p "$APP/licenses" "$APP/source"
+        cp "$ASIO_DIR/source/ASIO-SDK-LICENSE.txt" "$APP/licenses/ASIO-SDK-LICENSE.txt" || return 1
+        cp "$ASIO_DIR/source/portaudio-source.zip" "$ASIO_DIR/source/asio-sdk-source.zip" "$ASIO_DIR/PA-ASIO-BUILD.txt" "$APP/source/" || return 1
+        cp "$REPO/windows/pack/ASIO-NOTICE.txt" "$APP/ASIO-NOTICE.txt" || return 1
+        cp "$REPO/windows/pack/ASIO-NOTICE.txt" "$APP/licenses/ASIO-NOTICE.txt"
+        echo "asio" > "$APP/FLAVOR.txt"
+    fi
     # which build this is: the launcher logs it and norns shows it; update-and-run compares it with the newest release
     {
         echo "$BUILD"
+        echo "flavor: ${FLAVOR:-wasapi}"
         echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "commit: $(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)"
         echo "message: $(git -C "$REPO" log -1 --format=%s 2> /dev/null || echo unknown)"
@@ -73,6 +94,15 @@ assemble() {
     [ -d "$tmp/SuperCollider" ] || { echo "no SuperCollider folder in $SC_ZIP"; return 1; }
     mv "$tmp/SuperCollider" "$APP/supercollider"
     rm -rf "$tmp"
+    # the source offer (GPL-3.0 section 6): where the corresponding source of this exact build is
+    {
+        sed -e "s|@BUILD@|$BUILD|g" -e "s|@COMMIT@|$(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)|g" -e "s|@REPO@|${VERDANDI_REPO:-${GITHUB_REPOSITORY:-unknown}}|g" "$REPO/windows/pack/SOURCE-OFFER.txt"
+        if [ "$FLAVOR" = asio ]; then
+            echo
+            # shellcheck disable=SC2028
+            echo "ASIO build: the source of PortAudio as it was built, and of the Steinberg ASIO SDK as it was used, are in this folder: source\\portaudio-source.zip, source\\asio-sdk-source.zip (build record: source\\PA-ASIO-BUILD.txt)."
+        fi
+    } > "$APP/SOURCE-OFFER.txt"
     # licences
     mkdir -p "$APP/licenses"
     cp "$REPO/LICENSE.txt" "$APP/licenses/Verdandi-GPL-3.0.txt" 2> /dev/null || true

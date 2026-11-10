@@ -17,10 +17,23 @@
 #endif
 #if __has_include(<pa_asio.h>)
 #include <pa_asio.h>
+#endif
+#endif
+#endif
+/* the ASIO host API's stream info (PortAudio's public pa_asio.h, version 1 of the struct) when the header of this PortAudio does not come with the package: the standard MSYS2 PortAudio has no ASIO, but the ASIO
+ * build of PortAudio (windows/ci/build-portaudio-asio.sh) is a drop-in DLL, so one norns.exe serves both builds: a PortAudio without ASIO simply lists no ASIO host API (Pa_HostApiTypeIdToHostApiIndex) and
+ * this code is never reached. no ASIO SDK header or code is used here: only this plain struct. */
+#ifndef PA_ASIO_H
+#define paAsioUseChannelSelectors (0x01)
+typedef struct PaAsioStreamInfo {
+    unsigned long size;
+    PaHostApiTypeId hostApiType;
+    unsigned long version;
+    unsigned long flags;
+    int *channelSelectors;
+} PaAsioStreamInfo;
+#endif
 #define HAVE_PA_ASIO_H 1
-#endif
-#endif
-#endif
 
 #include "audio_device.h"
 
@@ -191,7 +204,10 @@ static const char *host_error_text(PaError e, char *buf, size_t n) {
 
 /* ---- the callbacks ---- */
 static int main_cb(const void *in, void *out, unsigned long frames, const PaStreamCallbackTimeInfo *ti, PaStreamCallbackFlags fl, void *user) {
-    (void)ti, (void)fl, (void)user;
+    (void)ti, (void)user;
+    if (fl & (paOutputUnderflow | paInputOverflow)) {
+        vaud_card_xrun(1);
+    }
     if (frames > MAXF) {
         memset(out, 0, frames * (size_t)out_ch * sizeof(float));
         return paContinue;

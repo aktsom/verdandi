@@ -92,7 +92,7 @@ The workflow asks for the one permission it needs, `contents: write`, for the on
 6. To let `update-and-run.cmd` download without a login the repository has to be **public**: **Settings > General**, scroll to the bottom, *Danger Zone*, **Change visibility**. This is your decision; with a private repository download the zip in the browser (the Releases page works while you are logged in).
 7. Check it worked: **Actions** tab > the newest run of *windows-m1* > the job **Publish the zip to GitHub Releases** is green; then the front page of the repository, the box **Releases** on the right: *Verdandi for Windows: the newest build (...)*.
 
-# Windows M1: the first runnable build (no sound yet)
+# Windows M1: the first runnable build (null audio; sound came in M2, ASIO and input in M3: see below)
 
 M1 gives you a program: unzip it anywhere and double-click `Verdandi.exe`. It opens the norns window, boots norns's Lua side, starts SuperCollider in the background on a silent "null" audio device and lets you run scripts and click through the menus. **Not in M1:** sound, grids, MIDI, Link, maiden, an installer. Approach: `docs/port/phase-m1.md`.
 
@@ -120,6 +120,32 @@ Nothing is changed in Windows' sound settings by Verdandi. No ASIO in M2 (M3).
 
 ### M2, second round: what changed and what to check
 Restarts no longer crash (the program now ends at once instead of closing Lua under running threads), the launcher stops old `norns.exe`/`sclang.exe`/`scsynth.exe` of the same folder before a start and starts sclang only after norns.exe has made the sound bridge, a slow SuperCollider start no longer ends in SUPERCOLLIDER FAIL (a late answer completes the start-up), and AUDIO > OUTPUT `default` means "follow the Windows default". Steps: `docs/port/HARDWARE-CHECKLIST.md`, "Windows M2, second round". A crash report now names the functions; to read one on your side: `python windows\ci\resolve_crash.py norns.exe --report crash-....txt` (the `norns.exe` of the same build).
+
+## Windows M3: ASIO, sound input, the RME Fireface UC (what to click, what you should hear, what to measure, what to send back)
+Two zips now (Releases page, newest build: the link at the top of this file):
+- **`Verdandi-windows-latest.zip`** (the default, **WASAPI only**: no ASIO code in it). Start with this one.
+- **`Verdandi-windows-asio-latest.zip`** (the same program with PortAudio built with the ASIO host API; it carries the GPLv3 notices and sources of that part: `ASIO-NOTICE.txt`, `SOURCE-OFFER.txt`, `source\`). Why two: `docs/port/asio-licence.md`. `update-and-run.cmd` inside an ASIO folder updates to the ASIO build.
+Unpack as before. The program is the same; only `libportaudio-2.dll` differs. Details of the design: `docs/port/phase-m3.md`.
+
+**SYSTEM > AUDIO** (F10 or the right mouse button; E2 moves, E3 changes, K3 on APPLY restarts Verdandi):
+`HOST` WASAPI (and ASIO in the ASIO zip) / `OUTPUT` / `OUT CH` (the output pair, ASIO) / `INPUT` (none or a capture device; with ASIO the same driver) / `IN L`, `IN R` (which input channels are left and right; the same channel twice = mono) / `RATE` / `BUFFER` (64 to 1024, default 512) / `APPLY` / `TEST` (K3: a click goes out and is listened for) / `LATENCY` (what the driver says, plus the extra block for engine sounds) / `MEASURED` (the round trip from TEST) / `LEVEL` (the peak of the input). Under the list: what runs (`playing: <device> <api>`), the counters `under` (scsynth was late for a block) and `xrun` (the card glitched), and plain notes: a busy ASIO driver says so and Verdandi uses WASAPI on the same hardware instead; a missing device falls back to the default device or to silence with a note, never a freeze. Everything is saved in `%USERPROFILE%\Verdandi\audio.conf` (`output=`, `input=`, `rate=`, `period=`, `out_first=`, `in_l=`, `in_r=`).
+
+**The input switch** is the MIC button of the window (or the menu key as on the Linux build): MIC > SYS > OFF. **It is OFF every time Verdandi starts** (so a microphone next to speakers cannot feed back). MIC is the INPUT chosen on the AUDIO page. SYS is what Windows plays (WASAPI loopback of the default playback device); it does **not** hear Ableton's ASIO audio and it hears Verdandi's own output if Verdandi plays to that device. A choice that cannot work (no input chosen, no loopback) stays OFF and the window says why.
+
+**Your set-ups, in the order to try them** (the click-by-click for TotalMix FX and Ableton is in `docs/port/phase-m3.md`, section 3; **it has not been tried on the RME**):
+1. **(b) WASAPI next to Ableton** (what M2 did): leave HOST WASAPI, OUTPUT the Fireface's Windows device. Hear awake while Live runs.
+2. **(c) Into TotalMix Loopback so that Live records it:** TotalMix FX loopback on a hardware output pair, Verdandi on that pair, an Ableton audio track with Ext. In on the loopback input.
+3. **(a) ASIO alone:** use the ASIO zip, close Live (or use the driver's multi-client mode if your RME driver has it), HOST ASIO, OUTPUT the Fireface, APPLY. If Live still has the driver, Verdandi says "ASIO driver ... is busy: another program has it (close its audio, or use the driver's multi-client mode)" and plays through WASAPI on the same hardware instead.
+
+**What you should hear / see**
+- awake as in M2 on every route. On ASIO the delay is shorter (the page shows LATENCY `out`, about 5 to 12 ms is my estimate for the RME, plus one block for engine sounds).
+- With INPUT chosen and MIC on: your input is heard through Verdandi's output and moves LEVEL; with MIC off LEVEL says `input off`. Start Verdandi again: the input is OFF again.
+- SYS: play a video in a browser (not through Ableton): SYS makes it an input of norns (LEVEL moves).
+- TEST: connect the output to an input (a cable, or the TotalMix loopback) and keep the script quiet: MEASURED shows a number in ms; without the loop it says `no signal` after two seconds.
+
+**What to measure:** the smallest BUFFER (128, 256, 512) at which `under` and `xrun` stay at 0 for a minute of awake; the MEASURED round trip on WASAPI and on ASIO; whether keys feel late (not noticeable / noticeable / annoying).
+
+**What to send back:** `logs\norns.log` (lines starting `audio:`: the host APIs of PortAudio, the choice, the device, the latencies, the input, any note), `sclang.log`, `audio.conf`; the **device list**: run `set VERDANDI_AUDIO_LIST=1` then `norns.exe` in the program folder in a command window (it prints every device with its host API, channels and latencies and exits); the **names of the ASIO drivers** installed (the list shows them in the ASIO zip; the RME one as Windows and Ableton name it); the TotalMix FX version and whether the hardware output strips have a Loopback setting; which of the three set-ups worked.
 
 ## Scripts and maiden in M1
 - The zip carries a small set of scripts (awake) in `dust-seed\code`; on the first start they are copied to `%USERPROFILE%\Verdandi\dust\code` when that folder is empty (a folder that already has anything is never touched).

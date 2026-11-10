@@ -80,6 +80,11 @@ chk_noise() {
 # M2: the audio chain on the runner (it has no sound card, so null audio or a card, whichever it is, is reported)
 chk_audio() {
     has "$LOGS/norns.log" "^audio: PortAudio .*host APIs:" "PortAudio and its host APIs are listed in the log" \
+        && has "$LOGS/norns.log" "^audio: output chosen: .*input: .*block " "the choice (output, input, rate, block) is in the log" \
+        && has "$LOGS/norns.log" "^audio: input is OFF at the start" "the input is OFF at the start (no feedback)" \
+        && has "$LOGS/norns.log" "VERDANDI_SMOKE_AUDIO .*input=off" "norns reports the input as off" \
+        && { [ "${EXPECT_ASIO:-0}" != 1 ] || has "$LOGS/norns.log" "^audio: PortAudio .*host APIs:.*ASIO\\(" "this is the ASIO build: PortAudio lists the ASIO host API (with 0 drivers on a runner)"; } \
+        && { [ "${EXPECT_ASIO:-0}" = 1 ] || ! grep -q -E "^audio: PortAudio .*host APIs:.*ASIO\\(" "$LOGS/norns.log" 2> /dev/null || { echo "NOT EXPECTED: ASIO in the WASAPI-only build"; false; }; } \
         && has "$LOGS/norns.log" "^audio: (device '|null audio|.*null audio is used)" "the audio decision (device or null audio) is in the log" \
         && has "$LOGS/norns.log" "^audio bridge: '.*' ready" "norns.exe made the audio bridge" \
         && has "$LOGS/sclang.log" "SC_BridgeAudioDriver: the first block was computed" "scsynth computed its first block from the bridge" \
@@ -88,19 +93,20 @@ chk_audio() {
         && echo "found: blocks flow both ways (more than 50 in 3 s) with at most 5 drops (underruns are reported, not judged: a loaded runner)"
 }
 chk_audio_numbers() { grep -h -E "^audio: |^audio bridge: |VERDANDI_SMOKE_AUDIO" "$LOGS/norns.log" 2> /dev/null | head -20; }
-# the list of output devices, with no program running: norns.exe alone, VERDANDI_AUDIO_LIST=1
+# the list of devices (all host APIs), with no program running: norns.exe alone, VERDANDI_AUDIO_LIST=1
 list_audio() {
     local out
     out=$(cd "$APP" && VERDANDI_AUDIO_LIST=1 HOME="$HOMEDIR" timeout 60 "./norns$EXE" 2>&1) || true
     echo "$out" | head -20
-    echo "$out" | grep -q -E "^[0-9]+ output devices"
+    echo "$out" | grep -q -E "^[0-9]+ devices"
 }
 # a device that does not exist: no hang, a plain note, null audio, and the bridge still works
 run_fallback() {
     local h2="$WORK/user home fallback"
     rm -rf "$h2"
     mkdir -p "$h2"
-    printf 'output=wasapi:No Such Speakers 4711\nrate=48000\nperiod=512\n' > "$h2/audio.conf"
+    # (an output that is not there, an input that is not there, channels: all of audio.conf's M3 keys at once)
+    printf 'output=wasapi:No Such Speakers 4711\ninput=wasapi:No Such Microphone 4711\nrate=48000\nperiod=512\nout_first=1\nin_l=3\nin_r=4\n' > "$h2/audio.conf"
     if command -v timeout > /dev/null 2>&1; then
         timeout -k 10 120 "$APP/Verdandi$EXE" --headless --exit-after=45 --home="$(native "$h2")"
     else
@@ -114,9 +120,42 @@ run_fallback() {
 chk_fallback() {
     local l="$WORK/user home fallback/logs/norns.log"
     has "$l" "not found.*null audio is used|null audio is used" "a device that does not exist is said in plain words, with null audio instead" \
+        && has "$l" "^audio: output chosen: 'wasapi:No Such Speakers 4711', input: 'wasapi:No Such Microphone 4711'" "the log says what was chosen: output and input" \
+        && has "$l" "^audio: channels: .*input left 3 right 4" "and the channels" \
         && has "$l" "^audio bridge: '.*' ready" "the bridge was made anyway" \
         && has "$WORK/user home fallback/logs/sclang.log" "SC_BridgeAudioDriver: audio from norns.exe" "scsynth still runs, on the bridge" \
         && [ -f "$WORK/user home fallback/audio.conf.failed" ] && echo "found: audio.conf.failed (the AUDIO page says it)"
+}
+# M3: an ASIO driver that does not exist (in the ASIO build this goes through the ASIO host API, in the WASAPI-only build through the same "not found" path): a plain note, never a hang.
+# and the input switch with VERDANDI_SMOKE_INPUT=1: MIC and SYS answer yes or no on a runner that may have no input, OFF always works, nothing crashes
+IN_HOME="$WORK/user home input"
+run_input() {
+    rm -rf "$IN_HOME"
+    mkdir -p "$IN_HOME/dust/code/verdandi_smoke" "$IN_HOME/dust/data/verdandi_smoke"
+    cp -r "$HOMEDIR/dust/code/verdandi_smoke" "$IN_HOME/dust/code/" && cp "$HOMEDIR/dust/data/system.state" "$IN_HOME/dust/data/system.state"
+    printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nperiod=256\n' > "$IN_HOME/audio.conf"
+    if command -v timeout > /dev/null 2>&1; then
+        VERDANDI_SMOKE_INPUT=1 timeout -k 10 150 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$IN_HOME")"
+    else
+        VERDANDI_SMOKE_INPUT=1 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$IN_HOME")"
+    fi
+    echo "launcher exit code $?"
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$IN_HOME/logs" "$M0_OUT/m3-input-logs" 2> /dev/null || true
+    return 0
+}
+chk_input() {
+    local l="$IN_HOME/logs/norns.log"
+    grep -h -E "^audio: |VERDANDI_SMOKE_INPUT" "$l" 2> /dev/null | head -30
+    has "$l" "^audio: output chosen: 'asio:No Such Driver 4711'" "the ASIO choice is in the log" \
+        && has "$l" "null audio is used|not found, using the default device" "an ASIO driver that is not there is said in plain words (null audio, or the default device)" \
+        && has "$l" "VERDANDI_SMOKE_INPUT start ok=true state=off" "the input is off at the start" \
+        && has "$l" "VERDANDI_SMOKE_INPUT mic ok=false state=off note=\\[MIC: " "MIC without an input device says no, with the reason" \
+        && has "$l" "VERDANDI_SMOKE_INPUT sys-2s ok=true state=(system|off)" "SYS answers (loopback or a note), and the program runs on" \
+        && has "$l" "VERDANDI_SMOKE_INPUT off ok=true state=off" "OFF always works" \
+        && has "$l" "VERDANDI_SMOKE_INPUT measured=-[12]" "the measurement with no input does not invent a number (no signal, or still waiting)" \
+        && has "$l" "VERDANDI_SMOKE_INPUT_DONE" "the whole input run finished" \
+        && ! grep -q "norns CRASHED" "$l"
 }
 # M2: ten starts and restarts in a row. norns.exe ends with exit code 42 when it asks for a restart (SYSTEM > RESTART, APPLY on the AUDIO page), the launcher starts everything again.
 # the restarts are asked for by lua/core/test_cycles.lua, switched on by VERDANDI_TEST_CYCLES (the launcher numbers the starts in VERDANDI_ROUND): not by a script. (the first version seeded a script that
@@ -220,6 +259,8 @@ m0_run m2-check-audio chk_audio
 m0_run m2-audio-numbers chk_audio_numbers
 m0_run m2-run-fallback run_fallback
 m0_run m2-check-fallback chk_fallback
+m0_run m3-run-input run_input
+m0_run m3-check-input chk_input
 m0_run m2-run-cycles run_cycles
 m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard

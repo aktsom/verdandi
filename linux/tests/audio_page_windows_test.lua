@@ -24,7 +24,7 @@ screen = {clear = function() texts = {} end, level = function() end, move = func
 local restarted, measured = false, false
 local function mkinfo(t)
   local i = {mode = "device", device = "Speakers (Realtek)", in_device = "", host_api = "Windows WASAPI shared", host_apis = "WASAPI", input = "off", rate = 48000, frames = 512,
-    out_latency_ms = 21.3, in_latency_ms = 0, block_ms = 10.7, engine_ms = 10.7, peak_db = -120, measured_ms = -1, in_active = false, note = "", in_note = "", sys_note = "", underruns = 0}
+    out_latency_ms = 21.3, in_latency_ms = 0, block_ms = 10.7, engine_ms = 10.7, peak_db = -120, measured_ms = -1, in_active = false, note = "", in_note = "", sys_note = "", underruns = 0, xruns = 0}
   for k, v in pairs(t or {}) do i[k] = v end
   return i
 end
@@ -59,7 +59,7 @@ page.init(); page.redraw()
 check(shown("WASAPI"), "the host row says WASAPI (no ASIO in this build)")
 check(shown("default") and shown("512"), "the default block is 512 and the output is the default device")
 check(shown("playing: Speakers (Realtek)"), "the bottom line names the device that is playing")
-check(shown("48000 Hz  512 frames  under 0"), "the stream, with the underrun count")
+check(shown("48000 Hz  512 frames  under 0  xrun 0"), "the stream, with the underrun count")
 go(ROW.HOST); page.enc(3, 1); page.redraw()
 check(shown("WASAPI") and not shown("ASIO"), "E3 on HOST cannot choose ASIO when the build has none")
 go(ROW.OUTPUT); page.enc(3, 1); page.redraw()
@@ -123,14 +123,14 @@ c = conf()
 restarted = false
 
 -- the number rows
-info = mkinfo({host_apis = "WASAPI ASIO", out_latency_ms = 21.3, in_latency_ms = 12.1, engine_ms = 10.7, in_active = true, input = "mic", peak_db = -18.4, underruns = 3})
+info = mkinfo({host_apis = "WASAPI ASIO", out_latency_ms = 21.3, in_latency_ms = 12.1, engine_ms = 10.7, in_active = true, input = "mic", peak_db = -18.4, underruns = 3, xruns = 2})
 write("")
 page.init()
 go(ROW.LATENCY); page.redraw()
 check(shown("out 21 in 12 +11 ms"), "LATENCY: what the driver reports, and the extra block of the bridge")
 go(ROW.LEVEL); page.redraw()
 check(shown("-18 dB"), "LEVEL shows the input peak")
-check(shown("under 3"), "the underrun count is on the page")
+check(shown("under 3") and shown("xrun 2"), "the bridge underruns and the card xruns are on the page")
 info = mkinfo({measured_ms = -1})
 go(ROW.MEASURED); page.redraw()
 check(shown("press TEST"), "MEASURED before a test")

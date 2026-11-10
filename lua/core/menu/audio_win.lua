@@ -293,7 +293,7 @@ m.redraw = function()
   if m.pos == R.APPLY then hint = "K3 restarts audio"
   elseif m.pos == R.TEST then hint = "K3: click out, heard in"
   elseif info and info.mode == "device" then
-    hint = string.format("%d Hz  %d frames  under %d", info.rate, info.frames, info.underruns)
+    hint = string.format("%d Hz  %d frames  under %d  xrun %d", info.rate, info.frames, info.underruns, info.xruns or 0)
   else hint = "" end
   screen.text(fit(hint, 128))
   local text, level = bottom(info)

@@ -1,0 +1,8 @@
+Source offer (GNU General Public License version 3, section 6)
+
+Verdandi for Windows (build @BUILD@) is free software under the GPL-3.0. The complete corresponding source of this exact build is in the public repository
+  https://github.com/@REPO@  at commit  @COMMIT@
+(branch linux-port; the folders windows\, matron\, crone\, lua\, sc\ and the git submodules named in .gitmodules are the program; the build scripts are windows\ci\).
+The sources of the third-party programs that are part of this folder are at their own places: SuperCollider 3.14.1 (https://github.com/supercollider/supercollider, with the patch
+windows\patches\scsynth-null-audio.patch of the repository above) and the libraries of MSYS2 (https://packages.msys2.org, named in licenses\ when the licence asks for it).
+This offer stands for as long as this build is distributed. If a link no longer works, ask in the repository above and the source will be sent.

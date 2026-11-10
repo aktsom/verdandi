@@ -1,0 +1,10 @@
+ASIO notice (the ASIO build of Verdandi for Windows only)
+
+This build contains PortAudio compiled with the ASIO host API. That part uses the ASIO SDK by Steinberg Media Technologies GmbH.
+  - ASIO is a trademark and software of Steinberg Media Technologies GmbH.
+  - The SDK is used here under the GNU General Public License version 3 (the open-source option of Steinberg's dual licence for the SDK). The licence text that came with the SDK is in
+    licenses\ASIO-SDK-LICENSE.txt, unchanged. Verdandi itself is GPL-3.0 (licenses\Verdandi-GPL-3.0.txt), so the program as a whole is distributed under GPL-3.0.
+  - PortAudio is MIT licensed (the licence is part of its source in source\portaudio-source.zip).
+  - The corresponding source of this build is in this folder (source\) and at the address in SOURCE-OFFER.txt.
+  - This is not an endorsement by Steinberg, and the ASIO name is used only to say which driver interface is meant.
+If you redistribute this build, keep this notice, SOURCE-OFFER.txt, licenses\ and source\ with it.

@@ -80,6 +80,13 @@ cat "$REPO_DIR/windows/KNOWN-LIMITS.md"
 echo
 echo "## Get it and start it"
 echo
+if [ "${HAVE_ASIO:-0}" = 1 ]; then
+    echo "Two zips: **Verdandi-windows-$VERSION-$SHORT.zip** (WASAPI only, the default, no ASIO code in it) and **Verdandi-windows-asio-$VERSION-$SHORT.zip** (the same program with PortAudio built with ASIO; it carries the GPLv3 notices and the sources of the ASIO part, see \`ASIO-NOTICE.txt\` in it and docs/port/asio-licence.md). Start with the default one."
+    echo
+else
+    echo "This release has only the WASAPI zip (the ASIO build was not made, or did not pass its checks, in this run)."
+    echo
+fi
 echo "1. Download **Verdandi-windows-$VERSION-$SHORT.zip** below. Right-click it, Properties, tick *Unblock*, OK. Extract it into a folder of your own (it contains one folder, \`Verdandi-$VERSION-$SHORT\`, so builds never overwrite each other)."
 echo "2. Double-click \`Verdandi.exe\` in that folder. Next time double-click \`update-and-run.cmd\` there: it fetches the newest build, unpacks it next to this one and starts it. Your files stay in \`%USERPROFILE%\\Verdandi\`."
 if [ -n "$REPO" ]; then

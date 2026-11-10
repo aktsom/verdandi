@@ -281,6 +281,8 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
     }
 }
 
+void vaud_card_xrun(unsigned n) { S.card_xruns += n; }
+
 void vaud_measure_start(void) {
     S.measured_ms = -1;
     measure_state = (S.mode == VAUD_MODE_DEVICE) ? 1 : 0;
@@ -454,6 +456,7 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
         verdandi_jack_null_external_clock(0);
         fprintf(stderr, "audio: null clock, %u Hz, %u frames per block\n", S.rate, S.frames);
     }
+    fprintf(stderr, "audio: input is OFF at the start (nothing reaches norns until MIC or SYS is chosen)\n");
     if (bridge_name && *bridge_name) {
         bridge_up = verdandi_bridge_host_start(bridge_name, S.rate, S.frames) == 0;
     }

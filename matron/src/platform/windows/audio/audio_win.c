@@ -79,6 +79,7 @@ void verdandi_audio_info(verdandi_audio_info_t *out) {
     out->engine_ms = out->block_ms; /* the bridge keeps one block between crone and scsynth */
     out->peak_db = s->in_peak_db;
     out->measured_ms = s->measured_ms;
+    out->card_xruns = s->card_xruns;
     out->in_active = dev && s->opened.in_active;
     snprintf(out->note, sizeof out->note, "%s", s->note);
     snprintf(out->in_note, sizeof out->in_note, "%s", dev ? s->opened.in_note : "");

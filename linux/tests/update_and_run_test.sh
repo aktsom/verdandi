@@ -174,6 +174,15 @@ run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VE
 mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
 ck "a file that is too small is refused as an error page" "grep -q 'that is an error page' '$T/out.txt' && [ ! -e '$ROOT/Verdandi-0.3.0-bbbbbbb' ]"
 
+echo "== the ASIO build updates to the ASIO build (FLAVOR.txt): its own zip, its own folder name"
+ROOT="$T/r6"; newroot 6
+mkbuild "$ROOT/Verdandi-asio-0.2.0-aaaaaaa" 0.2.0 aaaaaaa; echo asio > "$ROOT/Verdandi-asio-0.2.0-aaaaaaa/FLAVOR.txt"
+mv "$T/server/Verdandi-windows-latest.zip" "$T/server/zip.hidden"
+head -c 1200000 /dev/zero > "$T/server/Verdandi-windows-asio-latest.zip"
+run "$ROOT/Verdandi-asio-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+rm -f "$T/server/Verdandi-windows-asio-latest.zip"; mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
+ck "the ASIO zip is downloaded and unpacked into Verdandi-asio-<version>-<hash>" "[ -f '$ROOT/Verdandi-asio-0.3.0-bbbbbbb/Verdandi.exe' ] && [ ! -e '$ROOT/Verdandi-0.3.0-bbbbbbb' ]"
+
 echo "== no address to download from"
 ROOT="$T/r6"; newroot 6
 rm -f "$ROOT/Verdandi-0.2.0-aaaaaaa/UPDATE-SOURCE.txt"

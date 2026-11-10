@@ -91,6 +91,7 @@ typedef struct {
     vaud_input_mode input;    /* what norns hears now */
     char sys_note[200];       /* why SYS does not work, "" otherwise */
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
+    unsigned long long card_xruns; /* callbacks the host API flagged as underflow / overflow (a block was late or lost at the card), counted since the start: the "crackles" counter of the AUDIO page */
     double measured_ms;       /* the measured round trip (output to input and back to crone), -1 = none yet, -2 = no signal */
 } vaud_state;
 
@@ -115,6 +116,8 @@ int vaud_input_set(int mic_on, int sys_on);
 /* the round trip: a click goes out, the input is watched for it. needs an input (and a cable or TotalMix Loopback from the output back to it). the result is in vaud_get_state()->measured_ms */
 void vaud_measure_start(void);
 
+/* the backend tells the card's glitches (PortAudio's output underflow / input overflow flags): n blocks */
+void vaud_card_xrun(unsigned n);
 /* for the backends' own threads: blocks of the separate input stream (mic) and of the loopback stream (sys), interleaved stereo */
 void vaud_push_mic(const float *interleaved, unsigned frames);
 void vaud_push_sys(const float *interleaved, unsigned frames);

@@ -534,6 +534,8 @@ static void scenario_input(const char *sc) {
             CHECK(st.frames == 128 && fabs(st.opened.out_latency_ms - 6.5) < 0.01, "asio_ok: block %u, reported output latency %.1f", st.frames, st.opened.out_latency_ms);
         }
         CHECK(card_blocks > 10, "%s: the card runs", sc);
+        vaud_card_xrun(2);
+        CHECK(vaud_get_state()->card_xruns == 2, "%s: the card's glitches are counted (%llu)", sc, vaud_get_state()->card_xruns);
     } else if (!strcmp(sc, "asio_gone")) {
         st = start_card("asio:Gone Driver", "", 1, 2, 1, 512);
         CHECK(st.mode == VAUD_MODE_DEVICE && strstr(st.note, "not found") && strstr(st.note, "default"), "asio_gone: a driver that is gone: the default device with a note: '%s'", st.note);

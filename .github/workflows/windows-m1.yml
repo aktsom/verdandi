@@ -1,4 +1,4 @@
-# Verdandi Windows, milestone M1: the first runnable build (norns window, matron and Lua, sclang and scsynth on a null audio device). plan: docs/port/phase-m1.md, guide: windows/README.md.
+# Verdandi Windows (M1 .. M3): the first runnable build (norns window, matron and Lua, sclang and scsynth on a null audio device). plan: docs/port/phase-m1.md, guide: windows/README.md.
 # builds SuperCollider 3.14.1 (with Verdandi's null audio driver patch), builds norns.exe and the launcher with MSYS2, assembles the folder, starts it HEADLESS on the runner and checks the logs and a
 # screenshot, and uploads the zip. every step records PASS or FAIL in a report (windows/ci/lib.sh); the artifact "verdandi-windows-m1" holds the zip, the report, the logs of the test run and its screenshot.
 name: windows-m1
@@ -150,12 +150,102 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+  # M3: PortAudio with the ASIO host API (MSYS2, from source with Steinberg's SDK under its GPLv3 option: docs/port/asio-licence.md). NOT part of the default build: when this job or its package job fails the
+  # WASAPI-only zip is published as before and the release notes say that there is no ASIO zip.
+  asio:
+    name: PortAudio with ASIO (MSYS2 UCRT64)
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 40
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: git base-devel mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+      - name: Build PortAudio with ASIO
+        run: windows/ci/build-portaudio-asio.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m3-out-asio
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m3-asio-dll
+          path: m3-asio
+          retention-days: 14
+          if-no-files-found: warn
+
+  package-asio:
+    name: 'ASIO build (assemble, start headless, check)'
+    needs: [sc, norns, asio]
+    if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' && needs.asio.result == 'success' }}
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 30
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-out-sc
+          path: sc-artifact
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-norns-bin
+          path: m1-norns
+      - uses: actions/download-artifact@v4
+        with:
+          name: m3-asio-dll
+          path: m3-asio
+      - name: Assemble the folder and the zip
+        run: FLAVOR=asio ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
+      - name: Start it headless and check (ASIO host API listed, fallback, input)
+        timeout-minutes: 30
+        run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m3" SMOKE_SECONDS=60 SMOKE_CYCLES=3 EXPECT_ASIO=1 windows/ci/smoke-m1.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
+      # the zip is handed on to the release only when every check of this job passed
+      - name: Gate
+        id: gate
+        run: |
+          if grep -l '^FAIL' m0-out/status/*.status 2> /dev/null; then echo "a check of the ASIO build failed: its zip is not published"; exit 1; fi
+          echo "all checks of the ASIO build passed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m3-out-package-asio
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.gate.outcome == 'success' }}
+        with:
+          name: m3-asio-zip
+          path: m1-stage/Verdandi-windows-asio-*.zip
+          retention-days: 30
+          if-no-files-found: error
+
   # a successful run on linux-port publishes its zip to GitHub Releases: windows-<short hash> for every commit (kept: the newest 20) and windows-latest (replaced each time, only when no check failed).
   # the workflow's own token, the one permission this job needs: contents: write (create and delete releases and their tags). nothing else in the workflow gets write access.
   release:
     name: Publish the zip to GitHub Releases
-    needs: [package, report]
-    if: ${{ github.ref == 'refs/heads/linux-port' && needs.package.result == 'success' && needs.report.result == 'success' }}
+    needs: [package, report, package-asio]
+    if: ${{ always() && github.ref == 'refs/heads/linux-port' && needs.package.result == 'success' && needs.report.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -174,10 +264,20 @@ jobs:
         with:
           name: verdandi-windows-m1
           path: release-report
+      # the ASIO zip, only when its own checks passed (the artifact is not there otherwise)
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m3-asio-zip
+          path: release-zip-asio
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           ZIP_DIR: release-zip
+          ASIO_ZIP_DIR: release-zip-asio
+          # m3-check-input (MIC / SYS / measure on a runner without a sound card) has never run before M3: for its first runs a red result is listed in the release notes but does not hold windows-latest
+          # back. REMOVE THIS LINE once it has been green (docs/port/phase-m3.md); the script's own default is an empty list
+          NONBLOCKING_CHECKS: 'm3-check-input m3-run-input'
           STATUS_DIR: release-report/status
         run: windows/ci/publish-release.sh
 

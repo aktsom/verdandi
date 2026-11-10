@@ -26,6 +26,10 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $parent = Split-Path -Parent $here
 $data = if ($env:VERDANDI_HOME) { $env:VERDANDI_HOME } else { Join-Path $env:USERPROFILE 'Verdandi' }
 $tag = 'windows-latest'
+# the ASIO build (FLAVOR.txt in its folder) updates to the ASIO build: its own zip and folder name
+$zipName = 'Verdandi-windows-latest'
+$namePrefix = 'Verdandi'
+if (Test-Path (Join-Path $here 'FLAVOR.txt')) { $zipName = 'Verdandi-windows-asio-latest'; $namePrefix = 'Verdandi-asio' }
 
 Say ''
 Say ' Verdandi: update and run'
@@ -103,7 +107,7 @@ if (-not $m.Success) {
     Say " The newest build's BUILD.txt is not in the expected form (`"$latest`"). Nothing was changed."
     Offer-Current 2
 }
-$newName = "Verdandi-$($m.Groups[1].Value)-$($m.Groups[2].Value)"
+$newName = "$namePrefix-$($m.Groups[1].Value)-$($m.Groups[2].Value)"
 Say " The newest build is:     $latest"
 
 $target = $null
@@ -119,7 +123,7 @@ if ($latest -eq $current) {
     Say ''
     Say ' Downloading the newest build (about 20 MB; this can take a minute) ...'
     $zip = Join-Path $work 'new.zip'
-    Fetch 'Verdandi-windows-latest.zip' $zip $true | Out-Null
+    Fetch "$zipName.zip" $zip $true | Out-Null
     $size = (Get-Item $zip).Length
     if ($size -lt 1000000) {
         Say ''
@@ -127,7 +131,7 @@ if ($latest -eq $current) {
         Offer-Current 2
     }
     $shaFile = Join-Path $work 'new.sha256'
-    if (Fetch 'Verdandi-windows-latest.zip.sha256' $shaFile $false) {
+    if (Fetch "$zipName.zip.sha256" $shaFile $false) {
         $expect = ((Get-Content $shaFile -TotalCount 1).Trim() -split '\s+')[0]
         $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
         if ($expect -and ($expect -ine $actual)) {

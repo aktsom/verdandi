@@ -22,21 +22,26 @@ WAF="$(find_waf)"
 
 FAILED=()
 KNOWN=()
+logfile() { # name -> a safe, short file name in $T (a name may hold slashes, > and quotes, and be long)
+    printf '%s/%s-%s.log' "$T" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_' | cut -c1-60)" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
+}
 run() { # name, command...
-    local name="$1"
+    local name="$1" log
     shift
-    if "$@" > "$T/$name.log" 2>&1; then
+    log="$(logfile "$name")"
+    if "$@" > "$log" 2>&1; then
         echo "PASS  $name"
     else
         echo "FAIL  $name (log: tail below)"
-        tail -5 "$T/$name.log" | sed 's/^/        /'
+        tail -5 "$log" | sed 's/^/        /'
         FAILED+=("$name")
     fi
 }
 known() { # name, command...: a failure is expected and recorded
-    local name="$1"
+    local name="$1" log
     shift
-    if "$@" > "$T/$name.log" 2>&1; then
+    log="$(logfile "$name")"
+    if "$@" > "$log" 2>&1; then
         echo "PASS  $name (was a known failure: update docs/port/phase-1.md)"
     else
         echo "KNOWN $name"
@@ -124,6 +129,7 @@ fi
 run "windows:start/restart cycle test hook (VERDANDI_TEST_CYCLES: a restart after each start-up until the start number is reached, then a shutdown; inactive without the variable)" lua5.3 linux/tests/test_cycles_test.lua
 run "windows:the cycle test check passes a good run and fails the real failing run with the log of the failing round in the report" bash linux/tests/cycle_check_test.sh
 run "windows:publishing a build to GitHub Releases (tags, assets, windows-latest updated in place and only when no check failed, old releases pruned, the notes) with a stand-in for gh" bash linux/tests/release_publish_test.sh
+run "windows:assembling the two flavours (default WASAPI-only zip has no ASIO file; the ASIO zip has its PortAudio, the SDK licence text, the notice, the source offer and the sources, its own names and FLAVOR.txt)" bash linux/tests/assemble_flavor_test.sh
 if command -v actionlint > /dev/null 2>&1 || [ -x "$HOME/go/bin/actionlint" ]; then
     run "windows:the workflows pass actionlint" bash -c 'PATH="$PATH:$HOME/go/bin" actionlint .github/workflows/windows-m0.yml .github/workflows/windows-m1.yml'
 fi

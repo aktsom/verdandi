@@ -30,7 +30,7 @@ typedef struct {
     char note[480];
     char in_note[200];
     char sys_note[200];
-    unsigned long long to_sc, from_sc, underruns, drops;
+    unsigned long long to_sc, from_sc, underruns, drops, card_xruns;
     int scsynth_attached;
 } verdandi_audio_info_t;
 void verdandi_audio_info(verdandi_audio_info_t *out);

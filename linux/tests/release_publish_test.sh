@@ -62,7 +62,7 @@ VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" RUN_URL="https://github.com/owner/re
 ck "the notes name the version and the build" "grep -q '^# Verdandi for Windows $VERSION (4c82066)' '$WORK_NOTES'"
 ck "the notes hold the commit message" "grep -q '> Windows: a test commit message' '$WORK_NOTES'"
 ck "the notes list the checks that passed (2 passed, 0 failed, 1 skipped) and the skipped one" "grep -q '2 passed, 0 failed, 1 skipped' '$WORK_NOTES' && grep -q 'm1-check-lua' '$WORK_NOTES' && grep -q 'm1-check-screen (no python)' '$WORK_NOTES'"
-ck "the notes hold the known limits and how to start" "grep -q 'No input from the sound card' '$WORK_NOTES' && grep -q 'update-and-run.cmd' '$WORK_NOTES' && grep -q 'releases/tag/windows-latest' '$WORK_NOTES'"
+ck "the notes hold the known limits and how to start" "grep -q 'ASIO' '$WORK_NOTES' && grep -q 'update-and-run.cmd' '$WORK_NOTES' && grep -q 'releases/tag/windows-latest' '$WORK_NOTES'"
 : "$NOTES_FILE"
 
 echo "== a check failed"
@@ -74,22 +74,36 @@ ck "it says so" "grep -q 'windows-latest is left as it was' '$T/out.txt'"
 VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" bash windows/ci/release-notes.sh > "$WORK_NOTES"
 ck "the notes carry a warning that names the failed check" "grep -q 'WARNING: 1 check' '$WORK_NOTES' && grep -q 'm1-check-keyboard' '$WORK_NOTES'"
 
-echo "== only the known red check (the cycle test) failed: windows-latest is still published"
+echo "== the cycle test is red: it blocks windows-latest like every other check (the list of non-blocking checks is empty by default)"
 rm -f "$T/status/m1-check-keyboard.status"; echo "FAIL 1" > "$T/status/m2-check-cycles.status"
 : > "$T/gh.log"; LATEST_EXISTS=1 run
-ck "windows-latest is updated although m2-check-cycles is red" "grep -q 'release upload windows-latest' '$T/gh.log' && grep -q 'published windows-latest' '$T/out.txt'"
-ck "it says that the check is on the list of those that do not block" "grep -q 'check m2-check-cycles is red, but it is on the list' '$T/out.txt'"
-VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" NONBLOCKING_CHECKS="m2-check-cycles m2-run-cycles" bash windows/ci/release-notes.sh > "$WORK_NOTES"
-ck "the notes name it as a known red check that does not hold the build back" "grep -q 'Known red check, not holding this build back' '$WORK_NOTES' && grep -q 'm2-check-cycles' '$WORK_NOTES' && ! grep -q 'WARNING' '$WORK_NOTES'"
-echo "== another check fails together with the cycle test: windows-latest is NOT updated"
+ck "windows-latest is NOT updated when m2-check-cycles is red" "! grep -q 'windows-latest' '$T/gh.log' && grep -q 'windows-latest is left as it was' '$T/out.txt'"
+ck "the notes carry the warning that names it" "grep -q 'WARNING: 1 check' '$T/notes_cycles.md' 2> /dev/null || { VERSION='$VERSION' SHORT=4c82066 SHA='$SHA' STATUS_DIR='$T/status' REPO=owner/repo COMMIT_MESSAGE=x bash windows/ci/release-notes.sh | grep -q 'WARNING: 1 check.*m2-check-cycles'; }"
+echo "== a check can still be named as not blocking (the mechanism stays, for a new check's first runs)"
+: > "$T/gh.log"; NONBLOCKING_CHECKS="m2-check-cycles" LATEST_EXISTS=1 run
+ck "windows-latest is updated although the named check is red" "grep -q 'release upload windows-latest' '$T/gh.log' && grep -q 'check m2-check-cycles is red, but it is on the list' '$T/out.txt'"
+VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" NONBLOCKING_CHECKS="m2-check-cycles" bash windows/ci/release-notes.sh > "$WORK_NOTES"
+ck "the notes name it as a known red check that does not hold the build back" "grep -q 'Known red check, not holding this build back' '$WORK_NOTES' && ! grep -q 'WARNING' '$WORK_NOTES'"
+echo "== another check fails together with the named one: windows-latest is NOT updated"
 echo "FAIL 1" > "$T/status/m1-check-keyboard.status"
-: > "$T/gh.log"; LATEST_EXISTS=1 run
+: > "$T/gh.log"; NONBLOCKING_CHECKS="m2-check-cycles" LATEST_EXISTS=1 run
 ck "a blocking red check still holds windows-latest back" "! grep -q 'windows-latest' '$T/gh.log'"
-echo "== the list can be emptied (NONBLOCKING_CHECKS='')"
-rm -f "$T/status/m1-check-keyboard.status"
-: > "$T/gh.log"; NONBLOCKING_CHECKS="" LATEST_EXISTS=1 run
-ck "then the cycle test blocks like any other check" "! grep -q 'windows-latest' '$T/gh.log'"
-rm -f "$T/status/m2-check-cycles.status"
+rm -f "$T/status/m1-check-keyboard.status" "$T/status/m2-check-cycles.status"
+
+echo "== the ASIO build is part of the run"
+mkdir -p "$T/asiozip"; head -c 2500000 /dev/zero > "$T/asiozip/Verdandi-windows-asio-$VERSION-4c82066.zip"
+: > "$T/gh.log"; ASIO_ZIP_DIR="$T/asiozip" LATEST_EXISTS=1 run
+ck "the per-commit release has both zips" "grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-$VERSION-4c82066.zip' && grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-asio-$VERSION-4c82066.zip'"
+ck "windows-latest gets the ASIO zip, its fixed name and its SHA-256 too" "grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip ' && grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip.sha256'"
+ck "the default zip (WASAPI only) is still the fixed Verdandi-windows-latest.zip" "grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-latest.zip '"
+ck "an ASIO zip of an older build in windows-latest is not removed while this run has one" "! grep -q 'delete-asset windows-latest Verdandi-windows-asio' '$T/gh.log'"
+VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" HAVE_ASIO=1 bash windows/ci/release-notes.sh > "$WORK_NOTES"
+ck "the notes say which zip is the default and point to the ASIO notice" "grep -q 'WASAPI only, the default' '$WORK_NOTES' && grep -q 'ASIO-NOTICE.txt' '$WORK_NOTES'"
+echo "== the ASIO build failed in this run: the release has the default zip only"
+: > "$T/gh.log"; LATEST_EXISTS=1 run
+ck "no ASIO zip is uploaded and the notes say so" "! grep -q 'asio' '$T/gh.log' && grep -q 'no ASIO build in this release' '$T/out.txt'"
+VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" bash windows/ci/release-notes.sh > "$WORK_NOTES"
+ck "the notes say that this release has only the WASAPI zip" "grep -q 'only the WASAPI zip' '$WORK_NOTES'"
 echo "== the zip is missing"
 rm -f "$T/zip/"*.zip
 run; rc=$?

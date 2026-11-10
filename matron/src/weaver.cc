@@ -3875,6 +3875,7 @@ int _audio_info(lua_State *l) {
     SET_I("from_scsynth", a.from_sc);
     SET_I("underruns", a.underruns);
     SET_I("drops", a.drops);
+    SET_I("xruns", a.card_xruns);
     lua_pushboolean(l, a.in_active);
     lua_setfield(l, -2, "in_active");
     lua_pushboolean(l, a.scsynth_attached);

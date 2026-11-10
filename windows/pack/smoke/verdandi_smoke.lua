@@ -33,9 +33,28 @@ function init()
       local a0 = a
       clock.sleep(3)
       a = _norns.audio_info()
-      print(string.format("VERDANDI_SMOKE_AUDIO mode=%s device=[%s] rate=%d frames=%d latency_ms=%.1f scsynth=%s blocks_to_scsynth=%d blocks_from_scsynth=%d underruns=%d drops=%d",
-        a.mode, a.device, a.rate, a.frames, a.latency_ms, tostring(a.scsynth), a.to_scsynth - a0.to_scsynth, a.from_scsynth - a0.from_scsynth, a.underruns, a.drops))
+      print(string.format("VERDANDI_SMOKE_AUDIO mode=%s device=[%s] api=[%s] host_apis=[%s] input=%s rate=%d frames=%d out_latency_ms=%.1f scsynth=%s blocks_to_scsynth=%d blocks_from_scsynth=%d underruns=%d drops=%d",
+        a.mode, a.device, a.host_api, a.host_apis, a.input, a.rate, a.frames, a.out_latency_ms, tostring(a.scsynth), a.to_scsynth - a0.to_scsynth, a.from_scsynth - a0.from_scsynth, a.underruns, a.drops))
       print("VERDANDI_SMOKE_AUDIO_NOTE [" .. a.note .. "]")
+      -- M3: the input switch on a machine that may have no input at all (the CI runner): MIC and SYS must say no or yes, never hang or crash, and OFF must always work
+      if os.getenv("VERDANDI_SMOKE_INPUT") == "1" and _norns.mic_input then
+        local function state(what, ok)
+          local s2, why = _norns.audio_input()
+          print(string.format("VERDANDI_SMOKE_INPUT %s ok=%s state=%s note=[%s]", what, tostring(ok), s2, why))
+        end
+        state("start", true)
+        state("mic", _norns.mic_input(true))
+        _norns.mic_input(false)
+        state("sys", _norns.app_input("system"))
+        clock.sleep(2)
+        state("sys-2s", true)
+        _norns.app_input(nil)
+        state("off", true)
+        _norns.audio_measure()
+        clock.sleep(1)
+        print("VERDANDI_SMOKE_INPUT measured=" .. tostring(_norns.audio_info().measured_ms))
+        print("VERDANDI_SMOKE_INPUT_DONE")
+      end
     end
   end)
 end

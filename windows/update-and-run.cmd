@@ -26,6 +26,13 @@ set "HERE=%~dp0"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
 for %%I in ("%HERE%\..") do set "PARENT=%%~fI"
 set "TAG=windows-latest"
+rem the ASIO build (FLAVOR.txt in its folder) updates to the ASIO build: its own zip and folder name
+set "ZIPNAME=Verdandi-windows-latest"
+set "NAMEPFX=Verdandi"
+if exist "%HERE%\FLAVOR.txt" (
+  set "ZIPNAME=Verdandi-windows-asio-latest"
+  set "NAMEPFX=Verdandi-asio"
+)
 set "CHOICE=choice.exe"
 if defined VERDANDI_CHOICE set "CHOICE=%VERDANDI_CHOICE%"
 set "DATA=%USERPROFILE%\Verdandi"
@@ -87,7 +94,7 @@ if defined CHK goto :bad_latest
 set "CHK=!LHASH!"
 for %%c in (0 1 2 3 4 5 6 7 8 9 a b c d e f) do if defined CHK call set "CHK=%%CHK:%%c=%%"
 if defined CHK goto :bad_latest
-set "NEWNAME=Verdandi-!LVER!-!LHASH!"
+set "NEWNAME=!NAMEPFX!-!LVER!-!LHASH!"
 echo  The newest build is:     !LVER! !LHASH!
 
 if /i "!LATEST!"=="!CURRENT!" (
@@ -106,7 +113,7 @@ if exist "%PARENT%\!NEWNAME!\Verdandi.exe" (
 rem ---- download
 echo.
 echo  Downloading the newest build (about 20 MB; this can take a minute) ...
-curl.exe -f -L -# --retry 2 --connect-timeout 20 -o "%WORK%\new.zip" "%BASE%/Verdandi-windows-latest.zip"
+curl.exe -f -L -# --retry 2 --connect-timeout 20 -o "%WORK%\new.zip" "%BASE%/%ZIPNAME%.zip"
 set "RC=%errorlevel%"
 if not "%RC%"=="0" goto :download_failed
 set "SIZE=0"
@@ -117,7 +124,7 @@ if %SIZE% LSS 1000000 (
   goto :offer_current
 )
 rem the SHA-256 of the zip, when the release has one (certutil is part of Windows)
-curl.exe -f -L -sS --retry 1 --connect-timeout 20 -o "%WORK%\new.sha256" "%BASE%/Verdandi-windows-latest.zip.sha256" >nul 2>nul
+curl.exe -f -L -sS --retry 1 --connect-timeout 20 -o "%WORK%\new.sha256" "%BASE%/%ZIPNAME%.zip.sha256" >nul 2>nul
 if exist "%WORK%\new.sha256" (
   set "EXPECT="
   for /f "usebackq tokens=1" %%e in ("%WORK%\new.sha256") do if not defined EXPECT set "EXPECT=%%e"
