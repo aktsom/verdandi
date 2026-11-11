@@ -434,6 +434,19 @@ New zip from the newest run of the workflow windows-m1 (the program is still 0.2
 3. **AUDIO default:** choose another device, APPLY; then choose `default` (the first entry), APPLY: the sound is on the Windows default device again, `audio.conf` has no `output=` line, the log says `audio: output chosen: the Windows default device`, and the bottom line of the page says `playing: <name>`. Tell me if not, with `audio.conf` and the `audio:` lines.
 4. **If it still crashes:** send the whole `crash-....txt`; it now holds the function names (also resolvable with `python windows\ci\resolve_crash.py norns.exe --report crash-....txt` and the exe of the same build), and it is written even if the process dies at once.
 
+## Windows M3, round 2 (live AUDIO page, no crackle by design, readable pages): what only your PC can show
+
+Everything below is new in build 0.4 and was tested only with a fake sound card on Linux. Steps for you: `docs/port/phase-m3.md` section 6 and the "FOR THE OWNER" block of the report.
+1. **Readable:** open SYSTEM > AUDIO and two other pages (SYSTEM, DEVICES): the unselected rows are bright and easy to read, the selected row is on a bar; nothing is cut off like `under..` (a long device name runs slowly on the selected row). The screen window (F9) behaves as before.
+2. **Live:** change OUTPUT (E3), wait about a second: the status line says `applying...` then `ok`; the running script (awake) does not restart and the notes carry on after a short gap. No window closes.
+3. **Crackle:** DRIVER normal, BUFFER auto: one minute of awake, then BUFFER 512, 256, 128, 64. For each: crackle yes/no, the status line (`u` and `x`), and the delay you feel. The log lines `audio:` (every 10 s) have the same numbers.
+4. **Delay:** the status line says an estimate (about 35 to 40 ms in normal mode is expected: that is the Windows mixer's period). Try DRIVER exclusive with Ableton closed: how much shorter does it feel? With Ableton open: the page must say `exclusive refused: normal mode` and keep playing.
+5. **A device that cannot be used:** choose OUTPUT of a device that something else holds: one plain line, the list goes back to what plays.
+6. **TEST:** with no input chosen: `no input selected`; with a loop (cable or TotalMix loopback): a number in ms; without the loop: `no click heard` (and the sentence on the status line).
+7. **MIC with an input chosen that did not open:** press the MIC button: the note on the window says what to do (choose it again on SYSTEM > AUDIO > INPUT, or close the program that uses it).
+8. **ASIO zip:** DRIVER shows `low latency`; the output list is the ASIO drivers; with Ableton closed the delay is clearly shorter; with Ableton open you get the busy line and normal mode. Send the names of the drivers.
+9. **Not testable without your PC:** the real numbers, crackle itself, MMCSS and the scsynth priority class taking effect (the log says `audio bridge: scsynth.exe ... high priority class`), exclusive mode on the RME, the ASIO build's behaviour.
+
 ## Windows M3 (ASIO, sound input, the RME Fireface UC): what only your PC can show
 
 Download the newest build (Releases page; `windows/README.md`, "Windows M3", has the click-by-click). Two zips: the default **WASAPI-only** one and the **ASIO** one. Nothing below has been tried on Windows with sound hardware, Ableton or TotalMix by me: all of it is for you, in this order.

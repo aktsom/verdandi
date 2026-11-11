@@ -70,3 +70,48 @@ Numbers below are **estimates from the code paths**, not measurements; the page 
 ## 5. Tests
 
 On Linux (and Wine for the same C code compiled for Windows): `linux/tests/audio_chain_test.c` (fake card: device list text with APIs, latencies and loopback flags; config keys; ASIO ok, ASIO busy -> WASAPI with the note, ASIO driver gone, input duplex / separate / mono / ASIO channels, MIC without input, SYS with and without a loopback, OFF silent and the level falling, measured round trip 21.33 ms and "no signal", xrun counting), `audio_pa_test.c` (the PortAudio backend on Linux: unknown device and unknown ASIO driver refused as not found, host APIs described, the loopback open does not hang), `audio_page_windows_test.lua`, `input_windows_test.lua`, `assemble_flavor_test.sh`, `release_publish_test.sh`. On the CI runner (no sound card): `m2-check-audio` (the new log lines, ASIO listed only in the ASIO zip), `m2-check-fallback` (a missing output and input, channels), `m3-check-input` (MIC says no with a reason, SYS answers, OFF, measure says no signal), the ten restarts. **Not tested anywhere:** WASAPI loopback in MSYS2's PortAudio, any real ASIO driver, the separate input stream's drift handling on real cards, the real RME.
+
+## 6. Round 2: the owner's test of 0.3.0 (WASAPI shared, RME Fireface UC)
+
+Findings: engine sounds about 34 ms at buffer 512 (unusable for playing); crackle at 128 and 256; the AUDIO page unreadable (dim rows, values cut off, eleven rows).
+
+### 6.1 Why crackle (a diagnosis from the code and the fake card, not yet from your PC)
+- In M2/M3 the engine's block, the card's block and the bridge's block were **one number** (`period=`). WASAPI **shared** mode runs on a fixed host period of the Windows audio engine (10 ms, 480 frames at 48000 Hz). Asking for 128 or 256 makes PortAudio re-block 480 into 128 or 256: the callbacks then come **in bursts** (two or three in a row, then a gap).
+- Every callback hands one block to scsynth and takes back the answer to the block before. scsynth is **another program**; an answer needs a thread wake-up and a computation. When three callbacks arrive in a row the answers of the first two are not there yet: the bridge counts an underrun and plays **silence for that block**: a click. At 512 the bursts are rarer (about one block per host period) which is why it was clean.
+- The same fake-card test now shows it: with the old rule, callbacks of 128 frames in bursts of four (a host period of 512) gave **84 bridge underruns and 351 drops in 638 blocks**; one card callback that runs four engine blocks gave 305 underruns in 636. With the fix both are 0.
+
+### 6.2 What changed
+| | Before | Now |
+|---|---|---|
+| Engine block (crone, scsynth, bridge) | = card buffer | `block=` in audio.conf, **default 128** (2.7 ms), independent of the card |
+| Card buffer | asked from PortAudio (re-blocking by the host API) | `buffer=auto` (default): the host API's own period (no re-blocking, no bursts); or 64 to 512 |
+| Between card and engine | nothing | two small fifos re-block the card's size into engine blocks (no allocation, no lock, no logging in the callback) |
+| Bridge | answers of the last block, or silence | holds back **as many blocks as one card callback (or one host period) runs** (`lag`, 1 to 6), so a burst always finds its answers |
+| Callback thread | normal | MMCSS **Pro Audio** (`PaWasapiStreamInfo` thread priority), WASAPI event driven (PortAudio's default) |
+| scsynth, norns.exe | normal class | scsynth **high** (set by norns.exe once scsynth attached; same user, no admin), norns.exe above normal |
+| Settings | APPLY restarts norns | **live**: only the stream is reopened (`_norns.audio_apply`), norns, the script, scsynth and the bridge run on; if it fails the old setting is reopened and one plain line says why; if nothing opens the engine goes on silently on its own clock and the next apply can bring the card back |
+
+### 6.3 Realistic delay per setting (estimates from the code paths; **the page and norns.log show the real numbers**)
+Delay of an engine sound (key to ear) = what the host API reports for the output + the engine's part. The engine's part is `lag x block + the re-blocking prime` (+ one block that the loop breaker in crone's graph adds, 2.7 ms at 128).
+| Setting | Output (host API) | Engine part | Total, about |
+|---|---|---|---|
+| normal, auto (WASAPI shared, 10 ms period) | 20 to 24 ms (23.4 reported on your PC) | lag 4 x 2.7 + prime 2.7 = 13.3 | **35 to 40 ms**. This is the floor of shared mode: Windows' mixer period, not a bug. It was 34 ms before and is not better; it is **clean** |
+| normal, buffer 256 or 512 | same | same (lag follows the host period) | same; no gain from smaller numbers in shared mode |
+| exclusive, buffer 128 | about 6 to 8 | lag 1 x 2.7 | **10 to 14 ms** if your RME's Windows driver accepts exclusive streams |
+| exclusive, buffer 64 | about 3 to 5 | lag 1 x 2.7 (64 < block) | 8 to 11 ms |
+| low latency (ASIO), buffer 128 or the driver's own | the driver's | lag 1 x 2.7 | **8 to 12 ms** |
+Softcut, tape and the monitor path (everything inside crone) do not pay the bridge part, only the output and the prime.
+
+**Exclusive mode and Ableton.** In exclusive mode a program owns the device alone. If Ableton holds the RME through its ASIO driver, Windows refuses the exclusive stream (and the other way round: while Verdandi holds it exclusively, Ableton and every Windows sound lose the device). Verdandi then says so in one line and uses the normal mode. So exclusive is only for a session in which Verdandi is the only program on that device. Together with Ableton the choices are: normal (about 35 to 40 ms), or low latency (ASIO) if the RME driver lets two programs share it (multi-client, **not verified for the Fireface UC**).
+
+### 6.4 The AUDIO page and the other pages (the UI principle)
+- One short list as on a norns: E2 selects, E3 changes, K2 goes back. Rows: **DRIVER** (normal / exclusive / low latency when the ASIO build is used), **OUTPUT**, **OUT CH** (low latency only), **INPUT**, **IN CH** (when an input is chosen), **BUFFER**, **TEST**. No APPLY, no RATE (the rate is the one norns started with; `rate=` in audio.conf).
+- Every change applies by itself about a second after the last turn (the status line shows `...`, `applying...`, then `ok` or one plain line such as `busy: another program has it`); on a failure the list shows what runs again.
+- One status line: `35 ms  u0 x0` = estimated delay, `u` = scsynth was late for a block, `x` = glitches reported by the card. A longer sentence runs slowly across the line. Details (host API, card and engine blocks, out/in/engine parts, counters and their growth over the last 10 s, input level) are written to `norns.log` every 10 seconds as `audio: ...`.
+- TEST row: `no input selected`, `input not open`, `listening...`, `no click heard`, or `NN ms`; the status line carries the sentence (`no click heard (is an output wired to the input?)`).
+- Text: unselected rows level 11, the selected row 15 on a bar; values are measured with the real font (tests with cairo's metrics over 100+ views with the longest device names); a long value is cut with `..` or, on the selected row, runs slowly.
+- **Other pages (Windows build only):** SYSTEM, DISPLAY, DEVICES, WIFI, SETTINGS, RESTART, RESET, UPDATE, SLEEP, MODS, SCREEN, THEME, MIDI MAP, CLEAN UP, SELECT and PARAMS are drawn through `winui.wrap`: levels 1 to 15 become 8 to 15 (0 stays black), so dim rows are readable; the selected row (15) is still the brightest. Their code is not changed, so their own widths and handlers are as tested before. The detachable screen window and everything of the Linux build are untouched (all of this is behind `_norns.audio_devices`, which only norns.exe has). MIX, TAPE, HOME and the colour picker are not wrapped (meters and colours there depend on the exact levels).
+- Colour themes: the levels are indexes of the OLED palette, the theme tints them in the window as before; the remap only changes which index a dim row uses. Not looked at on a screen here.
+
+### 6.5 ASIO in CI
+The first real run of the ASIO job (run 42926894743) cloned PortAudio and the SDK (the SDK's `LICENSE.txt` read from the mirror: "licensed under the terms of the Steinberg ASIO License, or alternatively under the terms of the General Public License (GPL) Version 3") and then stopped at CMake: PortAudio 19.7.0 asks for CMake 3.1 and MSYS2's CMake refuses anything below 3.5. Fixed with `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`. Whether PortAudio's own ASIO options then find the SDK is decided by the next run (`PA_USE_ASIO`, `ASIOSDK_ROOT_DIR`, MinGW).
