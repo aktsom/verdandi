@@ -211,6 +211,8 @@ jobs:
         with:
           name: m3-asio-dll
           path: m3-asio
+      - name: The ASIO DLL must exist
+        run: test -f m3-asio/libportaudio-2.dll || { echo "the ASIO build of PortAudio did not make libportaudio-2.dll (see the job 'PortAudio with ASIO' and its step log)"; ls -l m3-asio; exit 1; }
       - name: Assemble the folder and the zip
         run: FLAVOR=asio ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check (ASIO host API listed, fallback, input)
@@ -275,9 +277,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ZIP_DIR: release-zip
           ASIO_ZIP_DIR: release-zip-asio
-          # m3-check-input (MIC / SYS / measure on a runner without a sound card) has never run before M3: for its first runs a red result is listed in the release notes but does not hold windows-latest
-          # back. REMOVE THIS LINE once it has been green (docs/port/phase-m3.md); the script's own default is an empty list
-          NONBLOCKING_CHECKS: 'm3-check-input m3-run-input'
           STATUS_DIR: release-report/status
         run: windows/ci/publish-release.sh
 

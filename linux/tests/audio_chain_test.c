@@ -503,7 +503,7 @@ static void scenario_input(const char *sc) {
         st = start_card("", "wasapi:Gone Mic", 1, 2, 1, 512);
         CHECK(st.mode == VAUD_MODE_DEVICE && !st.opened.in_active, "in_missing: the output runs, the input does not");
         CHECK(vaud_input_set(1, 0) == 1 && vaud_get_state()->input == VAUD_IN_OFF, "in_missing: MIC cannot be switched on, it stays OFF");
-        CHECK(strstr(vaud_get_state()->sys_note, "MIC") && strstr(vaud_get_state()->sys_note, "INPUT"), "in_missing: the note says what to do: '%s'", vaud_get_state()->sys_note);
+        CHECK(strstr(vaud_get_state()->sys_note, "MIC") && strstr(vaud_get_state()->sys_note, "INPUT") && strstr(vaud_get_state()->sys_note, "did not open"), "in_missing: the note says what to do: '%s'", vaud_get_state()->sys_note);
     } else if (!strcmp(sc, "in_asio_other")) {
         st = start_card("asio:Fake ASIO", "wasapi:Fake Mic", 1, 2, 1, 512);
         CHECK(st.mode == VAUD_MODE_DEVICE && !st.opened.in_active, "in_asio_other: ASIO output runs, an input on another device does not");

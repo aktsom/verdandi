@@ -41,6 +41,13 @@ function init()
       _norns.audio_measure()
       clock.sleep(1)
       print("VERDANDI_SMOKE_INPUT measured=" .. tostring(_norns.audio_info().measured_ms))
+      -- the AUDIO page's live apply with a device that does not exist: an answer, never a hang, and the script (this one) runs on
+      if _norns.audio_apply then
+        local rc, msg = _norns.audio_apply("output=wasapi:No Such Speakers 4711\nbuffer=auto\n")
+        print(string.format("VERDANDI_SMOKE_APPLY rc=%s msg=[%s]", tostring(rc), tostring(msg)))
+        clock.sleep(1)
+        print("VERDANDI_SMOKE_APPLY after: mode=" .. tostring(_norns.audio_info().mode))
+      end
       print("VERDANDI_SMOKE_INPUT_DONE")
     end
     if _norns.audio_info then

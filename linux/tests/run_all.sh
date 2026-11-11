@@ -192,7 +192,10 @@ hello_late_ok() {
 }
 run "windows:start-up wait for SuperCollider (a time limit, the question every 100 ms, a late ready message from crone completes the start-up instead of staying SUPERCOLLIDER FAIL)" hello_late_ok
 run "windows:the PortAudio backend on Linux (list, an unknown device is refused as not found, start ends in a card or null audio with a note, no hang)" audio_pa_ok
-run "windows:SYSTEM > AUDIO with the program's own device list (host APIs, devices, channels, output= input= rate= period= out_first= in_l= in_r= in audio.conf, restart, latency / measured / level rows, busy or missing device said)" lua5.3 linux/tests/audio_page_windows_test.lua
+# the metrics of the norns screen font (measured by cairo), for the width tests (also used by the page width tests further down)
+gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
+"$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"
+run "windows:SYSTEM > AUDIO: one short list (DRIVER OUTPUT [OUT CH] INPUT [IN CH] BUFFER TEST), every change applied live without a restart (reverted with one plain line when it fails), the status line, TEST results in plain words, bright text, nothing wider than the screen with the real font, the marquee" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/audio_page_windows_test.lua
 run "windows:MIC / OFF / SYS switch (OFF at every start, nothing remembered, no input device or no loopback stays OFF with the reason)" lua5.3 linux/tests/input_windows_test.lua
 run "windows:scsynth with the Verdandi bridge driver against the bridge host (needs a patched scsynth: VERDANDI_SCSYNTH)" bash linux/tests/scsynth_bridge_test.sh
 hid_virtual_ok() {
@@ -218,8 +221,6 @@ run "lua:MIDI MAP settings and presets (midimap.conf defaults, round trip, every
 run "lua:MIDI MAP layer and learn (through the real midi.lua and pmap: device and channel filters, ANY skips the iii grid and the keys window, the params MAP wins a clash, scripts get every message, held keys released, every way out of a learn)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_layer_test.lua
 # the width of every row of our own pages at long values, measured with the real font metrics of the norns screen (the menu font, liquid.ttf at 8: cairo,
 # linux/tests/font_widths_dump.c), docs/port/KNOWN-ISSUES.md 38. scripts' own drawing is not checked or changed
-gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
-"$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"
 run "lua:page widths (CLEAN UP, DEVICES, SCREEN, THEME, AUDIO, MODS, SYSTEM, RESET, RESTART, TAPE, PICKER: no row wider than the screen or over another at long names, real font metrics)" env FONT_WIDTHS="$T/font_widths_liquid.txt" NORNS_PLATFORM=linux lua5.3 linux/tests/page_width_test.lua
 run "lua:MIDI MAP page (rows and wording, views, preset row, device list with the mio, visible learn state, every handler redraws, SYSTEM list below THEME, every row at long values fits the screen)" env FONT_WIDTHS="$T/font_widths_liquid.txt" NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_page_test.lua
 run "lua:menu number formats and handler errors (sizes with fractions, an error in a key or encoder handler is logged, shown and the page redrawn on the desktop, left alone on the device)" env NORNS_PLATFORM=linux lua5.3 linux/tests/menu_format_test.lua

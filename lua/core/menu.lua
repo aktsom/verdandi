@@ -864,3 +864,28 @@ m["SLEEP"] = require 'core/menu/sleep'
 m["MIX"] = require 'core/menu/mix'
 m["TAPE"] = require 'core/menu/tape'
 m["MODS"] = require 'core/menu/mods'
+
+-- Windows build only (docs/port/phase-m3.md, "UI principle"): the list pages of the system menu are drawn brighter (unselected rows were level 4 on black: dim and olive under a theme), the numbers of the
+-- audio are written to norns.log every ten seconds, and a MIC that cannot work says what to do. Nothing here runs on Linux or macOS: _norns.audio_devices exists only in norns.exe
+if _norns.audio_devices ~= nil then
+  local winui = require 'core/menu/winui'
+  for _, name in ipairs({"SYSTEM", "DISPLAY", "DEVICES", "WIFI", "SETTINGS", "RESTART", "RESET", "UPDATE", "SLEEP", "MODS", "UI", "BOX", "MIDIMAP", "CLEANUP", "SELECT", "PARAMS"}) do
+    local page = m[name]
+    if page and page.redraw and not page.winui_wrapped then
+      page.redraw = winui.wrap(page.redraw)
+      page.winui_wrapped = true
+    end
+  end
+  hook.system_post_startup:register("menu-audio-log", function()
+    local audio = m["AUDIO"]
+    local prev
+    clock.run(function()
+      while true do
+        clock.sleep(10)
+        local line, info = audio.log_line(prev)
+        if line then print(line) end
+        prev = info
+      end
+    end)
+  end)
+end

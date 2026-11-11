@@ -108,7 +108,7 @@ run_fallback() {
     rm -rf "$h2"
     mkdir -p "$h2"
     # (an output that is not there, an input that is not there, channels: all of audio.conf's M3 keys at once)
-    printf 'output=wasapi:No Such Speakers 4711\ninput=wasapi:No Such Microphone 4711\nrate=48000\nperiod=512\nout_first=1\nin_l=3\nin_r=4\n' > "$h2/audio.conf"
+    printf 'output=wasapi:No Such Speakers 4711\ninput=wasapi:No Such Microphone 4711\nrate=48000\nblock=128\nout_first=1\nin_l=3\nin_r=4\n' > "$h2/audio.conf"
     if command -v timeout > /dev/null 2>&1; then
         timeout -k 10 120 "$APP/Verdandi$EXE" --headless --exit-after=45 --home="$(native "$h2")"
     else
@@ -135,7 +135,7 @@ run_input() {
     rm -rf "$IN_HOME"
     # a freshly seeded home (the first version copied system.state from the first run's home: after that run norns had rewritten it, no script was resumed, and the probe never ran)
     seed_home "$IN_HOME"
-    printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nperiod=256\n' > "$IN_HOME/audio.conf"
+    printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nblock=128\n' > "$IN_HOME/audio.conf"
     if command -v timeout > /dev/null 2>&1; then
         VERDANDI_SMOKE_INPUT=1 timeout -k 10 150 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$IN_HOME")"
     else
@@ -161,6 +161,8 @@ chk_input() {
         && has "$l" "VERDANDI_SMOKE_INPUT sys-2s ok=true state=(system|off)" "SYS answers (loopback or a note), and the program runs on" \
         && has "$l" "VERDANDI_SMOKE_INPUT off ok=true state=off" "OFF always works" \
         && has "$l" "VERDANDI_SMOKE_INPUT measured=-[12]" "the measurement with no input does not invent a number (no signal, or still waiting)" \
+        && has "$l" "VERDANDI_SMOKE_APPLY rc=[0-2] msg=" "a live change to a device that does not exist is answered (reverted or silent), no hang" \
+        && has "$l" "VERDANDI_SMOKE_APPLY after: mode=(device|fallback|null)" "and norns and the script run on afterwards" \
         && has "$l" "VERDANDI_SMOKE_INPUT_DONE" "the whole input run finished" \
         && ! grep -q "norns CRASHED" "$l"
 }

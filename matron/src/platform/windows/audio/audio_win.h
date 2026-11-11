@@ -33,7 +33,7 @@ typedef struct {
     int in_active;
     char note[480];
     char in_note[200];
-    char sys_note[200];
+    char sys_note[320];
     unsigned long long to_sc, from_sc, underruns, drops, card_xruns;
     int scsynth_attached;
 } verdandi_audio_info_t;

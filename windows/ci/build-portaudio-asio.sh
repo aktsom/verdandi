@@ -62,7 +62,8 @@ build() {
     ASIOSDK_ROOT_DIR="$sdk" cmake -S "$WORK/portaudio" -B "$WORK/pa-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DPA_BUILD_SHARED_LIBS=ON -DPA_BUILD_TESTS=OFF -DPA_BUILD_EXAMPLES=OFF \
         -DPA_USE_ASIO=ON -DPA_USE_WASAPI=ON -DPA_USE_DS=ON -DPA_USE_WMME=ON -DPA_USE_WDMKS=OFF -DPA_USE_WDMKS_DEVICE_INFO=OFF \
-        -DASIOSDK_ROOT_DIR="$sdk" -DASIO_SDK_PATH="$sdk" -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static-libstdc++" || return 1
+        -DASIOSDK_ROOT_DIR="$sdk" -DASIO_SDK_PATH="$sdk" -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 || return 1 # (PortAudio 19.7.0 asks for CMake 3.1: the CMake of MSYS2 refuses anything below 3.5 unless told: the first real run failed on exactly that)
     cmake --build "$WORK/pa-build" || return 1
     find "$WORK/pa-build" -maxdepth 1 \( -name '*.dll' -o -name '*.a' \)
 }

@@ -701,7 +701,17 @@ int vaud_input_set(int mic_on, int sys_on) {
     }
     if (mic_on) {
         if (S.mode != VAUD_MODE_DEVICE || !S.opened.in_active) {
-            snprintf(S.sys_note, sizeof S.sys_note, "MIC: no input is open (choose one on SYSTEM > AUDIO, INPUT)");
+            if (S.mode == VAUD_MODE_DEVICE && CUR.input[0]) {
+                char why[100] = "";
+                if (S.opened.in_note[0]) {
+                    snprintf(why, sizeof why, " (%.80s)", S.opened.in_note);
+                }
+                snprintf(S.sys_note, sizeof S.sys_note, "MIC: '%.40s' did not open%s. Choose it again on SYSTEM > AUDIO > INPUT, or close the program that uses it", shown(CUR.input), why);
+            } else if (S.mode != VAUD_MODE_DEVICE) {
+                snprintf(S.sys_note, sizeof S.sys_note, "MIC: there is no sound card running (see SYSTEM > AUDIO)");
+            } else {
+                snprintf(S.sys_note, sizeof S.sys_note, "MIC: no input chosen. Pick one on SYSTEM > AUDIO > INPUT");
+            }
             return 1;
         }
         S.sys_note[0] = 0;

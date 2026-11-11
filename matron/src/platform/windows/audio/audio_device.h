@@ -94,7 +94,7 @@ typedef struct {
     char note[480];           /* for the screen and the log: why null audio, which device replaced the chosen one; "" when all is as chosen */
     char host_apis[120];      /* the host APIs of this PortAudio, for the page ("WASAPI ASIO") */
     vaud_input_mode input;    /* what norns hears now */
-    char sys_note[200];       /* why SYS does not work, "" otherwise */
+    char sys_note[320];       /* why SYS does not work, "" otherwise */
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
     unsigned engine_prime;    /* frames of extra delay of the re-blocking between the card's block and the engine's (0 when the card's block is a multiple of the engine's) */
     unsigned engine_lag;      /* blocks of scsynth's answers held back in the bridge (the engine blocks per card callback) */
