@@ -221,9 +221,21 @@ local function apply()
     local f = io.open(CONF, "w")
     if f then f:write(conf_text(want)) f:close() end
     os.remove(FAILED)
+    local asked_driver = want.driver
     from_running() -- what really runs (a busy ASIO driver may have become the normal driver)
-    local s = short(msg)
-    say(s ~= "" and s or "ok", s ~= "" and 40 or 4)
+    local row = m.changed_row or "AUDIO"
+    local what = row .. (row == "AUDIO" and "" or (" " .. (value_text(row) or "")))
+    local detail = (msg or ""):match("refused %((.-)%): normal")
+    if detail and asked_driver == "exclusive" then
+      -- the exact reason, once: it is also written to norns.log, and audio.conf no longer asks for exclusive on every start
+      say("exclusive refused: " .. detail .. " - normal mode is used", 60)
+    elseif short(msg) ~= "" then
+      say(what .. " applied; " .. short(msg), 40)
+    elseif row == "OUTPUT" then
+      say(what .. " applied (pairs on the interface may not be wired to anything)", 40)
+    else
+      say(what .. " applied", 20)
+    end
   else
     -- it did not work: the page shows what runs again, and says why in one line
     local why = short(msg)
@@ -288,9 +300,10 @@ m.key = function(n, z)
   end
 end
 
-local function changed()
+local function changed(row)
   m.pending = m.tick + APPLY_AFTER
   m.status = nil
+  m.changed_row = row -- for the confirmation: "BUFFER 256 applied"
 end
 
 local function step(list, i, delta) return util.clamp(i + delta, 1, #list) end
@@ -312,7 +325,7 @@ m.enc = function(n, delta)
       if l[i].id ~= c.driver then
         c.driver, c.output, c.input, c.out_first, c.in_l, c.in_r, c.buffer = l[i].id, "", "", 1, 1, 2, 0
         if c.driver == "asio" then local o = outputs()[1]; c.output = o and o.uid or "" end
-        changed()
+        changed("DRIVER")
       end
     elseif row == "OUTPUT" then
       local l = outputs()
@@ -320,23 +333,23 @@ m.enc = function(n, delta)
       if l[i].uid ~= c.output then
         c.output, c.out_first = l[i].uid, 1
         if c.driver == "asio" then c.input = "" end
-        changed()
+        changed("OUTPUT")
       end
     elseif row == "OUT CH" then
       local l = outpairs()
       local i = step(l, index_where(l, function(p) return p.first == c.out_first end), delta)
-      if l[i].first ~= c.out_first then c.out_first = l[i].first; changed() end
+      if l[i].first ~= c.out_first then c.out_first = l[i].first; changed("OUT CH") end
     elseif row == "INPUT" then
       local l = inputs()
       local i = step(l, index_where(l, function(d) return d.uid == c.input end), delta)
-      if l[i].uid ~= c.input then c.input, c.in_l, c.in_r = l[i].uid, 1, math.min(2, math.max(1, l[i].ins or 1)); changed() end
+      if l[i].uid ~= c.input then c.input, c.in_l, c.in_r = l[i].uid, 1, math.min(2, math.max(1, l[i].ins or 1)); changed("INPUT") end
     elseif row == "IN CH" then
       local l = inpairs()
       local i = step(l, index_where(l, function(p) return p.l == c.in_l and p.r == c.in_r end), delta)
-      if l[i].l ~= c.in_l or l[i].r ~= c.in_r then c.in_l, c.in_r = l[i].l, l[i].r; changed() end
+      if l[i].l ~= c.in_l or l[i].r ~= c.in_r then c.in_l, c.in_r = l[i].l, l[i].r; changed("IN CH") end
     elseif row == "BUFFER" then
       local i = step(BUFFERS, index_where(BUFFERS, function(b) return b == c.buffer end), delta)
-      if BUFFERS[i] ~= c.buffer then c.buffer = BUFFERS[i]; changed() end
+      if BUFFERS[i] ~= c.buffer then c.buffer = BUFFERS[i]; changed("BUFFER") end
     end
     m.tick = 0
   end
@@ -353,7 +366,12 @@ local function status_line(info)
   elseif info.mode ~= "device" then
     return "null audio (silent)"
   end
-  return string.format("%.0f ms  u%d x%d", info.total_ms or 0, info.underruns or 0, info.xruns or 0)
+  local line = string.format("%.0f ms  u%d x%d", info.total_ms or 0, info.underruns or 0, info.xruns or 0)
+  -- the rate the card itself runs at, when it is not norns's own (shared mode: Windows converts; exclusive and ASIO: the clock of the card)
+  if (info.device_rate or 0) > 0 and math.floor(info.device_rate + 0.5) ~= info.rate then
+    line = line .. string.format("  card %d Hz", math.floor(info.device_rate + 0.5))
+  end
+  return line
 end
 
 m.redraw = function()
@@ -370,12 +388,28 @@ m.redraw = function()
   screen.update()
 end
 
+-- at the start: exclusive mode was asked for in audio.conf but the device refused it. the reason is written once to norns.log and audio.conf says exclusive=0 from now on, so that it is not tried (and
+-- refused) again on every start. called by lua/core/menu.lua after the start-up
+m.forget_exclusive = function(info)
+  info = info or _norns.audio_info()
+  if not info or not (info.note or ""):find("exclusive mode was refused", 1, true) then return false end
+  local text = read_file(CONF)
+  if not text:find("exclusive=1", 1, true) then return false end
+  local f = io.open(CONF, "w")
+  if not f then return false end
+  f:write((text:gsub("exclusive=1", "exclusive=0")))
+  f:close()
+  print("audio: " .. info.note)
+  print("audio: audio.conf now says exclusive=0 (it will not be asked for again at every start; choose DRIVER exclusive on the AUDIO page to try again)")
+  return true
+end
+
 -- the numbers of the last ten seconds, for norns.log (called by lua/core/menu.lua every 10 s)
 m.log_line = function(prev)
   local info = _norns.audio_info()
   if not info then return nil end
-  local line = string.format("audio: %s %s %s | %d Hz engine block %d card %d | delay ~%.1f ms (out %.1f in %.1f engine %.1f) | scsynth late %d (+%d) glitches %d (+%d) input %s level %.0f dB",
-    info.mode, info.host_api ~= "" and info.host_api or "-", info.device ~= "" and info.device or "-", info.rate, info.frames, info.card_frames or 0, info.total_ms or 0, info.out_latency_ms,
+  local line = string.format("audio: %s %s %s | norns %d Hz (device %d Hz) engine block %d card %d hold-back %d (grew %d x) | delay ~%.1f ms (out %.1f in %.1f engine %.1f) | scsynth late %d (+%d) glitches %d (+%d) input %s level %.0f dB",
+    info.mode, info.host_api ~= "" and info.host_api or "-", info.device ~= "" and info.device or "-", info.rate, math.floor((info.device_rate or 0) + 0.5), info.frames, info.card_frames or 0, info.engine_lag or 0, info.lag_raises or 0, info.total_ms or 0, info.out_latency_ms,
     info.in_latency_ms, info.engine_ms or 0, info.underruns, info.underruns - ((prev or {}).underruns or 0), info.xruns or 0, (info.xruns or 0) - ((prev or {}).xruns or 0), info.input, info.peak_db or -120)
   return line, info
 end

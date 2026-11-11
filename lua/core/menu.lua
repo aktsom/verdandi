@@ -878,6 +878,7 @@ if _norns.audio_devices ~= nil then
   end
   hook.system_post_startup:register("menu-audio-log", function()
     local audio = m["AUDIO"]
+    pcall(audio.forget_exclusive)
     local prev
     clock.run(function()
       while true do

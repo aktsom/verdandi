@@ -3870,6 +3870,9 @@ int _audio_info(lua_State *l) {
     SET_N("engine_ms", a.engine_ms);
     SET_N("total_ms", a.total_ms);
     SET_I("card_frames", a.card_frames);
+    SET_I("engine_lag", a.engine_lag);
+    SET_I("lag_raises", a.lag_raises);
+    SET_N("device_rate", a.device_rate);
     SET_S("config", a.config_text);
     lua_pushboolean(l, a.exclusive);
     lua_setfield(l, -2, "exclusive");

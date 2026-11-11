@@ -202,6 +202,19 @@ static const char *host_error_text(PaError e, char *buf, size_t n) {
     return buf;
 }
 
+/* exclusive mode refused: the exact reason, once, for the log and the note: what PortAudio said, the rate the device runs at, and which of the usual rates the device takes in exclusive mode */
+static void exclusive_report(const PaDeviceInfo *odi, const PaStreamParameters *outp, char *err, size_t errn) {
+    static const double rates[4] = {44100, 48000, 88200, 96000};
+    char ok[80] = "";
+    for (int i = 0; i < 4; i++) {
+        if (Pa_IsFormatSupported(NULL, outp, rates[i]) == paFormatIsSupported) {
+            snprintf(ok + strlen(ok), sizeof ok - strlen(ok), "%s%.0f", ok[0] ? ", " : "", rates[i]);
+        }
+    }
+    size_t len = strlen(err);
+    snprintf(err + len, errn - len, "; the device runs at %.0f Hz, exclusive takes: %s", odi->defaultSampleRate, ok[0] ? ok : "none of 44100, 48000, 88200, 96000");
+}
+
 /* ---- the callbacks ---- */
 static int main_cb(const void *in, void *out, unsigned long frames, const PaStreamCallbackTimeInfo *ti, PaStreamCallbackFlags fl, void *user) {
     (void)ti, (void)user;
@@ -394,6 +407,9 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     }
     if (e != paFormatIsSupported) {
         host_error_text(e, err, errn);
+        if (rq->exclusive && !is_asio) {
+            exclusive_report(odi, &outp.p, err, errn);
+        }
         res->rate = (unsigned)odi->defaultSampleRate;
         vaud_error c = classify(e, oapi);
         return c == VAUD_FAILED && e == paInvalidSampleRate ? VAUD_BAD_RATE : (c == VAUD_FAILED && e != paUnanticipatedHostError ? VAUD_BAD_RATE : c);
@@ -409,6 +425,9 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     }
     if (e != paNoError) {
         host_error_text(e, err, errn);
+        if (rq->exclusive && !is_asio) {
+            exclusive_report(odi, &outp.p, err, errn);
+        }
         stream = NULL;
         return classify(e, oapi);
     }
@@ -455,6 +474,7 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     res->rate = si ? (unsigned)(si->sampleRate + 0.5) : rq->rate;
     res->frames = rq->frames;
     res->exclusive = rq->exclusive && !is_asio;
+    res->device_rate = odi->defaultSampleRate;
 #if defined(HAVE_PA_WASAPI_H) && defined(_WIN32)
     if (!is_asio && !rq->frames) {
         /* the period Windows gave (480 frames at 48000 Hz in shared mode): that is the size of the card's callbacks */

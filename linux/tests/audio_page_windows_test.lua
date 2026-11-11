@@ -48,7 +48,7 @@ local input_calls = {}
 local function mkinfo(t)
   local i = {mode = "device", device = "Speakers (Realtek)", in_device = "", host_api = "Windows WASAPI shared", host_apis = "WASAPI", input = "off", rate = 48000, frames = 128, card_frames = 480,
     out_latency_ms = 21.3, in_latency_ms = 0, block_ms = 2.7, engine_ms = 13.3, total_ms = 34.6, peak_db = -120, measured_ms = -1, in_active = false, note = "", in_note = "", sys_note = "", underruns = 0,
-    xruns = 0, exclusive = false,
+    xruns = 0, exclusive = false, device_rate = 0, engine_lag = 4, lag_raises = 0,
     config = "output=\ninput=\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"}
   for k, v in pairs(t or {}) do i[k] = v end
   return i
@@ -109,7 +109,7 @@ check(applied[1]:find("output=wasapi:Speakers (Realtek High", 1, true) or applie
 check(not restarted, "norns is not restarted")
 local c = conf()
 check(c and c:find("buffer=auto", 1, true) and c:find("block=128", 1, true) and c:find("in_l=1", 1, true), "audio.conf is written after it worked: " .. tostring(c))
-check(shown("ok") or shown("ms"), "the status line says ok, then the numbers")
+check(page.status and page.status:find("applied", 1, true), "the status line confirms what was applied")
 check(#input_calls >= 1 and input_calls[#input_calls][1] == "off", "the input goes OFF after a new device (the MIC button state follows)")
 
 -- ---- a setting that cannot be used: the page goes back and says why in one short line ----
@@ -171,6 +171,54 @@ check(shown("input not open") and page.status:find("did not open", 1, true) and 
 info = mkinfo({mode = "fallback", note = "no sound: audio device is busy"})
 page.init(); key_test()
 check(shown("no sound card"), "no card: said")
+
+-- ---- every change is confirmed on the status line ----
+info = mkinfo()
+page.init()
+turn(pos_of("BUFFER"), 3); ticks(6)
+check(page.status == "BUFFER 256  5.3 ms applied", "BUFFER: the status line says 'BUFFER 256  5.3 ms applied': " .. tostring(page.status))
+page.init()
+turn(pos_of("OUTPUT"), 2); ticks(6)
+check(page.status:find("OUTPUT ", 1, true) == 1 and page.status:find("applied (pairs on the interface may not be wired to anything)", 1, true), "OUTPUT: confirmed, with the help that pairs on the interface may not be wired: " .. tostring(page.status))
+page.init()
+turn(pos_of("DRIVER"), 1); ticks(6)
+check(page.status == "DRIVER exclusive applied", "DRIVER: 'DRIVER exclusive applied': " .. tostring(page.status))
+page.init()
+page.enc(2, -9); page.enc(2, 2); page.enc(3, 1); ticks(6)
+check(page.status:find("INPUT ", 1, true) == 1 and page.status:find(" applied", 1, true), "INPUT: confirmed: " .. tostring(page.status))
+-- exclusive refused: the exact reason on the status line
+apply_rc = 0
+apply_msg = "exclusive mode was refused (Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100): normal mode is used"
+info = mkinfo()
+page.init()
+turn(pos_of("DRIVER"), 1); ticks(6)
+check(page.status:find("exclusive refused: Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100", 1, true), "exclusive refused: the exact reason is on the status line: " .. tostring(page.status))
+apply_msg = ""
+
+-- ---- exclusive refused at the start: the reason once in the log, audio.conf says exclusive=0 from then on ----
+local f = real_open(tmp .. "/audio.conf", "w") f:write("output=\ninput=\nrate=48000\nblock=128\nbuffer=auto\nexclusive=1\n") f:close()
+info = mkinfo({note = "exclusive mode was refused (Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100): normal mode is used"})
+page.init()
+local printed = {}
+local real_print = print
+print = function(...) printed[#printed + 1] = table.concat({...}, " ") end
+check(page.forget_exclusive(info) == true, "forget_exclusive acts when exclusive was asked for and refused")
+print = real_print
+check(conf() and conf():find("exclusive=0", 1, true) and not conf():find("exclusive=1", 1, true), "audio.conf says exclusive=0 now")
+check(#printed == 2 and printed[1]:find("Invalid sample rate", 1, true) and printed[2]:find("exclusive=0", 1, true), "the reason and the change are written to the log once")
+check(page.forget_exclusive(info) == false, "and nothing happens a second time")
+info = mkinfo()
+check(page.forget_exclusive(info) == false, "nothing happens when exclusive was not refused")
+
+-- ---- the card's own rate ----
+info = mkinfo({device_rate = 44100})
+page.init(); page.redraw()
+check(shown("card 44100 Hz"), "the status line shows the card's own rate when it differs from norns's")
+info = mkinfo({device_rate = 48000})
+page.init(); page.redraw()
+check(not shown("card "), "and says nothing when they are the same")
+local line = page.log_line(nil)
+check(line and line:find("device 48000 Hz", 1, true) and line:find("hold-back", 1, true), "the log line has the device rate and the hold-back: " .. tostring(line))
 
 -- ---- the status line when something is wrong ----
 info = mkinfo({mode = "fallback", note = "no sound: audio device 'X' is busy or in use by another program. null audio is used"})

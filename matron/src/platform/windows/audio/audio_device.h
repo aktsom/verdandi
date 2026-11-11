@@ -46,6 +46,7 @@ typedef struct {
     unsigned rate;       /* what the stream really runs at */
     unsigned frames;     /* the block the card calls back with (0 = not known). `frames` of the request: 0 = the card's own period (the default: no re-blocking by the host API) */
     unsigned host_frames; /* the period of the host API under the callbacks (WASAPI shared: 480 at 48000 Hz even when the callbacks are 128): the callbacks may arrive in bursts of host_frames, 0 = same as frames */
+    double device_rate;  /* the rate the device runs at (the Windows setting of the device; the card's clock for exclusive and ASIO), 0 = not known */
     int exclusive;       /* the stream is in exclusive mode */
     double out_latency_ms; /* the latencies the host API reports */
     double in_latency_ms;

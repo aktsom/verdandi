@@ -77,7 +77,20 @@ static void laction(int i) {
 ** Prints an error message, adding the program name in front of it
 ** (if present)
 */
+#ifdef NORNS_WINDOWS
+#include "platform/windows/msg_dedupe.h"
+static vmsg_dedupe l_dedupe;
+#endif
 static void l_message(const char *pname, const char *msg) {
+#ifdef NORNS_WINDOWS
+    unsigned skipped = 0;
+    if (!vmsg_dedupe_check(&l_dedupe, msg, &skipped)) {
+        return; // the same error again: written once, counted
+    }
+    if (skipped > 0) {
+        lua_writestringerror("(the error above was repeated %u more times)\n", skipped);
+    }
+#endif
     if (pname) {
         lua_writestringerror("%s: ", pname);
     }

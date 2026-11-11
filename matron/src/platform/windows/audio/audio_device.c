@@ -321,7 +321,13 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
         S.card_frames = frames;
         S.engine_prime = prime;
         unsigned hf = S.opened.host_frames > frames ? S.opened.host_frames : frames;
+        if (S.opened.exclusive) {
+            hf *= 2; /* an exclusive stream is double buffered by the host API: two periods can arrive together */
+        }
         S.engine_lag = (hf + S.frames - 1) / S.frames;
+        /* scsynth is another program and needs a moment to wake and to compute: never less than about 5 ms of hold-back, whatever the card's buffer (a card buffer of 64 or 128 frames is 1.3 to 2.7 ms) */
+        unsigned floor_lag = (S.rate / 200 + S.frames - 1) / S.frames;
+        if (S.engine_lag < floor_lag) S.engine_lag = floor_lag;
         if (S.engine_lag < 1) S.engine_lag = 1;
         if (S.engine_lag > 6) S.engine_lag = 6; /* the ring holds 8 blocks: a card block above six engine blocks cannot be bridged in time (the page offers none) */
         verdandi_bridge_host_set_lag(S.engine_lag);
@@ -430,6 +436,18 @@ static void wasapi_twin(const vaud_backend *be, const char *uid, int want_input,
 
 static vaud_config CUR; /* what runs now (the AUDIO page asks, vaud_apply starts from it) */
 
+/* the rate a device runs at now ("" = the Windows default output), 0 when the list does not know it */
+static double device_rate_of(const vaud_backend *be, const char *uid) {
+    vaud_device dev[96];
+    int count = be->list(dev, 96);
+    for (int i = 0; i < count; i++) {
+        if ((uid[0] && !strcmp(dev[i].uid, uid)) || (!uid[0] && dev[i].is_default && dev[i].out_channels > 0)) {
+            return dev[i].default_rate;
+        }
+    }
+    return 0;
+}
+
 /* the chain of decisions that turns a configuration into an open (not started) stream, or says why not: the chosen device -> (not found) the default device -> (rate refused) the device's own rate
  * (only when follow_rate: at the start; a live change must keep the engine's rate) -> (exclusive refused) normal mode -> (ASIO busy) the same hardware through WASAPI. notes in plain words go to `note`.
  * cfg is updated to what was really opened. */
@@ -445,6 +463,15 @@ static vaud_error open_chain(const vaud_backend *be, vaud_config *cfg, int follo
     req.in_r = cfg->in_r;
     req.exclusive = cfg->exclusive;
     memset(res, 0, sizeof *res);
+    if (follow_rate && (cfg->exclusive || !strncmp(cfg->output, "asio:", 5))) {
+        /* exclusive mode and ASIO set the CLOCK of the device to the rate they ask for (the RME follows): so they ask for the rate the device runs at now, and norns follows it. shared mode never needs this */
+        double dr = device_rate_of(be, cfg->output);
+        if (dr > 0 && rate_ok((unsigned)dr) && (unsigned)dr != cfg->rate) {
+            note_add(note, noten, "the device runs at %.0f Hz: norns follows it (%u Hz was asked for) so that its clock is not changed", dr, cfg->rate);
+            cfg->rate = (unsigned)dr;
+            req.rate = cfg->rate;
+        }
+    }
     vaud_error e = be->open(&req, card_callback, NULL, res, err, errn);
     if (e != VAUD_OK && req.exclusive) {
         fprintf(stderr, "audio: exclusive mode of '%s' %s (%s); trying the normal (shared) mode\n", cfg->output[0] ? shown(cfg->output) : "the default device", error_words(e), err);
@@ -452,7 +479,7 @@ static vaud_error open_chain(const vaud_backend *be, vaud_config *cfg, int follo
         cfg->exclusive = 0;
         e = be->open(&req, card_callback, NULL, res, err, errn);
         if (e == VAUD_OK) {
-            note_add(note, noten, "exclusive mode was refused (another program has the device, or it takes no such format): normal mode is used");
+            note_add(note, noten, "exclusive mode was refused (%.120s): normal mode is used", err[0] ? err : "another program has the device, or it takes no such format");
         }
     }
     if (e == VAUD_NOT_FOUND && cfg->output[0]) {
@@ -523,6 +550,9 @@ static int activate(const vaud_opened *res, const vaud_config *cfg, char *err, s
 }
 
 static void log_device(const vaud_opened *res, const vaud_config *cfg) {
+    if (res->device_rate > 0) {
+        fprintf(stderr, "audio: the device itself runs at %.0f Hz (its Windows setting / clock)%s\n", res->device_rate, (unsigned)res->device_rate == S.rate ? "" : (res->exclusive ? " - DIFFERENT from norns" : ": the Windows mixer converts to norns's rate"));
+    }
     fprintf(stderr, "audio: device '%s' (%s%s), %u Hz, engine block %u frames (%.1f ms), card buffer %s, output latency %.1f ms\n", res->device_name, res->host_api, res->exclusive ? ", exclusive" : "", S.rate, S.frames,
             1000.0 * S.frames / S.rate, cfg->buffer ? "asked" : "auto", res->out_latency_ms);
     if (res->in_name[0]) {

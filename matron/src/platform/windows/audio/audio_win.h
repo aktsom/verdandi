@@ -25,6 +25,8 @@ typedef struct {
     double block_ms;                      /* one block of the stream */
     double engine_ms;                     /* what the engine adds: the bridge's block (scsynth) plus the re-blocking delay, in ms */
     double total_ms;                      /* output latency + engine_ms: the estimate for an engine sound, key to ear, without the Windows mixer's own variation */
+    double device_rate;                   /* the rate the device itself runs at (Windows setting / clock), 0 = not known */
+    unsigned engine_lag, lag_raises;      /* blocks of scsynth's answers held back in the bridge now, and how often that grew by itself */
     unsigned card_frames;                 /* the block of the card's callback, 0 = not known yet */
     int exclusive;
     char config_text[512];                /* what runs, as audio.conf lines (the AUDIO page starts from it) */

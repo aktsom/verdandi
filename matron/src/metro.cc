@@ -31,6 +31,13 @@ enum { METRO_STATUS_RUNNING,
        METRO_STATUS_STOPPED };
 
 const int MAX_NUM_METROS = MAX_NUM_METROS_OK;
+#ifdef NORNS_WINDOWS
+struct metro;
+struct metro_start_arg {
+    struct metro *t;
+    unsigned generation; // the metro's generation at the start this thread belongs to
+};
+#endif
 struct metro {
     int idx;                     // metro index
     int status;                  // running/stopped status
@@ -193,7 +200,19 @@ void metro_init(struct metro *t, uint64_t nsec, int count) {
 #ifdef NORNS_WINDOWS
     t->generation++;
 #endif
+#ifdef NORNS_WINDOWS
+    // the loop learns which start it belongs to from the argument, not from the metro's counter: a thread that is slow to begin would otherwise read the number of a LATER stop and never end
+    // (a metro started and stopped at once ran on for ever: the old script's handler was called hundreds of times after "# script clear")
+    struct metro_start_arg *start_arg = (struct metro_start_arg *)malloc(sizeof *start_arg);
+    start_arg->t = t;
+    start_arg->generation = t->generation;
+    res = pthread_create(&(t->tid), &attr, &metro_thread_loop, (void *)start_arg);
+    if (res != 0) {
+        free(start_arg);
+    }
+#else
     res = pthread_create(&(t->tid), &attr, &metro_thread_loop, (void *)t);
+#endif
 #ifdef NORNS_LINUX_DESKTOP
     pthread_attr_destroy(&attr);
 #endif
@@ -234,11 +253,18 @@ void metro_init(struct metro *t, uint64_t nsec, int count) {
 }
 
 void *metro_thread_loop(void *metro) {
-    struct metro *t = (struct metro *)metro;
-    int stop = 0;
 #ifdef NORNS_WINDOWS
-    unsigned my_generation = t->generation;
+    struct metro_start_arg *start_arg = (struct metro_start_arg *)metro;
+    struct metro *t = start_arg->t;
+    unsigned my_generation = start_arg->generation;
+    free(start_arg);
+    if (my_generation != t->generation) {
+        return NULL; // stopped, or started again, before this thread even began: it never runs and leaves the status alone
+    }
+#else
+    struct metro *t = (struct metro *)metro;
 #endif
+    int stop = 0;
 
     pthread_mutex_lock(&(t->status_lock));
     t->status = METRO_STATUS_RUNNING;

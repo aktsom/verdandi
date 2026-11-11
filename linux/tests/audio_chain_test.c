@@ -15,6 +15,7 @@
 
 #include <jack/jack.h>
 
+#include "audio/audio_bridge_host.h"
 #include "audio/audio_device.h"
 #include "audio/exit_win.h"
 #include "audio/verdandi_bridge.h"
@@ -34,6 +35,7 @@ static size_t rec_n, rec_cap;
 static atomic_int card_blocks;
 static int dev_mode; /* 0 all fine, 1 "Busy" is busy, 2 only 48000 */
 static int asio_busy, no_loopback, no_mic_open, fail_all, excl_busy, g_burst; /* scenario switches */
+static double g_dev_rate = 48000;          /* the rate the fake interface runs at (the Windows setting / the card's clock) */
 static unsigned g_host_frames;            /* the host period under the callbacks (0: the same as the callbacks)  */
 static int g_buffer = -1;                 /* the card's buffer asked for in the scenario: -1 = the same as the engine block (the old tests), 0 = auto */
 static unsigned auto_frames = 480;        /* what the card calls back with when it is asked for "auto": a 10 ms Windows period at 48000 Hz */
@@ -67,7 +69,7 @@ static void *card_loop(void *a) {
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
         double el = (now.tv_sec - t0.tv_sec) * 1000.0 + (now.tv_nsec - t0.tv_nsec) / 1e6;
-        if (target > el) sleep_ms_f(target - el);
+        if (target > el && n > 1) sleep_ms_f(target - el); /* (the first callback comes at once, as an event driven stream does: before the bridge exists) */
         /* the input: channel c carries 0.1 * c, or the output of loop_delay frames ago (a cable) */
         const float *in = NULL;
         if (fake_duplex || fake_sep) {
@@ -122,6 +124,7 @@ static int fk_list(vaud_device *o, int max) {
     DEV("wasapi:Fake ASIO", "Fake ASIO", "WASAPI", 0, 2, 2, 21, 12, 0);
     DEV("wasapi:Fake Speakers [Loopback]", "Fake Speakers [Loopback]", "WASAPI", 0, 2, 0, 0, 12, 1);
     DEV("asio:Fake ASIO", "Fake ASIO", "ASIO", 0, 8, 8, 6, 6, 0);
+    o[2].default_rate = g_dev_rate;
     return n;
 }
 /* what each input channel of the fake devices carries: channel c (1 based) is the constant 0.1 * c, so the mapping can be read from the numbers in crone */
@@ -163,7 +166,7 @@ static vaud_error fk_open(const vaud_open_req *rq, vaud_callback cb, void *u, va
     int is_asio = !strncmp(uid, "asio:", 5);
     strcpy(res->device_name, uid[0] ? uid + (is_asio ? 5 : 7) : "Fake Speakers");
     strcpy(res->host_api, is_asio ? "Fake ASIO" : "Fake shared");
-    res->rate = rq->rate; res->frames = card_frames; res->host_frames = g_host_frames; res->exclusive = rq->exclusive; res->out_latency_ms = is_asio ? 6.5 : 12.5;
+    res->rate = rq->rate; res->device_rate = g_dev_rate; res->frames = card_frames; res->host_frames = g_host_frames; res->exclusive = rq->exclusive; res->out_latency_ms = is_asio ? 6.5 : 12.5;
     fake_duplex = fake_sep = 0;
     if (rq->in_uid[0] && !no_mic_open) {
         int dup = !strcmp(rq->in_uid, uid) || (!uid[0] && !strcmp(rq->in_uid, "wasapi:Fake Speakers"));
@@ -340,7 +343,7 @@ static void run_chain(const char *scenario, int with_guest, const char *output, 
     if (with_guest && expect_mode != VAUD_MODE_DEVICE) {
         /* null audio: nothing plays, but scsynth is paced and fed exactly the same */
         CHECK(att == 1, "%s: scsynth is attached", scenario);
-        CHECK(from_sc + 4 >= to_sc && to_sc > expected * 0.7, "%s: blocks to scsynth %llu / from %llu", scenario, to_sc, from_sc);
+        CHECK(from_sc + 8 >= to_sc && to_sc > expected * 0.7, "%s: blocks to scsynth %llu / from %llu", scenario, to_sc, from_sc);
         CHECK(under <= 3 && drops <= 3, "%s: underruns %llu drops %llu", scenario, under, drops);
     } else if (with_guest) {
         CHECK(att == 1, "%s: scsynth is attached", scenario);
@@ -350,7 +353,7 @@ static void run_chain(const char *scenario, int with_guest, const char *output, 
         unsigned long long lim = st.frames <= 128 ? 25 : 3; /* small blocks on a busy machine miss a deadline now and then */
         CHECK(under <= lim, "%s: bridge underruns %llu", scenario, under);
         CHECK(drops <= lim, "%s: bridge drops %llu", scenario, drops);
-        CHECK(from_sc + 4 >= to_sc && to_sc > expected * 0.7, "%s: blocks to scsynth %llu / from %llu", scenario, to_sc, from_sc);
+        CHECK(from_sc + 8 >= to_sc && to_sc > expected * 0.7, "%s: blocks to scsynth %llu / from %llu", scenario, to_sc, from_sc);
     } else {
         CHECK(att == 0, "%s: no scsynth is attached", scenario);
         CHECK(fabs(mean) < 0.001 && peak < 0.001, "%s: without scsynth the card gets silence from the engine path (mean %.4f peak %.4f), and nothing hung", scenario, mean, peak);
@@ -643,6 +646,117 @@ static void scenario_apply(const char *sc) {
     vaud_stop();
 }
 
+/* a fresh start must be in the same state as a re-open (owner test of 0.4.0: "fresh start crackles, the same settings re-applied are clean"): the bridge hold-back is set by the first callback, which
+ * came before the bridge existed, and the bridge wiped it. both states are compared. */
+static void scenario_startup(const char *sc) {
+    char name[64];
+    snprintf(name, sizeof name, "AudioStartup-%d", (int)getpid());
+    bridge_name = name;
+    g_buffer = 0;
+    g_host_frames = 480; /* WASAPI shared: the Windows period of 10 ms */
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.rate = 48000; cfg.period = 128; cfg.buffer = 0;
+    rec_cap = 48000 * 14; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, name, &st);
+    crone_start();
+    atomic_store(&sc_run, 1);
+    pthread_create(&sc_thread, NULL, sc_loop, NULL);
+    sleep_ms_f(3500);
+    unsigned long long to1, f1, u1, d1;
+    int att;
+    vaud_bridge_stats(&to1, &f1, &u1, &d1, &att);
+    unsigned lag_start = verdandi_bridge_host_lag();
+    unsigned prime_start = vaud_get_state()->engine_prime, card_start = vaud_get_state()->card_frames;
+    CHECK(lag_start == 4 && card_start == 480 && prime_start == 128, "%s: the start-up state: hold-back 4 blocks, card 480, prime 128 (%u %u %u)", sc, lag_start, card_start, prime_start);
+    CHECK(u1 <= 3, "%s: bridge underruns in the first seconds after the start: %llu (an unset hold-back gave thousands)", sc, u1);
+    char msg[256] = "";
+    vaud_config want = *vaud_current_config();
+    int rc = vaud_apply(&want, msg, sizeof msg);
+    CHECK(rc == 0, "%s: the same settings applied again: %d '%s'", sc, rc, msg);
+    sleep_ms_f(3500);
+    unsigned long long to2, f2, u2, d2;
+    vaud_bridge_stats(&to2, &f2, &u2, &d2, &att);
+    CHECK(verdandi_bridge_host_lag() == lag_start && vaud_get_state()->engine_prime == prime_start && vaud_get_state()->card_frames == card_start,
+          "%s: after a re-apply the state is the same as at the start (%u %u %u)", sc, verdandi_bridge_host_lag(), vaud_get_state()->engine_prime, vaud_get_state()->card_frames);
+    CHECK(u2 - u1 <= 3, "%s: and so is the quiet: %llu underruns in the seconds after the re-apply", sc, u2 - u1);
+    printf("%s: start: lag %u underruns %llu | re-apply: lag %u underruns +%llu\n", sc, lag_start, u1, verdandi_bridge_host_lag(), u2 - u1);
+    atomic_store(&sc_run, 0);
+    pthread_join(sc_thread, NULL);
+    vaud_stop();
+}
+
+/* the cause itself: the card's first callback sets the hold-back, and that can come before the bridge is made (the bridge is made after the stream is open); creating the bridge must not forget it */
+static void scenario_lagfirst(const char *sc) {
+    char name[64];
+    snprintf(name, sizeof name, "AudioLagFirst-%d", (int)getpid());
+    verdandi_bridge_host_set_lag(4);
+    CHECK(verdandi_bridge_host_start(name, 48000, 128) == 0, "%s: the bridge is made", sc);
+    CHECK(verdandi_bridge_host_lag() == 4, "%s: a hold-back set before the bridge existed is still there (%u)", sc, verdandi_bridge_host_lag());
+    verdandi_bridge_host_set_lag(2);
+    CHECK(verdandi_bridge_host_lag() == 2, "%s: and it can be set again while it runs (%u)", sc, verdandi_bridge_host_lag());
+    verdandi_bridge_host_stop();
+}
+
+/* callbacks in bursts that nobody announced (the host API says nothing): the hold-back grows by itself until the bursts find their answers, and then stays */
+static void scenario_adapt(const char *sc) {
+    char name[64];
+    snprintf(name, sizeof name, "AudioAdapt-%d", (int)getpid());
+    bridge_name = name;
+    g_buffer = 128; g_burst = 4; g_host_frames = 0;
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.rate = 48000; cfg.period = 128; cfg.buffer = 128;
+    rec_cap = 48000 * 14; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, name, &st);
+    crone_start();
+    atomic_store(&sc_run, 1);
+    pthread_create(&sc_thread, NULL, sc_loop, NULL);
+    CHECK(verdandi_bridge_host_lag() == 2, "%s: the first hold-back is the floor of 5 ms (2 blocks of 128): %u", sc, verdandi_bridge_host_lag());
+    sleep_ms_f(4000);
+    unsigned long long to1, f1, u1, d1;
+    int att;
+    vaud_bridge_stats(&to1, &f1, &u1, &d1, &att);
+    sleep_ms_f(3000);
+    unsigned long long to2, f2, u2, d2;
+    vaud_bridge_stats(&to2, &f2, &u2, &d2, &att);
+    CHECK(verdandi_bridge_host_lag() >= 3, "%s: the hold-back grew to meet the bursts: %u", sc, verdandi_bridge_host_lag());
+    CHECK(u2 - u1 <= 1, "%s: and then it is quiet: %llu underruns in the last 3 s (%llu before)", sc, u2 - u1, u1);
+    printf("%s: lag %u underruns first 4 s %llu, next 3 s %llu\n", sc, verdandi_bridge_host_lag(), u1, u2 - u1);
+    atomic_store(&sc_run, 0);
+    pthread_join(sc_thread, NULL);
+    vaud_stop();
+}
+
+/* the card's rate is the owner's: shared mode never changes it (the Windows mixer converts), exclusive mode and ASIO set the clock of the device to what they ask for, so they ask for the rate the device
+ * runs at (owner test: the card was found at 44100 Hz in the RME settings after exclusive tests). norns follows the device's rate at the start and says so */
+static void scenario_rate(const char *sc) {
+    g_buffer = 0;
+    g_dev_rate = 44100;
+    rec_cap = 48000 * 4; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    snprintf(cfg.output, sizeof cfg.output, "wasapi:Fake Interface");
+    cfg.rate = 48000; cfg.period = 128;
+    vaud_state st;
+    if (!strcmp(sc, "rate_excl")) {
+        cfg.exclusive = 1;
+        vaud_start(&FAKE, &cfg, NULL, &st);
+        CHECK(st.mode == VAUD_MODE_DEVICE && last_req.rate == 44100 && st.rate == 44100, "rate_excl: exclusive asks for the device's own rate (%u), norns follows (%u)", last_req.rate, st.rate);
+        CHECK(strstr(st.note, "44100 Hz") && strstr(st.note, "48000"), "rate_excl: and says so: '%s'", st.note);
+        CHECK(st.opened.device_rate == 44100, "rate_excl: the device's rate is known to the page and the log (%.0f)", st.opened.device_rate);
+    } else {
+        vaud_start(&FAKE, &cfg, NULL, &st);
+        CHECK(st.mode == VAUD_MODE_DEVICE && last_req.rate == 48000 && st.rate == 48000, "rate_shared: shared mode asks for the norns rate and never touches the device (%u)", last_req.rate);
+        CHECK(st.opened.device_rate == 44100 && st.note[0] == 0, "rate_shared: the device stays at 44100 Hz, nothing to say (%.0f '%s')", st.opened.device_rate, st.note);
+    }
+    sleep_ms_f(200);
+    vaud_stop();
+    g_dev_rate = 48000;
+}
+
 static void scenario_excl(const char *sc) {
     g_buffer = 0;
     vaud_state st;
@@ -666,6 +780,10 @@ int main(int argc, char **argv) {
     if (!strcmp(sc, "config")) scenario_config();
     else if (!strncmp(sc, "apply_", 6)) scenario_apply(sc);
     else if (!strncmp(sc, "excl_", 5)) scenario_excl(sc);
+    else if (!strncmp(sc, "rate_", 5)) scenario_rate(sc);
+    else if (!strcmp(sc, "startup")) scenario_startup(sc);
+    else if (!strcmp(sc, "lagfirst")) scenario_lagfirst(sc);
+    else if (!strcmp(sc, "adapt")) scenario_adapt(sc);
     else if (!strcmp(sc, "reblock480")) { g_buffer = 0; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 480 && vaud_get_state()->engine_prime == 256, "reblock480: card 480, engine 256: primed with one engine block (%u %u)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime); CHECK(vaud_get_state()->card_xruns == 0, "reblock480: no glitch (%llu)", vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "reblock64")) { g_buffer = 64; run_chain(sc, 1, "", 48000, 128, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 64 && vaud_get_state()->engine_prime == 128 && vaud_get_state()->card_xruns == 0, "reblock64: card 64, engine 128 (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "reblock1024")) { g_buffer = 1024; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 1024 && vaud_get_state()->engine_prime == 0 && vaud_get_state()->card_xruns == 0, "reblock1024: card 1024, engine 256: no extra delay (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }

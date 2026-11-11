@@ -53,6 +53,7 @@ static struct {
     atomic_int stop;
     int thread_started;
     unsigned frames;
+    volatile unsigned want_lag; /* set by the card's first callback, which may come before the bridge exists: kept here and put into the bridge when it is made */
 } H;
 
 static int process(jack_nframes_t n, void *arg) {
@@ -129,6 +130,7 @@ int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames)
         return -1;
     }
     H.frames = frames;
+    H.b.lag = H.want_lag; /* (vb_host_create cleared the struct) */
     jack_status_t st;
     H.client = jack_client_open("SuperCollider", JackNoStartServer, &st);
     if (!H.client) {
@@ -155,8 +157,13 @@ int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames)
 void verdandi_bridge_host_set_lag(unsigned blocks) {
     if (blocks < 1) blocks = 1;
     if (blocks > VB_RING - 2) blocks = VB_RING - 2;
+    H.want_lag = blocks;
     H.b.lag = blocks;
+    H.b.primed = 0; /* a new device: the hold-back is built up again */
 }
+
+unsigned verdandi_bridge_host_lag(void) { return H.up ? (H.b.lag ? H.b.lag : 1) : 0; }
+unsigned verdandi_bridge_host_raises(void) { return H.up ? H.b.raises : 0; }
 
 void verdandi_bridge_host_stop(void) {
     if (!H.up) {

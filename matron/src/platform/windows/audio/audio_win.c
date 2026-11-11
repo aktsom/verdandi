@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "audio_bridge_host.h"
 #include "audio_device.h"
 
 #ifdef _WIN32
@@ -93,9 +94,12 @@ void verdandi_audio_info(verdandi_audio_info_t *out) {
     out->out_latency_ms = dev ? s->opened.out_latency_ms : 0.0;
     out->in_latency_ms = dev ? s->opened.in_latency_ms : 0.0;
     out->block_ms = s->rate ? 1000.0 * s->frames / s->rate : 0.0;
-    out->engine_ms = (s->engine_lag ? s->engine_lag : 1) * out->block_ms + (s->rate ? 1000.0 * s->engine_prime / s->rate : 0.0); /* the bridge keeps one block between crone and scsynth; the re-blocking may add one more */
+    out->engine_ms = (verdandi_bridge_host_lag() ? verdandi_bridge_host_lag() : (s->engine_lag ? s->engine_lag : 1)) * out->block_ms + (s->rate ? 1000.0 * s->engine_prime / s->rate : 0.0); /* the bridge keeps one block between crone and scsynth; the re-blocking may add one more */
     out->total_ms = out->out_latency_ms + out->engine_ms;
     out->card_frames = s->card_frames;
+    out->engine_lag = verdandi_bridge_host_lag();
+    out->lag_raises = verdandi_bridge_host_raises();
+    out->device_rate = dev ? s->opened.device_rate : 0.0;
     out->exclusive = dev && s->opened.exclusive;
     {
         const vaud_config *c = vaud_current_config();
