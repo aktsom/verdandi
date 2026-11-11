@@ -85,7 +85,7 @@ chk_audio() {
         && has "$LOGS/norns.log" "^audio: output chosen: .*input: .*block " "the choice (output, input, rate, block) is in the log" \
         && has "$LOGS/norns.log" "^audio: input is OFF at the start" "the input is OFF at the start (no feedback)" \
         && has "$LOGS/norns.log" "VERDANDI_SMOKE_AUDIO .*input=off" "norns reports the input as off" \
-        && { [ "${EXPECT_ASIO:-0}" != 1 ] || has "$LOGS/norns.log" "^audio: PortAudio .*host APIs:.*ASIO\\(" "this is the ASIO build: PortAudio lists the ASIO host API (with 0 drivers on a runner)"; } \
+        && { [ "${EXPECT_ASIO:-0}" != 1 ] || { grep -a -q "ASIO" "$APP/libportaudio-2.dll" && echo "found: this is the ASIO build: its PortAudio DLL contains the ASIO host API (PortAudio lists it in the log only when an ASIO driver is installed: a runner has none)"; }; } \
         && { [ "${EXPECT_ASIO:-0}" = 1 ] || ! grep -q -E "^audio: PortAudio .*host APIs:.*ASIO\\(" "$LOGS/norns.log" 2> /dev/null || { echo "NOT EXPECTED: ASIO in the WASAPI-only build"; false; }; } \
         && has "$LOGS/norns.log" "^audio: (device '|null audio|.*null audio is used)" "the audio decision (device or null audio) is in the log" \
         && has "$LOGS/norns.log" "^audio bridge: '.*' ready" "norns.exe made the audio bridge" \

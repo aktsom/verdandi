@@ -554,7 +554,7 @@ static void pa_describe(char *out, size_t n) {
         len += (size_t)snprintf(out + len, n - len, " %s(%d)", Pa_GetHostApiInfo(i)->name, Pa_GetHostApiInfo(i)->deviceCount);
     }
     if (Pa_HostApiTypeIdToHostApiIndex(paASIO) < 0 && len + 40 < n) {
-        snprintf(out + len, n - len, " [no ASIO in this build]");
+        snprintf(out + len, n - len, " [no ASIO host API: this PortAudio has none, or no ASIO driver is installed]");
     }
 }
 
