@@ -23,7 +23,11 @@ typedef struct {
     unsigned rate, frames;
     double out_latency_ms, in_latency_ms; /* what the host API reports */
     double block_ms;                      /* one block of the stream */
-    double engine_ms;                     /* the extra block the bridge to scsynth adds, in ms */
+    double engine_ms;                     /* what the engine adds: the bridge's block (scsynth) plus the re-blocking delay, in ms */
+    double total_ms;                      /* output latency + engine_ms: the estimate for an engine sound, key to ear, without the Windows mixer's own variation */
+    unsigned card_frames;                 /* the block of the card's callback, 0 = not known yet */
+    int exclusive;
+    char config_text[512];                /* what runs, as audio.conf lines (the AUDIO page starts from it) */
     double peak_db;                       /* the input level */
     double measured_ms;                   /* -1 none yet, -2 no signal */
     int in_active;
@@ -37,6 +41,8 @@ void verdandi_audio_info(verdandi_audio_info_t *out);
 /* MIC / OFF / SYS as _norns.mic_input and _norns.app_input call it. returns 0 = ok, 1 = that one cannot (see sys_note / in_note) */
 int verdandi_audio_input(int mic_on, int sys_on);
 void verdandi_audio_measure(void);
+/* the AUDIO page's choices as audio.conf lines; applied live (the stream is reopened, the engine runs on). returns 0 = runs, 1 = reverted (msg says why), 2 = silence. the file is written by the caller on 0 only */
+int verdandi_audio_apply(const char *conf_text, char *msg, size_t n);
 
 #ifdef __cplusplus
 }

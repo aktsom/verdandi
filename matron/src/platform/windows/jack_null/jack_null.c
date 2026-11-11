@@ -77,7 +77,7 @@ static struct {
     _Atomic double cpu;     /* percent of the block period spent in the callbacks, smoothed */
     atomic_uint ticks;
     atomic_uint xruns;
-    int external;          /* M2: a sound card callback runs the blocks (verdandi_jack_null_process), there is no clock thread */
+    atomic_int external;   /* M2: a sound card callback runs the blocks (verdandi_jack_null_process); the clock thread then idles. M3: switchable at any time (the card is reopened live, or fails and the engine goes back to the clock) */
     unsigned pre_rate;     /* verdandi_jack_null_configure, used by init_locked instead of the environment */
     unsigned pre_frames;
 } G = {.lock = PTHREAD_MUTEX_INITIALIZER};
@@ -252,7 +252,21 @@ static void *clock_thread(void *arg) {
     uint64_t n = 0;
     int64_t period = (int64_t)((double)G.frames * 1e9 / (double)G.rate);
     int64_t t0 = now_ns();
+    int idle = 0;
     while (!atomic_load(&G.stop)) {
+        if (atomic_load(&G.external)) {
+            /* a sound card runs the blocks: wait, and start the count again when the clock is needed */
+            struct timespec ts = {0, 2000000L};
+            nanosleep(&ts, NULL);
+            idle = 1;
+            continue;
+        }
+        if (idle) {
+            idle = 0;
+            n = 0;
+            t0 = now_ns();
+            period = (int64_t)((double)G.frames * 1e9 / (double)G.rate);
+        }
         n++;
         int64_t target = t0 + (int64_t)n * period;
         sleep_until_ns(target);
@@ -358,7 +372,7 @@ int jack_activate(jack_client_t *client) {
     }
     pthread_mutex_lock(&G.lock);
     client->active = 1;
-    int start = !G.thread_running && !G.external;
+    int start = !G.thread_running; /* (M3: the clock thread always exists and idles while a card runs the blocks) */
     if (start) {
         G.thread_running = 1;
         atomic_store(&G.stop, 0);
@@ -598,7 +612,7 @@ void verdandi_jack_null_configure(unsigned rate, unsigned frames) {
 
 void verdandi_jack_null_external_clock(int on) {
     pthread_mutex_lock(&G.lock);
-    G.external = on ? 1 : 0;
+    atomic_store(&G.external, on ? 1 : 0);
     pthread_mutex_unlock(&G.lock);
 }
 

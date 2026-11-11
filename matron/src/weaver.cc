@@ -325,6 +325,7 @@ static int _listdir(lua_State *l);
 static int _audio_devices(lua_State *l);
 static int _audio_info(lua_State *l);
 static int _audio_measure(lua_State *l);
+static int _audio_apply(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_input(lua_State *l);
 static int _audio_input(lua_State *l);
@@ -573,6 +574,7 @@ void w_init(void) {
     lua_register_norns("audio_info", &_audio_info);       // M2: what the audio is running on
     lua_register_norns("mic_input", &_mic_input);         // M3: MIC on or off
     lua_register_norns("app_input", &_app_input);         // M3: SYS (WASAPI loopback)
+    lua_register_norns("audio_apply", &_audio_apply);     // M3: new settings live
     lua_register_norns("audio_measure", &_audio_measure); // M3: the measured round trip
     lua_register_norns("audio_input", &_audio_input);     // M3: what the input is now (after mic_input / app_input)
 #endif
@@ -3866,6 +3868,11 @@ int _audio_info(lua_State *l) {
     SET_N("in_latency_ms", a.in_latency_ms);
     SET_N("block_ms", a.block_ms);
     SET_N("engine_ms", a.engine_ms);
+    SET_N("total_ms", a.total_ms);
+    SET_I("card_frames", a.card_frames);
+    SET_S("config", a.config_text);
+    lua_pushboolean(l, a.exclusive);
+    lua_setfield(l, -2, "exclusive");
     SET_N("peak_db", a.peak_db);
     SET_N("measured_ms", a.measured_ms);
     SET_S("note", a.note);
@@ -3922,6 +3929,21 @@ int _audio_input(lua_State *l) {
     verdandi_audio_info(&a);
     lua_pushstring(l, a.input);
     lua_pushstring(l, a.sys_note[0] ? a.sys_note : a.in_note);
+    return 2;
+}
+
+/***
+ * Windows: use new audio settings NOW (the AUDIO page): the stream is reopened, the engine and the script run on. argument: audio.conf lines. returns the code (0 runs, 1 reverted, 2 silence) and one plain sentence
+ * @function audio_apply
+ * @tparam string conf
+ * @treturn integer
+ * @treturn string
+ */
+int _audio_apply(lua_State *l) {
+    char msg[512];
+    int rc = verdandi_audio_apply(luaL_checkstring(l, 1), msg, sizeof msg);
+    lua_pushinteger(l, rc);
+    lua_pushstring(l, msg);
     return 2;
 }
 

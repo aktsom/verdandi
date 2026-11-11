@@ -57,6 +57,8 @@ typedef struct {
 typedef struct {
     vb_shared *sh;
     int host;
+    volatile unsigned lag;   /* host only: how many blocks of scsynth's answers are held back (>= the number of engine blocks that run in one callback of the card, so that a burst of blocks finds its answers) */
+    int primed;              /* host only: the held-back blocks are there */
 #ifdef _WIN32
     HANDLE map, event;
 #else
@@ -167,13 +169,18 @@ static inline void vb_host_exchange(vb_t *b, const float *to_l, const float *to_
         }
         vb_os_signal(b);
     }
-    /* scsynth's answer: the oldest block that is not too old */
+    /* scsynth's answer: the oldest block that is not too old. `lag` blocks are held back: scsynth is another program and answers a moment after it was handed a block, so when the card's callback runs
+     * several engine blocks in a row (a callback of 480 or 1024 frames with a 128 or 256 block) the answers of the earlier ones must already be there. after an underrun the lag is built up again */
+    unsigned lag = b->lag ? b->lag : 1;
     uint64_t fw = vb_load(&s->from_w), fr = vb_load(&s->from_r);
-    while (fw - fr > VB_LATE_LIMIT) {
+    while (fw - fr > lag + VB_LATE_LIMIT - 1) {
         fr++;
         vb_add(&s->host_drops, 1);
     }
-    if (fw > fr) {
+    if (!b->primed && fw - fr >= lag) {
+        b->primed = 1;
+    }
+    if (b->primed && fw > fr) {
         const float *src = s->from_sc[fr % VB_RING];
         if (from_l) memcpy(from_l, src, n * sizeof(float));
         if (from_r) memcpy(from_r, src + n, n * sizeof(float));
@@ -181,8 +188,9 @@ static inline void vb_host_exchange(vb_t *b, const float *to_l, const float *to_
     } else {
         if (from_l) memset(from_l, 0, n * sizeof(float));
         if (from_r) memset(from_r, 0, n * sizeof(float));
-        if (vb_load(&s->guest_attached) && vb_load(&s->guest_blocks) > 0) {
+        if (b->primed && vb_load(&s->guest_attached) && vb_load(&s->guest_blocks) > 0) {
             vb_add(&s->host_underruns, 1);
+            b->primed = 0;
         }
     }
 }

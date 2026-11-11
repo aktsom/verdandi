@@ -262,13 +262,13 @@ typedef struct {
 #endif
 } sp_t;
 
-static void fill_params(sp_t *sp, PaDeviceIndex dev, const char *api, int channels, int is_input, double rate, double frames, const int *sel /* 2 selectors, 0 based, or NULL */) {
+static void fill_params(sp_t *sp, PaDeviceIndex dev, const char *api, int channels, int is_input, double rate, double frames /* 0 = the device's own period */, const int *sel /* 2 selectors, 0 based, or NULL */, int exclusive) {
     memset(sp, 0, sizeof *sp);
     const PaDeviceInfo *di = Pa_GetDeviceInfo(dev);
     sp->p.device = dev;
     sp->p.channelCount = channels;
     sp->p.sampleFormat = paFloat32;
-    double want_lat = frames / rate, low = is_input ? di->defaultLowInputLatency : di->defaultLowOutputLatency;
+    double want_lat = frames > 0 ? frames / rate : 0.0, low = is_input ? di->defaultLowInputLatency : di->defaultLowOutputLatency;
     sp->p.suggestedLatency = low > want_lat ? low : want_lat;
 #ifdef HAVE_PA_ASIO_H
     if (!strcmp(api, "ASIO") && sel) {
@@ -288,12 +288,24 @@ static void fill_params(sp_t *sp, PaDeviceIndex dev, const char *api, int channe
         sp->wasapi.hostApiType = paWASAPI;
         sp->wasapi.version = 1;
 #ifdef paWinWasapiAutoConvert
-        sp->wasapi.flags = paWinWasapiAutoConvert; /* shared mode: the Windows mixer converts the rate when the device runs at another one */
+        if (!exclusive) {
+            sp->wasapi.flags = paWinWasapiAutoConvert; /* shared mode: the Windows mixer converts the rate when the device runs at another one */
+        }
+#endif
+#ifdef paWinWasapiExclusive
+        if (exclusive) {
+            sp->wasapi.flags |= paWinWasapiExclusive; /* the device is ours alone: a block as small as the driver takes, and nothing else (Ableton, Windows sounds) can use it meanwhile */
+        }
+#endif
+#ifdef paWinWasapiThreadPriority
+        /* the callback thread is registered with MMCSS as "Pro Audio" (the scheduler class for audio threads): without it a callback that must finish in 3 to 10 ms is a normal thread among all the others */
+        sp->wasapi.flags |= paWinWasapiThreadPriority;
+        sp->wasapi.threadPriority = eThreadPriorityProAudio;
 #endif
         sp->p.hostApiSpecificStreamInfo = &sp->wasapi;
     }
 #endif
-    (void)api, (void)sel;
+    (void)api, (void)sel, (void)exclusive;
 }
 
 static void close_all(void) {
@@ -351,7 +363,8 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     user_cb = cb;
     user_arg = user;
     sp_t outp, inp;
-    fill_params(&outp, od, oapi, 2, 0, rq->rate, rq->frames, is_asio ? osel : NULL);
+    fill_params(&outp, od, oapi, 2, 0, rq->rate, rq->frames, is_asio ? osel : NULL, rq->exclusive && !is_asio);
+    const unsigned long fpb = rq->frames ? rq->frames : paFramesPerBufferUnspecified; /* 0: the host API's own period, no re-blocking by PortAudio (the engine re-blocks itself) */
     PaError e;
     int try_input = duplex; /* one stream with both directions only on one device; another device gets its own input stream below */
     int isel[2] = {rq->in_l - 1, rq->in_r - 1};
@@ -367,7 +380,7 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
         in_ch = is_asio ? 2 : maxc; /* ASIO: two channels, picked by the selectors; WASAPI: the first `maxc` channels, picked by the callback */
         in_l_sel = is_asio ? 0 : isel[0];
         in_r_sel = is_asio ? 1 : isel[1];
-        fill_params(&inp, id, iapi, in_ch, 1, rq->rate, rq->frames, is_asio ? isel : NULL);
+        fill_params(&inp, id, iapi, in_ch, 1, rq->rate, rq->frames, is_asio ? isel : NULL, rq->exclusive && !is_asio);
     }
     out_ch = 2;
     e = Pa_IsFormatSupported(try_input ? &inp.p : NULL, &outp.p, (double)rq->rate);
@@ -385,14 +398,14 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
         vaud_error c = classify(e, oapi);
         return c == VAUD_FAILED && e == paInvalidSampleRate ? VAUD_BAD_RATE : (c == VAUD_FAILED && e != paUnanticipatedHostError ? VAUD_BAD_RATE : c);
     }
-    e = Pa_OpenStream(&stream, try_input ? &inp.p : NULL, &outp.p, (double)rq->rate, rq->frames, paClipOff | paDitherOff, main_cb, NULL);
+    e = Pa_OpenStream(&stream, try_input ? &inp.p : NULL, &outp.p, (double)rq->rate, fpb, paClipOff | paDitherOff, main_cb, NULL);
     if (e != paNoError && try_input) {
         char t[120];
         snprintf(res->in_note + strlen(res->in_note), sizeof res->in_note - strlen(res->in_note), "%sinput '%.50s' could not be opened (%s): output only", res->in_note[0] ? ". " : "", rq->in_uid,
                  host_error_text(e, t, sizeof t));
         try_input = 0;
         stream = NULL;
-        e = Pa_OpenStream(&stream, NULL, &outp.p, (double)rq->rate, rq->frames, paClipOff | paDitherOff, main_cb, NULL);
+        e = Pa_OpenStream(&stream, NULL, &outp.p, (double)rq->rate, fpb, paClipOff | paDitherOff, main_cb, NULL);
     }
     if (e != paNoError) {
         host_error_text(e, err, errn);
@@ -415,8 +428,8 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
         }
         sin_ch = maxc;
         sp_t sip;
-        fill_params(&sip, id, iapi, sin_ch, 1, rq->rate, rq->frames, NULL);
-        PaError e2 = Pa_OpenStream(&in_stream, &sip.p, NULL, (double)rq->rate, rq->frames, paClipOff | paDitherOff, sep_in_cb, NULL);
+        fill_params(&sip, id, iapi, sin_ch, 1, rq->rate, rq->frames, NULL, 0);
+        PaError e2 = Pa_OpenStream(&in_stream, &sip.p, NULL, (double)rq->rate, fpb, paClipOff | paDitherOff, sep_in_cb, NULL);
         if (e2 == paNoError) {
             res->in_active = 1;
             res->in_separate = 1;
@@ -441,6 +454,17 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     snprintf(res->host_api, sizeof res->host_api, "%s%s", hi ? hi->name : "?", hi && hi->type == paWASAPI ? " shared" : "");
     res->rate = si ? (unsigned)(si->sampleRate + 0.5) : rq->rate;
     res->frames = rq->frames;
+    res->exclusive = rq->exclusive && !is_asio;
+#if defined(HAVE_PA_WASAPI_H) && defined(_WIN32)
+    if (!is_asio && !rq->frames) {
+        /* the period Windows gave (480 frames at 48000 Hz in shared mode): that is the size of the card's callbacks */
+        UINT32 hin = 0, hout = 0;
+        if (PaWasapi_GetFramesPerHostBuffer(stream, &hin, &hout) == paNoError && hout > 0) {
+            res->frames = hout;
+            res->host_frames = hout;
+        }
+    }
+#endif
     res->out_latency_ms = si ? si->outputLatency * 1000.0 : 0.0;
     res->in_latency_ms = si && res->in_active && !res->in_separate ? si->inputLatency * 1000.0 : (res->in_active ? idi->defaultLowInputLatency * 1000.0 : 0.0);
     return VAUD_OK;
@@ -493,7 +517,7 @@ static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen,
     const PaDeviceInfo *di = Pa_GetDeviceInfo(dev);
     int ch = di->maxInputChannels > 1 ? 2 : 1;
     sp_t sp;
-    fill_params(&sp, dev, "WASAPI", ch, 1, rate, frames, NULL);
+    fill_params(&sp, dev, "WASAPI", ch, 1, rate, frames, NULL, 0);
     PaError e = Pa_OpenStream(&sys_stream, &sp.p, NULL, (double)rate, frames, paClipOff | paDitherOff, sys_cb, (void *)(intptr_t)ch);
     if (e != paNoError) {
         host_error_text(e, err, errn);

@@ -7,6 +7,10 @@
 
 #include "audio_device.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 extern const vaud_backend vaud_backend_portaudio;
 extern void vaud_backend_pa_describe(char *out, size_t n);
 
@@ -26,6 +30,12 @@ int verdandi_audio_boot(void) {
         fflush(stdout);
         return 1;
     }
+#ifdef _WIN32
+    /* the process that runs the sound card's callback gets a priority class above the normal one (its callback thread is also registered with MMCSS as "Pro Audio" by the backend) */
+    if (SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS)) {
+        fprintf(stderr, "audio: norns.exe runs at the above-normal priority class\n");
+    }
+#endif
     vaud_state st;
     vaud_start(&vaud_backend_portaudio, &CFG, getenv("VERDANDI_BRIDGE"), &st);
     /* audio.conf.failed: the AUDIO page says "failed: back to default" while it exists (the same file the macOS launcher leaves) */
@@ -61,6 +71,13 @@ int verdandi_audio_input(int mic_on, int sys_on) { return vaud_input_set(mic_on,
 
 void verdandi_audio_measure(void) { vaud_measure_start(); }
 
+int verdandi_audio_apply(const char *conf_text, char *msg, size_t n) {
+    vaud_config c;
+    memset(&c, 0, sizeof c);
+    vaud_config_parse_text(&c, conf_text);
+    return vaud_apply(&c, msg, n);
+}
+
 void verdandi_audio_info(verdandi_audio_info_t *out) {
     memset(out, 0, sizeof *out);
     const vaud_state *s = vaud_get_state();
@@ -76,7 +93,15 @@ void verdandi_audio_info(verdandi_audio_info_t *out) {
     out->out_latency_ms = dev ? s->opened.out_latency_ms : 0.0;
     out->in_latency_ms = dev ? s->opened.in_latency_ms : 0.0;
     out->block_ms = s->rate ? 1000.0 * s->frames / s->rate : 0.0;
-    out->engine_ms = out->block_ms; /* the bridge keeps one block between crone and scsynth */
+    out->engine_ms = (s->engine_lag ? s->engine_lag : 1) * out->block_ms + (s->rate ? 1000.0 * s->engine_prime / s->rate : 0.0); /* the bridge keeps one block between crone and scsynth; the re-blocking may add one more */
+    out->total_ms = out->out_latency_ms + out->engine_ms;
+    out->card_frames = s->card_frames;
+    out->exclusive = dev && s->opened.exclusive;
+    {
+        const vaud_config *c = vaud_current_config();
+        snprintf(out->config_text, sizeof out->config_text, "output=%s\ninput=%s\nrate=%u\nblock=%u\nbuffer=%u\nexclusive=%d\nout_first=%d\nin_l=%d\nin_r=%d\n", c->output, c->input, c->rate, c->period, c->buffer,
+                 c->exclusive, c->out_first, c->in_l, c->in_r);
+    }
     out->peak_db = s->in_peak_db;
     out->measured_ms = s->measured_ms;
     out->card_xruns = s->card_xruns;

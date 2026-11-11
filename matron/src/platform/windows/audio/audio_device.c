@@ -15,7 +15,7 @@ extern void verdandi_jack_null_external_clock(int on);
 extern int verdandi_jack_null_process(unsigned nframes, const float *cap_l, const float *cap_r, float *play_l, float *play_r);
 
 #define DEFAULT_RATE 48000u
-#define DEFAULT_PERIOD 512u
+#define DEFAULT_PERIOD 128u /* the ENGINE block (M3 round 2): independent of the card's buffer */
 #define MAXF 2048u
 
 static vaud_state S;
@@ -100,7 +100,8 @@ static void note_add(char *dst, size_t n, const char *fmt, ...) {
 }
 
 static int rate_ok(unsigned r) { return r == 44100 || r == 48000 || r == 88200 || r == 96000; }
-static int period_ok(unsigned p) { return p >= 64 && p <= 2048 && p % 64 == 0; }
+static int period_ok(unsigned p) { return p >= 64 && p <= 1024 && p % 64 == 0; }
+static int buffer_ok(unsigned b) { return b == 0 || (b >= 32 && b <= 2048 && b % 32 == 0); }
 static const char *shown(const char *uid) {
     const char *c = strchr(uid, ':');
     return c ? c + 1 : uid;
@@ -122,10 +123,15 @@ void vaud_config_check(vaud_config *cfg) {
     }
     if (!period_ok(cfg->period)) {
         if (cfg->period != 0) {
-            note_add(cfg->notes, sizeof cfg->notes, "block %u is not a multiple of 64 from 64 to 2048: using %u. ", cfg->period, DEFAULT_PERIOD);
+            note_add(cfg->notes, sizeof cfg->notes, "block %u is not a multiple of 64 from 64 to 1024: using %u. ", cfg->period, DEFAULT_PERIOD);
         }
         cfg->period = DEFAULT_PERIOD;
     }
+    if (!buffer_ok(cfg->buffer)) {
+        note_add(cfg->notes, sizeof cfg->notes, "buffer %u is not auto or a multiple of 32 up to 2048: using auto. ", cfg->buffer);
+        cfg->buffer = 0;
+    }
+    cfg->exclusive = cfg->exclusive ? 1 : 0;
     if (cfg->out_first < 1 || cfg->out_first > 64) {
         if (cfg->out_first != 0) note_add(cfg->notes, sizeof cfg->notes, "out_first %d is not a channel from 1 to 64: using 1. ", cfg->out_first);
         cfg->out_first = 1;
@@ -140,6 +146,52 @@ void vaud_config_check(vaud_config *cfg) {
     }
 }
 
+static void parse_line(vaud_config *cfg, char *line) {
+    line[strcspn(line, "\r\n")] = 0;
+    char *eq = strchr(line, '=');
+    if (!eq) {
+        return;
+    }
+    *eq = 0;
+    const char *k = line, *v = eq + 1;
+    if (!strcmp(k, "output")) {
+        snprintf(cfg->output, sizeof cfg->output, "%s", v);
+    } else if (!strcmp(k, "input")) {
+        snprintf(cfg->input, sizeof cfg->input, "%s", v);
+    } else if (!strcmp(k, "rate")) {
+        cfg->rate = (unsigned)strtoul(v, NULL, 10);
+    } else if (!strcmp(k, "block")) {
+        cfg->period = (unsigned)strtoul(v, NULL, 10);
+    } else if (!strcmp(k, "buffer")) {
+        cfg->buffer = !strcmp(v, "auto") ? 0 : (unsigned)strtoul(v, NULL, 10);
+    } else if (!strcmp(k, "exclusive")) {
+        cfg->exclusive = atoi(v);
+    } else if (!strcmp(k, "period")) {
+        /* the key of versions up to 0.3: it was the card's block and the engine's at once. it is read no more (the engine block is block=, the card's buffer is buffer=; the AUDIO page writes both) */
+        note_add(cfg->notes, sizeof cfg->notes, "period= is no longer used (block= is the engine block, buffer= the card's buffer; the AUDIO page writes them). ");
+    } else if (!strcmp(k, "out_first")) {
+        cfg->out_first = atoi(v);
+    } else if (!strcmp(k, "in_l")) {
+        cfg->in_l = atoi(v);
+    } else if (!strcmp(k, "in_r")) {
+        cfg->in_r = atoi(v);
+    }
+}
+
+void vaud_config_parse_text(vaud_config *cfg, const char *text) {
+    char line[512];
+    const char *p = text;
+    while (p && *p) {
+        size_t n = strcspn(p, "\n");
+        snprintf(line, sizeof line, "%.*s", (int)(n < sizeof line - 1 ? n : sizeof line - 1), p);
+        parse_line(cfg, line);
+        p += n;
+        if (*p == '\n') {
+            p++;
+        }
+    }
+}
+
 void vaud_config_load(vaud_config *cfg, const char *home) {
     memset(cfg, 0, sizeof *cfg);
     if (home && *home) {
@@ -149,28 +201,7 @@ void vaud_config_load(vaud_config *cfg, const char *home) {
         if (f) {
             char line[512];
             while (fgets(line, sizeof line, f)) {
-                line[strcspn(line, "\r\n")] = 0;
-                char *eq = strchr(line, '=');
-                if (!eq) {
-                    continue;
-                }
-                *eq = 0;
-                const char *k = line, *v = eq + 1;
-                if (!strcmp(k, "output")) {
-                    snprintf(cfg->output, sizeof cfg->output, "%s", v);
-                } else if (!strcmp(k, "input")) {
-                    snprintf(cfg->input, sizeof cfg->input, "%s", v);
-                } else if (!strcmp(k, "rate")) {
-                    cfg->rate = (unsigned)strtoul(v, NULL, 10);
-                } else if (!strcmp(k, "period")) {
-                    cfg->period = (unsigned)strtoul(v, NULL, 10);
-                } else if (!strcmp(k, "out_first")) {
-                    cfg->out_first = atoi(v);
-                } else if (!strcmp(k, "in_l")) {
-                    cfg->in_l = atoi(v);
-                } else if (!strcmp(k, "in_r")) {
-                    cfg->in_r = atoi(v);
-                }
+                parse_line(cfg, line);
             }
             fclose(f);
         }
@@ -198,6 +229,10 @@ void vaud_config_load(vaud_config *cfg, const char *home) {
     if (e && *e) {
         cfg->period = (unsigned)strtoul(e, NULL, 10);
     }
+    e = getenv("VERDANDI_AUDIO_BUFFER");
+    if (e && *e) {
+        cfg->buffer = !strcmp(e, "auto") ? 0 : (unsigned)strtoul(e, NULL, 10);
+    }
     vaud_config_check(cfg);
 }
 
@@ -206,6 +241,32 @@ static volatile int measure_state;        /* 0 idle, 1 armed (the click goes out
 static volatile unsigned measure_frames;  /* frames since the click */
 
 static double to_db(double x) { return x <= 1e-6 ? -120.0 : 20.0 * log10(x); }
+
+/* a fifo of stereo frames used by the card's thread only */
+#define FIFO_FRAMES 8192u
+typedef struct {
+    float l[FIFO_FRAMES], r[FIFO_FRAMES];
+    unsigned head, n;
+} vfifo;
+static vfifo fi, fo;
+static int fifos_primed;
+static void fifo_reset(vfifo *f) { f->head = f->n = 0; }
+static void fifo_push1(vfifo *f, float l, float r) {
+    if (f->n >= FIFO_FRAMES) { /* cannot happen with blocks up to 2048 and 1024; if it does, the oldest frame goes */
+        f->head = (f->head + 1) % FIFO_FRAMES;
+        f->n--;
+    }
+    unsigned k = (f->head + f->n) % FIFO_FRAMES;
+    f->l[k] = l;
+    f->r[k] = r;
+    f->n++;
+}
+static void fifo_pop1(vfifo *f, float *l, float *r) {
+    *l = f->l[f->head];
+    *r = f->r[f->head];
+    f->head = (f->head + 1) % FIFO_FRAMES;
+    f->n--;
+}
 
 static void card_callback(const float *in, float *out, unsigned frames, void *user) {
     (void)user;
@@ -232,28 +293,65 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
         ring_pull(&sys_ring, sys_tmp, frames);
         src = sys_tmp;
     }
+    double secs_fall = 12.0 * frames / (S.rate ? S.rate : 48000);
     if (src) {
         double peak = 0;
         for (unsigned i = 0; i < frames; i++) {
-            cap_l[i] = src[2 * i];
-            cap_r[i] = src[2 * i + 1];
-            double a = fabs(cap_l[i]), b = fabs(cap_r[i]);
+            double a = fabs(src[2 * i]), b = fabs(src[2 * i + 1]);
             if (a > peak) peak = a;
             if (b > peak) peak = b;
         }
-        double db = to_db(peak), fall = S.in_peak_db - 12.0 * frames / (S.rate ? S.rate : 48000);
+        double db = to_db(peak), fall = S.in_peak_db - secs_fall;
         S.in_peak_db = db > fall ? db : fall;
     } else {
-        double fall = S.in_peak_db - 12.0 * frames / (S.rate ? S.rate : 48000);
+        double fall = S.in_peak_db - secs_fall;
         S.in_peak_db = fall < -120 ? -120 : fall;
     }
-    if (verdandi_jack_null_process(frames, src ? cap_l : NULL, src ? cap_r : NULL, scratch_l, scratch_r) != 0) {
-        memset(out, 0, (size_t)frames * 2 * sizeof(float));
-        return;
+    /* the engine runs in blocks of its own size E (crone, scsynth and the bridge are configured for it); the card's callback has the size the card wants (480 on a 10 ms Windows period, 64 on an ASIO
+     * buffer, 1024 ...). two small fifos re-block: the input is collected until a block of E is there, the blocks run, the output is handed out in the card's size. when E does not divide the card's size
+     * the output is primed with E frames of silence once (one engine block of delay) so that the card never finds the fifo empty. no allocation, no logging, no lock but jack_null's own. */
+    if (!fifos_primed) {
+        fifos_primed = 1;
+        unsigned prime = (frames % S.frames) ? S.frames : 0;
+        fifo_reset(&fo);
+        fifo_reset(&fi);
+        for (unsigned i = 0; i < prime; i++) {
+            fifo_push1(&fo, 0.f, 0.f);
+        }
+        S.card_frames = frames;
+        S.engine_prime = prime;
+        unsigned hf = S.opened.host_frames > frames ? S.opened.host_frames : frames;
+        S.engine_lag = (hf + S.frames - 1) / S.frames;
+        if (S.engine_lag < 1) S.engine_lag = 1;
+        if (S.engine_lag > 6) S.engine_lag = 6; /* the ring holds 8 blocks: a card block above six engine blocks cannot be bridged in time (the page offers none) */
+        verdandi_bridge_host_set_lag(S.engine_lag);
     }
     for (unsigned i = 0; i < frames; i++) {
-        out[2 * i] = scratch_l[i];
-        out[2 * i + 1] = scratch_r[i];
+        fifo_push1(&fi, src ? src[2 * i] : 0.f, src ? src[2 * i + 1] : 0.f);
+    }
+    while (fi.n >= S.frames) {
+        unsigned E = S.frames;
+        for (unsigned i = 0; i < E; i++) {
+            fifo_pop1(&fi, &cap_l[i], &cap_r[i]);
+        }
+        if (verdandi_jack_null_process(E, cap_l, cap_r, scratch_l, scratch_r) != 0) {
+            memset(scratch_l, 0, E * sizeof(float));
+            memset(scratch_r, 0, E * sizeof(float));
+        }
+        for (unsigned i = 0; i < E; i++) {
+            fifo_push1(&fo, scratch_l[i], scratch_r[i]);
+        }
+    }
+    if (fo.n < frames) {
+        S.card_xruns += 1; /* the engine did not deliver in time: silence for the missing part (counted as a glitch) */
+    }
+    for (unsigned i = 0; i < frames; i++) {
+        float l = 0.f, r = 0.f;
+        if (fo.n > 0) {
+            fifo_pop1(&fo, &l, &r);
+        }
+        out[2 * i] = l;
+        out[2 * i + 1] = r;
     }
     /* the round trip: a click on the output, then the raw input is watched for it */
     if (measure_state == 1) {
@@ -330,6 +428,108 @@ static void wasapi_twin(const vaud_backend *be, const char *uid, int want_input,
     }
 }
 
+static vaud_config CUR; /* what runs now (the AUDIO page asks, vaud_apply starts from it) */
+
+/* the chain of decisions that turns a configuration into an open (not started) stream, or says why not: the chosen device -> (not found) the default device -> (rate refused) the device's own rate
+ * (only when follow_rate: at the start; a live change must keep the engine's rate) -> (exclusive refused) normal mode -> (ASIO busy) the same hardware through WASAPI. notes in plain words go to `note`.
+ * cfg is updated to what was really opened. */
+static vaud_error open_chain(const vaud_backend *be, vaud_config *cfg, int follow_rate, vaud_opened *res, char *note, size_t noten, char *err, size_t errn) {
+    vaud_open_req req;
+    memset(&req, 0, sizeof req);
+    snprintf(req.out_uid, sizeof req.out_uid, "%s", cfg->output);
+    snprintf(req.in_uid, sizeof req.in_uid, "%s", cfg->input);
+    req.rate = cfg->rate;
+    req.frames = cfg->buffer;
+    req.out_first = cfg->out_first;
+    req.in_l = cfg->in_l;
+    req.in_r = cfg->in_r;
+    req.exclusive = cfg->exclusive;
+    memset(res, 0, sizeof *res);
+    vaud_error e = be->open(&req, card_callback, NULL, res, err, errn);
+    if (e != VAUD_OK && req.exclusive) {
+        fprintf(stderr, "audio: exclusive mode of '%s' %s (%s); trying the normal (shared) mode\n", cfg->output[0] ? shown(cfg->output) : "the default device", error_words(e), err);
+        req.exclusive = 0;
+        cfg->exclusive = 0;
+        e = be->open(&req, card_callback, NULL, res, err, errn);
+        if (e == VAUD_OK) {
+            note_add(note, noten, "exclusive mode was refused (another program has the device, or it takes no such format): normal mode is used");
+        }
+    }
+    if (e == VAUD_NOT_FOUND && cfg->output[0]) {
+        /* the chosen device is not there (unplugged, renamed): the default device, and say so */
+        fprintf(stderr, "audio: output '%s' %s (%s); trying the default device\n", cfg->output, error_words(e), err);
+        vaud_open_req r2 = req;
+        r2.out_uid[0] = 0;
+        r2.out_first = 1;
+        vaud_error e2 = be->open(&r2, card_callback, NULL, res, err, errn);
+        if (e2 == VAUD_OK) {
+            req = r2;
+            note_add(note, noten, "audio device '%.60s' not found, using the default device", shown(cfg->output));
+            cfg->output[0] = 0;
+            cfg->out_first = 1;
+        }
+        e = e2;
+    }
+    if (e == VAUD_BAD_RATE && res->rate != 0 && follow_rate) {
+        /* shared mode keeps the rate the device runs at: follow it */
+        fprintf(stderr, "audio: the device does not take %u Hz; trying %u Hz\n", cfg->rate, res->rate);
+        cfg->rate = res->rate;
+        req.rate = res->rate;
+        e = be->open(&req, card_callback, NULL, res, err, errn);
+    }
+    if ((e == VAUD_BUSY || e == VAUD_FAILED) && !strncmp(req.out_uid, "asio:", 5)) {
+        /* an ASIO driver is normally used by one program at a time: the program that has it (the DAW) keeps it. the same hardware through WASAPI shared mode can be used next to it */
+        char twin[192], twin_in[192];
+        wasapi_twin(be, req.out_uid, 0, twin, sizeof twin);
+        wasapi_twin(be, req.in_uid, 1, twin_in, sizeof twin_in);
+        fprintf(stderr, "audio: ASIO driver '%s' %s (%s); trying WASAPI%s%s\n", shown(req.out_uid), error_words(e), err, twin[0] ? " on " : "", twin[0] ? shown(twin) : "");
+        vaud_open_req r2 = req;
+        snprintf(r2.out_uid, sizeof r2.out_uid, "%s", twin);
+        snprintf(r2.in_uid, sizeof r2.in_uid, "%s", twin_in);
+        r2.out_first = 1;
+        r2.frames = 0;
+        r2.exclusive = 0;
+        vaud_error e2 = be->open(&r2, card_callback, NULL, res, err, errn);
+        if (e2 == VAUD_OK) {
+            note_add(note, noten, "ASIO driver '%.50s' is busy: another program has it (close its audio, or use the driver's multi-client mode). Using WASAPI%s%.50s instead", shown(req.out_uid),
+                     twin[0] ? " on " : "", twin[0] ? shown(twin) : "");
+            snprintf(cfg->output, sizeof cfg->output, "%s", twin);
+            snprintf(cfg->input, sizeof cfg->input, "%s", twin_in);
+            cfg->out_first = 1;
+            cfg->buffer = 0;
+            cfg->exclusive = 0;
+        }
+        e = e2;
+    }
+    return e;
+}
+
+/* the stream that was opened runs: the engine takes the card's clock. returns 0 = ok */
+static int activate(const vaud_opened *res, const vaud_config *cfg, char *err, size_t errn) {
+    S.opened = *res;
+    S.card_frames = 0;
+    fifos_primed = 0;
+    atomic_store(&mic_ring.active, res->in_active && res->in_separate ? 1 : 0); /* (a duplex stream gives its input in the callback; a separate one arrives through vaud_push_mic) */
+    verdandi_jack_null_external_clock(1);
+    if (BE->start(err, errn) != 0) {
+        BE->close();
+        verdandi_jack_null_external_clock(0);
+        atomic_store(&mic_ring.active, 0);
+        return -1;
+    }
+    CUR = *cfg;
+    S.mode = VAUD_MODE_DEVICE;
+    return 0;
+}
+
+static void log_device(const vaud_opened *res, const vaud_config *cfg) {
+    fprintf(stderr, "audio: device '%s' (%s%s), %u Hz, engine block %u frames (%.1f ms), card buffer %s, output latency %.1f ms\n", res->device_name, res->host_api, res->exclusive ? ", exclusive" : "", S.rate, S.frames,
+            1000.0 * S.frames / S.rate, cfg->buffer ? "asked" : "auto", res->out_latency_ms);
+    if (res->in_name[0]) {
+        fprintf(stderr, "audio: input '%s'%s, input latency %.1f ms%s%s\n", res->in_name, res->in_active ? "" : " NOT running", res->in_latency_ms, res->in_note[0] ? ": " : "", res->in_note);
+    }
+}
+
 void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *bridge_name, vaud_state *st_out) {
     vaud_config cfg = *cfg_in;
     memset(&S, 0, sizeof S);
@@ -359,86 +559,28 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
             *br = 0;
         }
     }
-    fprintf(stderr, "audio: output chosen: %s%s%s%s, input: %s%s%s, %u Hz, block %u%s\n", cfg.output[0] ? "'" : "", cfg.output[0] ? cfg.output : "the Windows default device", cfg.output[0] ? "'" : "",
-            cfg.out_first > 1 ? " (outputs from the channel shown below)" : "", cfg.input[0] ? "'" : "", cfg.input[0] ? cfg.input : "none", cfg.input[0] ? "'" : "", cfg.rate, cfg.period,
-            cfg.force_null ? " (null audio forced)" : "");
+    fprintf(stderr, "audio: output chosen: %s%s%s%s, input: %s%s%s, %u Hz, engine block %u, card buffer %s%s%s\n", cfg.output[0] ? "'" : "", cfg.output[0] ? cfg.output : "the Windows default device",
+            cfg.output[0] ? "'" : "", cfg.out_first > 1 ? " (outputs from the channel shown below)" : "", cfg.input[0] ? "'" : "", cfg.input[0] ? cfg.input : "none", cfg.input[0] ? "'" : "", cfg.rate,
+            cfg.period, cfg.buffer ? "" : "auto", cfg.exclusive ? ", exclusive" : "", cfg.force_null ? " (null audio forced)" : "");
     if (cfg.out_first > 1 || cfg.in_l != 1 || cfg.in_r != 2) {
         fprintf(stderr, "audio: channels: output pair starts at %d, input left %d right %d\n", cfg.out_first, cfg.in_l, cfg.in_r);
     }
     int use_card = !cfg.force_null && be != NULL;
     char err[256] = "";
+    CUR = cfg;
     if (use_card) {
-        vaud_open_req req;
-        memset(&req, 0, sizeof req);
-        snprintf(req.out_uid, sizeof req.out_uid, "%s", cfg.output);
-        snprintf(req.in_uid, sizeof req.in_uid, "%s", cfg.input);
-        req.rate = cfg.rate;
-        req.frames = cfg.period;
-        req.out_first = cfg.out_first;
-        req.in_l = cfg.in_l;
-        req.in_r = cfg.in_r;
         vaud_opened res;
-        memset(&res, 0, sizeof res);
-        vaud_error e = be->open(&req, card_callback, NULL, &res, err, sizeof err);
-        if (e == VAUD_NOT_FOUND && cfg.output[0]) {
-            /* the chosen device is not there (unplugged, renamed): the default device, and say so */
-            fprintf(stderr, "audio: output '%s' %s (%s); trying the default device\n", cfg.output, error_words(e), err);
-            vaud_open_req r2 = req;
-            r2.out_uid[0] = 0;
-            r2.out_first = 1;
-            vaud_error e2 = be->open(&r2, card_callback, NULL, &res, err, sizeof err);
-            if (e2 == VAUD_OK) {
-                req = r2;
-                note_add(S.note, sizeof S.note, "audio device '%.60s' not found, using the default device", shown(cfg.output));
-            }
-            e = e2;
-        }
-        if (e == VAUD_BAD_RATE && res.rate != 0) {
-            /* shared mode keeps the rate the device runs at: follow it */
-            fprintf(stderr, "audio: the device does not take %u Hz; trying %u Hz\n", cfg.rate, res.rate);
-            cfg.rate = res.rate;
-            req.rate = res.rate;
-            e = be->open(&req, card_callback, NULL, &res, err, sizeof err);
-        }
-        if ((e == VAUD_BUSY || e == VAUD_FAILED) && !strncmp(req.out_uid, "asio:", 5)) {
-            /* an ASIO driver is normally used by one program at a time: the program that has it (the DAW) keeps it. the same hardware through WASAPI shared mode can be used next to it */
-            char twin[192], twin_in[192];
-            wasapi_twin(be, req.out_uid, 0, twin, sizeof twin);
-            wasapi_twin(be, req.in_uid, 1, twin_in, sizeof twin_in);
-            fprintf(stderr, "audio: ASIO driver '%s' %s (%s); trying WASAPI%s%s\n", shown(req.out_uid), error_words(e), err, twin[0] ? " on " : "", twin[0] ? shown(twin) : "");
-            vaud_open_req r2 = req;
-            snprintf(r2.out_uid, sizeof r2.out_uid, "%s", twin);
-            snprintf(r2.in_uid, sizeof r2.in_uid, "%s", twin_in);
-            r2.out_first = 1;
-            vaud_error e2 = be->open(&r2, card_callback, NULL, &res, err, sizeof err);
-            if (e2 == VAUD_OK) {
-                note_add(S.note, sizeof S.note,
-                         "ASIO driver '%.50s' is busy: another program has it (close its audio, or use the driver's multi-client mode). Using WASAPI%s%.50s instead",
-                         shown(req.out_uid), twin[0] ? " on " : "", twin[0] ? shown(twin) : "");
-                req = r2;
-            }
-            e = e2;
-        }
+        vaud_error e = open_chain(be, &cfg, 1, &res, S.note, sizeof S.note, err, sizeof err);
         if (e == VAUD_OK) {
-            S.opened = res;
             S.rate = res.rate ? res.rate : cfg.rate;
             S.frames = cfg.period;
             verdandi_jack_null_configure(S.rate, S.frames);
-            verdandi_jack_null_external_clock(1);
-            atomic_store(&mic_ring.active, res.in_active && res.in_separate ? 1 : 0); /* (a duplex stream gives its input in the callback; a separate one arrives through vaud_push_mic) */
-            if (be->start(err, sizeof err) == 0) {
-                S.mode = VAUD_MODE_DEVICE;
-                fprintf(stderr, "audio: device '%s' (%s), %u Hz, %u frames per block (%.1f ms), output latency %.1f ms\n", res.device_name, res.host_api, S.rate, S.frames,
-                        1000.0 * S.frames / S.rate, res.out_latency_ms);
-                if (res.in_name[0]) {
-                    fprintf(stderr, "audio: input '%s'%s, input latency %.1f ms%s%s\n", res.in_name, res.in_active ? "" : " NOT running", res.in_latency_ms, res.in_note[0] ? ": " : "", res.in_note);
-                }
+            if (activate(&res, &cfg, err, sizeof err) == 0) {
+                log_device(&res, &cfg);
                 if (res.in_note[0]) {
                     note_add(S.note, sizeof S.note, "%s%s", S.note[0] ? ". " : "", res.in_note);
                 }
             } else {
-                be->close();
-                verdandi_jack_null_external_clock(0);
                 e = VAUD_FAILED;
             }
         }
@@ -463,6 +605,69 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
     if (st_out) {
         *st_out = S;
     }
+}
+
+const vaud_config *vaud_current_config(void) { return &CUR; }
+
+int vaud_apply(const vaud_config *want, char *msg, size_t n) {
+    msg[0] = 0;
+    if (!BE || S.mode == VAUD_MODE_NONE || S.mode == VAUD_MODE_NULL) {
+        snprintf(msg, n, "audio is off (null audio was chosen)");
+        return 1;
+    }
+    vaud_config cfg = *want, old = CUR;
+    cfg.rate = S.rate; /* the engine's rate and block stay: scsynth and crone run on */
+    cfg.period = S.frames;
+    cfg.force_null = 0;
+    cfg.notes[0] = 0;
+    vaud_config_check(&cfg);
+    vaud_input_set(0, 0); /* a new device: the input is OFF again (nothing reaches norns by surprise) */
+    S.input = VAUD_IN_OFF;
+    S.sys_note[0] = 0;
+    atomic_store(&mic_ring.active, 0);
+    if (S.mode == VAUD_MODE_DEVICE) {
+        BE->close(); /* the callback thread is gone when this returns */
+    }
+    verdandi_jack_null_external_clock(0); /* the engine goes on, on its own clock, while the stream is reopened */
+    S.mode = VAUD_MODE_FALLBACK;
+    char note[480] = "", err[256] = "", why[256] = "";
+    vaud_opened res;
+    vaud_error e = open_chain(BE, &cfg, 0, &res, note, sizeof note, err, sizeof err);
+    if (e == VAUD_OK && res.rate && res.rate != S.rate) {
+        BE->close();
+        snprintf(why, sizeof why, "'%.60s' runs at %u Hz and norns at %u Hz (set rate= in audio.conf and restart)", res.device_name, res.rate, S.rate);
+        e = VAUD_BAD_RATE;
+    } else if (e != VAUD_OK) {
+        snprintf(why, sizeof why, "'%.60s' %s", cfg.output[0] ? shown(cfg.output) : "the default device", error_words(e));
+    }
+    if (e == VAUD_OK && activate(&res, &cfg, err, sizeof err) == 0) {
+        S.note[0] = 0;
+        note_add(S.note, sizeof S.note, "%s", note);
+        if (res.in_note[0]) {
+            note_add(S.note, sizeof S.note, "%s%s", S.note[0] ? ". " : "", res.in_note);
+        }
+        log_device(&res, &cfg);
+        snprintf(msg, n, "%s", S.note);
+        return 0;
+    }
+    fprintf(stderr, "audio: the new setting could not be used: %s (%s); back to the old one\n", why, err);
+    note[0] = 0;
+    vaud_error e2 = open_chain(BE, &old, 0, &res, note, sizeof note, err, sizeof err);
+    if (e2 == VAUD_OK && res.rate && res.rate != S.rate) {
+        BE->close();
+        e2 = VAUD_BAD_RATE;
+    }
+    if (e2 == VAUD_OK && activate(&res, &old, err, sizeof err) == 0) {
+        S.note[0] = 0;
+        log_device(&res, &old);
+        snprintf(msg, n, "%s: back to %.60s", why, res.device_name);
+        return 1;
+    }
+    S.mode = VAUD_MODE_FALLBACK;
+    snprintf(S.note, sizeof S.note, "no sound: %s, and the old device cannot be opened either. null audio is used", why);
+    fprintf(stderr, "audio: %s\n", S.note);
+    snprintf(msg, n, "%s", S.note);
+    return 2;
 }
 
 int vaud_input_set(int mic_on, int sys_on) {

@@ -17,6 +17,7 @@ void verdandi_jack_null_external_clock(int on) { (void)on; }
 int verdandi_jack_null_process(unsigned n, const float *a, const float *b, float *c, float *d) { (void)n, (void)a, (void)b, (void)c, (void)d; return 0; }
 int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames) { (void)name, (void)rate, (void)frames; return -1; }
 void verdandi_bridge_host_stop(void) {}
+void verdandi_bridge_host_set_lag(unsigned n) { (void)n; }
 void verdandi_bridge_host_stats(unsigned long long *a, unsigned long long *b, unsigned long long *c, unsigned long long *d, int *e) { (void)a, (void)b, (void)c, (void)d, (void)e; }
 
 static int fails;

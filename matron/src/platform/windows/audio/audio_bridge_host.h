@@ -9,6 +9,8 @@ extern "C" {
  * 0 = ok. rate and frames must be the ones of the audio (jack_null) */
 int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames);
 void verdandi_bridge_host_stop(void);
+/* how many blocks of scsynth's answers are held back (1 to 6): the number of engine blocks that run in one callback of the sound card. safe to call from the card's callback */
+void verdandi_bridge_host_set_lag(unsigned blocks);
 /* counters: blocks handed to scsynth, blocks taken from it, underruns, drops, scsynth attached */
 void verdandi_bridge_host_stats(unsigned long long *to_sc, unsigned long long *from_sc, unsigned long long *underruns, unsigned long long *drops, int *attached);
 

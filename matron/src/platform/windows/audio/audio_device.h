@@ -36,6 +36,7 @@ typedef struct {
     unsigned frames;
     int out_first;     /* the first channel of the output pair, 1 based (ASIO: 3 = outputs 3 and 4) */
     int in_l, in_r;    /* the input channels, 1 based; in_r == in_l is a mono source heard on both sides */
+    int exclusive;     /* WASAPI exclusive mode (the device is ours alone: lowest delay, nobody else can play on it) */
 } vaud_open_req;
 
 typedef struct {
@@ -43,7 +44,9 @@ typedef struct {
     char in_name[128];   /* "" when there is no input */
     char host_api[40];   /* "Windows WASAPI shared", "ASIO", ... */
     unsigned rate;       /* what the stream really runs at */
-    unsigned frames;
+    unsigned frames;     /* the block the card calls back with (0 = not known). `frames` of the request: 0 = the card's own period (the default: no re-blocking by the host API) */
+    unsigned host_frames; /* the period of the host API under the callbacks (WASAPI shared: 480 at 48000 Hz even when the callbacks are 128): the callbacks may arrive in bursts of host_frames, 0 = same as frames */
+    int exclusive;       /* the stream is in exclusive mode */
     double out_latency_ms; /* the latencies the host API reports */
     double in_latency_ms;
     int in_active;       /* the input stream runs */
@@ -72,7 +75,9 @@ typedef struct {
     char output[192];   /* audio.conf output= ("" = the Windows default device) */
     char input[192];    /* audio.conf input= ("" = no input) */
     unsigned rate;      /* audio.conf rate= */
-    unsigned period;    /* audio.conf period= (frames per block) */
+    unsigned period;    /* audio.conf block= : the ENGINE block (crone, scsynth, the bridge), default 256; independent of the card's buffer */
+    unsigned buffer;    /* audio.conf buffer= : the card's buffer in frames, 0 = "auto" (the card's own period; the default) */
+    int exclusive;      /* audio.conf exclusive=1: WASAPI exclusive mode */
     int out_first;      /* audio.conf out_first= (1: outputs 1 and 2) */
     int in_l, in_r;     /* audio.conf in_l= in_r= (1 and 2) */
     int force_null;     /* VERDANDI_AUDIO=null in the environment, or output=null in audio.conf */
@@ -91,6 +96,9 @@ typedef struct {
     vaud_input_mode input;    /* what norns hears now */
     char sys_note[200];       /* why SYS does not work, "" otherwise */
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
+    unsigned engine_prime;    /* frames of extra delay of the re-blocking between the card's block and the engine's (0 when the card's block is a multiple of the engine's) */
+    unsigned engine_lag;      /* blocks of scsynth's answers held back in the bridge (the engine blocks per card callback) */
+    unsigned card_frames;     /* the block of the card's callback (0 = not known) */
     unsigned long long card_xruns; /* callbacks the host API flagged as underflow / overflow (a block was late or lost at the card), counted since the start: the "crackles" counter of the AUDIO page */
     double measured_ms;       /* the measured round trip (output to input and back to crone), -1 = none yet, -2 = no signal */
 } vaud_state;
@@ -106,6 +114,13 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg, const char *brid
 void vaud_stop(void);
 
 const vaud_state *vaud_get_state(void);
+/* audio.conf-style text ("key=value" lines) into cfg (the same keys as the file): the AUDIO page hands its choices over this way */
+void vaud_config_parse_text(vaud_config *cfg, const char *text);
+/* the configuration that runs now */
+const vaud_config *vaud_current_config(void);
+/* a new device, channels or driver WITHOUT restarting: the stream is closed and reopened, the engine (crone, scsynth, the bridge, the rate and the engine block) keeps running. the input goes OFF.
+ * returns 0 = the new setting runs (msg: a note or ""), 1 = it could not be opened and the old one runs again (msg: why, in one plain sentence), 2 = neither could be opened: silence on the engine's own clock. */
+int vaud_apply(const vaud_config *want, char *msg, size_t n);
 /* "uid\tname\tinputs\toutputs\tapi\tlow_out_ms\tlow_in_ms\tloopback" per line, for SYSTEM > AUDIO */
 int vaud_list_text(const vaud_backend *be, char *out, size_t n);
 void vaud_bridge_stats(unsigned long long *to_sc, unsigned long long *from_sc, unsigned long long *underruns, unsigned long long *drops, int *scsynth_attached);

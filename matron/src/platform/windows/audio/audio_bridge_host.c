@@ -12,6 +12,36 @@
 
 #include "verdandi_bridge.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <tlhelp32.h>
+/* scsynth is a program of its own that must deliver a block every few milliseconds: at the normal priority class any busy program (a browser, a DAW) can make it late, which is a crackle. once it has
+ * attached to the bridge its process is raised to the HIGH class (the same user may do this to a process it started; no administrator rights). said once; tried again each second until it worked. */
+static int boost_scsynth(void) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    PROCESSENTRY32 pe;
+    pe.dwSize = sizeof pe;
+    int done = 0;
+    for (BOOL ok = Process32First(snap, &pe); ok; ok = Process32Next(snap, &pe)) {
+        if (_stricmp(pe.szExeFile, "scsynth.exe") == 0) {
+            HANDLE h = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+            if (h) {
+                if (SetPriorityClass(h, HIGH_PRIORITY_CLASS)) {
+                    fprintf(stderr, "audio bridge: scsynth.exe (process %lu) runs at the high priority class\n", (unsigned long)pe.th32ProcessID);
+                    done = 1;
+                }
+                CloseHandle(h);
+            }
+        }
+    }
+    CloseHandle(snap);
+    return done;
+}
+#endif
+
 extern void verdandi_jack_null_loop_breaker(jack_client_t *client);
 
 static struct {
@@ -74,6 +104,15 @@ static void *connect_thread(void *arg) {
             told_late = 1;
             fprintf(stderr, "audio bridge: crone's ports have not appeared after %ld s: engine audio will not reach the mixer until they do\n", waited);
         }
+#ifdef _WIN32
+        {
+            static int boosted, tries;
+            if (!boosted && tries < 120 && H.b.sh && vb_load(&H.b.sh->guest_attached)) {
+                tries++;
+                boosted = boost_scsynth();
+            }
+        }
+#endif
         struct timespec ts = {0, all ? 1000000000L : 200000000L};
         nanosleep(&ts, NULL);
     }
@@ -111,6 +150,12 @@ int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames)
     H.thread_started = pthread_create(&H.thread, NULL, connect_thread, NULL) == 0;
     fprintf(stderr, "audio bridge: '%s' ready, %u Hz, %u frames per block\n", name, rate, frames);
     return 0;
+}
+
+void verdandi_bridge_host_set_lag(unsigned blocks) {
+    if (blocks < 1) blocks = 1;
+    if (blocks > VB_RING - 2) blocks = VB_RING - 2;
+    H.b.lag = blocks;
 }
 
 void verdandi_bridge_host_stop(void) {
