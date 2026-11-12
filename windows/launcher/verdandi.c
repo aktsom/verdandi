@@ -1127,7 +1127,8 @@ int wmain(int argc, wchar_t **argv) {
         wait_job_empty(g_job, 10000);
         say(L"sclang and scsynth stopped (%lu ms)", (unsigned long)(GetTickCount64() - stop0));
         if (g_maiden_proc) {
-            say(L"maiden %ls with the round", WaitForSingleObject(g_maiden_proc, 0) == WAIT_OBJECT_0 ? L"stopped" : L"is STILL RUNNING (it should have ended with the job)");
+            /* (TerminateJobObject ends the processes asynchronously: give maiden a moment before saying it is still there) */
+            say(L"maiden %ls with the round", WaitForSingleObject(g_maiden_proc, 5000) == WAIT_OBJECT_0 ? L"stopped" : L"is STILL RUNNING (it should have ended with the job)");
             g_maiden_proc = NULL;
         }
     }
