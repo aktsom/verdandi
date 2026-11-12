@@ -11,6 +11,8 @@ int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames)
 void verdandi_bridge_host_stop(void);
 /* how many blocks of scsynth's answers are held back (1 to 6): the number of engine blocks that run in one callback of the sound card. safe to call from the card's callback */
 void verdandi_bridge_host_set_lag(unsigned blocks);
+/* tuning (tests): blocks after scsynth's first answer during which underruns do not raise the hold-back, and quiet blocks after which a raised hold-back goes down by one. 0 = the defaults (15 s, 60 s) */
+void verdandi_bridge_host_tune(unsigned grace_blocks, unsigned decay_blocks);
 /* the hold-back now (it may have grown by itself) */
 unsigned verdandi_bridge_host_lag(void);
 /* how often the hold-back grew by itself because underruns came close together */

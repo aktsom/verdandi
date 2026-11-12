@@ -348,6 +348,11 @@ function _menu.next_input()
   end
   local mode = INPUT_NEXT[_menu.input] or "mic"
   if mode == "system" and not _norns.app_input then mode = "off" end
+  -- Windows: without a WASAPI loopback device in this PortAudio there is no SYS; the button goes MIC > OFF (the AUDIO page says why)
+  if mode == "system" and _norns.audio_input and _norns.audio_info then
+    local inf = _norns.audio_info()
+    if inf and inf.sys_available == false then mode = "off" end
+  end
   _menu.set_input(mode)
 end
 

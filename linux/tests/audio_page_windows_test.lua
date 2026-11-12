@@ -1,6 +1,7 @@
 -- SYSTEM > AUDIO in the Windows build (lua/core/menu/audio_win.lua with lua/core/menu/winui.lua; chosen by audio.lua when _norns.audio_devices exists): one short list, E2 selects, E3 changes, every change is applied
 -- live (_norns.audio_apply) about a second after the last turn, one status line, TEST results in plain words, nothing wider than the screen (real font metrics when FONT_WIDTHS is set), bright text.
 -- run from the repo root:   FONT_WIDTHS=<table from linux/tests/font_widths_dump.c> lua5.3 linux/tests/audio_page_windows_test.lua
+local _print = print
 package.path = "lua/?.lua;lua/core/?.lua;lua/lib/?.lua;" .. package.path
 local tmp = os.tmpname()
 os.remove(tmp)
@@ -11,7 +12,7 @@ local function map(p) return (p:gsub("^/home/we", tmp)) end
 io.open = function(p, m) return real_open(map(p), m) end
 os.remove = function(p) return real_remove(map(p)) end
 local fails = 0
-local function check(ok, what) if not ok then fails = fails + 1; print("FAIL", what) end end
+local function check(ok, what) if not ok then fails = fails + 1; _print("FAIL", what) end end
 
 package.loaded.util = {
   clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
@@ -74,6 +75,8 @@ _norns = {
   audio_apply = function(text) applied[#applied + 1] = text; if apply_rc == 0 then info.config = text end; return apply_rc, apply_msg end,
 }
 local page
+printed_lines = {}
+print = function(...) printed_lines[#printed_lines + 1] = table.concat({...}, " ") end
 _menu = {redraw = function() redraws = redraws + 1; if page then page.redraw() end end, set_page = function(p) _menu.page = p end, set_input = function(...) input_calls[#input_calls + 1] = {...} end, show_note = function() end}
 norns = {none = function() end}
 
@@ -160,17 +163,19 @@ check(applied[#applied]:find("buffer=auto", 1, true), "back to auto")
 -- ---- TEST: a plain result every time; without an input (or one that did not open) a self-test of the card and the engine, no cables needed ----
 local function key_test() page.enc(2, -9); page.enc(2, 9); page.key(3, 1); page.redraw() end
 local function finish_selftest(t) selftest = t; ticks(1) end
-page.init(); selftest_started = 0; key_test()
+page.init(); selftest_started = 0; printed_lines = {}; key_test()
 check(selftest_started == 1 and shown("testing"), "TEST with no input: the self-test starts (no cables needed) and the row says testing")
 finish_selftest({state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0})
 page.redraw()
-check(shown("ok") and page.status:find("self-test ok: card calls every 10.0 ms (longest 10.4), engine answered 750 blocks, 0 late, 0 glitches", 1, true), "self-test ok: one sentence with the numbers: " .. tostring(page.status))
-check(page.status:find("no input selected", 1, true), "and it says why there was no click test: no input selected")
-for _, c in ipairs({{1, "no card", "no sound card is running"}, {2, "no scsynth", "SuperCollider is not attached"}, {3, "card late", "the card calls late"}, {4, "engine late", "the engine was late"}, {5, "glitches", "the card glitched"}}) do
-  page.init(); key_test()
+check(shown("ok") and page.status == "self-test ok", "self-test ok: the status line says just 'self-test ok': " .. tostring(page.status))
+local d = table.concat(printed_lines, "\n")
+check(d:find("self-test ok: card calls every 10.0 ms (longest 10.4), engine answered 750 blocks, 0 late, 0 glitches", 1, true) and d:find("no input selected", 1, true), "the details (numbers, and why there was no click test) are written to norns.log: " .. d)
+for _, c in ipairs({{1, "no card", "self-test: no card", "no sound card is running"}, {2, "no scsynth", "self-test: no scsynth", "SuperCollider is not attached"}, {3, "card late", "self-test: card late", "the card calls late"}, {4, "engine late", "self-test: engine late", "the engine was late"}, {5, "glitches", "self-test: glitches", "the card glitched"}}) do
+  page.init(); printed_lines = {}; key_test()
   finish_selftest({state = 2, verdict = c[1], callbacks = 100, avg_ms = 10, max_ms = 80, expect_ms = 10, engine_blocks = 5, late = 7, glitches = 3})
   page.redraw()
-  check(shown(c[2]) and page.status:find(c[3], 1, true), "self-test verdict " .. c[1] .. ": the row says '" .. c[2] .. "' and the sentence '" .. c[3] .. "': " .. tostring(page.status))
+  check(shown(c[2]) and page.status == c[3] and #c[3] < 30, "self-test verdict " .. c[1] .. ": the row says '" .. c[2] .. "' and the status line the short '" .. c[3] .. "': " .. tostring(page.status))
+  check(table.concat(printed_lines, "\n"):find(c[4], 1, true), "and norns.log gets the details ('" .. c[4] .. "')")
 end
 info = mkinfo({in_active = true, input = "mic", measured_ms = -1, config = "output=\ninput=wasapi:Line In 1/2 (RME Fireface UC)\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
 page.init(); selftest_started = 0; key_test()
@@ -180,10 +185,10 @@ check(shown("no click heard") and page.status == "no click heard (is an output w
 info.measured_ms = 37.4; page.init(); key_test(); info.measured_ms = 37.4; page.redraw()
 check(shown("37 ms"), "a click: the round trip in ms")
 info = mkinfo({in_active = false, config = "output=\ninput=wasapi:Line In 1/2 (RME Fireface UC)\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
-page.init(); selftest_started = 0; key_test()
+page.init(); selftest_started = 0; printed_lines = {}; key_test()
 check(selftest_started == 1, "an input that is chosen but not open: the self-test runs")
 finish_selftest({state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0}); page.redraw()
-check(page.status:find("did not open", 1, true) and page.status:find("choose it again on INPUT", 1, true), "and the sentence says the input did not open and what to do: " .. tostring(page.status))
+check(page.status == "self-test ok" and table.concat(printed_lines, "\n"):find("choose it again on INPUT", 1, true), "and the log says the input did not open and what to do")
 page.enc(2, -9); page.enc(2, 2); page.redraw()
 check(page.value_text("INPUT"):find("(not open)", 1, true), "the INPUT row itself says '(not open)': " .. page.value_text("INPUT"))
 info = mkinfo({mode = "fallback", note = "no sound: audio device is busy"})
@@ -210,10 +215,46 @@ for name, word in pairs(rows_help) do
   check(h and #h > 20 and #h < 200 and h:find(word, 1, true), "help for " .. name .. " mentions '" .. word .. "': " .. tostring(h))
 end
 page.enc(2, -9); page.enc(2, 1); page.redraw()
-check(page.help_now() and page.help_now():find("wired", 1, true), "moving to OUTPUT shows its help (the pairs may not be wired)")
-check(page.status_text():find("wired", 1, true), "on the status line")
-ticks(40)
-check(not page.help_now(), "after a few seconds the help goes and the numbers come back")
+check(page.help_now() and page.help_now() == winui.pages(page.help("OUTPUT"), 124)[1], "moving to OUTPUT shows the first page of its help")
+-- every help text is read page by page, 2.5 s a page (the last page too), each page fits the screen width, nothing is lost, then the numbers come back
+local function check_pages(row, text)
+  local pages = winui.pages(text, 124)
+  local joined = table.concat(pages, " ")
+  check(joined == text and #pages >= 1 and #pages <= 6, "help for " .. row .. " is cut into " .. #pages .. " pages that together are the whole text")
+  for _, pg in ipairs(pages) do
+    if screen.text_extents(pg) > 124 then check(false, "a help page is wider than the screen: " .. pg) end
+  end
+  page.init(); page.enc(2, -9)
+  local rs = {DRIVER = 0, OUTPUT = 1, INPUT = 2, BUFFER = 3, TEST = 4}
+  page.enc(2, rs[row]); page.tick = 0
+  for i = 1, #pages do
+    page.tick = (i - 1) * 10
+    check(page.help_now() == pages[i], "help for " .. row .. ": page " .. i .. " at " .. ((i - 1) * 2.5) .. " s")
+  end
+  page.tick = #pages * 10 - 1
+  check(page.help_now() == pages[#pages], "help for " .. row .. ": the last page stays for the full 2.5 s (more than the 2 s asked for)")
+  page.tick = #pages * 10
+  check(page.help_now() == nil, "help for " .. row .. ": then the numbers come back")
+end
+info = mkinfo()
+for _, row in ipairs({"DRIVER", "OUTPUT", "INPUT", "BUFFER", "TEST"}) do check_pages(row, page.help(row)) end
+-- SYS is left out when this PortAudio has no loopback: the INPUT help says so, in plain words
+info = mkinfo({sys_available = false, sys_reason = "SYS (what Windows plays) is off: this PortAudio has no WASAPI loopback device"})
+page.init()
+check(page.help("INPUT"):find("SYS is off: this PortAudio has no WASAPI loopback", 1, true), "INPUT help: SYS needs WASAPI loopback, which this PortAudio lacks: " .. page.help("INPUT"))
+check_pages("INPUT", page.help("INPUT"))
+info = mkinfo({sys_available = true})
+page.init()
+check(not page.help("INPUT"):find("SYS is off", 1, true), "and nothing about it when loopback is there")
+-- long status sentences (a refused exclusive with its reason) are paged the same way, round and round, all pages readable
+info = mkinfo()
+page.init()
+page.status = "exclusive refused: Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100 - normal mode is used"
+page.status_until = 400; page.status_start = 0
+local seen_pages = {}
+for t = 0, 59, 10 do page.tick = t; local line = page.status_text(); seen_pages[line] = true; check(screen.text_extents(line) <= 124, "a status page fits the screen: " .. line) end
+local n_seen = 0 for _ in pairs(seen_pages) do n_seen = n_seen + 1 end
+check(n_seen >= 2, "a long status sentence shows on " .. n_seen .. " pages")
 
 -- ---- every change is confirmed on the status line ----
 info = mkinfo()
@@ -290,7 +331,7 @@ if W then
         W.clear(); page.redraw()
         checked = checked + 1
         local bad = W.violations()
-        if #bad > 0 then widths_ok = false; print("   too wide: " .. table.concat(bad, "; ")) end
+        if #bad > 0 then widths_ok = false; _print("   too wide: " .. table.concat(bad, "; ")) end
       end
     end
   end
@@ -317,5 +358,6 @@ check(winui.fit(long, 80, true, 20) ~= winui.fit(long, 80, true, 0) and screen.t
 check(winui.fit("short", 80, true, 50) == "short", "a short value never moves")
 
 os.execute("rm -rf " .. tmp)
+print = _print
 print(fails == 0 and "audio page (windows): all scenarios pass" or (fails .. " failures"))
 os.exit(fails == 0)

@@ -53,6 +53,7 @@ static struct {
     atomic_int stop;
     int thread_started;
     unsigned frames;
+    volatile unsigned want_grace, want_decay; /* the tuning, kept across the making of the bridge */
     volatile unsigned want_lag; /* set by the card's first callback, which may come before the bridge exists: kept here and put into the bridge when it is made */
 } H;
 
@@ -131,6 +132,9 @@ int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames)
     }
     H.frames = frames;
     H.b.lag = H.want_lag; /* (vb_host_create cleared the struct) */
+    H.b.lag_base = H.want_lag;
+    H.b.grace_calls = H.want_grace;
+    H.b.decay_calls = H.want_decay;
     jack_status_t st;
     H.client = jack_client_open("SuperCollider", JackNoStartServer, &st);
     if (!H.client) {
@@ -159,7 +163,16 @@ void verdandi_bridge_host_set_lag(unsigned blocks) {
     if (blocks > VB_RING - 2) blocks = VB_RING - 2;
     H.want_lag = blocks;
     H.b.lag = blocks;
+    H.b.lag_base = blocks;
+    H.b.first_guest_call = 0; /* a new device: the grace starts again */
     H.b.primed = 0; /* a new device: the hold-back is built up again */
+}
+
+void verdandi_bridge_host_tune(unsigned grace_blocks, unsigned decay_blocks) {
+    H.want_grace = grace_blocks;
+    H.want_decay = decay_blocks;
+    H.b.grace_calls = grace_blocks;
+    H.b.decay_calls = decay_blocks;
 }
 
 unsigned verdandi_bridge_host_lag(void) { return H.up ? (H.b.lag ? H.b.lag : 1) : 0; }

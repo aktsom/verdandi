@@ -127,6 +127,8 @@ void verdandi_audio_info(verdandi_audio_info_t *out) {
     out->in_active = dev && s->opened.in_active;
     snprintf(out->note, sizeof out->note, "%s", s->note);
     snprintf(out->in_note, sizeof out->in_note, "%s", dev ? s->opened.in_note : "");
+    out->sys_available = s->sys_available;
+    snprintf(out->sys_reason, sizeof out->sys_reason, "%s", s->sys_reason);
     snprintf(out->sys_note, sizeof out->sys_note, "%s", s->sys_note);
     vaud_bridge_stats(&out->to_sc, &out->from_sc, &out->underruns, &out->drops, &out->scsynth_attached);
 }

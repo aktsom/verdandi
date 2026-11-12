@@ -19,6 +19,7 @@ int verdandi_bridge_host_start(const char *name, unsigned rate, unsigned frames)
 void verdandi_bridge_host_stop(void) {}
 void verdandi_bridge_host_set_lag(unsigned n) { (void)n; }
 unsigned verdandi_bridge_host_lag(void) { return 0; }
+void verdandi_bridge_host_tune(unsigned a, unsigned b) { (void)a, (void)b; }
 unsigned verdandi_bridge_host_raises(void) { return 0; }
 void verdandi_bridge_host_stats(unsigned long long *a, unsigned long long *b, unsigned long long *c, unsigned long long *d, int *e) { (void)a, (void)b, (void)c, (void)d, (void)e; }
 

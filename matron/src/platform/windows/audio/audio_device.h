@@ -105,6 +105,8 @@ typedef struct {
     char note[480];           /* for the screen and the log: why null audio, which device replaced the chosen one; "" when all is as chosen */
     char host_apis[120];      /* the host APIs of this PortAudio, for the page ("WASAPI ASIO") */
     vaud_input_mode input;    /* what norns hears now */
+    int sys_available;        /* SYS (what Windows plays) can be offered: this PortAudio lists a WASAPI loopback device */
+    char sys_reason[200];     /* why not, in plain words, "" when it is */
     char sys_note[320];       /* why SYS does not work, "" otherwise */
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
     unsigned engine_prime;    /* frames of extra delay of the re-blocking between the card's block and the engine's (0 when the card's block is a multiple of the engine's) */

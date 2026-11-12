@@ -36,6 +36,8 @@ static atomic_int card_blocks;
 static int dev_mode; /* 0 all fine, 1 "Busy" is busy, 2 only 48000 */
 static int asio_busy, no_loopback, no_mic_open, fail_all, excl_busy, g_burst; /* scenario switches */
 static double g_dev_rate = 48000;          /* the rate the fake interface runs at (the Windows setting / the card's clock) */
+static int g_no_loop_dev;                  /* the PortAudio of the fake card lists no loopback device (the owner's MSYS2 build) */
+static volatile int g_guest_delay_ms;      /* the scsynth stand-in answers this much later (a start-up that loads synthdefs, a busy machine) */
 static unsigned g_host_frames;            /* the host period under the callbacks (0: the same as the callbacks)  */
 static int g_buffer = -1;                 /* the card's buffer asked for in the scenario: -1 = the same as the engine block (the old tests), 0 = auto */
 static unsigned auto_frames = 480;        /* what the card calls back with when it is asked for "auto": a 10 ms Windows period at 48000 Hz */
@@ -125,6 +127,7 @@ static int fk_list(vaud_device *o, int max) {
     DEV("wasapi:Fake Speakers [Loopback]", "Fake Speakers [Loopback]", "WASAPI", 0, 2, 0, 0, 12, 1);
     DEV("asio:Fake ASIO", "Fake ASIO", "ASIO", 0, 8, 8, 6, 6, 0);
     o[2].default_rate = g_dev_rate;
+    if (g_no_loop_dev) o[5].loopback = 0;
     return n;
 }
 /* what each input channel of the fake devices carries: channel c (1 based) is the constant 0.1 * c, so the mapping can be read from the numbers in crone */
@@ -278,6 +281,7 @@ static void *sc_loop(void *a) {
             ol[i] = s + il[i];
             or_[i] = s + ir[i];
         }
+        if (g_guest_delay_ms > 0) sleep_ms_f(g_guest_delay_ms);
         vb_guest_push(&g, ol, or_);
         atomic_fetch_add(&sc_blocks, 1);
     }
@@ -511,9 +515,17 @@ static void scenario_input(const char *sc) {
         st = start_card("asio:Fake ASIO", "wasapi:Fake Mic", 1, 2, 1, 512);
         CHECK(st.mode == VAUD_MODE_DEVICE && !st.opened.in_active, "in_asio_other: ASIO output runs, an input on another device does not");
         CHECK(strstr(st.note, "ASIO uses one device"), "in_asio_other: the note says why: '%s'", st.note);
+    } else if (!strcmp(sc, "sys_hidden")) {
+        g_no_loop_dev = 1;
+        st = start_card("", "", 1, 2, 1, 512);
+        CHECK(!st.sys_available && strstr(st.sys_reason, "WASAPI loopback") && strstr(st.sys_reason, "SYS"), "sys_hidden: no loopback device in the list: SYS is not available, with a plain reason: '%s'", st.sys_reason);
+        int rc = vaud_input_set(0, 1);
+        CHECK(rc == 1 && !fake_sys_open && vaud_get_state()->input == VAUD_IN_OFF && strstr(vaud_get_state()->sys_note, "WASAPI loopback"), "sys_hidden: choosing SYS is refused with that reason and nothing is opened: '%s'", vaud_get_state()->sys_note);
+        g_no_loop_dev = 0;
     } else if (!strcmp(sc, "sys") || !strcmp(sc, "sys_none")) {
         no_loopback = !strcmp(sc, "sys_none");
         st = start_card("", "", 1, 2, 1, 512);
+        CHECK(st.sys_available, "%s: a loopback device is listed: SYS is available", sc);
         int rc = vaud_input_set(1, 1); /* SYS has priority over MIC */
         if (no_loopback) {
             CHECK(rc == 1 && vaud_get_state()->input == VAUD_IN_OFF, "sys_none: SYS without a loopback stays OFF");
@@ -699,12 +711,54 @@ static void scenario_lagfirst(const char *sc) {
     verdandi_bridge_host_stop();
 }
 
+/* owner test of 0.4.2: in normal mode the hold-back was 9 and the delay 48.7 ms at the start (41 ms before): the start-up of SuperCollider (it loads synthdefs, the machine is busy) made blocks late and the
+ * self-raising hold-back grew for that, and never came back. now: no growing in the first seconds after scsynth attached, and a hold-back that grew goes down again after a quiet minute */
+static void scenario_grow(const char *sc) {
+    char name[64];
+    snprintf(name, sizeof name, "AudioGrow-%d", (int)getpid());
+    bridge_name = name;
+    g_buffer = 0;
+    g_host_frames = 480;
+    int decay = !strcmp(sc, "decay");
+    verdandi_bridge_host_tune(decay ? 100 : 1100, decay ? 200 : 100000000); /* in blocks of 128 frames: grace of 2.9 s (or 0.3 s), quiet time before lowering by one 0.5 s (or never) */
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.rate = 48000; cfg.period = 128; cfg.buffer = 0;
+    rec_cap = 48000 * 20; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_state st;
+    g_guest_delay_ms = 9; /* the start-up: every answer late */
+    vaud_start(&FAKE, &cfg, name, &st);
+    crone_start();
+    atomic_store(&sc_run, 1);
+    pthread_create(&sc_thread, NULL, sc_loop, NULL);
+    sleep_ms_f(2500);
+    unsigned long long to1, f1, u1, d1;
+    int att;
+    vaud_bridge_stats(&to1, &f1, &u1, &d1, &att);
+    unsigned lag_busy = verdandi_bridge_host_lag();
+    g_guest_delay_ms = 0;
+    sleep_ms_f(decay ? 9000 : 4500);
+    printf("%s: underruns during the busy start %llu, hold-back then %u (grew %u x), at the end %u\n", sc, u1, lag_busy, verdandi_bridge_host_raises(), verdandi_bridge_host_lag());
+    if (!decay) {
+        CHECK(u1 > 20, "%s: the busy start really made blocks late (%llu underruns)", sc, u1);
+        CHECK(verdandi_bridge_host_lag() == 4 && verdandi_bridge_host_raises() == 0, "%s: but the hold-back stayed at 4: the first seconds after scsynth attached do not make it grow (%u, grew %u x)", sc, verdandi_bridge_host_lag(), verdandi_bridge_host_raises());
+    } else {
+        CHECK(lag_busy > 4 && verdandi_bridge_host_raises() >= 1, "%s: after the grace a busy scsynth makes the hold-back grow (%u)", sc, lag_busy);
+        CHECK(verdandi_bridge_host_lag() == 4, "%s: and a quiet time brings it back to 4 (%u)", sc, verdandi_bridge_host_lag());
+    }
+    atomic_store(&sc_run, 0);
+    pthread_join(sc_thread, NULL);
+    vaud_stop();
+    verdandi_bridge_host_tune(0, 0);
+}
+
 /* callbacks in bursts that nobody announced (the host API says nothing): the hold-back grows by itself until the bursts find their answers, and then stays */
 static void scenario_adapt(const char *sc) {
     char name[64];
     snprintf(name, sizeof name, "AudioAdapt-%d", (int)getpid());
     bridge_name = name;
     g_buffer = 128; g_burst = 4; g_host_frames = 0;
+    verdandi_bridge_host_tune(100, 100000000); /* a grace of 0.3 s, no lowering */
     vaud_config cfg;
     memset(&cfg, 0, sizeof cfg);
     cfg.rate = 48000; cfg.period = 128; cfg.buffer = 128;
@@ -831,6 +885,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(sc, "startup")) scenario_startup(sc);
     else if (!strcmp(sc, "lagfirst")) scenario_lagfirst(sc);
     else if (!strcmp(sc, "adapt")) scenario_adapt(sc);
+    else if (!strcmp(sc, "grow_start") || !strcmp(sc, "decay")) scenario_grow(sc);
     else if (!strcmp(sc, "reblock480")) { g_buffer = 0; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 480 && vaud_get_state()->engine_prime == 256, "reblock480: card 480, engine 256: primed with one engine block (%u %u)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime); CHECK(vaud_get_state()->card_xruns == 0, "reblock480: no glitch (%llu)", vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "reblock64")) { g_buffer = 64; run_chain(sc, 1, "", 48000, 128, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 64 && vaud_get_state()->engine_prime == 128 && vaud_get_state()->card_xruns == 0, "reblock64: card 64, engine 128 (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "reblock1024")) { g_buffer = 1024; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 1024 && vaud_get_state()->engine_prime == 0 && vaud_get_state()->card_xruns == 0, "reblock1024: card 1024, engine 256: no extra delay (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }

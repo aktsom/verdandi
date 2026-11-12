@@ -53,6 +53,22 @@ function winui.fit(s, w, scroll, tick)
   return shown
 end
 
+-- a text cut at word ends into lines that each fit w pixels (the pages of a help text that is shown one after the other). a single word wider than w is cut with ".."
+function winui.pages(text, w)
+  local pages, cur = {}, ""
+  for word in tostring(text or ""):gmatch("%S+") do
+    local try = cur == "" and word or (cur .. " " .. word)
+    if screen.text_extents(try) <= w then
+      cur = try
+    else
+      if cur ~= "" then pages[#pages + 1] = cur end
+      cur = screen.text_extents(word) <= w and word or cut(word, w)
+    end
+  end
+  if cur ~= "" then pages[#pages + 1] = cur end
+  return pages
+end
+
 -- a row at baseline y: bar (8 px high, the whole width) and the text of the selected row at 15, the others at 11 (on a Windows page that is already bright)
 function winui.row(y, label, value, selected, tick)
   if selected then

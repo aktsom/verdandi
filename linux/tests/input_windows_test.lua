@@ -13,6 +13,7 @@ local fails = 0
 local function check(cond, what) if not cond then fails = fails + 1; print("FAIL " .. what) end end
 
 local mic, sys, can_mic, can_sys, warn = false, false, true, true, nil
+local sys_available = true
 local function actual()
   if sys and can_sys then return "system", "" end
   if mic and can_mic then return "mic", "" end
@@ -25,6 +26,7 @@ _norns = {
   mic_input = function(live) mic = live end,
   app_input = function(target) sys = target == "system" end,
   audio_input = actual,
+  audio_info = function() return {sys_available = sys_available} end,
   set_warning = function(t) warn = t end,
   show_control = function() end,
 }
@@ -58,6 +60,13 @@ check(_menu.input == "mic" and not (warn or ""):find("INPUT"), "a working input 
 can_sys = false
 _menu.set_input("system")
 check(_menu.input == "off" and warn and warn:find("no loopback device", 1, true), "SYS without a loopback stays OFF with the reason")
+-- SYS is not offered when this PortAudio has no WASAPI loopback: the button goes MIC > OFF, and a direct choice stays OFF with the reason
+sys_available = false
+_menu.set_input("off")
+_menu.next_input()
+check(_menu.input == "mic", "no loopback: OFF > MIC")
+_menu.next_input()
+check(_menu.input == "off" and not sys, "no loopback: MIC > OFF (SYS is left out)")
 os.remove(mic_off)
 os.remove(kept)
 print(fails == 0 and "input (windows): all scenarios pass" or (fails .. " failures"))

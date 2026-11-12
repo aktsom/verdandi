@@ -50,7 +50,7 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     [ "$rc" -eq 42 ] || { echo "FAIL fast exit $i: exit code $rc"; bad=1; }
 done
 [ "$bad" -eq 0 ] && echo "fast exit (TerminateProcess) ten times: exit code 42, no crash: ok" || fail=1
-for sc in device small noguest busy notfound badrate latecrone preconnected in_duplex in_separate in_asio in_missing sys sys_none measure measure_none asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null; do
+for sc in device small noguest busy notfound badrate latecrone preconnected in_duplex in_separate in_asio in_missing sys sys_none measure measure_none asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null grow_start decay sys_hidden; do
     (cd "$T" && timeout 90 "$WINE" ./audio_chain_test.exe "$sc" 2> /dev/null | grep -E '^FAIL|passed') || fail=1
 done
 

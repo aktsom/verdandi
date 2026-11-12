@@ -142,7 +142,7 @@ local function buffer_text(b)
 end
 
 local function say(text, secs)
-  m.status, m.status_until = text, m.tick + (secs or 24) * 4
+  m.status, m.status_until, m.status_start = text, m.tick + (secs or 24) * 4, m.tick
 end
 
 -- one plain line of help per row (shown on the status line for a few seconds when E2 lands on the row)
@@ -155,10 +155,19 @@ local HELP = {
   BUFFER = "auto is the safest. A smaller buffer means less delay but more risk of clicks (u and x on the status line).",
   TEST = "K3: with an input and a cable (or loopback) a click goes out and is listened for. Without: a 2 second self-test of the card and the engine.",
 }
-m.help = function(row) return HELP[row] end
+m.help = function(row)
+  local h = HELP[row]
+  if row == "INPUT" and h then
+    local inf = _norns.audio_info()
+    if inf and inf.sys_available == false then h = h .. " SYS is off: this PortAudio has no WASAPI loopback." end
+  end
+  return h
+end
 
 local SELFTEST_SHORT = {[0] = "ok", "no card", "no scsynth", "card late", "engine late", "glitches"}
-local function selftest_sentence(t, why)
+local SELFTEST_LINE = {[0] = "self-test ok", "self-test: no card", "self-test: no scsynth", "self-test: card late", "self-test: engine late", "self-test: glitches"}
+-- the details of the self-test go to norns.log, the status line only gets the short result
+local function selftest_details(t, why)
   local v = t.verdict
   local text
   if v == 0 then
@@ -193,7 +202,8 @@ local function value_text(row)
       if t and t.state == 2 then
         m.selftesting = false
         m.test = SELFTEST_SHORT[t.verdict] or "?"
-        say(selftest_sentence(t, m.selftest_why), 60)
+        say(SELFTEST_LINE[t.verdict] or "self-test: ?", 60)
+        print("audio: " .. selftest_details(t, m.selftest_why))
       else
         return "testing..."
       end
@@ -404,14 +414,22 @@ local function mode_word(info)
   return "normal"
 end
 
+-- a text of several pages: 2.5 s a page (10 ticks of the page timer); help is read once (the last page stays its full 2.5 s, then the numbers come back), a status sentence goes round until it expires
+local PAGE_TICKS = 10
 m.help_now = function()
-  if m.help_until and m.tick < m.help_until then return HELP[rows()[m.pos]] end
-  return nil
+  if not m.help_until then return nil end
+  local pages = winui.pages(m.help(rows()[m.pos]), 124)
+  local idx = math.floor(m.tick / PAGE_TICKS) + 1
+  return pages[idx]
 end
 
 local function status_line(info)
   if m.pending then return "..." end
-  if m.status and m.tick < m.status_until then return m.status end
+  if m.status and m.tick < m.status_until then
+    local pages = winui.pages(m.status, 124)
+    if #pages <= 1 then return pages[1] or m.status end
+    return pages[(math.floor((m.tick - (m.status_start or 0)) / PAGE_TICKS) % #pages) + 1]
+  end
   local h = m.help_now()
   if h then return h end
   if not info then return "" end
@@ -439,7 +457,7 @@ m.redraw = function()
   end
   screen.level(15)
   screen.move(2, 62)
-  screen.text(winui.fit(status_line(info), 124, true, m.tick)) -- a longer sentence runs slowly (the same marquee as on the selected row)
+  screen.text(winui.fit(status_line(info), 124, false, 0)) -- (long sentences are paged by status_line)
   screen.update()
 end
 

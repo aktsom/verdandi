@@ -654,6 +654,19 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
             *br = 0;
         }
     }
+    S.sys_available = 1;
+    if (be) {
+        vaud_device dv[96];
+        int n = be->list(dv, 96), loops = 0;
+        for (int i = 0; i < n; i++) {
+            loops += dv[i].loopback ? 1 : 0;
+        }
+        if (n > 0 && loops == 0) {
+            S.sys_available = 0;
+            snprintf(S.sys_reason, sizeof S.sys_reason, "SYS (what Windows plays) is off: this PortAudio has no WASAPI loopback device");
+            fprintf(stderr, "audio: %s. MIC and OFF work; the SYS choice is left out of the MIC button\n", S.sys_reason);
+        }
+    }
     fprintf(stderr, "audio: output chosen: %s%s%s%s, input: %s%s%s, %u Hz, engine block %u, card buffer %s%s%s\n", cfg.output[0] ? "'" : "", cfg.output[0] ? cfg.output : "the Windows default device",
             cfg.output[0] ? "'" : "", cfg.out_first > 1 ? " (outputs from the channel shown below)" : "", cfg.input[0] ? "'" : "", cfg.input[0] ? cfg.input : "none", cfg.input[0] ? "'" : "", cfg.rate,
             cfg.period, cfg.buffer ? "" : "auto", cfg.exclusive ? ", exclusive" : "", cfg.force_null ? " (null audio forced)" : "");
@@ -766,6 +779,10 @@ int vaud_apply(const vaud_config *want, char *msg, size_t n) {
 }
 
 int vaud_input_set(int mic_on, int sys_on) {
+    if (sys_on && !S.sys_available) {
+        snprintf(S.sys_note, sizeof S.sys_note, "%s", S.sys_reason);
+        return 1;
+    }
     if (sys_on) {
         if (!sys_open) {
             char name[128] = "", err[200] = "";

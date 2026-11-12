@@ -3885,6 +3885,9 @@ int _audio_info(lua_State *l) {
     SET_S("note", a.note);
     SET_S("in_note", a.in_note);
     SET_S("sys_note", a.sys_note);
+    SET_S("sys_reason", a.sys_reason);
+    lua_pushboolean(l, a.sys_available);
+    lua_setfield(l, -2, "sys_available");
     SET_I("to_scsynth", a.to_sc);
     SET_I("from_scsynth", a.from_sc);
     SET_I("underruns", a.underruns);

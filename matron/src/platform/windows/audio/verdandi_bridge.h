@@ -60,6 +60,9 @@ typedef struct {
     volatile unsigned lag;   /* host only: how many blocks of scsynth's answers are held back (>= the number of engine blocks that run in one callback of the card, so that a burst of blocks finds its answers) */
     int primed;              /* host only: the held-back blocks are there */
     uint64_t calls, last_underrun_call; /* host only: exchanges so far, and the call of the last underrun (a second underrun soon after raises the hold-back by itself) */
+    unsigned lag_base;       /* host only: the hold-back the card's way of calling asks for; a grown hold-back goes back down to it after a quiet time */
+    unsigned grace_calls, decay_calls; /* host only: blocks after scsynth's first answer during which underruns do not make the hold-back grow (0: 15 s), and quiet blocks before it goes down by one (0: 60 s) */
+    uint64_t first_guest_call, last_decay_call; /* host only */
     volatile unsigned raises; /* host only: how often the hold-back grew by itself */
 #ifdef _WIN32
     HANDLE map, event;
@@ -174,7 +177,20 @@ static inline void vb_host_exchange(vb_t *b, const float *to_l, const float *to_
     /* scsynth's answer: the oldest block that is not too old. `lag` blocks are held back: scsynth is another program and answers a moment after it was handed a block, so when the card's callback runs
      * several engine blocks in a row (a callback of 480 or 1024 frames with a 128 or 256 block) the answers of the earlier ones must already be there. after an underrun the lag is built up again */
     b->calls++;
+    if (!b->first_guest_call && vb_load(&s->guest_blocks) > 0) {
+        b->first_guest_call = b->calls; /* scsynth answered for the first time: its start-up (it loads synthdefs, the machine is busy) is not the way it will run */
+    }
     unsigned lag = b->lag ? b->lag : 1;
+    {
+        /* a hold-back that grew goes down again, one block after each quiet minute (a transient must not cost delay for the rest of the session) */
+        uint64_t quiet = b->decay_calls ? b->decay_calls : 22500u;
+        uint64_t since = b->calls - (b->last_underrun_call > b->last_decay_call ? b->last_underrun_call : b->last_decay_call);
+        if (lag > b->lag_base && b->lag_base > 0 && since >= quiet) {
+            lag--;
+            b->lag = lag;
+            b->last_decay_call = b->calls;
+        }
+    }
     uint64_t fw = vb_load(&s->from_w), fr = vb_load(&s->from_r);
     while (fw - fr > lag + VB_LATE_LIMIT - 1) {
         fr++;
@@ -196,7 +212,9 @@ static inline void vb_host_exchange(vb_t *b, const float *to_l, const float *to_
             b->primed = 0;
             /* two underruns within about half a second (4000 blocks of 128 frames): the hold-back is too small for the way this card calls back (bursts nobody announced, a scsynth that wakes late).
              * one more block is held back, up to 6 (the ring holds 8). it stays: a smaller hold-back would only bring the clicks back */
-            if (b->last_underrun_call && b->calls - b->last_underrun_call < 4000 && lag < VB_RING - 2) {
+            uint64_t grace = b->grace_calls ? b->grace_calls : 5600u;
+            int past_grace = b->first_guest_call && b->calls - b->first_guest_call >= grace;
+            if (past_grace && b->last_underrun_call && b->calls - b->last_underrun_call < 4000 && lag < VB_RING - 2) {
                 b->lag = lag + 1;
                 b->raises++;
             }

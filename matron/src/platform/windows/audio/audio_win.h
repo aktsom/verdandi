@@ -35,6 +35,8 @@ typedef struct {
     int in_active;
     char note[480];
     char in_note[200];
+    int sys_available;                    /* SYS can be chosen (PortAudio lists a WASAPI loopback device) */
+    char sys_reason[200];
     char sys_note[320];
     unsigned long long to_sc, from_sc, underruns, drops, card_xruns;
     int scsynth_attached;
