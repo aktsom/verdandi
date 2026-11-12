@@ -101,6 +101,16 @@ fi
 # ---- mi-UGens
 MI_SRC="$WORK/mi-UGens"
 if clone https://github.com/v7b1/mi-UGens.git "$MIUGENS_REF" "$MI_SRC" > "$OUT/logs/clone-mi.log" 2>&1; then
+    # MiBraids links a libsamplerate that its source tree expects pre-built in projects/MiBraids/libsamplerate/build (Release, as a Visual Studio build puts it)
+    if [ -f "$MI_SRC/projects/MiBraids/libsamplerate/CMakeLists.txt" ]; then
+        say "== mi-UGens: libsamplerate for MiBraids"
+        ( cmake -S "$MI_SRC/projects/MiBraids/libsamplerate" -B "$MI_SRC/projects/MiBraids/libsamplerate/build" -G "Visual Studio 17 2022" -A x64 \
+            -DBUILD_TESTING=OFF -DLIBSAMPLERATE_EXAMPLES=OFF -DBUILD_SHARED_LIBS=OFF \
+          && cmake --build "$MI_SRC/projects/MiBraids/libsamplerate/build" --config Release ) > "$OUT/logs/libsamplerate.log" 2>&1 \
+            || { say "libsamplerate FAILED (logs/libsamplerate.log): the errors:"; grep -m 8 -E "error|Error" "$OUT/logs/libsamplerate.log" | tee -a "$REPORT"; }
+    else
+        say "mi-UGens: no libsamplerate sources in projects/MiBraids (submodule missing?)"
+    fi
     build_pack mi-UGens "$MI_SRC"
     dest="$OUT/seed/mi-UGens"
     [ -d "$MI_SRC/Classes" ] && mkdir -p "$dest/Classes" && cp -r "$MI_SRC/Classes"/. "$dest/Classes/"
