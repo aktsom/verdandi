@@ -504,6 +504,13 @@ static int pa_start(char *err, size_t errn) {
 
 static void pa_close(void) { close_all(); }
 
+#ifdef _WIN32
+/* direct WASAPI loopback (wasapi_loopback.cc): used when this PortAudio lists no loopback device */
+extern int vwl_open(unsigned target_rate, char *name, size_t namen, char *err, size_t errn);
+extern void vwl_close(void);
+static int direct_sys_on;
+#endif
+
 static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen, char *err, size_t errn) {
     if (pa_up(err, errn) != 0) {
         return -1;
@@ -531,8 +538,17 @@ static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen,
         }
     }
     if (dev == paNoDevice) {
-        snprintf(err, errn, "this PortAudio has no WASAPI loopback device (it needs PortAudio 19.7 or newer): the system's sound cannot be recorded");
+#ifdef _WIN32
+        /* this PortAudio lists no loopback device (the MSYS2 build): record the default output straight from WASAPI */
+        if (vwl_open(rate, name, namen, err, errn) == 0) {
+            direct_sys_on = 1;
+            return 0;
+        }
         return -1;
+#else
+        snprintf(err, errn, "this PortAudio has no WASAPI loopback device: the system's sound cannot be recorded");
+        return -1;
+#endif
     }
     const PaDeviceInfo *di = Pa_GetDeviceInfo(dev);
     int ch = di->maxInputChannels > 1 ? 2 : 1;
@@ -555,6 +571,12 @@ static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen,
 }
 
 static void pa_close_sys(void) {
+#ifdef _WIN32
+    if (direct_sys_on) {
+        vwl_close();
+        direct_sys_on = 0;
+    }
+#endif
     if (sys_stream) {
         Pa_StopStream(sys_stream);
         Pa_CloseStream(sys_stream);
@@ -578,7 +600,12 @@ static void pa_describe(char *out, size_t n) {
     }
 }
 
-const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe};
+#ifdef _WIN32
+#define HAS_DIRECT_SYS 1
+#else
+#define HAS_DIRECT_SYS 0
+#endif
+const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe, HAS_DIRECT_SYS};
 
 /* what the log shows at start: the host APIs this PortAudio has (WASAPI missing is the first thing to look for when there is no sound) */
 void vaud_backend_pa_describe(char *out, size_t n) { pa_describe(out, n); }

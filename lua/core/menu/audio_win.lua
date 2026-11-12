@@ -1,23 +1,20 @@
--- SYSTEM > AUDIO in the Windows build (docs/port/phase-m3.md). One short list as on a norns: E2 selects a row, E3 changes it, K2 goes back. Every change applies at once (about a second after the last
--- turn of E3): only the sound stream is reopened, norns and the running script are not restarted. Rows:
+-- SYSTEM > AUDIO in the Windows build (docs/port/phase-m3.md, "UI rule"). ONE rule, the same on every Windows page that has a setting to apply:
+--   E2 selects a row.  E3 CHOOSES a value: the row shows it at once and says "K3 apply".  K3 APPLIES it: the row says "applying..." and then "applied".  K2 leaves and never applies anything.
+-- a boxed help of at most three short lines for the selected row only; messages belong to the row and go when E2 moves; TEST shows its result on its own row. Rows:
 --   DRIVER   normal (WASAPI shared: works next to other programs)   exclusive (WASAPI: lowest delay Windows allows, nobody else can use the device)   low latency (ASIO, only in the ASIO build)
---   OUTPUT   the device (normal / exclusive: "default" follows Windows; low latency: the ASIO driver)
---   OUT CH   (low latency only) which output pair
---   INPUT    none, or the input device (low latency: the same driver); the input is always OFF at the start, the MIC button switches it on
---   IN CH    (when an input is chosen) which input channels are left and right
---   BUFFER   auto = the card's own period (the safe choice), or a block of 64 to 512 frames
---   TEST     K3: a click goes out and is listened for on the input
--- under the list ONE short status line: estimated delay of an engine sound, u = scsynth late for a block, x = glitches of the card ("34 ms  u0 x0"); details go to norns.log every 10 s.
+--   OUTPUT   the device ("default" follows Windows)      OUT CH   (low latency only) which output pair
+--   INPUT    none, or the input device (low latency: the same driver); always OFF at the start, the MIC button switches it on      IN CH   (when an input is chosen) left and right
+--   BUFFER   auto = the card's own period (the safe choice), or a block of 64 to 512 frames      TEST   K3: a click out and listened for, or without an input a 2 second self-test
+-- under the list ONE short status line: mode, estimated delay of an engine sound, u = scsynth late for a block, x = glitches of the card ("normal  41 ms  u0 x0"); details go to norns.log every 10 s.
 local util = require 'util'
 local winui = require 'core/menu/winui'
 
 local CONF = "/home/we/audio.conf"
 local FAILED = "/home/we/audio.conf.failed"
 local BUFFERS = {0, 64, 128, 256, 512}
-local ROWS_SHOWN = 6
-local APPLY_AFTER = 4 -- redraw ticks (4 a second) after the last change before the stream is reopened
+local ROWS_SHOWN = 3 -- the selected row and its neighbours; the help box fills the lower part of the screen
 
-local m = {pos = 1, top = 1, tick = 0, extra = {}, devs = {}, hosts = {}, cfg = {}, pending = nil, status = nil, status_until = 0, test = nil, testing = false}
+local m = {pos = 1, top = 1, tick = 0, extra = {}, devs = {}, hosts = {}, cfg = {}, run = {}, busy = false, status = nil, status_until = 0, test = nil, testing = false}
 
 -- ---- the device list of the program: uid, name, inputs, outputs, api, low_out_ms, low_in_ms, loopback ----
 local function read_devices()
@@ -145,24 +142,28 @@ local function say(text, secs)
   m.status, m.status_until, m.status_start = text, m.tick + (secs or 24) * 4, m.tick
 end
 
--- one plain line of help per row (shown on the status line for a few seconds when E2 lands on the row)
+-- the help of a row: at most three short lines of plain words, drawn in a box over the lower part of the screen while the row is selected (the first words are the name of the row)
 local HELP = {
-  DRIVER = "normal works next to other programs. exclusive: shortest delay, but only Verdandi can use the device. low latency: the ASIO driver.",
-  OUTPUT = "where the sound goes. default follows Windows. Pairs on the interface may not be wired to anything.",
-  ["OUT CH"] = "which two outputs of the ASIO driver the sound uses.",
-  INPUT = "sound in. none keeps it off. The MIC button of the window switches it on; it is always off at the start.",
-  ["IN CH"] = "which input channels are left and right. n mono: one channel heard on both sides.",
-  BUFFER = "auto is the safest. A smaller buffer means less delay but more risk of clicks (u and x on the status line).",
-  TEST = "K3: with an input and a cable (or loopback) a click goes out and is listened for. Without: a 2 second self-test of the card and the engine.",
+  DRIVER = {"DRIVER: normal shares the", "card with other programs.", "exclusive: fastest, alone."},
+  OUTPUT = {"OUTPUT: where sound goes.", "default follows Windows.", "Some pairs may be unwired."},
+  ["OUT CH"] = {"OUT CH: which two outputs", "of the ASIO driver."},
+  INPUT = {"INPUT: sound in; none = off.", "The MIC button turns it on."},
+  ["IN CH"] = {"IN CH: left and right input", "channels. 3 mono = channel 3", "on both sides."},
+  BUFFER = {"BUFFER: auto is safest.", "Smaller = less delay,", "more risk of clicks."},
+  TEST = {"TEST: K3 sends a click out", "and listens on the input.", "No input: 2 s self-test."},
 }
 m.help = function(row)
   local h = HELP[row]
-  if row == "INPUT" and h then
+  if not h then return nil end
+  local lines = {}
+  for i, l in ipairs(h) do lines[i] = l end
+  if row == "INPUT" then
     local inf = _norns.audio_info()
-    if inf and inf.sys_available == false then h = h .. " SYS is off: this PortAudio has no WASAPI loopback." end
+    if inf and inf.sys_available == false then lines[3] = "SYS: needs WASAPI loopback." end
   end
-  return h
+  return lines
 end
+m.help_lines = function() return m.help(rows()[m.pos]) or {} end
 
 local SELFTEST_SHORT = {[0] = "ok", "no card", "no scsynth", "card late", "engine late", "glitches"}
 local SELFTEST_LINE = {[0] = "self-test ok", "self-test: no card", "self-test: no scsynth", "self-test: card late", "self-test: engine late", "self-test: glitches"}
@@ -252,32 +253,68 @@ local function short(msg)
 end
 
 
+local function copy(c)
+  local t = {}
+  for k, v in pairs(c) do t[k] = v end
+  return t
+end
+
 local function from_running()
   local info = _norns.audio_info()
   local c = parse(info and info.config or read_file(CONF))
   c.driver = driver_of(c)
   m.cfg = c
+  m.run = copy(c) -- what runs: the pending choices are the differences
   m.extra = parse(read_file(CONF)).extra
 end
 
--- reopen the stream with the choices now on the page
+-- the rows whose chosen value is not what runs (they say "K3 apply")
+local function pending(row)
+  local c, r = m.cfg, m.run
+  if row == "DRIVER" then return c.driver ~= r.driver
+  elseif row == "OUTPUT" then return c.output ~= r.output
+  elseif row == "OUT CH" then return c.out_first ~= r.out_first
+  elseif row == "INPUT" then return c.input ~= r.input
+  elseif row == "IN CH" then return c.in_l ~= r.in_l or c.in_r ~= r.in_r
+  elseif row == "BUFFER" then return c.buffer ~= r.buffer end
+  return false
+end
+local function any_pending()
+  for _, row in ipairs(rows()) do if pending(row) then return true end end
+  return false
+end
+m.pending = pending
+
+-- messages belong to the row: E2 clears them (and the 'applied' mark and the result of TEST)
+local function clear_row_messages()
+  m.status, m.applied_row, m.test = nil, nil, nil
+  if not m.testing and not m.selftesting then m.test = nil end
+end
+
+-- K3: reopen the stream with the choices now on the page. the row says applying... meanwhile, then applied (or the reason it was not)
 local function apply()
-  m.pending = nil
   local want = m.cfg
-  say("applying...", 30)
-  if _menu and _menu.redraw then _menu.redraw() end
+  local sel = rows()[m.pos]
+  local row = pending(sel) and sel or nil
+  if not row then
+    for _, r in ipairs(rows()) do if pending(r) then row = r break end end
+  end
+  m.busy, m.status = true, nil
+  _menu.redraw()
   local rc, msg = _norns.audio_apply(conf_text(want))
+  m.busy = false
   if rc == 0 then
     local f = io.open(CONF, "w")
     if f then f:write(conf_text(want)) f:close() end
     os.remove(FAILED)
     local asked_driver = want.driver
     from_running() -- what really runs (a busy ASIO driver may have become the normal driver)
-    local row = m.changed_row or "AUDIO"
-    local what = row .. (row == "AUDIO" and "" or (" " .. (value_text(row) or "")))
+    local what = (row or "AUDIO") .. (row and (" " .. (value_text(row) or "")) or "")
     local detail = (msg or ""):match("refused %((.-)%): normal")
+    m.applied_row = row
     if detail and asked_driver == "exclusive" then
       -- the exact reason, once: it is also written to norns.log, and audio.conf no longer asks for exclusive on every start
+      m.applied_row = nil
       say("exclusive refused: " .. detail .. " - normal mode is used", 60)
     elseif short(msg) ~= "" then
       say(what .. " applied; " .. short(msg), 40)
@@ -290,6 +327,7 @@ local function apply()
     -- it did not work: the page shows what runs again, and says why in one line
     local why = short(msg)
     from_running()
+    m.applied_row = nil
     say(why ~= "" and why or (rc == 2 and "no sound: silence" or "could not open it"), 40)
   end
   if _menu and _menu.show_note and _menu.set_input then
@@ -300,31 +338,29 @@ local function apply()
 end
 
 m.value_text = value_text
-local timer
 m.init = function()
   read_devices()
   from_running()
-  m.pos, m.top, m.tick, m.pending, m.test, m.testing = 1, 1, 0, nil, nil, false
-  m.status = nil
-  m.help_until = nil
-  local failed = util.file_exists(FAILED)
-  if failed then say("failed: back to default", 40) end
-  if metro and metro.init and not timer then
-    timer = metro.init(function() m.timer() end, 0.25, -1)
-  end
-  if timer then timer:start() end
+  m.pos, m.top, m.tick, m.test, m.testing, m.selftesting, m.busy = 1, 1, 0, nil, false, false, false
+  m.status, m.applied_row = nil, nil
+  if util.file_exists(FAILED) then say("failed: back to default", 40) end
+  -- the menu's own timer (as the other pages use it), not a script metro: a script change must not be able to take it away
+  _menu.timer.time = 0.25
+  _menu.timer.count = -1
+  _menu.timer.event = function() m.timer() end
+  _menu.timer:start()
 end
 
--- every quarter of a second while the page is open: the marquee, the pending apply, the numbers
+-- every quarter of a second while the page is open: the TEST result, the status line, the pages of a long sentence
 m.timer = function()
   m.tick = m.tick + 1
-  if m.pending and m.tick >= m.pending then apply() end
+  if m.testing or m.selftesting then value_text("TEST") end
   if _menu and _menu.redraw then _menu.redraw() end
 end
 
+-- leaving the page never applies anything: a choice that was not applied with K3 is dropped
 m.deinit = function()
-  if timer then timer:stop() end
-  if m.pending then apply() end
+  _menu.timer:stop()
 end
 
 m.key = function(n, z)
@@ -334,6 +370,7 @@ m.key = function(n, z)
   elseif n == 3 and rows()[m.pos] == "TEST" then
     local info = _norns.audio_info()
     m.test, m.testing, m.selftesting, m.selftest_why = nil, false, false, nil
+    m.status = nil
     if not info or info.mode ~= "device" then
       m.test = "no card"
       say("no sound card is running (see the status line)", 60)
@@ -347,13 +384,14 @@ m.key = function(n, z)
       _norns.audio_measure()
     end
     _menu.redraw()
+  elseif n == 3 and any_pending() then
+    apply()
+    _menu.redraw()
   end
 end
 
-local function changed(row)
-  m.pending = m.tick + APPLY_AFTER
-  m.status = nil
-  m.changed_row = row -- for the confirmation: "BUFFER 256 applied"
+local function changed()
+  m.status, m.applied_row = nil, nil -- a new choice: the old message is about something else
 end
 
 local function step(list, i, delta) return util.clamp(i + delta, 1, #list) end
@@ -361,12 +399,9 @@ local function step(list, i, delta) return util.clamp(i + delta, 1, #list) end
 m.enc = function(n, delta)
   if n == 2 then
     local r = rows()
-    if m.pending then apply() end -- leaving a row: what was changed runs now
     m.pos = util.clamp(m.pos + delta, 1, #r)
-    if m.pos < m.top then m.top = m.pos end
-    if m.pos > m.top + ROWS_SHOWN - 1 then m.top = m.pos - ROWS_SHOWN + 1 end
+    clear_row_messages()
     m.tick = 0
-    m.help_until = 24 -- six seconds of help for the row
   elseif n == 3 then
     local row = rows()[m.pos]
     local c = m.cfg
@@ -376,7 +411,7 @@ m.enc = function(n, delta)
       if l[i].id ~= c.driver then
         c.driver, c.output, c.input, c.out_first, c.in_l, c.in_r, c.buffer = l[i].id, "", "", 1, 1, 2, 0
         if c.driver == "asio" then local o = outputs()[1]; c.output = o and o.uid or "" end
-        changed("DRIVER")
+        changed()
       end
     elseif row == "OUTPUT" then
       local l = outputs()
@@ -384,54 +419,43 @@ m.enc = function(n, delta)
       if l[i].uid ~= c.output then
         c.output, c.out_first = l[i].uid, 1
         if c.driver == "asio" then c.input = "" end
-        changed("OUTPUT")
+        changed()
       end
     elseif row == "OUT CH" then
       local l = outpairs()
       local i = step(l, index_where(l, function(p) return p.first == c.out_first end), delta)
-      if l[i].first ~= c.out_first then c.out_first = l[i].first; changed("OUT CH") end
+      if l[i].first ~= c.out_first then c.out_first = l[i].first; changed() end
     elseif row == "INPUT" then
       local l = inputs()
       local i = step(l, index_where(l, function(d) return d.uid == c.input end), delta)
-      if l[i].uid ~= c.input then c.input, c.in_l, c.in_r = l[i].uid, 1, math.min(2, math.max(1, l[i].ins or 1)); changed("INPUT") end
+      if l[i].uid ~= c.input then c.input, c.in_l, c.in_r = l[i].uid, 1, math.min(2, math.max(1, l[i].ins or 1)); changed() end
     elseif row == "IN CH" then
       local l = inpairs()
       local i = step(l, index_where(l, function(p) return p.l == c.in_l and p.r == c.in_r end), delta)
-      if l[i].l ~= c.in_l or l[i].r ~= c.in_r then c.in_l, c.in_r = l[i].l, l[i].r; changed("IN CH") end
+      if l[i].l ~= c.in_l or l[i].r ~= c.in_r then c.in_l, c.in_r = l[i].l, l[i].r; changed() end
     elseif row == "BUFFER" then
       local i = step(BUFFERS, index_where(BUFFERS, function(b) return b == c.buffer end), delta)
-      if BUFFERS[i] ~= c.buffer then c.buffer = BUFFERS[i]; changed("BUFFER") end
+      if BUFFERS[i] ~= c.buffer then c.buffer = BUFFERS[i]; changed() end
     end
-    m.tick = 0
   end
   _menu.redraw()
 end
 
--- one short status line: what is wrong, or the numbers
+-- one short status line: what is wrong, or the numbers. a message belongs to the selected row; a long sentence goes round in pages of one line
+local PAGE_TICKS = 10
 local function mode_word(info)
   if (info.host_api or ""):find("ASIO", 1, true) then return "ASIO" end
   if info.exclusive then return "exclusive" end
   return "normal"
 end
 
--- a text of several pages: 2.5 s a page (10 ticks of the page timer); help is read once (the last page stays its full 2.5 s, then the numbers come back), a status sentence goes round until it expires
-local PAGE_TICKS = 10
-m.help_now = function()
-  if not m.help_until then return nil end
-  local pages = winui.pages(m.help(rows()[m.pos]), 124)
-  local idx = math.floor(m.tick / PAGE_TICKS) + 1
-  return pages[idx]
-end
-
 local function status_line(info)
-  if m.pending then return "..." end
+  if m.busy then return "applying..." end
   if m.status and m.tick < m.status_until then
     local pages = winui.pages(m.status, 124)
     if #pages <= 1 then return pages[1] or m.status end
     return pages[(math.floor((m.tick - (m.status_start or 0)) / PAGE_TICKS) % #pages) + 1]
   end
-  local h = m.help_now()
-  if h then return h end
   if not info then return "" end
   if info.mode == "fallback" then
     return (info.note:find("busy", 1, true) and "no sound: device busy") or (info.note:find("not found", 1, true) and "no sound: device missing") or "no sound"
@@ -451,13 +475,37 @@ m.redraw = function()
   screen.clear()
   local info = _norns.audio_info()
   local r = rows()
+  m.top = util.clamp(m.pos - 1, 1, math.max(1, #r - ROWS_SHOWN + 1))
   for k = 0, ROWS_SHOWN - 1 do
     local i = m.top + k
-    if r[i] then winui.row(8 + 9 * k, r[i], value_text(r[i]), i == m.pos, m.tick) end
+    local row = r[i]
+    if row then
+      local label = row
+      if i == m.pos and m.busy and (pending(row) or m.applied_row == row) then label = "applying..."
+      elseif pending(row) then label = "K3 apply"
+      elseif m.applied_row == row then label = "applied" end
+      winui.row(8 + 9 * k, label, value_text(row), i == m.pos, m.tick)
+    end
+  end
+  -- the help of the selected row: a box over the lower part of the screen, three short lines at most
+  local lines = m.help(r[m.pos]) or {}
+  if #lines > 0 then
+    screen.level(0)
+    screen.rect(0, 31, 128, 26)
+    screen.fill()
+    screen.level(15)
+    screen.line_width(1)
+    screen.rect(0.5, 31.5, 127, 25)
+    screen.stroke()
+    for k, l in ipairs(lines) do
+      screen.level(15)
+      screen.move(3, 39 + 8 * (k - 1))
+      screen.text(l)
+    end
   end
   screen.level(15)
-  screen.move(2, 62)
-  screen.text(winui.fit(status_line(info), 124, false, 0)) -- (long sentences are paged by status_line)
+  screen.move(2, 63)
+  screen.text(winui.fit(status_line(info), 124, false, 0))
   screen.update()
 end
 

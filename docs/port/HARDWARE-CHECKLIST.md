@@ -498,3 +498,10 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 7. **A path with spaces and an accented letter:** unpack into a folder such as `C:\Verdandi test\Café` and start it there; and a Windows user name with an accented letter if you have one. Say what happens.
 8. **Second round (after run 42715710150):** (a) the keyboard: letters, arrows, F10/F5 and a script that uses `keyboard.code`; (b) `logs\norns.log` has no "is not recognized", no "pthread_cancel", no "menu key handler error", and says `platform: windows`, version 0.1.0; repeated lines are collapsed; (c) SELECT lists `awake` and loads it; K3 on an empty folder shows the note; (d) the MAIDEN button shows "maiden is not in this Windows build yet" and opens no browser page; (e) metros: a script with a fast metro (awake's clock) keeps time; (f) which Firewall prompts appear (norns.exe, sclang.exe, scsynth.exe?) and what you answered.
 9. **Closing:** close the window: everything ends (check in the Task Manager that `norns.exe`, `sclang.exe` and `scsynth.exe` are gone).
+
+## Windows M3 round 6 (0.4.4)
+1. Normal mode: the status line right after the start should say about 41 ms, not 49.
+2. AUDIO page: E3 on BUFFER shows the new value and `K3 apply` at once; K3 shows `applying...` then `applied`; E2 to another row clears it; K2 never changes the sound.
+3. The boxed help appears for the selected row only, at most three lines, nothing cut off.
+4. TEST: `testing...` then a short result on the row.
+5. SYS: play a video in a browser, MIC button to SYS: a script with a level meter moves (direct WASAPI loopback, never run on Windows before).

@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M3 round 6: owner test of 0.4.3 (d6ed860): menu usability, hold-back at start, SYS loopback (version 0.4.4)
+- Done (Linux tests): hold-back cap in shared mode (host_frames 1056 no longer gives 9 blocks: `lagcap_*`), AUDIO page rewritten (E3 chooses, K3 applies, `K3 apply`/`applying...`/`applied` on the row, boxed help of 3 lines, messages cleared by E2, TEST on the row, leaving never applies), direct WASAPI loopback code (`wasapi_loopback.cc`, conversion tested), rule for all system pages written in `docs/port/phase-m3.md` section 10.
+- Not tested here (no Windows): how the page looks and feels on a real screen, the COM loopback at runtime, exclusive/RME. Wine tests could not run (disk).
+
 ## Windows M3 round 5: owner test of 0.4.2 (2d14474): help lines, self-test text, SYS, hold-back (version 0.4.3)
 Exclusive 256 now 21 ms u0 x0 with about one click per 4 to 5 minutes; drag/resize no longer cut the sound (resize redraw a little choppy: open, low priority). Full note: `docs/port/phase-m3.md` section 9.
 - Help lines (and long status sentences) are paged, 2.5 s a page, the last page stays, each page fits the screen (real font test); TEST self-test: short result on the status line, details in norns.log; SYS: left out of the MIC button with a plain reason when PortAudio lists no WASAPI loopback (no loopback capture added: untestable here, offered); hold-back: grace of 15 s after scsynth's first answer and a decay of one block per quiet minute (tests `grow_start`, `decay`).

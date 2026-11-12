@@ -388,6 +388,10 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
         unsigned hf = S.opened.host_frames > frames ? S.opened.host_frames : frames;
         if (S.opened.exclusive) {
             hf *= 2; /* an exclusive stream is double buffered by the host API: two periods can arrive together */
+        } else if (hf > S.rate / 100) {
+            /* shared mode: PortAudio reports the size of the whole host BUFFER (a Windows period of 10 ms and more: 1056 frames in the owner's log, hold-back 9, 49 ms), but what can arrive together is one
+             * Windows period. the callbacks of an "auto" stream are that period anyway */
+            hf = frames > S.rate / 100 ? frames : S.rate / 100;
         }
         S.engine_lag = (hf + S.frames - 1) / S.frames;
         /* scsynth is another program and needs a moment to wake and to compute: never less than about 5 ms of hold-back, whatever the card's buffer (a card buffer of 64 or 128 frames is 1.3 to 2.7 ms) */
@@ -661,7 +665,7 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
         for (int i = 0; i < n; i++) {
             loops += dv[i].loopback ? 1 : 0;
         }
-        if (n > 0 && loops == 0) {
+        if (n > 0 && loops == 0 && !be->has_direct_sys) {
             S.sys_available = 0;
             snprintf(S.sys_reason, sizeof S.sys_reason, "SYS (what Windows plays) is off: this PortAudio has no WASAPI loopback device");
             fprintf(stderr, "audio: %s. MIC and OFF work; the SYS choice is left out of the MIC button\n", S.sys_reason);

@@ -175,7 +175,7 @@ audio_chain_ok() {
     gcc -std=gnu11 -O1 -I matron/src/platform/windows/jack_null/include -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c \
         matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/audio/exit_win.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
     local sc
-    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null grow_start decay sys_hidden; do
+    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null grow_start decay sys_hidden lagcap_auto lagcap_128; do
         "$T/audio_chain_test" "$sc" 2> /dev/null || return 1
     done
     for sc in 1 2 3 4 5 6 7 8; do
@@ -201,6 +201,11 @@ run "windows:the PortAudio backend on Linux (list, an unknown device is refused 
 gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
 "$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"
 run "windows:SYSTEM > AUDIO: one short list (DRIVER OUTPUT [OUT CH] INPUT [IN CH] BUFFER TEST), every change applied live without a restart (reverted with one plain line when it fails), the status line, TEST results in plain words, bright text, nothing wider than the screen with the real font, the marquee" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/audio_page_windows_test.lua
+loopback_ok() {
+    g++ -std=c++17 -O1 -I matron/src/platform/windows/audio linux/tests/loopback_convert_test.cc -o "$T/loopback_convert_test" || return 1
+    "$T/loopback_convert_test"
+}
+run "windows:WASAPI loopback conversion (any format to float stereo at norns's rate)" loopback_ok
 run "windows:MIC / OFF / SYS switch (OFF at every start, nothing remembered, no input device or no loopback stays OFF with the reason)" lua5.3 linux/tests/input_windows_test.lua
 run "windows:scsynth with the Verdandi bridge driver against the bridge host (needs a patched scsynth: VERDANDI_SCSYNTH)" bash linux/tests/scsynth_bridge_test.sh
 hid_virtual_ok() {

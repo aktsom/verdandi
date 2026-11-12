@@ -711,6 +711,29 @@ static void scenario_lagfirst(const char *sc) {
     verdandi_bridge_host_stop();
 }
 
+/* owner test of 0.4.3: normal mode at the start showed 49 ms (hold-back 9) where 41 ms had been. PortAudio reports the size of the whole host BUFFER (a second period or more: 1056 frames), not the
+ * period the callbacks come in. The hold-back must follow what the callbacks do (480 frames at 48000 Hz, a Windows period of 10 ms), and an explicitly asked small buffer at most one Windows period */
+static void scenario_lagcap(const char *sc) {
+    g_buffer = !strcmp(sc, "lagcap_auto") ? 0 : 128;
+    g_host_frames = 1056;
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.rate = 48000; cfg.period = 128; cfg.buffer = g_buffer;
+    rec_cap = 48000 * 3; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, NULL, &st);
+    crone_start();
+    sleep_ms_f(600);
+    unsigned lag = vaud_get_state()->engine_lag;
+    if (!strcmp(sc, "lagcap_auto")) {
+        CHECK(lag == 4, "%s: auto: the callbacks are 480 frames: hold-back 4, not the 9 of the 1056 frame host buffer (%u)", sc, lag);
+    } else {
+        CHECK(lag == 4, "%s: an asked buffer of 128 under a Windows period: at most one period (480 frames) = 4 blocks, not 9 (%u)", sc, lag);
+    }
+    vaud_stop();
+    g_host_frames = 0;
+}
+
 /* owner test of 0.4.2: in normal mode the hold-back was 9 and the delay 48.7 ms at the start (41 ms before): the start-up of SuperCollider (it loads synthdefs, the machine is busy) made blocks late and the
  * self-raising hold-back grew for that, and never came back. now: no growing in the first seconds after scsynth attached, and a hold-back that grew goes down again after a quiet minute */
 static void scenario_grow(const char *sc) {
@@ -885,6 +908,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(sc, "startup")) scenario_startup(sc);
     else if (!strcmp(sc, "lagfirst")) scenario_lagfirst(sc);
     else if (!strcmp(sc, "adapt")) scenario_adapt(sc);
+    else if (!strncmp(sc, "lagcap", 6)) scenario_lagcap(sc);
     else if (!strcmp(sc, "grow_start") || !strcmp(sc, "decay")) scenario_grow(sc);
     else if (!strcmp(sc, "reblock480")) { g_buffer = 0; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 480 && vaud_get_state()->engine_prime == 256, "reblock480: card 480, engine 256: primed with one engine block (%u %u)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime); CHECK(vaud_get_state()->card_xruns == 0, "reblock480: no glitch (%llu)", vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "reblock64")) { g_buffer = 64; run_chain(sc, 1, "", 48000, 128, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 64 && vaud_get_state()->engine_prime == 128 && vaud_get_state()->card_xruns == 0, "reblock64: card 64, engine 128 (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }

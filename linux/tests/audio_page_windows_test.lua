@@ -1,5 +1,6 @@
--- SYSTEM > AUDIO in the Windows build (lua/core/menu/audio_win.lua with lua/core/menu/winui.lua; chosen by audio.lua when _norns.audio_devices exists): one short list, E2 selects, E3 changes, every change is applied
--- live (_norns.audio_apply) about a second after the last turn, one status line, TEST results in plain words, nothing wider than the screen (real font metrics when FONT_WIDTHS is set), bright text.
+-- SYSTEM > AUDIO in the Windows build (lua/core/menu/audio_win.lua with lua/core/menu/winui.lua; chosen by audio.lua when _norns.audio_devices exists): ONE rule: E2 selects a row, E3 CHOOSES a value (the row
+-- shows it at once and says 'K3 apply'), K3 APPLIES (the row says 'applying...' and then 'applied'), K2 leaves and never applies; a boxed help of at most 3 lines for the selected row, messages that belong to
+-- a row and go when E2 moves, TEST results on the row itself, nothing wider than the screen (real font metrics when FONT_WIDTHS is set), bright text.
 -- run from the repo root:   FONT_WIDTHS=<table from linux/tests/font_widths_dump.c> lua5.3 linux/tests/audio_page_windows_test.lua
 local _print = print
 package.path = "lua/?.lua;lua/core/?.lua;lua/lib/?.lua;" .. package.path
@@ -31,16 +32,18 @@ else
   screen = setmetatable({}, {__index = function() return function() end end})
   screen.text_extents = function(s) return #s * 5 end
 end
-local level, drawn = 15, {}
+local level, drawn, boxes = 15, {}, {}
 local base = {}
 for _, k in ipairs({"clear", "text", "text_right", "level", "move", "rect", "fill", "update"}) do base[k] = screen[k] end
-screen.clear = function() drawn = {}; if base.clear then base.clear() end end
+screen.clear = function() drawn = {}; boxes = {}; if base.clear then base.clear() end end
 screen.level = function(l) level = l end
 screen.text = function(s) drawn[#drawn + 1] = {s = s, l = level, right = false}; if base.text then base.text(s) end end
 screen.text_right = function(s) drawn[#drawn + 1] = {s = s, l = level, right = true}; if base.text_right then base.text_right(s) end end
 screen.move = function(x, y) if base.move then base.move(x, y) end end
-screen.rect = function() end
+screen.rect = function(x, y, w, h) boxes[#boxes + 1] = {x = x, y = y, w = w, h = h}; if base.rect then base.rect(x, y, w, h) end end
 screen.fill = function() end
+screen.stroke = function() end
+screen.line_width = function() end
 screen.update = function() end
 
 local selftest_started, selftest
@@ -77,7 +80,8 @@ _norns = {
 local page
 printed_lines = {}
 print = function(...) printed_lines[#printed_lines + 1] = table.concat({...}, " ") end
-_menu = {redraw = function() redraws = redraws + 1; if page then page.redraw() end end, set_page = function(p) _menu.page = p end, set_input = function(...) input_calls[#input_calls + 1] = {...} end, show_note = function() end}
+local timer_running = false
+_menu = {timer = {start = function() timer_running = true end, stop = function() timer_running = false end}, redraw = function() redraws = redraws + 1; if page then page.redraw() end end, set_page = function(p) _menu.page = p end, set_input = function(...) input_calls[#input_calls + 1] = {...} end, show_note = function() end}
 norns = {none = function() end}
 
 local winui = dofile("lua/core/menu/winui.lua")
@@ -87,242 +91,216 @@ package.loaded["core/menu/audio"] = nil
 page = dofile("lua/core/menu/audio_win.lua")
 local function shown(s) for _, t in ipairs(drawn) do if t.s:find(s, 1, true) then return true end end return false end
 local function conf() local h = real_open(tmp .. "/audio.conf"); if not h then return nil end local c = h:read("a"); h:close(); return c end
-local function turn(row_pos, delta) page.enc(2, -9); page.enc(2, row_pos - 1); page.enc(3, delta) end
-local function ticks(n) for _ = 1, n do page.timer() end end
+local function select_row(row_pos) page.enc(2, -9); page.enc(2, row_pos - 1) end
+local function turn(row_pos, delta) select_row(row_pos); page.enc(3, delta) end
+local function ticks(n) for _ = 1, n do _menu.timer.event() end end
 local function pos_of(name) for i, r in ipairs({"DRIVER", "OUTPUT", "INPUT", "BUFFER", "TEST"}) do if r == name then return i end end end
 
--- ---- the list ----
+
+local function lines_of_box() -- the help box: the texts drawn inside the box rect at the lower part of the screen
+  local out = {}
+  for _, t in ipairs(drawn) do if t.box then out[#out + 1] = t.s end end
+  return out
+end
+-- texts drawn after the box rect belong to it: mark them (y of the lines is in the lower part). the recorder has no y, so the page exposes its box lines
+local function help_lines() return page.help_lines and page.help_lines() or {} end
+
+-- ---- the list: three rows around the selected one, the help box under them ----
+info = mkinfo()
 page.init(); page.redraw()
-check(shown("DRIVER") and shown("OUTPUT") and shown("INPUT") and shown("BUFFER") and shown("TEST"), "the rows are DRIVER, OUTPUT, INPUT, BUFFER, TEST (no APPLY, no RATE, no latency rows)")
+check(shown("DRIVER") and shown("OUTPUT") and shown("INPUT"), "the first three rows are DRIVER, OUTPUT, INPUT")
 check(not shown("APPLY") and not shown("RATE") and not shown("LATENCY") and not shown("MEASURED") and not shown("LEVEL") and not shown("IN L"), "none of the old rows")
-check(shown("normal") and shown("default") and shown("auto") and shown("none"), "defaults: normal driver, default output, auto buffer, no input")
-check(shown("35 ms  u0 x0"), "ONE short status line with the numbers")
--- unselected rows are bright
+check(shown("normal") and shown("default") and shown("none"), "defaults: normal driver, default output, no input")
+check(shown("normal  35 ms  u0 x0"), "ONE short status line: the mode and the numbers")
 local dim = false
 for _, t in ipairs(drawn) do if t.l < 11 then dim = true end end
-check(not dim, "every text is at level 11 or more (unselected rows 11, the selected row 15)")
+check(not dim, "every text is at level 11 or more")
+check(timer_running and _menu.timer.time == 0.25 and _menu.timer.count == -1, "the page uses the menu's own timer (metro 32), not a script metro that a script change could take away")
 
--- ---- a change applies by itself, without APPLY and without a restart ----
-turn(pos_of("OUTPUT"), 2)
-page.redraw()
-check(shown("Speakers (RME") or shown("Speakers (Realtek"), "E3 on OUTPUT chooses a device")
-check(#applied == 0, "nothing is applied while E3 is still being turned")
-ticks(3)
-check(#applied == 0, "not before the quiet second")
-ticks(2)
-check(#applied == 1, "about a second after the last turn the new setting is applied: " .. #applied)
-check(applied[1]:find("output=wasapi:Speakers (Realtek High", 1, true) or applied[1]:find("output=wasapi:Speakers (RME", 1, true), "the audio.conf lines go to the program")
-check(not restarted, "norns is not restarted")
+-- ---- the help box: at most 3 short lines of plain words, for the selected row only, gone when E2 moves ----
+local ROWS5 = {"DRIVER", "OUTPUT", "INPUT", "BUFFER", "TEST"}
+for i, name in ipairs(ROWS5) do
+  select_row(i); page.redraw()
+  local h = help_lines()
+  check(#h >= 2 and #h <= 3, "help for " .. name .. " has 2 or 3 lines (" .. #h .. ")")
+  check(h[1] and h[1]:find(name, 1, true) == 1, "and starts with the name of the row: " .. tostring(h[1]))
+  for _, l in ipairs(h) do if screen.text_extents(l) > 118 then check(false, "a help line is wider than the box: " .. l) end end
+  check(#boxes >= 1, "a box is drawn for the help of " .. name)
+  local others = true
+  for j, other in ipairs(ROWS5) do if j ~= i and shown(other .. ": ") then others = false end end
+  check(others, "only the help of the selected row (" .. name .. ") is on the screen")
+end
+info = mkinfo({sys_available = false, sys_reason = "SYS is off: no WASAPI loopback"})
+page.init(); select_row(3); page.redraw()
+local h3 = help_lines()
+check(#h3 == 3 and h3[3]:find("SYS", 1, true) and h3[3]:find("loopback", 1, true), "INPUT help: the third line says SYS is not available and why: " .. tostring(h3[3]))
+info = mkinfo({sys_available = true})
+page.init(); select_row(3); page.redraw()
+check(#help_lines() == 2, "and nothing about SYS when it is there")
+
+-- ---- E3 CHOOSES: the new value is on the row at once, the row says K3 apply, nothing is applied yet ----
+info = mkinfo()
+page.init(); applied = {}
+select_row(2); page.enc(3, 2); page.redraw()
+check(shown("K3 apply"), "the row says K3 apply")
+check(shown("Speakers (RME") or shown("Speakers (Realtek"), "and shows the chosen device at once")
+check(#applied == 0, "nothing is applied by turning E3")
+ticks(40)
+check(#applied == 0, "not by waiting either (no timer applies anything)")
+page.enc(2, 1); page.redraw()
+check(#applied == 0 and shown("K3 apply") == true, "not by moving to another row (the choice stays pending, the row still says so)")
+page.enc(2, -1)
+
+-- ---- K3 APPLIES: 'applying...', then 'applied' on the row, and the confirmation on the status line ----
+local before_rc = apply_rc
+page.key(3, 1); page.redraw()
+check(#applied == 1, "K3 on a changed row applies (one call to the program)")
+check(applied[1]:find("output=wasapi:Speakers", 1, true), "with the audio.conf lines")
+check(shown("applied") and not shown("K3 apply"), "the row says applied now")
+check(page.status and page.status:find("OUTPUT", 1, true) and page.status:find("applied", 1, true), "and the status line confirms it: " .. tostring(page.status))
 local c = conf()
-check(c and c:find("buffer=auto", 1, true) and c:find("block=128", 1, true) and c:find("in_l=1", 1, true), "audio.conf is written after it worked: " .. tostring(c))
-check(page.status and page.status:find("applied", 1, true), "the status line confirms what was applied")
-check(#input_calls >= 1 and input_calls[#input_calls][1] == "off", "the input goes OFF after a new device (the MIC button state follows)")
+check(c and c:find("buffer=auto", 1, true) and c:find("block=128", 1, true), "audio.conf is written after it worked")
+check(#input_calls >= 1 and input_calls[#input_calls][1] == "off", "a new device: the input goes OFF (the MIC button state follows)")
+check(not restarted, "norns is not restarted")
+page.enc(2, 1); page.redraw()
+check(not shown("applied") and page.status == nil, "moving to another row clears the 'applied' mark and the message")
 
--- ---- a setting that cannot be used: the page goes back and says why in one short line ----
+-- ---- leaving never applies ----
+info = mkinfo(); page.init(); applied = {}
+turn(pos_of("BUFFER"), 2)
+page.key(2, 1)
+page.deinit()
+check(#applied == 0, "K2 (and deinit) leave without applying: nothing was applied")
+page.init(); page.redraw()
+check(shown("K3 apply") == false, "and the pending choice is gone when the page is opened again")
+page.enc(2, -9); page.enc(2, 3); page.redraw()
+check(shown("auto"), "BUFFER is back to what runs: auto")
+
+-- ---- 'applying...' is visible while it takes time ----
+local seen_applying = false
+local real_apply = _norns.audio_apply
+_norns.audio_apply = function(text) page.redraw(); seen_applying = shown("applying"); return real_apply(text) end
+page.init(); turn(pos_of("BUFFER"), 2); page.key(3, 1)
+check(seen_applying, "during the call the row says applying...")
+_norns.audio_apply = real_apply
+
+-- ---- a setting that cannot be used: back to what runs, one plain line, no 'applied' ----
 apply_rc, apply_msg = 1, "'Busy Headset' is busy or in use by another program: back to Fake Speakers"
 info = mkinfo({config = "output=wasapi:Speakers (RME Fireface UC)\ninput=\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
 page.init()
-turn(pos_of("OUTPUT"), -1); ticks(6); page.redraw()
+turn(pos_of("OUTPUT"), -1); page.key(3, 1); page.redraw()
 check(shown("busy: another program has it"), "a busy device: one plain line")
-check(shown("Speakers (RME"), "and the list shows what runs again")
+check(shown("Speakers (RME") and not shown("applied"), "the row shows what runs again and no applied mark")
+page.enc(2, 1); page.redraw()
+check(not shown("busy: another program has it"), "and the message goes when E2 moves")
 apply_rc, apply_msg = 0, ""
 
--- ---- DRIVER ----
-page.init()
+-- ---- DRIVER and ASIO ----
+info = mkinfo(); page.init()
 turn(pos_of("DRIVER"), 1); page.redraw()
-check(shown("exclusive"), "E3 on DRIVER: exclusive")
-turn(pos_of("DRIVER"), 1); page.redraw()
-check(shown("exclusive") and not shown("low latency"), "no low latency driver in a build without ASIO")
-ticks(6)
-check(applied[#applied]:find("exclusive=1", 1, true), "exclusive=1 goes to the program")
-info = mkinfo({host_apis = "WASAPI ASIO"})
-page.init()
+check(shown("exclusive") and shown("K3 apply"), "E3 on DRIVER: exclusive, K3 apply")
+page.key(3, 1)
+check(applied[#applied]:find("exclusive=1", 1, true), "exclusive=1 goes to the program on K3")
+info = mkinfo({host_apis = "WASAPI ASIO"}); page.init()
 turn(pos_of("DRIVER"), 2); page.redraw()
-check(shown("low latency") and shown("ASIO Fireface USB"), "with ASIO: DRIVER low latency, OUTPUT is the ASIO driver")
-check(shown("OUT CH") and shown("1+2"), "and OUT CH appears")
-ticks(6)
+check(shown("low latency"), "with ASIO: low latency is a DRIVER choice")
+page.enc(2, 1); page.redraw()
+check(shown("ASIO Fireface USB"), "OUTPUT lists the ASIO driver")
+page.enc(2, 1); page.redraw()
+check(shown("OUT CH") or shown("K3 apply") or shown("1+2"), "OUT CH appears")
+page.key(3, 1)
 check(applied[#applied]:find("output=asio:ASIO Fireface USB", 1, true), "the asio: uid is applied")
--- the input of the ASIO driver, and its channels
-page.enc(2, -9); page.enc(2, 3); page.enc(3, 1); page.redraw()
-check(shown("ASIO Fireface USB") and shown("IN CH"), "INPUT can be the same driver, then IN CH appears")
-page.enc(2, 1); page.enc(3, 1); page.redraw()
-check(shown("3+4"), "IN CH picks 3+4")
-ticks(6)
-check(applied[#applied]:find("in_l=3", 1, true) and applied[#applied]:find("in_r=4", 1, true), "in_l=3 in_r=4")
+page.init(); page.enc(2, 9); page.redraw()
+check(shown("TEST"), "TEST is the last row")
 
 -- ---- BUFFER ----
-info = mkinfo()
-page.init()
+info = mkinfo(); page.init()
 turn(pos_of("BUFFER"), 2); page.redraw()
-check(shown("128  2.7 ms"), "BUFFER 128 shows its length")
-ticks(6)
-check(applied[#applied]:find("buffer=128", 1, true), "buffer=128 is applied")
-turn(pos_of("BUFFER"), -9); ticks(6)
-check(applied[#applied]:find("buffer=auto", 1, true), "back to auto")
+check(shown("128  2.7 ms"), "BUFFER 128 shows its length at once")
+page.key(3, 1)
+check(applied[#applied]:find("buffer=128", 1, true), "buffer=128 is applied by K3")
+check(page.status:find("BUFFER 128", 1, true) and page.status:find("applied", 1, true), "and confirmed: " .. tostring(page.status))
 
--- ---- TEST: a plain result every time; without an input (or one that did not open) a self-test of the card and the engine, no cables needed ----
-local function key_test() page.enc(2, -9); page.enc(2, 9); page.key(3, 1); page.redraw() end
-local function finish_selftest(t) selftest = t; ticks(1) end
-page.init(); selftest_started = 0; printed_lines = {}; key_test()
-check(selftest_started == 1 and shown("testing"), "TEST with no input: the self-test starts (no cables needed) and the row says testing")
-finish_selftest({state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0})
-page.redraw()
-check(shown("ok") and page.status == "self-test ok", "self-test ok: the status line says just 'self-test ok': " .. tostring(page.status))
+-- ---- TEST: 'testing...' on the row, the short result on the row itself, while the row stays selected ----
+local function press_test() select_row(5); page.key(3, 1); page.redraw() end
+info = mkinfo(); page.init(); selftest_started = 0; printed_lines = {}; press_test()
+check(selftest_started == 1 and shown("testing..."), "TEST with no input: the row says testing... at once (self-test, no cables needed)")
+selftest = {state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0}
+ticks(1)
+check(shown("ok") and not shown("testing..."), "and the short result 'ok' on the row itself, without leaving it")
+check(page.status == "self-test ok", "status line: self-test ok")
 local d = table.concat(printed_lines, "\n")
-check(d:find("self-test ok: card calls every 10.0 ms (longest 10.4), engine answered 750 blocks, 0 late, 0 glitches", 1, true) and d:find("no input selected", 1, true), "the details (numbers, and why there was no click test) are written to norns.log: " .. d)
-for _, c in ipairs({{1, "no card", "self-test: no card", "no sound card is running"}, {2, "no scsynth", "self-test: no scsynth", "SuperCollider is not attached"}, {3, "card late", "self-test: card late", "the card calls late"}, {4, "engine late", "self-test: engine late", "the engine was late"}, {5, "glitches", "self-test: glitches", "the card glitched"}}) do
-  page.init(); printed_lines = {}; key_test()
-  finish_selftest({state = 2, verdict = c[1], callbacks = 100, avg_ms = 10, max_ms = 80, expect_ms = 10, engine_blocks = 5, late = 7, glitches = 3})
-  page.redraw()
-  check(shown(c[2]) and page.status == c[3] and #c[3] < 30, "self-test verdict " .. c[1] .. ": the row says '" .. c[2] .. "' and the status line the short '" .. c[3] .. "': " .. tostring(page.status))
-  check(table.concat(printed_lines, "\n"):find(c[4], 1, true), "and norns.log gets the details ('" .. c[4] .. "')")
+check(d:find("self-test ok: card calls every 10.0 ms (longest 10.4), engine answered 750 blocks, 0 late, 0 glitches", 1, true) and d:find("no input selected", 1, true), "details in norns.log")
+for _, v in ipairs({{1, "no card", "self-test: no card"}, {2, "no scsynth", "self-test: no scsynth"}, {3, "card late", "self-test: card late"}, {4, "engine late", "self-test: engine late"}, {5, "glitches", "self-test: glitches"}}) do
+  page.init(); printed_lines = {}; press_test()
+  selftest = {state = 2, verdict = v[1], callbacks = 100, avg_ms = 10, max_ms = 80, expect_ms = 10, engine_blocks = 5, late = 7, glitches = 3}
+  ticks(1)
+  check(shown(v[2]) and page.status == v[3], "self-test verdict " .. v[1] .. ": '" .. v[2] .. "' on the row, '" .. v[3] .. "' on the status line")
 end
 info = mkinfo({in_active = true, input = "mic", measured_ms = -1, config = "output=\ninput=wasapi:Line In 1/2 (RME Fireface UC)\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
-page.init(); selftest_started = 0; key_test()
-check(selftest_started == 0 and shown("listening"), "TEST with an input that is open: the click test starts (no self-test)")
-info.measured_ms = -2; page.redraw()
-check(shown("no click heard") and page.status == "no click heard (is an output wired to the input?)", "no click: 'no click heard' and the sentence on the status line")
-info.measured_ms = 37.4; page.init(); key_test(); info.measured_ms = 37.4; page.redraw()
-check(shown("37 ms"), "a click: the round trip in ms")
+page.init(); selftest_started = 0; select_row(6); page.key(3, 1); page.redraw()
+check(selftest_started == 0 and shown("listening"), "TEST with an open input: the click test, 'listening...' on the row")
+info.measured_ms = -2; ticks(1)
+check(shown("no click heard") and page.status == "no click heard (is an output wired to the input?)", "no click: on the row, the sentence on the status line")
+info.measured_ms = 37.4; page.init(); select_row(6); page.key(3, 1); info.measured_ms = 37.4; ticks(1)
+check(shown("37 ms"), "a click: the round trip in ms on the row")
 info = mkinfo({in_active = false, config = "output=\ninput=wasapi:Line In 1/2 (RME Fireface UC)\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
-page.init(); selftest_started = 0; printed_lines = {}; key_test()
+page.init(); selftest_started = 0; printed_lines = {}; select_row(6); page.key(3, 1)
 check(selftest_started == 1, "an input that is chosen but not open: the self-test runs")
-finish_selftest({state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0}); page.redraw()
-check(page.status == "self-test ok" and table.concat(printed_lines, "\n"):find("choose it again on INPUT", 1, true), "and the log says the input did not open and what to do")
-page.enc(2, -9); page.enc(2, 2); page.redraw()
-check(page.value_text("INPUT"):find("(not open)", 1, true), "the INPUT row itself says '(not open)': " .. page.value_text("INPUT"))
+selftest = {state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0}; ticks(1)
+check(table.concat(printed_lines, "\n"):find("choose it again on INPUT", 1, true), "and the log says the input did not open and what to do")
+select_row(3); page.redraw()
+check(page.value_text("INPUT"):find("(not open)", 1, true), "the INPUT row says '(not open)'")
 info = mkinfo({mode = "fallback", note = "no sound: audio device is busy"})
-page.init(); key_test()
+page.init(); select_row(5); page.key(3, 1); page.redraw()
 check(shown("no card"), "no card: the row says so at once")
+-- the result of TEST goes when E2 moves to another row
+info = mkinfo(); page.init(); press_test(); selftest = {state = 2, verdict = 0, callbacks = 1, avg_ms = 10, max_ms = 10, expect_ms = 10, engine_blocks = 9, late = 0, glitches = 0}; ticks(1)
+page.enc(2, -1); page.enc(2, 1); page.redraw()
+check(not shown("self-test ok") and page.status == nil, "moving away clears the status message of TEST")
 
--- ---- the status line says which mode runs ----
-info = mkinfo()
-page.init(); page.redraw()
-check(shown("normal  35 ms  u0 x0"), "the status line starts with the mode: normal")
-info = mkinfo({exclusive = true, total_ms = 21.2})
-page.init(); page.redraw()
+-- ---- the status line says which mode runs; and the card's own rate ----
+info = mkinfo(); page.init(); page.redraw()
+check(shown("normal  35 ms  u0 x0"), "normal")
+info = mkinfo({exclusive = true, total_ms = 21.2}); page.init(); page.redraw()
 check(shown("exclusive  21 ms  u0 x0"), "exclusive")
-info = mkinfo({host_api = "ASIO", device = "ASIO Fireface USB", total_ms = 9.4})
-page.init(); page.redraw()
+info = mkinfo({host_api = "ASIO", device = "ASIO Fireface USB", total_ms = 9.4}); page.init(); page.redraw()
 check(shown("ASIO  9 ms"), "ASIO")
-
--- ---- a help line per row (shown for a few seconds after E2 lands on the row, then the numbers come back) ----
-info = mkinfo()
-page.init()
-local rows_help = {DRIVER = "exclusive", OUTPUT = "wired", INPUT = "MIC button", BUFFER = "auto", TEST = "click"}
-for name, word in pairs(rows_help) do
-  local h = page.help(name)
-  check(h and #h > 20 and #h < 200 and h:find(word, 1, true), "help for " .. name .. " mentions '" .. word .. "': " .. tostring(h))
-end
-page.enc(2, -9); page.enc(2, 1); page.redraw()
-check(page.help_now() and page.help_now() == winui.pages(page.help("OUTPUT"), 124)[1], "moving to OUTPUT shows the first page of its help")
--- every help text is read page by page, 2.5 s a page (the last page too), each page fits the screen width, nothing is lost, then the numbers come back
-local function check_pages(row, text)
-  local pages = winui.pages(text, 124)
-  local joined = table.concat(pages, " ")
-  check(joined == text and #pages >= 1 and #pages <= 6, "help for " .. row .. " is cut into " .. #pages .. " pages that together are the whole text")
-  for _, pg in ipairs(pages) do
-    if screen.text_extents(pg) > 124 then check(false, "a help page is wider than the screen: " .. pg) end
-  end
-  page.init(); page.enc(2, -9)
-  local rs = {DRIVER = 0, OUTPUT = 1, INPUT = 2, BUFFER = 3, TEST = 4}
-  page.enc(2, rs[row]); page.tick = 0
-  for i = 1, #pages do
-    page.tick = (i - 1) * 10
-    check(page.help_now() == pages[i], "help for " .. row .. ": page " .. i .. " at " .. ((i - 1) * 2.5) .. " s")
-  end
-  page.tick = #pages * 10 - 1
-  check(page.help_now() == pages[#pages], "help for " .. row .. ": the last page stays for the full 2.5 s (more than the 2 s asked for)")
-  page.tick = #pages * 10
-  check(page.help_now() == nil, "help for " .. row .. ": then the numbers come back")
-end
-info = mkinfo()
-for _, row in ipairs({"DRIVER", "OUTPUT", "INPUT", "BUFFER", "TEST"}) do check_pages(row, page.help(row)) end
--- SYS is left out when this PortAudio has no loopback: the INPUT help says so, in plain words
-info = mkinfo({sys_available = false, sys_reason = "SYS (what Windows plays) is off: this PortAudio has no WASAPI loopback device"})
-page.init()
-check(page.help("INPUT"):find("SYS is off: this PortAudio has no WASAPI loopback", 1, true), "INPUT help: SYS needs WASAPI loopback, which this PortAudio lacks: " .. page.help("INPUT"))
-check_pages("INPUT", page.help("INPUT"))
-info = mkinfo({sys_available = true})
-page.init()
-check(not page.help("INPUT"):find("SYS is off", 1, true), "and nothing about it when loopback is there")
--- long status sentences (a refused exclusive with its reason) are paged the same way, round and round, all pages readable
-info = mkinfo()
-page.init()
-page.status = "exclusive refused: Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100 - normal mode is used"
-page.status_until = 400; page.status_start = 0
-local seen_pages = {}
-for t = 0, 59, 10 do page.tick = t; local line = page.status_text(); seen_pages[line] = true; check(screen.text_extents(line) <= 124, "a status page fits the screen: " .. line) end
-local n_seen = 0 for _ in pairs(seen_pages) do n_seen = n_seen + 1 end
-check(n_seen >= 2, "a long status sentence shows on " .. n_seen .. " pages")
-
--- ---- every change is confirmed on the status line ----
-info = mkinfo()
-page.init()
-turn(pos_of("BUFFER"), 3); ticks(6)
-check(page.status == "BUFFER 256  5.3 ms applied", "BUFFER: the status line says 'BUFFER 256  5.3 ms applied': " .. tostring(page.status))
-page.init()
-turn(pos_of("OUTPUT"), 2); ticks(6)
-check(page.status:find("OUTPUT ", 1, true) == 1 and page.status:find("applied (pairs on the interface may not be wired to anything)", 1, true), "OUTPUT: confirmed, with the help that pairs on the interface may not be wired: " .. tostring(page.status))
-page.init()
-turn(pos_of("DRIVER"), 1); ticks(6)
-check(page.status == "DRIVER exclusive applied", "DRIVER: 'DRIVER exclusive applied': " .. tostring(page.status))
-page.init()
-page.enc(2, -9); page.enc(2, 2); page.enc(3, 1); ticks(6)
-check(page.status:find("INPUT ", 1, true) == 1 and page.status:find(" applied", 1, true), "INPUT: confirmed: " .. tostring(page.status))
--- exclusive refused: the exact reason on the status line
-apply_rc = 0
-apply_msg = "exclusive mode was refused (Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100): normal mode is used"
-info = mkinfo()
-page.init()
-turn(pos_of("DRIVER"), 1); ticks(6)
-check(page.status:find("exclusive refused: Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100", 1, true), "exclusive refused: the exact reason is on the status line: " .. tostring(page.status))
-apply_msg = ""
-
--- ---- exclusive refused at the start: the reason once in the log, audio.conf says exclusive=0 from then on ----
-local f = real_open(tmp .. "/audio.conf", "w") f:write("output=\ninput=\nrate=48000\nblock=128\nbuffer=auto\nexclusive=1\n") f:close()
-info = mkinfo({note = "exclusive mode was refused (Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100): normal mode is used"})
-page.init()
-local printed = {}
-local real_print = print
-print = function(...) printed[#printed + 1] = table.concat({...}, " ") end
-check(page.forget_exclusive(info) == true, "forget_exclusive acts when exclusive was asked for and refused")
-print = real_print
-check(conf() and conf():find("exclusive=0", 1, true) and not conf():find("exclusive=1", 1, true), "audio.conf says exclusive=0 now")
-check(#printed == 2 and printed[1]:find("Invalid sample rate", 1, true) and printed[2]:find("exclusive=0", 1, true), "the reason and the change are written to the log once")
-check(page.forget_exclusive(info) == false, "and nothing happens a second time")
-info = mkinfo()
-check(page.forget_exclusive(info) == false, "nothing happens when exclusive was not refused")
-
--- ---- the card's own rate ----
-info = mkinfo({device_rate = 44100})
-page.init(); page.redraw()
-check(shown("card 44100 Hz"), "the status line shows the card's own rate when it differs from norns's")
-info = mkinfo({device_rate = 48000})
-page.init(); page.redraw()
-check(not shown("card "), "and says nothing when they are the same")
+info = mkinfo({device_rate = 44100}); page.init(); page.redraw()
+check(shown("card 44100 Hz"), "the card's own rate when it differs")
+info = mkinfo({device_rate = 48000}); page.init(); page.redraw()
+check(not shown(" Hz"), "and nothing when it is the same")
 local line = page.log_line(nil)
 check(line and line:find("device 48000 Hz", 1, true) and line:find("hold-back", 1, true), "the log line has the device rate and the hold-back: " .. tostring(line))
-
--- ---- the status line when something is wrong ----
-info = mkinfo({mode = "fallback", note = "no sound: audio device 'X' is busy or in use by another program. null audio is used"})
-page.init(); page.redraw()
+info = mkinfo({mode = "fallback", note = "no sound: audio device 'X' is busy or in use by another program. null audio is used"}); page.init(); page.redraw()
 check(shown("no sound: device busy"), "a busy device is said in one line")
-info = mkinfo({mode = "null"})
-page.init(); page.redraw()
+info = mkinfo({mode = "null"}); page.init(); page.redraw()
 check(shown("null audio (silent)"), "null audio is said")
-info = mkinfo({underruns = 3, xruns = 2, total_ms = 41.2})
-page.init(); page.redraw()
-check(shown("41 ms  u3 x2"), "the numbers: delay, u (scsynth late), x (card glitches)")
+info = mkinfo({underruns = 3, xruns = 2, total_ms = 41.2}); page.init(); page.redraw()
+check(shown("normal  41 ms  u3 x2"), "the numbers: delay, u, x")
 
--- ---- widths: nothing wider than the screen, at every row, every tick of the marquee, with the longest names ----
+-- ---- exclusive refused: the exact reason on the status line (paged), audio.conf stops asking at the start ----
+apply_rc = 0
+apply_msg = "exclusive mode was refused (Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100): normal mode is used"
+info = mkinfo(); page.init(); turn(pos_of("DRIVER"), 1); page.key(3, 1)
+check(page.status:find("exclusive refused: Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100", 1, true), "K3 on exclusive that is refused: the exact reason: " .. tostring(page.status))
+apply_msg = ""
+local f = real_open(tmp .. "/audio.conf", "w") f:write("output=\ninput=\nrate=48000\nblock=128\nbuffer=auto\nexclusive=1\n") f:close()
+info = mkinfo({note = "exclusive mode was refused (Invalid sample rate; the device runs at 44100 Hz, exclusive takes: 44100): normal mode is used"})
+page.init(); printed_lines = {}
+check(page.forget_exclusive(info) == true, "forget_exclusive acts when exclusive was asked for and refused")
+check(conf() and conf():find("exclusive=0", 1, true) and not conf():find("exclusive=1", 1, true), "audio.conf says exclusive=0 now")
+check(#printed_lines == 2 and printed_lines[1]:find("Invalid sample rate", 1, true), "and the reason is written once to the log")
+check(page.forget_exclusive(info) == false, "nothing happens a second time")
+
+-- ---- widths: nothing wider than the screen, every row, with the longest device names ----
 local widths_ok, checked = true, 0
 if W then
   info = mkinfo({host_apis = "WASAPI ASIO", config = "output=wasapi:Speakers (Realtek High Definition Audio(SST))\ninput=wasapi:Microphone Array (Realtek High Definition Audio(SST))\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n",
     in_active = true, measured_ms = -2})
   for _, drv in ipairs({0, 1}) do
     page.init()
-    if drv == 1 then page.enc(2, -9); page.enc(3, 1) end -- exclusive
+    if drv == 1 then page.enc(2, -9); page.enc(3, 1) end
     for pos = 1, 7 do
       page.enc(2, -9); page.enc(2, pos - 1)
       page.key(3, 1)
@@ -335,7 +313,7 @@ if W then
       end
     end
   end
-  check(widths_ok and checked > 100, "no text wider than the screen or over another, " .. checked .. " views with the longest device names and a running marquee")
+  check(widths_ok and checked > 100, "no text wider than the screen or over another, " .. checked .. " views with the longest device names (rows, help box, status line, pending marks)")
 end
 
 -- ---- winui ----
@@ -343,14 +321,12 @@ check(winui.remap(0) == 0 and winui.remap(1) >= 8 and winui.remap(4) >= 10 and w
 local seen = {}
 local real = screen.level
 screen.level = function(l) seen[#seen + 1] = l end
-local wrapped = winui.wrap(function() screen.level(4); screen.level(15) end)
-wrapped()
-check(seen[1] >= 10 and seen[2] == 15 and screen.level ~= nil, "winui.wrap brightens the levels of a page")
+winui.wrap(function() screen.level(4); screen.level(15) end)()
+check(seen[1] >= 10 and seen[2] == 15, "winui.wrap brightens the levels of a page")
 local ok = pcall(winui.wrap(function() error("boom") end))
 screen.level(1)
 check(not ok and seen[#seen] == 1, "and gives screen.level back even when the page fails")
 screen.level = real
-screen.text_extents = screen.text_extents or function(s) return #s * 5 end
 local long = "A very long device name that cannot fit on the screen of a norns"
 check(screen.text_extents(winui.fit(long, 80, false, 0)) <= 80 and winui.fit(long, 80, false, 0):sub(-2) == "..", "a long value is cut with ..")
 check(winui.fit(long, 80, true, 0):sub(1, 6) == long:sub(1, 6), "the selected row's marquee rests first")

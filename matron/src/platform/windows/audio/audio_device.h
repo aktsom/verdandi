@@ -70,6 +70,7 @@ typedef struct {
     int (*open_sys)(unsigned rate, unsigned frames, char *name, size_t namen, char *err, size_t errn);
     void (*close_sys)(void);
     void (*describe)(char *out, size_t n); /* "PortAudio ...; host APIs: ..." for the log */
+    int has_direct_sys;                    /* open_sys can record the system's sound without a loopback device in the list (the direct WASAPI loopback of the Windows build) */
 } vaud_backend;
 
 typedef struct {
