@@ -1,5 +1,5 @@
 // Verdandi (Windows build): the start-up check of the plug-in packs. every pack that Verdandi seeds into <home>/extensions carries UNITS.txt, the UGen names its plug-in files define (written by the build
-// from the sources). after the class library is compiled every one of them has to be a class sclang knows: an engine that calls a UGen without its class stops with "Class 'X' not found" (and, before
+// from the sources). after the class library is compiled every one of them has to be a class sclang knows: an engine that calls a UGen without its class stops with a missing-class error (and, before
 // VerdandiSafeInit.sc, took the whole start-up down). ONE plain line in the log names what is missing; the full list is in <home>/logs/pack-check.txt. nothing is changed.
 VerdandiPackCheck {
 	*initClass {
@@ -38,7 +38,7 @@ VerdandiPackCheck {
 		shown = missing.keep(12).join(", ");
 		line = "### plug-in packs: " ++ missing.size ++ " UGens have no class in sclang: " ++ shown
 			++ (missing.size > 12).if { ", and " ++ (missing.size - 12) ++ " more" } { "" }
-			++ ". a script whose engine uses one of them stops with Class 'X' not found (packs: " ++ packs.asArray.sort.join(", ") ++ "; full list: logs/pack-check.txt)";
+			++ ". a script whose engine uses one of them stops with a missing-class error (packs: " ++ packs.asArray.sort.join(", ") ++ "; full list: logs/pack-check.txt)";
 		line.postln;
 		path = home +/+ "logs" +/+ "pack-check.txt";
 		try {

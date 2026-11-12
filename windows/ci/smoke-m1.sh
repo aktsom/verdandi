@@ -218,8 +218,9 @@ chk_packs() {
     [ ! -f "$H/extensions/mi-UGens/plugins/Old.txt" ] && echo "found: the new mi-UGens does not hold the old file" || { echo "NOT FOUND: the old file is still in extensions/mi-UGens"; bad=1; }
     [ -f "$H/extensions/MyOwnExt/MyOwnExt.sc" ] && echo "found: the owner's own folder in extensions was not touched" || { echo "NOT FOUND: MyOwnExt untouched"; bad=1; }
     has "$S" "Class tree inited" "sclang initialised its class tree with the packs" || bad=1
-    if grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" "$S" | head -5 | grep -q .; then
-        echo "NOT FOUND (must be absent): class not found / duplicate / initClass failure in sclang.log:"; grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" "$S" | head -10; bad=1
+    # (the pack check line of VerdandiPackCheck.sc is not an error: it is left out)
+    if grep -a -v "^### plug-in packs" "$S" | grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" | head -5 | grep -q .; then
+        echo "NOT FOUND (must be absent): class not found / duplicate / initClass failure in sclang.log:"; grep -a -v "^### plug-in packs" "$S" | grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" | head -10; bad=1
     else
         echo "found: no 'Class not found', no 'duplicate Class', no initClass failure in sclang.log"
     fi

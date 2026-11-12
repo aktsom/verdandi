@@ -40,6 +40,8 @@ echo "$B" | grep -q "MAIN_RAN" && check ok "(2) the interpreter runs the script"
 echo "$B" | grep -q "^### plug-in packs: 2 UGens have no class in sclang: MiNoSuchPlaits (BadPack), DecimatorNot (BadPack)" && check ok "(3) one line names the UGens without a class (SinOsc and Saw are known)" || { check FAIL "(3) the pack line"; echo "$B" | grep "plug-in packs"; }
 [ "$(echo "$B" | grep -c '^### plug-in packs')" = 1 ] && check ok "(3) it is one line" || check FAIL "(3) it is one line"
 [ "$(wc -l < "$T/home/logs/pack-check.txt")" = 2 ] && check ok "(3) the full list is in logs/pack-check.txt" || check FAIL "(3) the full list"
+# the pack line must not look like the error it warns about (CI greps the log for "Class 'X' not found", and so does the Lua class check)
+echo "$B" | grep "^### plug-in packs" | grep -qE "Class '?[A-Za-z0-9_]+'? not found" && check FAIL "(3) the pack line contains a 'Class X not found' text" || check ok "(3) the pack line is not mistaken for a class-not-found error"
 rm -rf "$T/home/extensions/BadPack"
 C="$(runs safe.yaml)"
 echo "$C" | grep -q "plug-in packs: every UGen of the packs has its class" && check ok "(3) all UGens known: the line says so" || check FAIL "(3) all known"
