@@ -81,16 +81,24 @@ if clone https://github.com/supercollider/sc3-plugins.git "$SC3P_TAG" "$SC3P_SRC
     git -C "$SC3P_SRC" describe --tags --always 2>/dev/null | tee -a "$REPORT"
     build_pack sc3-plugins "$SC3P_SRC" -DQUARKS=OFF
     dest="$OUT/seed/sc3-plugins"
-    # class files and the licences, per source directory; a directory whose targets all failed keeps its classes out (they would call UGens that are not there)
-    find "$SC3P_SRC/source" -type d \( -name Classes -o -name classes -o -name sc \) 2> /dev/null | while read -r d; do
-        rel="${d#"$SC3P_SRC"/source/}"
-        top="${rel%%/*}"
-        if grep -q "source/$top/" "$OUT/logs/failed-sc3-plugins.txt" 2> /dev/null && ! find "$WORK/build-sc3-plugins" -path "*$top*" -name '*.scx' 2> /dev/null | grep -q .; then
+    # class files, per source directory: every .sc file ONCE, with its path below the directory (copying "sc" and "sc/classes" as folders defined every class twice: sclang stopped at "duplicate Class found").
+    # a directory whose plug-in did not build keeps its classes out (they would call UGens that are not there)
+    for top_dir in "$SC3P_SRC"/source/*/; do
+        top=$(basename "$top_dir")
+        if grep -q "source/$top/" "$OUT/logs/failed-sc3-plugins.txt" 2> /dev/null; then
             say "classes of $top left out (its plug-in did not build)"
             continue
         fi
-        mkdir -p "$dest/classes/$top" && cp -r "$d"/. "$dest/classes/$top/"
+        (
+            cd "$top_dir" || exit 0
+            find . -name '*.sc' -not -ipath '*HelpSource*' -not -ipath '*/help/*' -not -ipath '*/test*' | while read -r f; do
+                mkdir -p "$dest/classes/$top/$(dirname "$f")" && cp "$f" "$dest/classes/$top/$f"
+            done
+        )
     done
+    # a class name defined in two files of the pack is what stops sclang: say so here, in the report, not only in the start test
+    grep -rhoE "^[A-Z][A-Za-z0-9_]* *(:|\{)" "$dest/classes" --include='*.sc' 2> /dev/null | sed -E 's/ *(:|\{)$//' | sort | uniq -d > "$OUT/logs/duplicate-classes.txt"
+    if [ -s "$OUT/logs/duplicate-classes.txt" ]; then say "WARNING: class names defined twice in the pack: $(head -n 10 "$OUT/logs/duplicate-classes.txt" | tr '\n' ' ')"; else say "no class name is defined twice in the sc3-plugins pack"; fi
     cp "$SC3P_SRC"/COPYING* "$SC3P_SRC"/LICENSE* "$SC3P_SRC"/README* "$dest/" 2> /dev/null || true
     find "$SC3P_SRC/source" -maxdepth 2 \( -iname 'COPYING*' -o -iname 'LICENSE*' \) -exec sh -c 'for f; do mkdir -p "$0/licences/$(basename "$(dirname "$f")")" && cp "$f" "$0/licences/$(basename "$(dirname "$f")")/"; done' "$dest" {} +
     git -C "$SC3P_SRC" rev-parse HEAD > "$dest/SOURCE-REVISION.txt" 2> /dev/null
