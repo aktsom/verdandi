@@ -11,6 +11,7 @@
 
 #include "grid_core.h"
 #include "serialosc_core.h"
+#include "platform/windows/midi/midi_win.h" /* the C declarations of vgrid_win_serialosc_status / _stop (C linkage: weaver.cc calls them) */
 
 namespace {
 
