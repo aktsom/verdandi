@@ -34,7 +34,7 @@ DEFS=(-DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONO
 # shellcheck disable=SC2206
 DEFS+=(${XC_DEFS:-})
 files="${XC_FILES:-}"
-[ -n "$files" ] || files="$(grep -v '^#' windows/cmake/norns-sources.txt | grep -v '^$')"
+[ -n "$files" ] || files="$(grep -v '^#' windows/cmake/norns-sources.txt | grep -v '^$') windows/ws-wrapper/ws_wrapper_win.c"
 ok=0; bad=0
 # XC_LINK=1: compile to objects (build/xlink) and report the symbols that no object defines and no known library provides
 mode=-fsyntax-only; [ "${XC_LINK:-0}" = 1 ] && { mkdir -p build/xlink; rm -f build/xlink/*.o; }

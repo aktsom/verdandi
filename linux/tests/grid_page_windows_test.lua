@@ -48,6 +48,53 @@ page.init(); page.redraw()
 check(shown("none") and page.help_full():find("Plug it in", 1, true), "no grid: says so and what to do")
 check(page.key(2, 1) == "back", "K2 leaves")
 
+
+-- ---- M6: serialosc: a row, K3 asks once, the second K3 stops it; administrator rights are said in plain words with the exact command; AUTO STOP is off by default ----
+local so = "running=1\nso_note=serialosc is running as a Windows service (serialosc). It keeps the grids' serial ports, so Verdandi cannot open them. K3 stops it (asks once). Verdandi needs no serialosc.\nso_prevent=If serialosc starts again by itself: it is a Windows service. In an administrator Command Prompt: sc stop serialosc then sc config serialosc start= demand (start type manual).\nso_proc=100 serialoscd.exe\nso_service=serialosc (running)\n"
+local stops, stop_left = 0, 0
+_norns.serialosc_status = function() return so end
+_norns.serialosc_stop = function() stops = stops + 1; return stop_left end
+status = "note=COM6: another program has this port open (serialosc? a serial terminal? another app that talks to the grid?). Close it there; Verdandi opens the grid when the port is free\n"
+page.init(); page.redraw()
+local rr = page.rows()
+local srow
+for i, row in ipairs(rr) do if row.kind == "serialosc" then srow = i end end
+check(srow ~= nil and rr[srow].label == "SERIALOSC" and rr[srow].value == "running", "a SERIALOSC row while serialosc runs")
+check(srow <= 2, "and it is near the top, with the held port")
+select_row(srow); page.redraw()
+check(page.help_full():find("K3 stops it", 1, true) and page.help_full():find("sc config serialosc start= demand", 1, true), "the help: what it is and how to keep it from coming back")
+page.key(3, 1); page.redraw()
+check(stops == 0 and shown("K3 AGAIN"), "the first K3 only asks (once)")
+page.key(3, 1); page.redraw()
+check(stops == 1, "the second K3 stops it")
+page.init(); select_row(srow); page.key(3, 1); page.enc(2, 1); page.enc(2, -1); page.key(3, 1)
+check(stops == 1, "moving to another row clears the question: one K3 asks again")
+so = so .. "so_admin=sc stop serialosc   (in an administrator Command Prompt)\nso_last=the service serialosc needs administrator rights to stop. ended serialoscd.exe (100). \n"
+stop_left = 1
+page.init(); select_row(srow)
+page.key(3, 1); page.key(3, 1); page.redraw()
+local hh = page.help_full()
+check(hh:find("administrator", 1, true) and hh:find("sc stop serialosc", 1, true), "needs administrator rights: plain words with the exact command: " .. hh)
+check(not hh:find("elevat", 1, true), "never elevates")
+so = "running=0\n"
+page.init()
+srow = nil
+for i, row in ipairs(page.rows()) do if row.kind == "serialosc" then srow = i end end
+check(srow == nil, "no serialosc: no row")
+so = "running=1\nso_note=serialosc is running.\nso_prevent=x\n"
+page.init()
+local arow
+for i, row in ipairs(page.rows()) do if row.kind == "autostop" then arow = i end end
+check(arow ~= nil and page.rows()[arow].value == "off", "AUTO STOP is there and off by default")
+select_row(arow)
+check(page.help_full():find("stops serialosc by itself", 1, true) and page.help_full():find("never", 1, true), "its help says what it does and that nothing else is touched")
+local saved = {}
+page.save_setting = function(key, value) saved[key] = value end
+page.enc(3, 1)
+check(saved.serialosc_autostop == "1", "E3 on: serialosc_autostop=1 is saved")
+page.enc(3, -1)
+check(saved.serialosc_autostop == "0", "E3 off: serialosc_autostop=0")
+
 -- the DEVICES list
 package.loaded["core/keyboard"] = {keymap = {us = true}, selected_map = "us"}
 midi = {devices = {}, vports = {}, update_devices = function() end}

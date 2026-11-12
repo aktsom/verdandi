@@ -24,6 +24,8 @@
 #include "platform/windows/audio/exit_win.h"
 #include "platform/windows/midi/midi_win.h"
 
+bool vgrid_win_serialosc_present(void);
+
 DEFINE_GUID(VGRID_GUID_COMPORT, 0x86e0d1e0L, 0x8089, 0x11d0, 0x9c, 0xe4, 0x08, 0x00, 0x3e, 0x30, 0x1f, 0x73);
 
 extern "C" char *(*monome_platform_serial_hook)(const char *path);
@@ -113,13 +115,25 @@ long io_read(void *ctx, uint8_t *d, size_t n, int ms) {
     return ReadFile(h, d, (DWORD)n, &r, NULL) ? (long)r : -1;
 }
 
+std::string conf_value(const char *key);
+
 int win_probe(const char *port, char *why, size_t whyn) {
     std::string path = std::string("\\\\.\\") + port;
     HANDLE h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD e = GetLastError();
         snprintf(why, whyn, "Windows error %lu", (unsigned long)e);
-        return (e == ERROR_ACCESS_DENIED || e == ERROR_SHARING_VIOLATION) ? 1 : 2;
+        bool held = e == ERROR_ACCESS_DENIED || e == ERROR_SHARING_VIOLATION;
+        // serialosc has the port and the owner switched on "stop serialosc by itself" (audio.conf serialosc_autostop=1, off by default): it is stopped, at most once a minute, and the port is tried again
+        static ULONGLONG last_auto;
+        if (held && conf_value("serialosc_autostop") == "1" && GetTickCount64() - last_auto > 60000 && vgrid_win_serialosc_present()) {
+            last_auto = GetTickCount64();
+            fprintf(stderr, "grid: %s is held and serialosc is running: stopping serialosc (serialosc_autostop=1)\n", port);
+            vgrid_win_serialosc_stop();
+            Sleep(500);
+            h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        }
+        if (h == INVALID_HANDLE_VALUE) return held ? 1 : 2;
     }
     vgrid::Port p;
     {
@@ -153,6 +167,8 @@ int win_probe(const char *port, char *why, size_t whyn) {
     if (result == 0) Sleep(100); // the driver lets go of the port
     return result;
 }
+
+std::string conf_value(const char *key);
 
 char *serial_hook(const char *path) {
     std::lock_guard<std::mutex> g(TABLE_LOCK);

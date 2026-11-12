@@ -48,6 +48,24 @@ assemble() {
     done
     rm -rf "$APP/sc/tests" "$APP/update/pack.sh" "$APP/update/test-update.sh" "$APP/update/update.sh"
     cp "$REPO/windows/pack/matronrc.lua" "$APP/matronrc.lua"
+    # M6: maiden (built on Linux: windows/ci/build-maiden.sh), the portable tools (windows/ci/fetch-tools.sh: busybox.exe, MinGit) and the folder where plug-in packs for Windows are seeded from.
+    # a missing part is said, not fatal: the checks of the smoke test then fail for it
+    if [ -n "${MAIDEN_DIR:-}" ] && [ -f "$MAIDEN_DIR/maiden.exe" ]; then
+        mkdir -p "$APP/maiden" && cp -r "$MAIDEN_DIR"/. "$APP/maiden/" || return 1
+        mkdir -p "$APP/licenses" && cp "$APP/maiden/LICENSE-maiden.txt" "$APP/licenses/maiden-LICENSE.txt" 2> /dev/null || true
+        echo "found: maiden\\maiden.exe and its web app"
+    else
+        echo "NOTE: no maiden in this zip (MAIDEN_DIR='${MAIDEN_DIR:-}')"
+    fi
+    if [ -n "${TOOLS_DIR:-}" ] && [ -f "$TOOLS_DIR/busybox.exe" ]; then
+        cp -r "$TOOLS_DIR"/. "$APP/" || return 1
+        echo "found: busybox.exe and tools\\mingit"
+    else
+        echo "NOTE: no busybox and MinGit in this zip (TOOLS_DIR='${TOOLS_DIR:-}')"
+    fi
+    mkdir -p "$APP/extensions-seed"
+    cp "$REPO/windows/pack/extensions-seed-README.txt" "$APP/extensions-seed/README.txt"
+    [ -f "$APP/ws-wrapper.exe" ] && echo "found: ws-wrapper.exe" || echo "NOTE: no ws-wrapper.exe"
     # the ASIO build: its PortAudio takes the place of the MSYS2 one (the same file name, the loader goes by it), the licence text of the SDK, the notices and the sources
     if [ "$FLAVOR" = asio ]; then
         [ -f "$ASIO_DIR/libportaudio-2.dll" ] || { echo "no libportaudio-2.dll in $ASIO_DIR"; return 1; }

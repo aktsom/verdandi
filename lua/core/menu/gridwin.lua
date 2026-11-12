@@ -20,13 +20,73 @@ local function parse(text)
   return st
 end
 
-local function refresh() m.st = parse(_norns.grid_status and _norns.grid_status() or "") end
+-- M6: serialosc (a process or a service) holds grid ports: what Windows says about it
+local function parse_so(text)
+  local so = {running = false, procs = {}, services = {}}
+  for line in tostring(text or ""):gmatch("[^\n]+") do
+    local k, v = line:match("^([%w_]+)=(.*)$")
+    if k == "running" then so.running = v == "1"
+    elseif k == "so_note" then so.note = v
+    elseif k == "so_prevent" then so.prevent = v
+    elseif k == "so_admin" then so.admin = v
+    elseif k == "so_last" then so.last = v
+    elseif k == "so_proc" then so.procs[#so.procs + 1] = v
+    elseif k == "so_service" then so.services[#so.services + 1] = v end
+  end
+  return so
+end
+
+local CONF = "/home/we/audio.conf"
+-- one key of audio.conf (the pages keep keys they do not know)
+function m.read_setting(key)
+  local f = io.open(CONF)
+  if not f then return nil end
+  local v
+  for line in f:lines() do
+    local k, val = line:match("^([%w_]+)=(.*)$")
+    if k == key then v = val end
+  end
+  f:close()
+  return v
+end
+function m.save_setting(key, value)
+  local lines, found = {}, false
+  local f = io.open(CONF)
+  if f then
+    for line in f:lines() do
+      local k = line:match("^([%w_]+)=")
+      if k == key then lines[#lines + 1] = key .. "=" .. value; found = true else lines[#lines + 1] = line end
+    end
+    f:close()
+  end
+  if not found then lines[#lines + 1] = key .. "=" .. value end
+  local tmp = CONF .. ".tmp"
+  local o = io.open(tmp, "w")
+  if not o then return false end
+  o:write(table.concat(lines, "\n"), "\n")
+  o:close()
+  return os.rename(tmp, CONF)
+end
+
+local function refresh()
+  m.st = parse(_norns.grid_status and _norns.grid_status() or "")
+  m.so = parse_so(_norns.serialosc_status and _norns.serialosc_status() or "")
+end
 
 local function rows()
   local r = {}
   for _, n in ipairs(m.st.notes) do
     local port, why = n:match("^(.-): (.*)$")
     r[#r + 1] = {kind = "note", label = port or n, value = "problem", help = why or n}
+  end
+  if m.so and m.so.running then
+    local h = (m.so.note or "serialosc is running.")
+    if m.so.admin then
+      h = h .. " It needs administrator rights to stop: type this in an administrator Command Prompt: " .. m.so.admin
+    end
+    if m.so.last then h = h .. " Last time: " .. m.so.last end
+    h = h .. " " .. (m.so.prevent or "")
+    r[#r + 1] = {kind = "serialosc", label = "SERIALOSC", value = m.asked and "K3 AGAIN" or (m.so_msg or "running"), help = h}
   end
   for _, g in ipairs(m.st.grids) do
     local size = g.cols == 0 and "arc" or (g.cols .. "x" .. g.rows)
@@ -35,6 +95,12 @@ local function rows()
   end
   r[#r + 1] = {kind = "info", label = "GRIDS", value = (#m.st.grids == 0) and "none" or (#m.st.grids .. " found"),
     help = (#m.st.grids == 0) and "No grid found. Plug it in with its USB cable. A serial port that is not a monome is left alone (see below); to use one anyway put its serial in monome_serial= in audio.conf." or "Every grid listed above is open. Plug in or pull out as you like: the list follows."}
+  if _norns.serialosc_status then
+    local on = m.read_setting("serialosc_autostop") == "1"
+    if m.autostop ~= nil then on = m.autostop end
+    r[#r + 1] = {kind = "autostop", label = "AUTO STOP", value = on and "on" or "off",
+      help = "E3 on: when Verdandi finds a grid's port held by serialosc, it stops serialosc by itself (at most once a minute) and opens the grid. Only serialosc's own programs and service are ever stopped, never anything else. Off by default."}
+  end
   for _, o in ipairs(m.st.others) do
     local port, why = o:match("^(.-): (.*)$")
     r[#r + 1] = {kind = "other", label = port or o, value = "not a monome", help = why or o}
@@ -56,7 +122,7 @@ end
 
 m.init = function()
   refresh()
-  m.pos, m.top, m.tick = 1, 1, 0
+  m.pos, m.top, m.tick, m.asked, m.so_msg, m.autostop = 1, 1, 0, false, nil, nil
   _menu.timer.time = 0.5
   _menu.timer.count = -1
   _menu.timer.event = function() m.timer() end
@@ -73,11 +139,33 @@ end
 
 m.key = function(n, z)
   if z == 1 and n == 2 then return "back" end
+  if z == 1 and n == 3 then
+    local row = rows()[m.pos]
+    if row and row.kind == "serialosc" then
+      if not m.asked then
+        m.asked = true -- asks once: the second K3 does it
+      else
+        m.asked = false
+        local left = _norns.serialosc_stop and _norns.serialosc_stop() or 0
+        m.so_msg = left == 0 and "stopped" or "not stopped"
+        refresh()
+      end
+      _menu.redraw()
+    end
+  end
 end
 
 m.enc = function(n, delta)
-  if n == 2 then
+  if n == 3 then
+    local row = rows()[m.pos]
+    if row and row.kind == "autostop" then
+      m.autostop = delta > 0
+      m.save_setting("serialosc_autostop", m.autostop and "1" or "0")
+      _menu.redraw()
+    end
+  elseif n == 2 then
     m.pos = util.clamp(m.pos + delta, 1, math.max(1, #rows()))
+    m.asked, m.so_msg = false, nil -- a question and a result belong to their row
     m.tick = 0
     _menu.redraw()
   end

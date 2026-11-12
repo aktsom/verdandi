@@ -15,6 +15,9 @@ void vgrid_win_monitor_deinit(void);
 void vgrid_win_poke(void);
 int vgrid_win_status(char *buf, size_t n);
 void vgrid_win_leds_off(void);
+/* serialosc (a process or a service) holds grid ports: its state for the grid page (key=value lines), stopping it (returns what is still running) */
+int vgrid_win_serialosc_status(char *buf, size_t n);
+int vgrid_win_serialosc_stop(void);
 /* the UDP port of the OSC input (audio.conf osc_in_port=, default 9201, 0 = off) */
 int vmidi_win_osc_port(void);
 /* the MIDI layer in one table for the DEVICES page: devices, virtual cables, notes ("name: text\n..."), the OSC port, the clock statistics, the last route test. one text, "key=value" lines */

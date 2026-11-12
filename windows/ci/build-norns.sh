@@ -34,7 +34,7 @@ launcher() {
 # the DLLs of norns.exe that are not Windows's own (ldd lists them recursively); the result is a flat folder
 collect() {
     mkdir -p "$OUT"
-    cp "$BLD/norns.exe" "$BLD/Verdandi.exe" "$OUT/" || return 1
+    cp "$BLD/norns.exe" "$BLD/Verdandi.exe" "$BLD/ws-wrapper.exe" "$OUT/" || return 1
     local n=0 dll
     while read -r dll; do
         [ -f "$dll" ] && cp -u "$dll" "$OUT/" && n=$((n + 1))

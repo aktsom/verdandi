@@ -236,6 +236,15 @@ grid_m5_ok() {
 }
 run "windows:monome grids (which serial ports are grids: the 128 by USB id, the 2011 256 by its FTDI serial, a generic FTDI port is not and is never opened; the serial from the instance id; two grids, replug on another COM port, a port held by another program, a monome that does not answer; the real libmonome against fake grids on pseudo terminals: sizes, serials, 16 LED levels, keys, all off, the Windows reader loop; the main window's size and place file)" grid_m5_ok
 run "windows:GRID PORTS page (grids by name, size, serial and port, problems with plain help, other ports left alone, the DEVICES entry; widths with the real font)" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/grid_page_windows_test.lua
+# ---- M6: maiden, serialosc, plug-ins (docs/port/phase-m6.md)
+m6_ok() {
+    g++ -std=c++17 -Wall -I matron/src linux/tests/serialosc_core_test.cpp -o "$T/serialosc_core_test" || return 1
+    "$T/serialosc_core_test" || return 1
+    cc -std=gnu11 -Wall -I windows/launcher linux/tests/plugin_heal_test.c -o "$T/plugin_heal_test" || return 1
+    "$T/plugin_heal_test"
+}
+run "windows:serialosc handling (exact image names only, a service before its processes, the plain note, the administrator command and how to keep it from coming back) and the plug-in kinds (only a PE x86-64 file is loaded: ELF, Mach-O, ARM are moved aside)" m6_ok
+run "windows:maiden probe of the CI against the Linux stack (maiden answers, a script with an accented, spaced name is installed from a zip over HTTP, the norns and sclang consoles on websockets answer, a page from another site gets no console; skipped when maiden is not built)" bash linux/tests/maiden_probe_test.sh
 link_pair_ok() {
     g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1
     local rc=0

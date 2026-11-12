@@ -305,3 +305,7 @@ Nothing is shipped in a product yet; these are the build inputs and what the M1 
 | `PaAsioStreamInfo` re-declared in `audio_backend_pa.c` | the channel selectors of the ASIO host API | PortAudio's public API struct (MIT); no SDK code |
 | awake (script by tehn, fetched by CI into `dust-seed/code`, test content only) | seeded example script | licence stated in its repository; **owner to check** before any public release |
 | WinMM (midiIn / midiOut), iphlpapi, ws2_32 | system DLLs of Windows, linked dynamically (Windows M4) | part of the operating system |
+| maiden (monome/maiden at the pinned commit) and its Go and node dependencies | built in CI, shipped as `maiden\maiden.exe` and `maiden\app\build` (Windows M6) | GPL-3.0 (maiden), see its go.sum and yarn.lock for the dependencies (as in the Linux list above) |
+| MinGit (git for Windows, minimal portable zip) | shipped unmodified as `tools\mingit` (Windows M6); source: github.com/git-for-windows/git | GPL-2.0 (and the licences of its parts) |
+| busybox-w32 (rmyorston) | shipped unmodified as `busybox.exe` (Windows M6); source: github.com/rmyorston/busybox-w32 | GPL-2.0 |
+| nng | linked into `ws-wrapper.exe` (Windows M6), as into norns.exe | MIT |

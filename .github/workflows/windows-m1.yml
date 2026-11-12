@@ -33,6 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  NONBLOCKING_CHECKS: 'm6-check-maiden m6-check-repl'
   SC_TAG: Version-3.14.1
   M0_REQUIRE: 'sc norns assemble m1'
   TAIL_LINES: '130'
@@ -109,9 +110,48 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+  # M6: maiden for Windows (cross-built on Linux: Go and static web files) and the portable tools (MinGit, busybox). Not fatal for the other jobs: the package then lacks them and its M6 checks say so
+  maiden:
+    name: maiden for Windows (Go server and web app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Build maiden
+        run: OUT="$PWD/maiden-win" B="$RUNNER_TEMP/maiden-build" windows/ci/build-maiden.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m6-maiden
+          path: maiden-win
+          retention-days: 14
+          if-no-files-found: error
+
+  tools:
+    name: portable tools (MinGit, busybox)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: OUT="$PWD/tools-win" windows/ci/fetch-tools.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m6-tools
+          path: tools-win
+          retention-days: 14
+          if-no-files-found: error
+
   package:
     name: Assemble, start headless, check
-    needs: [sc, norns]
+    needs: [sc, norns, maiden, tools]
+    if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
     timeout-minutes: 30
     defaults:
@@ -127,8 +167,18 @@ jobs:
         with:
           name: m1-norns-bin
           path: m1-norns
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m6-maiden
+          path: m6-maiden
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m6-tools
+          path: m6-tools
       - name: Assemble the folder and the zip
-        run: NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
+        run: MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check
         timeout-minutes: 45
         run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
@@ -189,7 +239,7 @@ jobs:
 
   package-asio:
     name: 'ASIO build (assemble, start headless, check)'
-    needs: [sc, norns, asio]
+    needs: [sc, norns, asio, maiden, tools]
     if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' && needs.asio.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
     timeout-minutes: 30
@@ -211,10 +261,20 @@ jobs:
         with:
           name: m3-asio-dll
           path: m3-asio
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m6-maiden
+          path: m6-maiden
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m6-tools
+          path: m6-tools
       - name: The ASIO DLL must exist
         run: test -f m3-asio/libportaudio-2.dll || { echo "the ASIO build of PortAudio did not make libportaudio-2.dll (see the job 'PortAudio with ASIO' and its step log)"; ls -l m3-asio; exit 1; }
       - name: Assemble the folder and the zip
-        run: FLAVOR=asio ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
+        run: FLAVOR=asio MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check (ASIO host API listed, fallback, input)
         timeout-minutes: 30
         run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m3" SMOKE_SECONDS=60 SMOKE_CYCLES=3 EXPECT_ASIO=1 windows/ci/smoke-m1.sh

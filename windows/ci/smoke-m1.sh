@@ -41,6 +41,14 @@ seed_home() { # a home folder in which norns resumes the smoke script
     local H="$1"
     mkdir -p "$H/dust/code/verdandi_smoke" "$H/dust/data/verdandi_smoke"
     cp "$APP/smoke/verdandi_smoke.lua" "$H/dust/code/verdandi_smoke/verdandi_smoke.lua"
+    # M6: a script that brought plug-ins for another system (a Raspberry Pi ELF file and a Mac Mach-O file named .scx) and one real Windows x86-64 plug-in (a PE header): the first two must be moved aside
+    mkdir -p "$H/dust/code/plugin_test/Extensions"
+    printf '\177ELF\002\001\001\000plug-in for the raspberry pi' > "$H/dust/code/plugin_test/Extensions/PiOnly.scx"
+    printf '\317\372\355\376plug-in for the mac' > "$H/dust/code/plugin_test/Extensions/MacOnly.scx"
+    "$PYTHON" -c "
+import sys
+b=bytearray(512); b[0:2]=b'MZ'; b[0x3c]=0x80; b[0x80:0x84]=b'PE\0\0'; b[0x84]=0x64; b[0x85]=0x86
+open(sys.argv[1],'wb').write(bytes(b))" "$H/dust/code/plugin_test/Extensions/WinX64.scx"
     # norns resumes the last script when it shut down cleanly (lua/core/state.lua): the seeded state says so. the script paths are the virtual /home/we ones
     cat > "$H/dust/data/system.state" <<'ST'
 -- norns system state (seeded by the smoke test)
@@ -136,10 +144,16 @@ run_input() {
     # a freshly seeded home (the first version copied system.state from the first run's home: after that run norns had rewritten it, no script was resumed, and the probe never ran)
     seed_home "$IN_HOME"
     printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nblock=128\n' > "$IN_HOME/audio.conf"
+    # M6: a plug-in pack in the program folder that the launcher must copy to <home>\extensions
+    mkdir -p "$APP/extensions-seed/SmokePack" && echo "SmokePack { *smoke { ^42 } }" > "$APP/extensions-seed/SmokePack/SmokePack.sc"
+    # M6: maiden and the consoles are asked from outside while the program runs (windows/ci/maiden_probe.py)
+    PROBE_OUT="$M0_OUT/m6-probe.txt"
+    rm -f "$PROBE_OUT"
+    if [ -n "$PYTHON" ]; then "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$IN_HOME")" "$(native "$PROBE_OUT")" > "$M0_OUT/m6-probe.log" 2>&1 & fi
     if command -v timeout > /dev/null 2>&1; then
-        VERDANDI_SMOKE_INPUT=1 timeout -k 10 150 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$IN_HOME")"
+        VERDANDI_SMOKE_INPUT=1 timeout -k 10 260 "$APP/Verdandi$EXE" --headless --exit-after=190 --home="$(native "$IN_HOME")"
     else
-        VERDANDI_SMOKE_INPUT=1 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$IN_HOME")"
+        VERDANDI_SMOKE_INPUT=1 "$APP/Verdandi$EXE" --headless --exit-after=190 --home="$(native "$IN_HOME")"
     fi
     echo "launcher exit code $?"
     if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
@@ -165,6 +179,37 @@ chk_input() {
         && has "$l" "VERDANDI_SMOKE_APPLY after: mode=(device|fallback|null)" "and norns and the script run on afterwards" \
         && has "$l" "VERDANDI_SMOKE_INPUT_DONE" "the whole input run finished" \
         && ! grep -q "norns CRASHED" "$l"
+}
+# M6: maiden, the consoles, the tools, the plug-in heal and the seeded pack
+chk_maiden() {
+    echo "--- the probe (windows/ci/maiden_probe.py):"; cat "$M0_OUT/m6-probe.txt" 2> /dev/null; echo "--- maiden.log (last 15):"; tail -n 15 "$IN_HOME/logs/maiden.log" 2> /dev/null
+    echo "---"
+    has "$IN_HOME/logs/launcher.log" "launcher: maiden started: http://127.0.0.1:5000/maiden" "the launcher started maiden on 127.0.0.1" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE maiden-api ok" "maiden's API answers" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE maiden-web ok" "the web app is served" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE maiden-install ok" "a script with an accented, spaced name was installed from a zip into dust/code"
+}
+chk_repl() {
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-norns ok" "the norns console (websocket 5555, ws-wrapper.exe around norns.exe) ran a line of Lua" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE repl-origin ok" "a page from another site gets no console" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE repl-sclang ok" "the sclang console (websocket 5556) evaluated a line"
+}
+chk_tools() {
+    local l="$IN_HOME/logs/norns.log"
+    grep -a -E "VERDANDI_SMOKE_TOOLS" "$l" 2> /dev/null | head -10
+    has "$l" "VERDANDI_SMOKE_TOOLS git \\[git version" "git (MinGit) runs through the program's own PATH" \
+        && has "$l" "VERDANDI_SMOKE_TOOLS busybox ok" "busybox sh: cp and cmp work (scripts that copy files)" \
+        && has "$l" "VERDANDI_SMOKE_TOOLS applets .*unzip.*wget" "busybox has unzip and wget" \
+        && has "$l" "VERDANDI_SMOKE_TOOLS submodule ok" "git clones a repository with a submodule (nb voices)"
+}
+chk_heal() {
+    local H="$IN_HOME"
+    grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
+    [ ! -f "$H/dust/code/plugin_test/Extensions/PiOnly.scx" ] && [ -f "$H/disabled/plugin_test/Extensions/PiOnly.scx" ] && echo "found: the Raspberry Pi plug-in was moved to disabled" || { echo "NOT FOUND: PiOnly.scx moved to disabled"; return 1; }
+    [ ! -f "$H/dust/code/plugin_test/Extensions/MacOnly.scx" ] && [ -f "$H/disabled/plugin_test/Extensions/MacOnly.scx" ] && echo "found: the Mac plug-in was moved to disabled" || { echo "NOT FOUND: MacOnly.scx moved"; return 1; }
+    [ -f "$H/dust/code/plugin_test/Extensions/WinX64.scx" ] && echo "found: the Windows x86-64 plug-in stayed" || { echo "NOT FOUND: WinX64.scx stayed"; return 1; }
+    grep -a -q "plug-in heal" "$H/disabled/MANIFEST.txt" 2> /dev/null && echo "found: MANIFEST.txt says what was moved and why" || { echo "NOT FOUND: MANIFEST.txt"; return 1; }
+    [ -f "$H/extensions/SmokePack/SmokePack.sc" ] && echo "found: the pack of extensions-seed was copied to <home>/extensions" || { echo "NOT FOUND: SmokePack in extensions"; return 1; }
 }
 # M4: the MIDI layer, OSC and Link on the runner (it has no MIDI device: the OSC input is the one device there is). the numbers of the OSC route (round trip, jitter) and of the clock go to the report
 chk_midi() {
@@ -292,6 +337,10 @@ m0_run m2-check-fallback chk_fallback
 m0_run m3-run-input run_input
 m0_run m3-check-input chk_input
 m0_run m4-check-midi chk_midi
+m0_run m6-check-maiden chk_maiden
+m0_run m6-check-repl chk_repl
+m0_run m6-check-tools chk_tools
+m0_run m6-check-heal chk_heal
 m0_run m2-run-cycles run_cycles
 m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard

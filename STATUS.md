@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M6: maiden, installing scripts, tools, serialosc (version 0.7.0)
+- Done (Linux tests, mingw syntax and link check, the CI probe run against the Linux stack): maiden cross-built for Windows (CI job), started by the launcher on 127.0.0.1, the MAIDEN button, `ws-wrapper.exe` for the norns and sclang consoles, busybox + MinGit bundled (CI job), plug-in heal and extension seeding, serialosc detection and STOP SERIALOSC / AUTO STOP on the GRID PORTS page. `docs/port/phase-m6.md`.
+- Not tested without Windows: everything that runs there (the CI headless run is the first test: the M6 checks `m6-check-maiden` and `m6-check-repl` are in NONBLOCKING_CHECKS until green), sclang's stdin on Windows, the real service/process calls, the catalog over the internet, Firewall behaviour. mi-UGens and NamAmp for Windows: M7.
+
 ## Windows M5: monome grids on Windows (version 0.6.0), small items A and B
 - Done (Linux tests with the real libmonome against fake grids on ptys, fakes for the ports, mingw syntax/link check, libmonome patch compiled with MinGW): grid detection, monitor, reader, GRID PORTS page, all-off at exit paths, card rate on the AUDIO page, main window size and place. Details `docs/port/phase-m5.md`.
 - Not tested without the grids: real SetupAPI answers, the Windows serial I/O of libmonome, the 2011 grid's LED steps, hot-plug on real USB, key latency. Arcs: same code, no arc owned.

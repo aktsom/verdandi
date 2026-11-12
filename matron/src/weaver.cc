@@ -334,6 +334,8 @@ static int _audio_input(lua_State *l);
 static int _midi_status(lua_State *l);
 static int _stage(lua_State *l);
 static int _grid_status(lua_State *l);
+static int _serialosc_status(lua_State *l);
+static int _serialosc_stop(lua_State *l);
 static int _midi_route_test(lua_State *l);
 static int _link_info(lua_State *l);
 #endif
@@ -586,6 +588,8 @@ void w_init(void) {
     lua_register_norns("audio_selftest", &_audio_selftest);
     lua_register_norns("audio_measure", &_audio_measure); // M3: the measured round trip
     lua_register_norns("audio_input", &_audio_input);     // M3: what the input is now (after mic_input / app_input)
+    lua_register_norns("serialosc_status", &_serialosc_status); // M6: serialosc (process or service) in key=value lines
+    lua_register_norns("serialosc_stop", &_serialosc_stop);
     lua_register_norns("grid_status", &_grid_status);     // M5: the grids in key=value lines (the DEVICES grid page)
     lua_register_norns("stage", &_stage);                 // M5: a timestamped stage line in norns.log
     lua_register_norns("midi_status", &_midi_status);     // M4: the MIDI layer in key=value lines (the DEVICES page)
@@ -3952,6 +3956,18 @@ int _app_input(lua_State *l) {
  * @function midi_status
  * @treturn string
  */
+int _serialosc_status(lua_State *l) {
+    static char text[4096];
+    vgrid_win_serialosc_status(text, sizeof text);
+    lua_pushstring(l, text);
+    return 1;
+}
+
+int _serialosc_stop(lua_State *l) {
+    lua_pushinteger(l, vgrid_win_serialosc_stop());
+    return 1;
+}
+
 int _grid_status(lua_State *l) {
     static char text[4096];
     vgrid_win_status(text, sizeof text);

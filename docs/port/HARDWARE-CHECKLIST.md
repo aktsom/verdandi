@@ -537,3 +537,11 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 6. SYSTEM > RESTART, SLEEP and closing the window with a lit grid: the LEDs go off. (Killing the program from Task Manager cannot.)
 7. Tilt (if your grid has it) and rotation: `grid:rotation(1)` etc. as on a norns.
 8. Window: resize and move the main window, restart: same size and place (an unplugged second monitor: the window opens on the first).
+
+## Windows M6 (0.7.0): maiden, installing scripts, serialosc
+1. Click MAIDEN in the window: the browser opens maiden (no Firewall question; if one appears, Cancel works). The catalog list loads (needs the internet).
+2. Install a script from the catalog (a small one, then one with submodules such as an nb voice pack): it appears in SELECT and runs. Update it, then remove it.
+3. The norns console (bottom left of maiden): type `print(1+1)` and Enter: `2`. The sclang console: `(1+1).postln;` gives `2`. Edit a script in the editor, save, run it from the window.
+4. A script that downloads things with `wget`/`curl`/`unzip` in its own install step: it works (busybox and git are in the folder).
+5. With serialosc running (as a program or a service) and a grid plugged in: GRID PORTS shows SERIALOSC; K3 twice stops it; with a service that needs administrator rights the page shows the command; AUTO STOP on: a held grid port makes Verdandi stop serialosc by itself.
+6. Put a Raspberry Pi plug-in (an ELF `.scx`) into a script's folder under dust\code and restart: it is moved to `disabled` and sclang still starts.

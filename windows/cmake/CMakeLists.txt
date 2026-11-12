@@ -111,4 +111,10 @@ target_link_libraries(norns PRIVATE
   ws2_32 mswsock iphlpapi advapi32 setupapi cfgmgr32 winmm ole32 shell32 dbghelp psapi pthread m)
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
-install(TARGETS norns RUNTIME DESTINATION .)
+# M6: ws-wrapper.exe puts a program's standard input and output on a websocket (maiden's norns and sclang consoles); see windows/ws-wrapper/ws_wrapper_win.c
+add_executable(ws-wrapper ${REPO}/windows/ws-wrapper/ws_wrapper_win.c)
+target_include_directories(ws-wrapper PRIVATE ${NNG_INC})
+target_link_libraries(ws-wrapper PRIVATE ${NNG_LIB} ws2_32 mswsock advapi32 bcrypt pthread)
+target_link_options(ws-wrapper PRIVATE -municode -static-libgcc)
+
+install(TARGETS norns ws-wrapper RUNTIME DESTINATION .)

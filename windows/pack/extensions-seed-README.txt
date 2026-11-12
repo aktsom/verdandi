@@ -1,0 +1,3 @@
+extensions-seed: SuperCollider plug-in packs for Windows (x86-64 .scx files with their .sc classes) that Verdandi copies to %USERPROFILE%\Verdandi\extensions on the next start when the pack is not there yet.
+One folder per pack (for example mi-UGens, NamAmp). Nothing is ever overwritten. A plug-in of another kind (Raspberry Pi, Mac, ARM) in dust\code or in extensions is moved to %USERPROFILE%\Verdandi\disabled at the start
+(a line in disabled\MANIFEST.txt says which and why): SuperCollider would stop at it. The Windows builds of mi-UGens and NamAmp are not part of this release.

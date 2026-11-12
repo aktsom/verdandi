@@ -27,6 +27,8 @@
 #include <string.h>
 #include <wchar.h>
 
+#include "plugin_heal.h"
+
 #define VERDANDI_LAUNCHER_VERSION "0.2 (M2)"
 
 static wchar_t g_app[MAX_PATH * 2];  /* program folder, no trailing backslash */
@@ -203,6 +205,7 @@ static void write_sclang_conf(const wchar_t *dir) {
     utf8(home, h, sizeof h);
     fprintf(f, "includePaths:\n    - \"%s/sc/core\"\n    - \"%s/sc/engines\"\n", a, a);
     fprintf(f, "    - \"%s/sc/linux\"\n    - \"%s/sc/linux-compat\"\n    - \"%s/dust\"\n", a, a, h);
+    fprintf(f, "    - \"%s/extensions\"\n", h); /* M6: plug-in packs seeded from extensions-seed (mi-UGens, NamAmp) and what a script installs there */
     fprintf(f, "excludePaths:\n    []\npostInlineWarnings: false\n");
     fclose(f);
 }
@@ -402,12 +405,172 @@ static void seed_scripts(const wchar_t *dust) {
     say(L"first start: the scripts of dust-seed were copied to %ls", code);
 }
 
+/* ---- M6: plug-ins, the extensions folder, maiden ---- */
+static void append_manifest(const wchar_t *line) {
+    wchar_t dir[MAX_PATH * 2], path[MAX_PATH * 2];
+    join(dir, MAX_PATH * 2, g_home, L"disabled");
+    make_dirs(dir);
+    join(path, MAX_PATH * 2, dir, L"MANIFEST.txt");
+    FILE *f = _wfopen(path, L"ab");
+    if (!f) return;
+    char u[2048];
+    utf8(line, u, sizeof u);
+    fprintf(f, "%s\r\n", u);
+    fclose(f);
+}
+
+/* a plug-in (.scx) of the wrong kind (Raspberry Pi, Mac, ARM) is moved to <home>\disabled with a line in MANIFEST.txt: sclang would stop at it. root is walked; rel is the path below `base` */
+static int heal_tree(const wchar_t *base, const wchar_t *dir, int depth) {
+    wchar_t pat[MAX_PATH * 2];
+    join(pat, MAX_PATH * 2, dir, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int moved = 0;
+    do {
+        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+        wchar_t full[MAX_PATH * 2];
+        join(full, MAX_PATH * 2, dir, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (depth < 8 && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) moved += heal_tree(base, full, depth + 1);
+            continue;
+        }
+        size_t n = wcslen(fd.cFileName);
+        if (n < 5 || _wcsicmp(fd.cFileName + n - 4, L".scx") != 0) continue;
+        unsigned char buf[4096];
+        size_t got = 0;
+        FILE *f = _wfopen(full, L"rb");
+        if (f) { got = fread(buf, 1, sizeof buf, f); fclose(f); }
+        ph_kind k = ph_classify(buf, got);
+        if (k == PH_PE_X64) continue;
+        wchar_t to[MAX_PATH * 2], todir[MAX_PATH * 2], line[MAX_PATH * 4];
+        const wchar_t *rel = full + wcslen(base) + 1;
+        join(todir, MAX_PATH * 2, g_home, L"disabled");
+        join(to, MAX_PATH * 2, todir, rel);
+        wchar_t *slash = wcsrchr(to, L'\\');
+        if (slash) { *slash = 0; make_dirs(to); *slash = L'\\'; }
+        if (MoveFileExW(full, to, MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING)) {
+            wchar_t what[160];
+            MultiByteToWideChar(CP_UTF8, 0, ph_words(k), -1, what, 160);
+            _snwprintf(line, MAX_PATH * 4, L"%ls  moved from %ls to disabled\\%ls: %ls", L"plug-in heal", full, rel, what);
+            say(L"plug-in heal: %ls is %ls: moved to disabled\\%ls (sclang would stop at it)", full, what, rel);
+            append_manifest(line);
+            moved++;
+        } else {
+            say(L"plug-in heal: %ls is not a Windows x86-64 plug-in and could not be moved (error %lu)", full, (unsigned long)GetLastError());
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return moved;
+}
+
+static void heal_plugins(void) {
+    wchar_t a[MAX_PATH * 2];
+    join(a, MAX_PATH * 2, g_home, L"dust\\code");
+    if (exists(a)) heal_tree(a, a, 0);
+    join(a, MAX_PATH * 2, g_home, L"extensions");
+    if (exists(a)) heal_tree(a, a, 0);
+}
+
+/* plug-in packs shipped in the program folder (extensions-seed\<pack>\...: mi-UGens, NamAmp for Windows) are copied to <home>\extensions when the pack is not there yet; nothing is ever overwritten */
+static void seed_extensions(void) {
+    wchar_t seed[MAX_PATH * 2], pat[MAX_PATH * 2], dst[MAX_PATH * 2];
+    join(seed, MAX_PATH * 2, g_app, L"extensions-seed");
+    join(dst, MAX_PATH * 2, g_home, L"extensions");
+    make_dirs(dst);
+    if (!exists(seed)) return;
+    join(pat, MAX_PATH * 2, seed, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+        wchar_t from[MAX_PATH * 2], to[MAX_PATH * 2];
+        join(from, MAX_PATH * 2, seed, fd.cFileName);
+        join(to, MAX_PATH * 2, dst, fd.cFileName);
+        if (!exists(to)) {
+            copy_tree(from, to);
+            say(L"plug-in pack %ls was copied to %ls", fd.cFileName, to);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+/* is something listening on this TCP port of the loopback address? (maiden's port) */
+static int port_in_use_tcp(unsigned short port) {
+    WSADATA wd;
+    if (WSAStartup(MAKEWORD(2, 2), &wd) != 0) return 0;
+    SOCKET sk = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int busy = 0;
+    if (sk != INVALID_SOCKET) {
+        struct sockaddr_in a;
+        memset(&a, 0, sizeof a);
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = htons(port);
+        if (connect(sk, (struct sockaddr *)&a, sizeof a) == 0) busy = 1;
+        closesocket(sk);
+    }
+    WSACleanup();
+    return busy;
+}
+
+static int g_maiden_port = 5000;
+
+/* maiden (the web editor and script catalog): maiden\maiden.exe in the program folder, on 127.0.0.1 only (a loopback listener does not ask Windows Firewall). its catalog sources are copied to dust\data\sources the
+ * first time. returns the process, or NULL (not part of this build, or the port is taken) */
+static HANDLE start_maiden(const wchar_t *logs) {
+    wchar_t dir[MAX_PATH * 2], exe[MAX_PATH * 2], src[MAX_PATH * 2], dst[MAX_PATH * 2];
+    join(dir, MAX_PATH * 2, g_app, L"maiden");
+    join(exe, MAX_PATH * 2, dir, L"maiden.exe");
+    if (!exists(exe)) return NULL;
+    wchar_t pv[16];
+    if (GetEnvironmentVariableW(L"NORNS_MAIDEN_PORT", pv, 16) > 0 && _wtoi(pv) > 0 && _wtoi(pv) < 65536) g_maiden_port = _wtoi(pv);
+    if (port_in_use_tcp((unsigned short)g_maiden_port)) {
+        say(L"maiden: port %d is in use by another program: maiden is not started (another port: set NORNS_MAIDEN_PORT)", g_maiden_port);
+        return NULL;
+    }
+    join(src, MAX_PATH * 2, dir, L"dist\\sources");
+    join(dst, MAX_PATH * 2, g_home, L"dust\\data\\sources");
+    if (exists(src) && !exists(dst)) {
+        copy_tree(src, dst);
+        say(L"maiden: the catalog sources were copied to %ls", dst);
+    }
+    wchar_t dustf[MAX_PATH * 2], homef[MAX_PATH * 2], appf[MAX_PATH * 2], args[MAX_PATH * 6];
+    fwd(g_home, homef, MAX_PATH * 2);
+    fwd(g_app, appf, MAX_PATH * 2);
+    _snwprintf(dustf, MAX_PATH * 2, L"%ls/dust", homef);
+    _snwprintf(args, MAX_PATH * 6, L"server --host 127.0.0.1 --port %d --app app\\build --data \"%ls\" --doc \"%ls/doc\" --config maiden.yaml", g_maiden_port, dustf, appf);
+    DWORD err = 0;
+    rotate(logs, L"maiden");
+    HANDLE p = start_child(exe, args, dir, logs, L"maiden", &err);
+    if (!p) {
+        say(L"maiden could not be started (error %lu)", (unsigned long)err);
+        return NULL;
+    }
+    say(L"maiden started: http://127.0.0.1:%d/maiden (log: %ls\\maiden.log)", g_maiden_port, logs);
+    return p;
+}
+
+/* norns.exe and sclang get their standard input and output on a websocket (maiden's consoles, ports 5555 and 5556) through ws-wrapper.exe when it is in the program folder (and VERDANDI_NO_WRAPPER is not set):
+ * the wrapper's exit code is the program's. otherwise the program is started directly, as before M6 */
+static HANDLE start_program(const wchar_t *exe, const wchar_t *args, const wchar_t *cwd, const wchar_t *logdir, const wchar_t *logname, int ws_port, const wchar_t *wrapped_args, DWORD *err) {
+    wchar_t w[MAX_PATH * 2], off[8];
+    join(w, MAX_PATH * 2, g_app, L"ws-wrapper.exe");
+    if (ws_port > 0 && exists(w) && GetEnvironmentVariableW(L"VERDANDI_NO_WRAPPER", off, 8) == 0) {
+        wchar_t a[MAX_PATH * 6];
+        _snwprintf(a, MAX_PATH * 6, L"ws://127.0.0.1:%d \"%ls\" %ls", ws_port, exe, wrapped_args ? wrapped_args : args);
+        return start_child(w, a, cwd, logdir, logname, err);
+    }
+    return start_child(exe, args, cwd, logdir, logname, err);
+}
+
 /* ---- the start order and the clean ends of every round (M2) ----
  * a stale norns.exe, sclang.exe or scsynth.exe of this program folder (an earlier launcher that was killed, a copy that hung while it crashed) holds the OSC ports, the audio bridge and the sound device and made the
  * next start fail in odd ways. before every round: stop them, wait until the ports are free. between norns.exe and sclang: wait until norns.exe has made the audio bridge (scsynth needs it). after every round:
  * wait until the job is empty. */
 static int is_our_program(const wchar_t *exe_name) {
-    return !_wcsicmp(exe_name, L"norns.exe") || !_wcsicmp(exe_name, L"sclang.exe") || !_wcsicmp(exe_name, L"scsynth.exe");
+    return !_wcsicmp(exe_name, L"norns.exe") || !_wcsicmp(exe_name, L"sclang.exe") || !_wcsicmp(exe_name, L"scsynth.exe") || !_wcsicmp(exe_name, L"ws-wrapper.exe") || !_wcsicmp(exe_name, L"maiden.exe");
 }
 
 static int kill_stale_programs(void) {
@@ -697,8 +860,23 @@ int wmain(int argc, wchar_t **argv) {
         set_env(L"SDL_VIDEODRIVER", L"dummy");
     }
     GetEnvironmentVariableW(L"PATH", oldpath, 32000);
-    _snwprintf(path, 32767, L"%ls;%ls\\supercollider;%ls", g_app, g_app, oldpath);
+    /* M6: git (MinGit, portable) and busybox (cp, cmp, unzip, wget ... for the scripts that fetch things) are found through the program's own PATH; nothing is installed on the computer */
+    _snwprintf(path, 32767, L"%ls;%ls\\supercollider;%ls\\tools\\mingit\\cmd;%ls", g_app, g_app, g_app, oldpath);
     set_env(L"PATH", path);
+    {
+        wchar_t mx[MAX_PATH * 2], pv[16];
+        join(mx, MAX_PATH * 2, g_app, L"maiden\\maiden.exe");
+        if (exists(mx)) {
+            set_env(L"VERDANDI_MAIDEN", L"1"); /* the MAIDEN button of the window opens maiden (sdl_bridge.cc) */
+            int port = GetEnvironmentVariableW(L"NORNS_MAIDEN_PORT", pv, 16) > 0 && _wtoi(pv) > 0 && _wtoi(pv) < 65536 ? _wtoi(pv) : 5000;
+            wchar_t origins[160];
+            /* the REPL websockets only talk to a browser page that maiden served */
+            _snwprintf(origins, 160, L"http://127.0.0.1:%d,http://localhost:%d", port, port);
+            set_env(L"WS_WRAPPER_ALLOWED_ORIGINS", origins);
+        }
+    }
+    heal_plugins();
+    seed_extensions();
 
     write_sclang_conf(scconf);
 
@@ -742,7 +920,7 @@ int wmain(int argc, wchar_t **argv) {
             say(L"the ports of the earlier start are free (waited %lu ms)", (unsigned long)(GetTickCount64() - pw0));
         }
     }
-    pn = start_child(norns, L"", g_app, logs, L"norns", &err);
+    pn = start_program(norns, L"", g_app, logs, L"norns", 5555, NULL, &err);
     if (!pn) {
         tell_user(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
         return 6;
@@ -757,7 +935,7 @@ int wmain(int argc, wchar_t **argv) {
             say(L"norns.exe has not made its audio bridge within 30 s: starting sclang anyway (scsynth then runs on its own clock until the bridge appears)");
         }
         if (WaitForSingleObject(pn, 0) == WAIT_TIMEOUT) {
-            ps = start_child(sclang, L"-D -l sclang_conf.yaml", scconf, logs, L"sclang", &err);
+            ps = start_program(sclang, L"-D -l sclang_conf.yaml", scconf, logs, L"sclang", 5556, L"-l sclang_conf.yaml -i maiden", &err);
             /* the working folder is the SuperCollider config folder, so the configuration file is named by a plain relative name */
             if (!ps) {
                 tell_user(L"Verdandi", MB_ICONWARNING, L"Windows could not start sclang.exe (error %lu). Verdandi goes on without engines.", (unsigned long)err);
@@ -766,6 +944,9 @@ int wmain(int argc, wchar_t **argv) {
             }
         }
     }
+
+    /* M6: maiden next to norns (ends with the round: it is in the job) */
+    start_maiden(logs);
 
     /* wait for norns */
     DWORD wait = exit_after > 0 ? (DWORD)exit_after * 1000 : INFINITE;

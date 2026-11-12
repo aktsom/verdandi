@@ -71,6 +71,18 @@ function init()
       clock.set_source("internal")
       print("VERDANDI_SMOKE_MIDI done")
     end
+    -- M6: the tools scripts use through os.execute / io.popen (busybox sh, git from the program's PATH)
+    if os.getenv("VERDANDI_SMOKE_INPUT") == "1" and _norns.midi_status then
+      local function sh(cmd) local p = io.popen(cmd .. " 2>&1"); local t = p and p:read("a") or ""; if p then p:close() end; return (t:gsub("%s+$", "")) end
+      print("VERDANDI_SMOKE_TOOLS git [" .. sh("git --version") .. "]")
+      local d = "/home/we/dust/data/verdandi_smoke"
+      sh("echo same > " .. d .. "/t1 && cp " .. d .. "/t1 " .. d .. "/t2")
+      print("VERDANDI_SMOKE_TOOLS busybox " .. (sh("cmp " .. d .. "/t1 " .. d .. "/t2 && echo CMP_SAME"):find("CMP_SAME") and "ok" or "FAIL"))
+      print("VERDANDI_SMOKE_TOOLS applets [" .. sh("busybox --list | tr '\\n' ' '") .. "]")
+      local r = d .. "/subtest"
+      sh("mkdir -p " .. r .. " && cd " .. r .. " && git init -q sub && cd sub && echo s > s.txt && git add s.txt && git -c user.name=t -c user.email=t@t commit -q -m s && cd .. && git init -q top && cd top && git -c protocol.file.allow=always submodule add -q ../sub voice && git -c user.name=t -c user.email=t@t commit -q -m t && cd .. && git -c protocol.file.allow=always clone -q --recurse-submodules top copy")
+      print("VERDANDI_SMOKE_TOOLS submodule " .. (sh("cat " .. r .. "/copy/voice/s.txt"):find("^s") and "ok" or "FAIL: " .. sh("ls " .. r .. "/copy")))
+    end
     if _norns.audio_info then
       local a = _norns.audio_info()
       for _ = 1, 70 do
