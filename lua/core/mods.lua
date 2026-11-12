@@ -12,15 +12,40 @@ local Mods = {}
 
 Mods.search_pattern = "*/lib/mod.lua"
 
+-- Windows build: the C glob() there expands a wildcard in the last path component only, so "*/lib/mod.lua" found nothing. With a native
+-- folder listing (_norns.listdir, same shape as `ls -p`: folders end in "/") the code folder is walked here instead. Folder names may hold
+-- accents and blanks. `Mods.listdir` is a parameter so that this can be tested.
+Mods.listdir = nil
+
+local function scan_by_listing(r, listdir)
+  local mods = {}
+  for _, entry in ipairs(listdir(r) or {}) do
+    local name = string.match(entry, "^(.+)/$")
+    if name then
+      local file = r .. name .. "/lib/mod.lua"
+      local h = io.open(file, "r")
+      if h then
+        h:close()
+        mods[name] = {name .. "/lib/mod", file}
+      end
+    end
+  end
+  return mods
+end
+
 function Mods.scan(root, pattern)
   local r = root or paths.code
   local p = pattern or Mods.search_pattern
+
+  local listdir = Mods.listdir or (_norns and _norns.listdir)
+  if listdir and p == "*/lib/mod.lua" then
+    return scan_by_listing(r, listdir)
+  end
 
   local matches, error = norns.system_glob(r .. p)
   if not matches then return nil end
 
   local mods = {}
-  local name_pattern = "^" .. r .. "([%w_-]+)/"
   for i, path in ipairs(matches) do
     -- strip off path root and trailing .lua
     local relative = string.gsub(string.gsub(path, r, ""), ".lua", "")

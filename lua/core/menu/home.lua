@@ -15,6 +15,10 @@ m.deinit = function()
 end
 
 m.key = function(n,z)
+  if _menu.errordetail then -- the plain message about a failed engine: any key puts it away (the short "error:" line stays on the home page)
+    if z == 1 then _menu.errordetail = nil; _menu.redraw() end
+    return
+  end
   if n == 2 and z == 1 then
     _menu.showstats = not _menu.showstats
     _menu.redraw()
@@ -93,6 +97,18 @@ end
 
 m.redraw = function()
   screen.clear()
+  if _menu.errordetail then
+    for i, l in ipairs(_menu.errordetail) do
+      screen.level(i == 1 and 15 or 10)
+      screen.move(0, 6 + 10 * i)
+      screen.text(l)
+    end
+    screen.level(4)
+    screen.move(0, 62)
+    screen.text("any key: ok")
+    screen.update()
+    return
+  end
   _menu.draw_panel()
   for i=1,3 do
     screen.move(0,25+10*i)

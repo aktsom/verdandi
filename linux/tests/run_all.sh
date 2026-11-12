@@ -201,6 +201,8 @@ run "windows:the PortAudio backend on Linux (list, an unknown device is refused 
 gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
 "$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"
 run "windows:SYSTEM > AUDIO: one short list (DRIVER OUTPUT [OUT CH] INPUT [IN CH] BUFFER TEST), every change applied live without a restart (reverted with one plain line when it fails), the status line, TEST results in plain words, bright text, nothing wider than the screen with the real font, the marquee" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/audio_page_windows_test.lua
+run "windows: mod scan finds mods by folder listing (accents, blanks), enabled and found again after restart; glob unchanged without listing" lua5.3 linux/tests/mods_scan_windows_test.lua
+run "engine that fails to build (fake Autumn: Class Decimator not found, Message ar not understood in Engine_Autumn:alloc): load stopped within a tick, plain line and screen text, next script loads" env NORNS_PLATFORM=linux lua5.3 linux/tests/engine_fail_test.lua
 # ---- M4: MIDI devices, clock, OSC input, route measurement (docs/port/phase-m4.md)
 midi_m4_ok() {
     local MD=matron/src/platform/windows/midi

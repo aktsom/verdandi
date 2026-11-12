@@ -22,10 +22,32 @@ end
 --- a load that is still waiting for its engine: one line, once, with what it waits for
 Script.check_load = function()
   local p = Script.load_pending
-  if p == nil or p.warned or util.time() - p.t < Script.WATCHDOG_SECONDS then return end
+  if p == nil then return end
+  if p.log and not p.failed then Script.check_engine_failure(p) end
+  if Script.load_pending ~= p or p.warned or util.time() - p.t < Script.WATCHDOG_SECONDS then return end
   p.warned = true
   print("### script load is taking longer than " .. Script.WATCHDOG_SECONDS .. " s: still waiting for engine " .. tostring(p.engine)
     .. " (sclang busy or not answering? see logs/sclang.log)")
+end
+
+--- sclang printed the error trace of the engine this load waits for (lua/core/engine_fail.lua): stop the load now, say why in one plain line, on the norns screen and in the log
+Script.check_engine_failure = function(p)
+  local ok, f = pcall(require('core/engine_fail').check, p.log, p.log_pos, p.engine)
+  if not ok or not f then return end
+  p.failed = true
+  print("### " .. f.line .. " (logs/sclang.log has the trace). the script was not started")
+  Script.load_stop()
+  Script.clear()
+  norns.scripterror(f.short)
+  local menu = _menu or rawget(_G, "_menu")
+  if menu then menu.errordetail = f.detail; if menu.redraw then pcall(menu.redraw) end end
+end
+
+--- forget a load that is waiting for its engine (the metro is stopped, the engine flag released)
+Script.load_stop = function()
+  Script.load_pending = nil
+  if Script.load_metro then pcall(function() Script.load_metro:stop() end) Script.load_metro = nil end
+  require('core/engine').is_loading = false
 end
 
 local function load_done()
@@ -287,8 +309,13 @@ Script.run = function()
   if engine.name ~= nil then print("loading engine: " .. engine.name) end
   if desktop then
     Script.load_pending = {engine = name, t = util.time(), warned = false}
+    if name ~= "None" then
+      local home = os.getenv("NORNS_HOME") or "/home/we"
+      Script.load_pending.log = home .. "/logs/sclang.log"
+      Script.load_pending.log_pos = require('core/engine_fail').size(Script.load_pending.log)
+    end
     if metro and metro.init then
-      local ok, m = pcall(metro.init, function() Script.check_load() end, 5, -1)
+      local ok, m = pcall(metro.init, function() Script.check_load() end, 1, -1)
       if ok and m then Script.load_metro = m; m:start() end
     end
     local started = engine.load(name, function()

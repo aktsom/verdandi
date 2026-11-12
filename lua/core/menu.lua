@@ -89,6 +89,7 @@ norns.scripterror = function(msg)
     print("### or check for new disk image")
   end
   _menu.errormsg = msg
+  _menu.errordetail = nil -- (lines for the screen, set by the caller that has them: a failed engine)
   _menu.scripterror = true
   _menu.locked = true
   _menu.set_page("HOME")
@@ -100,6 +101,7 @@ norns.init_done = function(status)
   _menu.panel = 3
   if status == true then
     _menu.scripterror = false
+    _menu.errordetail = nil
     m["PARAMS"].pos = 0
     _menu.locked = false
     _menu.set_mode(false)
