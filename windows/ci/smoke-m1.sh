@@ -166,6 +166,21 @@ chk_input() {
         && has "$l" "VERDANDI_SMOKE_INPUT_DONE" "the whole input run finished" \
         && ! grep -q "norns CRASHED" "$l"
 }
+# M4: the MIDI layer, OSC and Link on the runner (it has no MIDI device: the OSC input is the one device there is). the numbers of the OSC route (round trip, jitter) and of the clock go to the report
+chk_midi() {
+    local l="$IN_HOME/logs/norns.log"
+    echo "--- midi and clock lines of norns.log:"
+    grep -a -E "^midi: |^clock: |VERDANDI_SMOKE_MIDI" "$l" 2> /dev/null | head -40
+    echo "---"
+    has "$l" "^midi: WinMM \\(midiIn / midiOut\\)" "the MIDI layer started (WinMM)" \
+        && has "$l" "OSC input on 127.0.0.1:" "the OSC input is bound to the loopback only" \
+        && has "$l" "^midi: found osc " "the OSC input is a device in the list" \
+        && has "$l" "VERDANDI_SMOKE_MIDI osc-route osc.*200 of 200|VERDANDI_SMOKE_MIDI osc-route OSC \\(127.0.0.1\\): .* 200 of 200" "the OSC route came back 200 of 200 times: round trip and jitter above" \
+        && has "$l" "VERDANDI_SMOKE_MIDI link peers=[0-9]+ tempo=" "Ableton Link switched on and read" \
+        && has "$l" "VERDANDI_SMOKE_MIDI done" "and off again, the program runs on" \
+        && has "$l" "^clock: the internal clock thread is registered with MMCSS" "the clock thread has MMCSS" \
+        && ! grep -q "norns CRASHED" "$l"
+}
 # M2: ten starts and restarts in a row. norns.exe ends with exit code 42 when it asks for a restart (SYSTEM > RESTART, APPLY on the AUDIO page), the launcher starts everything again.
 # the restarts are asked for by lua/core/test_cycles.lua, switched on by VERDANDI_TEST_CYCLES (the launcher numbers the starts in VERDANDI_ROUND): not by a script. (the first version seeded a script that
 # asked for the restart: but a restart clears the script before it saves the state, as on a norns, so only the first start ran it and the run hung in the second: "NO SCRIPT", 27 minutes, then the time limit.)
@@ -270,6 +285,7 @@ m0_run m2-run-fallback run_fallback
 m0_run m2-check-fallback chk_fallback
 m0_run m3-run-input run_input
 m0_run m3-check-input chk_input
+m0_run m4-check-midi chk_midi
 m0_run m2-run-cycles run_cycles
 m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard

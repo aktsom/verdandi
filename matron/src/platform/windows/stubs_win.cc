@@ -7,6 +7,7 @@
  */
 #ifdef _WIN32
 
+#include "platform/windows/midi/midi_win.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,34 +88,18 @@ void guid_to_string(uint16_t *guid, char *guidstr) {
     guidstr[32] = 0;
 }
 
-/* ---- device_midi.cc ---- */
-unsigned int dev_midi_port_count(const char *path) {
-    (void)path;
-    return 0;
-}
-int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
-    (void)self, (void)port_index, (void)multiport_device;
-    not_yet("MIDI devices");
-    return -1;
-}
-int dev_midi_virtual_init(void *self) {
-    (void)self;
-    not_yet("the virtual MIDI device");
-    return -1;
-}
-ssize_t dev_midi_send(void *self, uint8_t *data, size_t n) {
-    (void)self, (void)data, (void)n;
-    return -1;
-}
-
-/* ---- device_monitor.cc: hot-plug ---- */
+/* ---- device_midi.cc and the device monitor: the MIDI devices are platform/windows/midi (WinMM); the computer keyboard is the HID device of the window ---- */
 void dev_monitor_init(void) {
-    not_yet("device hot-plug detection");
+    vmidi_win_monitor_init();
 }
-void dev_monitor_deinit(void) {}
+void dev_monitor_deinit(void) {
+    vmidi_win_monitor_deinit();
+}
 int dev_monitor_scan(void) {
     // the computer keyboard, through the norns window (hid_win.cc), as the Linux scan does
     dev_list_add(DEV_TYPE_HID, LINUX_SDL_KEYBOARD_PATH, strdup("keyboard"), NULL);
+    // the MIDI devices: the first scan and the thread that looks again
+    vmidi_win_monitor_start();
     return 0;
 }
 
@@ -191,22 +176,6 @@ void vgrid_rings(vgrid_device_t *g, uint8_t ring[VARC_RINGS][VARC_LEDS], int *in
         *intensity = 15;
     }
 }
-
-/* ---- clocks/clock_link.cc: Ableton Link (a later milestone; the build defines HAVE_ABLETON_LINK=0) ---- */
-void clock_link_init() {}
-void clock_link_start() {}
-void clock_link_join_session() {
-    not_yet("Ableton Link");
-}
-void clock_link_leave_session() {}
-void clock_link_set_quantum(double quantum) { (void)quantum; }
-void clock_link_set_tempo(double tempo) { (void)tempo; }
-void clock_link_set_transport_start() {}
-void clock_link_set_transport_stop() {}
-void clock_link_set_start_stop_sync(bool sync_enabled) { (void)sync_enabled; }
-double clock_link_get_beat() { return 0.0; }
-double clock_link_get_tempo() { return 120.0; }
-uint64_t clock_link_number_of_peers() { return 0; }
 
 /* ---- platform/linux/app_audio_linux.cc, input_route: listening to another program's sound (SYS/APP input) and the MIC/OFF routing ---- */
 int app_audio_available(void) { return 0; }

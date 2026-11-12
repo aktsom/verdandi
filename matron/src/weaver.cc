@@ -331,6 +331,9 @@ static int _audio_selftest(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_input(lua_State *l);
 static int _audio_input(lua_State *l);
+static int _midi_status(lua_State *l);
+static int _midi_route_test(lua_State *l);
+static int _link_info(lua_State *l);
 #endif
 /// run command in child process, blocking (replaces `os.execute`)
 static int _execute(lua_State *l);
@@ -581,6 +584,9 @@ void w_init(void) {
     lua_register_norns("audio_selftest", &_audio_selftest);
     lua_register_norns("audio_measure", &_audio_measure); // M3: the measured round trip
     lua_register_norns("audio_input", &_audio_input);     // M3: what the input is now (after mic_input / app_input)
+    lua_register_norns("midi_status", &_midi_status);     // M4: the MIDI layer in key=value lines (the DEVICES page)
+    lua_register_norns("midi_route_test", &_midi_route_test); // M4: the loopback measurement of a route
+    lua_register_norns("link_info", &_link_info);         // M4: Ableton Link: peers, tempo, latency compensation
 #endif
     lua_register_norns("execute", &_execute);
 
@@ -3832,6 +3838,7 @@ int _listdir(lua_State *l) {
 }
 
 #include "platform/windows/audio/audio_win.h"
+#include "platform/windows/midi/midi_win.h"
 
 /***
  * Windows: the sound card's output devices, one per line: uid, name, inputs (0), outputs, separated by tabs (the format of the macOS audio tool, read by SYSTEM > AUDIO)
@@ -3934,6 +3941,52 @@ int _app_input(lua_State *l) {
  * @treturn string
  * @treturn string
  */
+/***
+ * Windows: the MIDI layer in "key=value" lines: devices, cables, note=<device: what is wrong>, open=<device>, osc_port, route_state, route (the last route test)
+ * @function midi_status
+ * @treturn string
+ */
+int _midi_status(lua_State *l) {
+    static char text[8192];
+    vmidi_win_status(text, sizeof text);
+    lua_pushstring(l, text);
+    return 1;
+}
+
+/***
+ * Windows: measure a route (round trip and jitter) in the background: kind "midi" with the name of a device whose input and output are joined by a cable, or "osc". the result comes in midi_status
+ * @function midi_route_test
+ * @tparam string kind
+ * @tparam string device
+ * @treturn integer 0 started
+ * @treturn string why not
+ */
+int _midi_route_test(lua_State *l) {
+    char msg[200];
+    const char *kind = luaL_optstring(l, 1, "midi");
+    const char *dev = luaL_optstring(l, 2, "");
+    int rc = vmidi_win_route_test(kind, dev, msg, sizeof msg);
+    lua_pushinteger(l, rc);
+    lua_pushstring(l, msg);
+    return 2;
+}
+
+/***
+ * Windows: Ableton Link: a table with peers, tempo, latency_ms (what is added to the beat for the sound card)
+ * @function link_info
+ * @treturn table
+ */
+int _link_info(lua_State *l) {
+    lua_newtable(l);
+    lua_pushinteger(l, (lua_Integer)clock_link_number_of_peers());
+    lua_setfield(l, -2, "peers");
+    lua_pushnumber(l, clock_link_get_tempo());
+    lua_setfield(l, -2, "tempo");
+    lua_pushnumber(l, clock_link_latency_ms());
+    lua_setfield(l, -2, "latency_ms");
+    return 1;
+}
+
 int _audio_input(lua_State *l) {
     verdandi_audio_info_t a;
     verdandi_audio_info(&a);

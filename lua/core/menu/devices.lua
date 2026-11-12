@@ -23,7 +23,30 @@ local function clip(s, room)
   return s:sub(1, n) .. ".."
 end
 
+-- Windows build (docs/port/phase-m4.md): one more entry, the MIDI routes page (ports held by other programs, virtual cables, the OSC input, the route tests: lua/core/menu/midiwin.lua)
+local function is_windows() return _norns ~= nil and _norns.midi_status ~= nil end
+local function midi_held_count()
+  local n = 0
+  for _ in tostring(_norns.midi_status()):gmatch("\nnote=") do n = n + 1 end
+  return n
+end
+local function list_label(name)
+  if is_windows() and name == "midi routes" then
+    local n = midi_held_count()
+    if n > 0 then return "midi: " .. n .. " held" end
+  end
+  return name
+end
+
 local function sync_list()
+  if is_windows() then
+    if #m.list ~= #BASE_LIST + 1 then
+      m.list = {table.unpack(BASE_LIST)}
+      m.list[#m.list + 1] = "midi routes"
+      if m.mode == "type" then m.len = #m.list end
+    end
+    return
+  end
   if not desktop then return end
   local want = {table.unpack(BASE_LIST)}
   if _menu.grid_note then want[#want + 1] = "serialosc" end
@@ -133,6 +156,17 @@ local function check_and_rename(dev_type,pos,name)
 end
 
 m.key = function(n,z)
+  if m.mode == "winmidi" then
+    local page = require 'core/menu/midiwin'
+    if page.key(n, z) == "back" then
+      page.deinit()
+      m.mode = "type"
+      m.len = #m.list
+      m.pos = #m.list
+    end
+    _menu.redraw()
+    return
+  end
   sync_list()
   if m.mode == "virmidi" then
     if z ~= 1 then return end
@@ -185,7 +219,12 @@ m.key = function(n,z)
       _menu.set_page("SYSTEM")
     elseif n==3 and z==1 then
       m.section = m.list[m.pos]
-      if m.section == "virmidi" then
+      if is_windows() and m.section == "midi routes" then
+        m.mode = "winmidi"
+        require('core/menu/midiwin').init()
+        _menu.redraw()
+        return
+      elseif m.section == "virmidi" then
         m.mode = "virmidi"
         m.result = nil
         if require('core/virmidi').load_status() == "running" then vm_poll_start() end -- a load that was started before: keep watching it
@@ -273,6 +312,10 @@ m.key = function(n,z)
 end
 
 m.enc = function(n,delta)
+  if m.mode == "winmidi" then
+    require('core/menu/midiwin').enc(n, delta)
+    return
+  end
   sync_list()
   if m.mode == "serialosc" or m.mode == "confirm_serialosc" or m.mode == "virmidi" or m.mode == "confirm_virmidi" then return end
   if n==2 then
@@ -433,6 +476,10 @@ end
 
 m.redraw = function()
   sync_list()
+  if m.mode == "winmidi" then
+    require('core/menu/midiwin').redraw()
+    return
+  end
   if m.mode == "virmidi" or m.mode == "confirm_virmidi" then
     redraw_virmidi()
     return
@@ -479,7 +526,7 @@ m.redraw = function()
       screen.level(4)
     end
     if m.mode == "type" then
-      screen.text(string.upper(m.list[i]) .. " >")
+      screen.text(string.upper(list_label(m.list[i])) .. " >")
       if m.list[i] == "keyboard layout" then
         screen.move(127,10*i+y_offset)
         local used = screen.text_extents(string.upper(m.list[i]) .. " >") + 4
@@ -525,6 +572,9 @@ m.init = function()
   m.len = #m.list
 end
 
-m.deinit = function() if vm_poll_stop then vm_poll_stop() end end
+m.deinit = function()
+  if vm_poll_stop then vm_poll_stop() end
+  if m.mode == "winmidi" then require('core/menu/midiwin').deinit() end
+end
 
 return m

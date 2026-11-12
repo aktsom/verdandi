@@ -18,7 +18,7 @@ INPUT: always OFF when Verdandi starts. The MIC button on the window (or K3 of t
 SYS is what Windows plays (WASAPI loopback). Details and the click-by-click set-ups for Ableton, TotalMix FX and the RME: windows\README.md of the repository ("Windows M3").
 Please send back logs\norns.log, sclang.log and audio.conf, and the list printed by  norns.exe  with  VERDANDI_AUDIO_LIST=1 .
 
-Not in this build: grids and arcs, MIDI, USB devices, Ableton Link, maiden, an installer. Dropping files on the window and the file picker are not available yet.
+Not in this build: grids and arcs, maiden, an installer. Dropping files on the window and the file picker are not available yet.
 
 If something does not work: look into  %USERPROFILE%\Verdandi\logs  (launcher.log, norns.log, sclang.log;
 a crash leaves a report in logs\crash) and send those files back.

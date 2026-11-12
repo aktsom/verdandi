@@ -50,6 +50,26 @@ function init()
       end
       print("VERDANDI_SMOKE_INPUT_DONE")
     end
+    -- M4: the MIDI layer on a machine that may have no MIDI device (the CI runner): the status table, the OSC route through the real loopback of the machine, and Ableton Link switched on and off
+    if os.getenv("VERDANDI_SMOKE_INPUT") == "1" and _norns.midi_status then
+      local st = _norns.midi_status()
+      print("VERDANDI_SMOKE_MIDI status " .. st:gsub("\n", " | "))
+      local rc, why = _norns.midi_route_test("osc", "")
+      print("VERDANDI_SMOKE_MIDI osc-start rc=" .. tostring(rc) .. " " .. tostring(why))
+      for _ = 1, 20 do
+        clock.sleep(0.5)
+        local state = _norns.midi_status():match("route_state=(%w+)")
+        if state == "done" or state == "failed" then break end
+      end
+      print("VERDANDI_SMOKE_MIDI osc-route " .. tostring(_norns.midi_status():match("route=([^\n]*)")))
+      -- Link: on, a moment for the network, the numbers, off. no other peer on the runner is expected: it must only start and stop without a crash
+      clock.set_source("link")
+      clock.sleep(2)
+      local li = _norns.link_info()
+      print(string.format("VERDANDI_SMOKE_MIDI link peers=%d tempo=%.1f latency_ms=%.1f", li.peers, li.tempo, li.latency_ms))
+      clock.set_source("internal")
+      print("VERDANDI_SMOKE_MIDI done")
+    end
     if _norns.audio_info then
       local a = _norns.audio_info()
       for _ = 1, 70 do

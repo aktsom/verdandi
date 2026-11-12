@@ -72,6 +72,7 @@ assemble() {
     echo "${VERDANDI_REPO:-${GITHUB_REPOSITORY:-}}" > "$APP/UPDATE-SOURCE.txt"
     cp "$APP/BUILD.txt" "$OUT/BUILD.txt"
     cp "$REPO/windows/pack/README-M1.txt" "$APP/README.txt"
+    cp "$REPO/windows/pack/max-for-live-osc-cc.md" "$APP/max-for-live-osc-cc.md"
     # sclang runs "jack_connect ..." to wire scsynth into crone (Linux, macOS): there is no JACK server here in M1, so these stand-ins do nothing, quietly
     cp "$REPO"/windows/pack/jack_*.cmd "$APP/"
     mkdir -p "$APP/smoke" && cp "$REPO"/windows/pack/smoke/verdandi_*.lua "$APP/smoke/"

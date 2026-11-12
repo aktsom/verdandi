@@ -154,6 +154,24 @@ Everything is saved in `%USERPROFILE%\Verdandi\audio.conf` (`output=`, `input=`,
 
 **What to send back:** `logs\norns.log` (lines starting `audio:`: the host APIs of PortAudio, the choice, the device, the latencies, the input, any note), `sclang.log`, `audio.conf`; the **device list**: run `set VERDANDI_AUDIO_LIST=1` then `norns.exe` in the program folder in a command window (it prints every device with its host API, channels and latencies and exits); the **names of the ASIO drivers** installed (the list shows them in the ASIO zip; the RME one as Windows and Ableton name it); the TotalMix FX version and whether the hardware output strips have a Loopback setting; which of the three set-ups worked.
 
+## Windows M4: MIDI devices, clock, Link, virtual ports (what to click, what you should see, what to measure, what to send back)
+Design and reasons: `docs/port/phase-m4.md`. Version 0.5.0. Grids are not in this milestone.
+
+**MIDI devices.** Every Windows MIDI device (USB controllers, the Fireface's MIDI input, virtual cables) is in SYSTEM > DEVICES > MIDI like on a norns: 16 vports, E2 vport, K3, E3 pick the device, and `midi.connect()` in scripts. A device with several ports is `Name 1`, `Name 2`. Unplug and plug in again: it comes back in a moment, under the same name (so MIDI MAP mappings keep working). Names carry no system index.
+- **A port that another program has open** (Windows MIDI ports of hardware usually have ONE user): the DEVICES list says `MIDI: 1 HELD`, and `MIDI ROUTES` names the device and says what to do: close that port in the other program, or put the device's name in `midi_ignore=` in `%USERPROFILE%\Verdandi\audio.conf` (names separated by `;`) so that Verdandi does not open it at all, then plug it in again. Rule of thumb: **a controller that your DAW should have for itself goes into `midi_ignore=`** (for example `midi_ignore=Push 2`); a clock source you want in Verdandi is better opened by Verdandi and *not* by the DAW.
+- **The midronome through the Fireface:** its clock arrives on the Fireface's own MIDI input, which the RME driver shows as an ordinary MIDI device (see its name in SYSTEM > DEVICES > MIDI). Give it a vport, set PARAMS > CLOCK > source = **midi**: the line above the tempo says `driving: midi from <device>, 120.0 bpm` (or `midi: no clock coming in`). If Ableton holds that port, DEVICES says so: pick one program to have it, or let Ableton be the clock master and send the clock on to Verdandi through a virtual port.
+- `PARAMS > CLOCK`: the clock-out toggles per vport are as on Linux.
+
+**Virtual ports (Verdandi <-> other programs).** Install loopMIDI (free, needs administrator rights once to install its driver; you have it), add a port or two. They show in `MIDI ROUTES` as `CABLES n found` and in DEVICES > MIDI by their names. Click by click for Ableton in both directions: `docs/port/phase-m4.md`, section 6. If none is installed `CABLES none` and its help says where to get one. Windows 11 25H2 may also have loopback endpoints of Windows MIDI Services; they appear in the same list if so.
+
+**OSC input (any program).** `127.0.0.1:9201`, messages `/cc ch num val`, `/note ch note vel`, `/noteoff`, `/pitchbend`, `/pc`, `/touch`, `/midi b0 b1 b2`. It is the device `osc` in MIDI MAP. Example client for Max for Live: `max-for-live-osc-cc.md` in this folder. `osc_in_port=0` in audio.conf switches it off.
+
+**Measure the routes.** SYSTEM > DEVICES > MIDI ROUTES > `TEST OSC` and `TEST <cable>`: K3, about 3 seconds; the row shows `0.04 ms j 0.01` (round trip, jitter), norns.log has the full line, RESULTS names the quickest. This is the route itself; the other program's own buffer is on top.
+
+**Link.** PARAMS > CLOCK > source = link: the first line says `link on: no peers yet` or `driving: link, 2 peers, 120.0 bpm`. Quantum and start/stop sync are the existing params. The delay of your audio (the AUDIO page's ms) is added so that beats are heard together.
+
+**What to send back:** `logs\norns.log` (the lines starting `midi:` and `clock:`), `audio.conf`, and the answers in the results template of the report. A screenshot of MIDI ROUTES with a test result is welcome.
+
 ## Scripts and maiden in M1
 - The zip carries a small set of scripts (awake) in `dust-seed\code`; on the first start they are copied to `%USERPROFILE%\Verdandi\dust\code` when that folder is empty (a folder that already has anything is never touched).
 - **Maiden is not in this build yet**; the MAIDEN button says so on the screen. To add scripts, copy a script folder (for example `awake`, from its GitHub page: Code > Download ZIP, unpack so that `awake.lua` is in `dust\code\awake\`) into `%USERPROFILE%\Verdandi\dust\code`, then open SELECT. Scripts that use a shared library (`lib`) bring it in their own folder.

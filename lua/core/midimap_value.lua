@@ -134,6 +134,20 @@ end
 -- ---------------------------------------------------------------- device names (docs/port/midi-map-plan.md 2.1a)
 V.VIRTUAL = "virtual"                -- the norns-side name of the JACK MIDI device (input Verdandi:midi_in and output Verdandi:midi_out)
 V.OLD_VIRTUAL = "verdandi jack in"   -- what it was called (normalised): read as an alias, never written
+--- Windows only (norns.exe has _norns.midi_status): WinMM names that a stored mapping may still carry from the driver's list: "MIDIIN2 (Name)" is port 2 of Name, "2- Name" the second device of that name. the MIDI layer
+--- (platform/windows/midi/midi_core.h) names a device "Name", its ports "Name 1", "Name 2" and a second device "Name 2": the same way is written here, so a mapping made with either name finds the device after a replug,
+--- another USB socket or a reboot. s is lower case already
+local function windows_name(s)
+  local wrap_n, inner = s:match("^midi[io][nu]t?(%d+) %((.*)%)$")
+  if not wrap_n then inner = s end
+  local inst = inner:match("^(%d%d?)%- ")
+  if inst then inner = inner:gsub("^%d%d?%- ", "") end
+  local out = inner
+  if inst and tonumber(inst) > 1 then out = out .. " " .. inst end
+  if wrap_n and tonumber(wrap_n) > 1 then out = out .. " " .. wrap_n end
+  return out
+end
+
 --- trim, collapse blanks, lower case, no control characters, no trailing "(ABSENT)"
 function V.norm_name(s)
   if type(s) ~= "string" then return "" end
@@ -141,6 +155,7 @@ function V.norm_name(s)
   s = s:gsub("%s+", " "):match("^ ?(.-) ?$")
   s = s:lower()
   s = s:gsub(" ?%(absent%)$", "")
+  if type(_norns) == "table" and _norns.midi_status ~= nil then s = windows_name(s) end
   if s == V.OLD_VIRTUAL then s = V.VIRTUAL end -- the virtual device was called "Verdandi JACK in": an old stored name is the same device
   return s
 end

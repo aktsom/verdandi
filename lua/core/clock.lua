@@ -237,9 +237,30 @@ function clock.refresh_midi_out_options()
   for k = 1, #names do o.options[k] = names[k] end
 end
 
+-- Windows build (docs/port/phase-m4.md): one plain line in PARAMS > CLOCK that says what drives the clock now. "midi" with no ticks coming in, and "link" with nobody there, are said as such
+local function clock_driving_text()
+  local src = params:string("clock_source")
+  local tempo = clock.get_tempo()
+  local bpm = tempo and string.format("%.1f", tempo) or "?"
+  if src == "internal" then
+    return "driving: internal, " .. bpm .. " bpm"
+  elseif src == "midi" then
+    local st = _norns.midi_status()
+    local dev = st:match("\nclock_in=([^\n]*)")
+    if dev then return "driving: midi from " .. dev .. ", " .. bpm .. " bpm" end
+    return "midi: no clock coming in"
+  elseif src == "link" then
+    local info = _norns.link_info()
+    if info.peers > 0 then return "driving: link, " .. info.peers .. (info.peers == 1 and " peer, " or " peers, ") .. bpm .. " bpm" end
+    return "link on: no peers yet, " .. bpm .. " bpm"
+  end
+  return "driving: " .. src
+end
+
 function clock.add_params()
   local send_midi_clock = {}
-  params:add_group("CLOCK", legacy_midi_out and 30 or 29)
+  local windows = _norns.midi_status ~= nil
+  params:add_group("CLOCK", (legacy_midi_out and 30 or 29) + (windows and 1 or 0))
 
   params:add_option("clock_source", "source", {"internal", "midi", "link", "crow"},
     norns.state.clock.source)
@@ -254,6 +275,16 @@ function clock.add_params()
       if x==1 then clock.internal.set_tempo(params:get("clock_tempo")) end
     end)
   params:set_save("clock_source", false)
+  if windows then
+    params:add_separator("clock_driving", clock_driving_text())
+    clock.run(function()
+      while true do
+        clock.sleep(1)
+        local idx = params.lookup["clock_driving"]
+        if idx and params.params[idx] then params.params[idx].name = clock_driving_text() end
+      end
+    end)
+  end
   params:add_number("clock_tempo", "tempo", 1, 300, norns.state.clock.tempo)
   params:set_action("clock_tempo",
     function(bpm)

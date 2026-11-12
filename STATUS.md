@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M4: MIDI devices (WinMM), clock, Link, OSC input, route measurement, MIDI ROUTES page (version 0.5.0)
+- Done (Linux tests + mingw syntax and link check): everything in `docs/port/phase-m4.md`. Not tested without Windows, Push 2, the midronome, loopMIDI, Max for Live, Ableton: the real WinMM calls and hot-plug window, a port held by a real program, the clock jitter, loopMIDI and Windows MIDI Services behaviour on build 26200.9711, Link with Ableton, the look of the new page on a real screen.
+- Open: Windows MIDI Services backend (only if WinMM turns out to be the problem), the MIDI MAP PUSH 2 preset check, a `.amxd` file (the Max steps are written down instead).
+
 ## Windows M3 round 7: owner test of 0.4.4 (7405a61): row marks, SYS without INPUT (version 0.4.5)
 - Done (Linux tests): pending mark `*` at the end of the row (name and full value kept), help line explains it, width test with pending marks; MIC/SYS button reaches SYS without an INPUT; SYS refused in exclusive/ASIO with the reason; feedback hint when SYS is on. Details: `docs/port/phase-m3.md` section 11.
 - Not tested here (no Windows): how it looks and reads on a real screen.

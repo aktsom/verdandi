@@ -55,7 +55,20 @@ static struct dev_node *dev_lookup_path(const char *path, struct dev_node *node_
 
 // ALSA rawmidi nodes (a USB MIDI device); the JACK "virtual" device and the keys window have other paths
 static bool is_alsa_midi_path(const char *p) {
+#ifdef NORNS_WINDOWS
+    // Windows: the devices of the MIDI layer (platform/windows/midi): "winmm:<name>" and the OSC input "osc:..."; the list logic is the same as for the ALSA nodes
+    return p != NULL && (strncmp(p, "winmm:", 6) == 0 || strncmp(p, "osc:", 4) == 0);
+#else
     return p != NULL && strncmp(p, "/dev/snd/midiC", 14) == 0;
+#endif
+}
+// is the device node there (Linux: the file; Windows: the last scan lists it)
+static bool midi_node_present(const char *p) {
+#ifdef NORNS_WINDOWS
+    return dev_midi_node_present(p) != 0;
+#else
+    return access(p, F_OK) == 0;
+#endif
 }
 
 // one line in the log for a node that could not be added, said once until it works (the periodic check tries again every few seconds)
@@ -277,7 +290,10 @@ void dev_list_remove(device_t type, const char *node) {
                     gone = true;
                 }
             }
-            if (!gone && access(node, F_OK) == 0) {
+#ifdef NORNS_WINDOWS
+            gone = true; // the monitor removes a device only when the scan no longer lists it
+#endif
+            if (!gone && midi_node_present(node)) {
                 fprintf(stderr, "midi: remove of %s ignored: the node is there and the device answers (a late event)\n", node);
                 pthread_mutex_unlock(&lock);
                 return;
@@ -345,7 +361,7 @@ int dev_list_midi_sweep(void) {
     for (struct dev_node *dn = dq.head; dn != NULL;) {
         struct dev_node *next = dn->next;
         if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MIDI && is_alsa_midi_path(dn->d->base.path)) {
-            bool node_missing = access(dn->d->base.path, F_OK) != 0;
+            bool node_missing = !midi_node_present(dn->d->base.path);
             if (dn->d->midi.gone || node_missing) {
                 union event_data *ev = event_data_new(EVENT_MIDI_REMOVE);
                 ev->midi_remove.id = dn->d->base.id;

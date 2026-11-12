@@ -38,6 +38,42 @@ static volatile double clock_internal_last_current_time = 0.0;
 static volatile double clock_internal_last_tick_duration = 0.0;
 #endif
 
+#ifdef NORNS_WINDOWS
+// Windows: a high resolution waitable timer (the sleep of winpthreads is whole milliseconds), the thread in the MMCSS class "Pro Audio", and the lateness of every wake-up measured: the numbers go to the log every 10 seconds
+// (docs/port/phase-m4.md, "Timing"). what the clock's tick does after waking (the beat for the scripts, the MIDI clock out) is the Lua side's.
+#include "platform/windows/midi/midi_winmm.h"
+extern "C" void norns_win_sleep_until_ns(int64_t monotonic_ns);
+static double win_late_sum, win_late_max;
+static unsigned win_late_n;
+static double win_log_t;
+
+static double win_mono_s() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+static void clock_internal_sleep(double seconds) {
+    if (seconds < 0) {
+        seconds = 0;
+    }
+    double target = win_mono_s() + seconds;
+    norns_win_sleep_until_ns((int64_t)(target * 1e9));
+    double now = win_mono_s();
+    double late = (now - target) * 1e6;
+    if (late < 0) late = 0;
+    win_late_sum += late;
+    if (late > win_late_max) win_late_max = late;
+    win_late_n++;
+    if (win_log_t == 0) win_log_t = now;
+    if (now - win_log_t >= 10.0) {
+        fprintf(stderr, "clock: internal ticks woke %.0f us late on average, %.0f us at worst (%u ticks in %.0f s)\n", win_late_n ? win_late_sum / win_late_n : 0.0, win_late_max, win_late_n, now - win_log_t);
+        win_late_sum = win_late_max = 0;
+        win_late_n = 0;
+        win_log_t = now;
+    }
+}
+#else
 static void clock_internal_sleep(double seconds) {
     struct timespec ts;
 
@@ -65,9 +101,16 @@ static void clock_internal_sleep(double seconds) {
     clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
 }
 
+#endif
+
 static void *clock_internal_thread_run(void *p) {
     (void)p;
 
+#ifdef NORNS_WINDOWS
+    if (vmidi_mmcss_enter()) {
+        fprintf(stderr, "clock: the internal clock thread is registered with MMCSS (Pro Audio)\n");
+    }
+#endif
     double current_time;
     double next_tick_time;
 

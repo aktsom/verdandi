@@ -201,6 +201,32 @@ run "windows:the PortAudio backend on Linux (list, an unknown device is refused 
 gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
 "$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"
 run "windows:SYSTEM > AUDIO: one short list (DRIVER OUTPUT [OUT CH] INPUT [IN CH] BUFFER TEST), every change applied live without a restart (reverted with one plain line when it fails), the status line, TEST results in plain words, bright text, nothing wider than the screen with the real font, the marquee" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/audio_page_windows_test.lua
+# ---- M4: MIDI devices, clock, OSC input, route measurement (docs/port/phase-m4.md)
+midi_m4_ok() {
+    local MD=matron/src/platform/windows/midi
+    g++ -std=c++17 -Wall -I matron/src linux/tests/midi_core_test.cpp -o "$T/midi_core_test" || return 1
+    "$T/midi_core_test" || return 1
+    g++ -std=c++17 -Wall -I matron/src linux/tests/midi_port_test.cpp $MD/midi_port.cc -lpthread -o "$T/midi_port_test" || return 1
+    "$T/midi_port_test" || return 1
+    g++ -std=c++17 -Wall -I matron/src linux/tests/midi_monitor_test.cpp $MD/midi_monitor.cc -lpthread -o "$T/midi_monitor_test" || return 1
+    "$T/midi_monitor_test" 2> /dev/null || return 1
+    g++ -std=c++17 -Wall -I matron/src linux/tests/osc_midi_test.cpp $MD/osc_in.cc $MD/midi_port.cc -lpthread -o "$T/osc_midi_test" || return 1
+    "$T/osc_midi_test" || return 1
+    g++ -std=c++17 -Wall -I matron/src linux/tests/midi_measure_test.cpp $MD/midi_measure.cc $MD/midi_port.cc -lpthread -o "$T/midi_measure_test" || return 1
+    "$T/midi_measure_test"
+}
+run "windows:MIDI devices (WinMM names: MIDIIN2 wrappers and '2- ' prefixes, ports of one device put together, keys independent of the system's order, replug, stale entries, 20 devices, midi_ignore, held ports tried again, notes for the DEVICES page, virtual cables named; clock and song position at once on the callback thread with tick statistics; ring and reader that can be cancelled; OSC to MIDI over a real UDP socket on 127.0.0.1; round trip and jitter of a route)" midi_m4_ok
+link_pair_ok() {
+    g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1
+    local rc=0
+    timeout 60 "$T/link_pair_probe" || rc=$?
+    [ "$rc" = 2 ] && { echo "no peer found on this machine's network: skipped"; return 0; }
+    return "$rc"
+}
+run "windows:Ableton Link, two instances in one process find each other and follow a tempo (the same probe the Windows CI runs; skipped when the machine's network does not carry the discovery)" link_pair_ok
+run "windows:MIDI ROUTES page (held ports as rows with plain help that names no program, cables, OSC IN, tests on the row, the quickest route, K2 back, the DEVICES entry; widths with the real font)" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/midi_page_windows_test.lua
+run "windows:PARAMS > CLOCK says what drives the clock (internal, midi from a named device or no clock coming in, link with peers or none)" lua5.3 linux/tests/clock_driving_windows_test.lua
+run "windows:MIDI MAP device names (MIDIIN2 (Name), '2- Name', plain names, the device name means every port; unchanged off Windows)" lua5.3 linux/tests/midimap_windows_names_test.lua
 loopback_ok() {
     g++ -std=c++17 -O1 -I matron/src/platform/windows/audio linux/tests/loopback_convert_test.cc -o "$T/loopback_convert_test" || return 1
     "$T/loopback_convert_test"

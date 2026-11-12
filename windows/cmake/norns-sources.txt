@@ -10,6 +10,7 @@ matron/src/platform/windows/sidecar_shell_win.cpp
 matron/src/config.cc
 matron/src/device/device.cc
 matron/src/device/device_list.cc
+matron/src/device/device_midi.cc
 matron/src/osc.cc
 matron/src/hardware/input.cc
 matron/src/hardware/io.cc
@@ -34,6 +35,8 @@ matron/src/clock.cc
 matron/src/clocks/clock_internal.cc
 matron/src/clocks/clock_midi.cc
 matron/src/clocks/clock_crow.cc
+matron/src/clocks/clock_link.cc
+third-party/link/extensions/abl_link/src/abl_link.cpp
 matron/src/clocks/clock_scheduler.cc
 matron/src/time_since.cc
 matron/src/hardware/screen/sdl.cc
@@ -94,3 +97,10 @@ matron/src/platform/windows/audio/audio_backend_pa.c
 matron/src/platform/windows/audio/audio_win.c
 matron/src/platform/windows/audio/wasapi_loopback.cc
 matron/src/platform/windows/audio/exit_win.c
+# --- M4: MIDI devices (WinMM), the monitor, the OSC input, the route measurement (docs/port/phase-m4.md)
+matron/src/platform/windows/midi/midi_port.cc
+matron/src/platform/windows/midi/midi_monitor.cc
+matron/src/platform/windows/midi/midi_measure.cc
+matron/src/platform/windows/midi/osc_in.cc
+matron/src/platform/windows/midi/midi_win.cc
+matron/src/platform/windows/midi/midi_winmm.c

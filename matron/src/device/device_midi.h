@@ -39,11 +39,20 @@ struct dev_midi {
     // waiting for a udev event that may never come, and a new device of the same node replaces it (docs/port/KNOWN-ISSUES.md 36)
     unsigned int port_index;
     volatile int gone;
+#ifdef NORNS_WINDOWS
+    // the Windows MIDI layer (platform/windows/midi): the port pair of this device (midi_port.h)
+    void *win_port;
+    bool win_osc;
+#endif
 #endif
 #endif
 };
 
 extern unsigned int dev_midi_port_count(const char *path);
+#ifdef NORNS_WINDOWS
+// Windows: is the device with this path ("winmm:name", "osc:...") in the last scan?
+extern int dev_midi_node_present(const char *path);
+#endif
 
 extern int dev_midi_init(void *self, unsigned int port_index, bool multiport_device);
 extern int dev_midi_virtual_init(void *self);

@@ -510,3 +510,13 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 1. AUDIO page: turn E3 on INPUT to a long device name: the row keeps `INPUT`, ends in `*`, the full name is readable (it runs on the selected row); the help box says `* chosen: K3 applies.`
 2. MIC button with no INPUT chosen: OFF > MIC shows the note `MIC needs an INPUT...`, the next press gives SYS, the next OFF.
 3. SYS in normal mode works with no INPUT and shows the feedback hint; in exclusive mode it goes back to OFF with `SYS only hears Windows sound in normal mode`.
+
+## Windows M4 (0.5.0): MIDI, clock, Link, virtual ports, OSC, MIDI MAP
+1. SYSTEM > DEVICES shows `MIDI ROUTES`. Plug a USB MIDI controller in and out: it appears and goes in a few seconds (the log says `midi: found / removed`), under the same name each time; assign it to a vport, move a control: MIDI MAP WATCH sees it.
+2. The Fireface's MIDI input with the midronome: it is a device in the list; PARAMS > CLOCK source = midi shows `driving: midi from <name>, N bpm` and the log has `midi: clock in '<name>': ... jitter ... us` every 10 s. Start/stop on the midronome (or a DAW) reaches scripts.
+3. With Ableton open and holding that port: DEVICES says `MIDI: 1 HELD` and names the device; after closing it in Ableton and plugging in again it works.
+4. loopMIDI ports: both directions to Ableton with the click-by-click of `phase-m4.md` section 6: notes/CC both ways, clock from Ableton (Sync), clock to Ableton.
+5. MIDI ROUTES tests: `TEST OSC` and `TEST <loopMIDI port>`: write the numbers down (round trip, jitter); check whether a Windows MIDI Services loopback shows up in the list on build 26200.9711 and test it the same way.
+6. OSC: send `/cc 1 74 64` to 127.0.0.1:9201 from any sender (the Max for Live example): `OSC IN (n)` counts, MIDI MAP learns the device `osc`.
+7. Link: with Ableton on the same machine, source = link: `driving: link, 1 peer`, tempo follows both ways; listen for the beat offset against Ableton's click (the latency is added to the beat; if it is off by the audio delay in the wrong direction, tell me).
+8. Clock timing: the `clock: internal ticks woke ... us late` lines (a few hundred microseconds is expected), and `midi: clock in ... jitter` with the midronome.

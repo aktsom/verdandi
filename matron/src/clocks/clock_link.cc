@@ -11,6 +11,10 @@
 #include "clock.h"
 #include "clock_link.h"
 
+#ifdef NORNS_WINDOWS
+#include "platform/windows/audio/audio_win.h"
+#endif
+
 static pthread_t clock_link_thread;
 
 static struct clock_link_shared_data_t {
@@ -25,6 +29,27 @@ static struct clock_link_shared_data_t {
 } clock_link_shared_data;
 
 static abl_link clock_link;
+
+#ifdef NORNS_WINDOWS
+// Windows: the delay from a beat to the sound in the room (the audio backend's number: the card's output latency plus what the engine holds back) is added to the time the beat is looked up at, so that a note on
+// beat 1 of Link is heard when the other programs' beat 1 is: the beat norns works on is the beat that Link has that much LATER. refreshed twice a second; clock_link_latency_ms() shows it
+static double clock_link_latency_us = 0;
+static double clock_link_latency_shown_ms = 0;
+static int clock_link_latency_tick = 0;
+static void clock_link_refresh_latency() {
+    if (clock_link_latency_tick++ % 50 != 0) {
+        return;
+    }
+    verdandi_audio_info_t info;
+    verdandi_audio_info(&info);
+    double ms = info.mode != NULL && info.mode[0] == 'd' ? info.total_ms : 0.0;
+    clock_link_latency_us = ms * 1000.0;
+    clock_link_latency_shown_ms = ms;
+}
+double clock_link_latency_ms() {
+    return clock_link_latency_shown_ms;
+}
+#endif
 
 static clock_reference_t clock_link_reference;
 
@@ -66,7 +91,12 @@ static void clock_link_step(abl_link_session_state state) {
         }
     }
 
+#ifdef NORNS_WINDOWS
+    clock_link_refresh_latency();
+    double link_beat = abl_link_beat_at_time(state, micros + (uint64_t)clock_link_latency_us, clock_link_shared_data.quantum);
+#else
     double link_beat = abl_link_beat_at_time(state, micros, clock_link_shared_data.quantum);
+#endif
     clock_update_source_reference(&clock_link_reference, link_beat, 60.0f / link_tempo);
 
     if (clock_link_shared_data.requested_tempo > 0) {

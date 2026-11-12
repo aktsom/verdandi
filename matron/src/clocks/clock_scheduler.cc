@@ -10,6 +10,11 @@
 
 #include "clock_scheduler.h"
 
+#ifdef NORNS_WINDOWS
+#include "platform/windows/midi/midi_winmm.h"
+extern "C" void norns_win_sleep_until_ns(int64_t monotonic_ns);
+#endif
+
 typedef enum {
     CLOCK_SCHEDULER_EVENT_SYNC,
     CLOCK_SCHEDULER_EVENT_SLEEP,
@@ -90,6 +95,11 @@ static void *clock_scheduler_tick_thread_run(void *p) {
     double clock_beat;
     double clock_time;
 
+#ifdef NORNS_WINDOWS
+    if (vmidi_mmcss_enter()) {
+        fprintf(stderr, "clock: the clock scheduler thread is registered with MMCSS (Pro Audio)\n");
+    }
+#endif
     while (true) {
         if (clock_scheduler_thread_stop) {
             break;
@@ -118,7 +128,15 @@ static void *clock_scheduler_tick_thread_run(void *p) {
         }
 
         pthread_mutex_unlock(&clock_scheduler_events_lock);
+#ifdef NORNS_WINDOWS
+        {
+            struct timespec t;
+            clock_gettime(CLOCK_MONOTONIC, &t);
+            norns_win_sleep_until_ns((int64_t)t.tv_sec * 1000000000LL + t.tv_nsec + 1000000LL); // 1 ms on a high resolution timer
+        }
+#else
         usleep(1000);
+#endif
     }
 
     return NULL;

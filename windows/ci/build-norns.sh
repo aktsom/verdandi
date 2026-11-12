@@ -44,10 +44,23 @@ collect() {
     find "$OUT" -maxdepth 1 -type f -size +1k | wc -l
 }
 
+# M4: two Link instances in one process find each other and follow a tempo (the real Link library with the MinGW toolchain, on the runner's network). exit 2 = the runner's network did not carry the discovery:
+# said in the report, not a failure of the program
+link_pair() {
+    local inc="$REPO/third-party/link"
+    g++ -std=c++14 -w -DLINK_PLATFORM_WINDOWS=1 -D_WIN32_WINNT=0x0601 -I "$inc/include" -I "$inc/modules/asio-standalone/asio/include" \
+        "$REPO/windows/ci/link_pair_probe.cpp" -o "$BLD/link_pair_probe.exe" -lws2_32 -lwinmm -liphlpapi -lmswsock || return 1
+    local rc=0
+    timeout 60 "$BLD/link_pair_probe.exe" || rc=$?
+    if [ "$rc" = 2 ]; then echo "NOTE: no Link peer was found on this runner's network: the discovery needs multicast; not a failure of the program"; return 0; fi
+    return "$rc"
+}
+
 m0_init
 m0_run norns-configure configure || exit 0
 m0_run norns-build build
 m0_run launcher-build launcher
+m0_run m4-link-pair link_pair
 if [ -f "$BLD/norns.exe" ] && [ -f "$BLD/Verdandi.exe" ]; then
     m0_run norns-collect collect
 else

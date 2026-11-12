@@ -78,6 +78,7 @@ target_compile_definitions(norns PRIVATE
   NORNS_DESKTOP=1 NORNS_LINUX_DESKTOP=1 NORNS_WINDOWS=1
   HAVE_LIBMONOME=1 HAVE_NNG=1 HAVE_LUA_CJSON=1 HAVE_ABLETON_LINK=1
   VERSION_MAJOR=${VERDANDI_VERSION_MAJOR} VERSION_MINOR=${VERDANDI_VERSION_MINOR} VERSION_PATCH=${VERDANDI_VERSION_PATCH} VERSION_HASH="${VERDANDI_VERSION_HASH}"
+  LINK_PLATFORM_WINDOWS=1 _WIN32_WINNT=0x0601
   _GNU_SOURCE=1)
 # the force-included compatibility header: every translation unit sees it first
 target_compile_options(norns PRIVATE "SHELL:-include ${REPO}/matron/src/platform/windows/compat_win.h")
@@ -97,6 +98,8 @@ target_include_directories(norns PRIVATE
   ${REPO}/third-party/concurrentqueue
   ${REPO}/third-party/readerwriterqueue
   ${REPO}/third-party/lua-cjson
+  # M4: Ableton Link (header only, GPL-2.0-or-later) with its standalone asio, and the C wrapper abl_link
+  ${REPO}/third-party/link/include ${REPO}/third-party/link/modules/asio-standalone/asio/include ${REPO}/third-party/link/extensions/abl_link/include
   ${MONOME_INC} ${NNG_INC})
 # winsock macros (connect, close, ...) for the one file that talks to a socket
 set_source_files_properties(${REPO}/matron/src/platform/macos/sdl_bridge.cc PROPERTIES
@@ -105,7 +108,7 @@ target_compile_options(norns PRIVATE -Wno-unused-parameter)
 target_link_libraries(norns PRIVATE
   lua-cjson ${MONOME_LIB}
   PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 PkgConfig::PORTAUDIO ${NNG_LIB}
-  ws2_32 mswsock advapi32 setupapi winmm ole32 shell32 dbghelp psapi pthread m)
+  ws2_32 mswsock iphlpapi advapi32 setupapi winmm ole32 shell32 dbghelp psapi pthread m)
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
 install(TARGETS norns RUNTIME DESTINATION .)

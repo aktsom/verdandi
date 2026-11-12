@@ -32,7 +32,7 @@ dependencies beyond what upstream norns and the macOS port already use; this lis
 | zenity | file dialog fallback (runtime, optional; also installed for the tests) | LGPL-2.1+ |
 | GIO (part of glib) | XDG portal file dialog over D-Bus | LGPL-2.1+ |
 | ImageMagick (`convert`) | headless tests only (screenshots) | ImageMagick license (Apache-2.0 style) |
-| git submodules: softcut-lib, Ableton Link, lua-cjson, concurrentqueue, readerwriterqueue, doctest, trompeloeil | as upstream | see each repository (Link: GPL-2.0+) |
+| git submodules: softcut-lib, Ableton Link (Windows M4: compiled into norns.exe, with its standalone asio, boost licence; GPL-2.0+ is compatible with this GPL-3.0 project), lua-cjson, concurrentqueue, readerwriterqueue, doctest, trompeloeil | as upstream | see each repository (Link: GPL-2.0+) |
 
 ## Licenses of maiden (collected, Phase 4)
 
@@ -304,3 +304,4 @@ Nothing is shipped in a product yet; these are the build inputs and what the M1 
 | Steinberg ASIO SDK 2.3.4 (cloned in CI from `github.com/steinbergmedia/asiosdk`, **never committed**; shipped as source with its `LICENSE.txt` in the ASIO zip only) | the ASIO driver interface inside that PortAudio | **Dual: Steinberg proprietary agreement or GPLv3**; Verdandi takes the **GPLv3 option** for the ASIO zip. "ASIO" is a trademark of Steinberg Media Technologies GmbH (notice in the zip, no logo). Text read through mirrors only: `docs/port/asio-licence.md` |
 | `PaAsioStreamInfo` re-declared in `audio_backend_pa.c` | the channel selectors of the ASIO host API | PortAudio's public API struct (MIT); no SDK code |
 | awake (script by tehn, fetched by CI into `dust-seed/code`, test content only) | seeded example script | licence stated in its repository; **owner to check** before any public release |
+| WinMM (midiIn / midiOut), iphlpapi, ws2_32 | system DLLs of Windows, linked dynamically (Windows M4) | part of the operating system |
