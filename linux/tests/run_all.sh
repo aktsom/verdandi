@@ -244,12 +244,17 @@ grid_m5_ok() {
 }
 run "windows:monome grids (which serial ports are grids: the 128 by USB id, the 2011 256 by its FTDI serial, a generic FTDI port is not and is never opened; the serial from the instance id; two grids, replug on another COM port, a port held by another program, a monome that does not answer; the real libmonome against fake grids on pseudo terminals: sizes, serials, 16 LED levels, keys, all off, the Windows reader loop; the main window's size and place file)" grid_m5_ok
 run "windows:GRID PORTS page (grids by name, size, serial and port, problems with plain help, other ports left alone, the DEVICES entry; widths with the real font)" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/grid_page_windows_test.lua
+# ---- M7: plug-in packs, a failing extension must not stop sclang's start-up (docs/port/phase-m7.md)
+run "windows:M7 pack checks (UNITS.txt, a class for every UGen, no class twice, PACK-ID only with plug-in files AND class files; the mi-UGens pack without classes)" linux/tests/pack_check_test.sh
+run "windows:M7 a failing initClass of an extension no longer stops sclang's start-up (real sclang: failure reproduced, then fixed), pack check line" linux/tests/safe_init_test.sh
 # ---- M6: maiden, serialosc, plug-ins (docs/port/phase-m6.md)
 m6_ok() {
     g++ -std=c++17 -Wall -I matron/src linux/tests/serialosc_core_test.cpp -o "$T/serialosc_core_test" || return 1
     "$T/serialosc_core_test" || return 1
     cc -std=gnu11 -Wall -I windows/launcher linux/tests/plugin_heal_test.c -o "$T/plugin_heal_test" || return 1
     "$T/plugin_heal_test" || return 1
+    cc -std=gnu11 -Wall -I windows/launcher linux/tests/pack_refresh_test.c -o "$T/pack_refresh_test" || return 1
+    "$T/pack_refresh_test" || return 1
     g++ -std=c++17 -Wall -I matron/src/platform/windows linux/tests/cmdline_quote_test.cpp -o "$T/cmdline_quote_test" || return 1
     "$T/cmdline_quote_test"
 }

@@ -28,6 +28,7 @@
 #include <wchar.h>
 
 #include "plugin_heal.h"
+#include "pack_refresh.h"
 
 #define VERDANDI_LAUNCHER_VERSION "0.2 (M2)"
 
@@ -204,7 +205,7 @@ static void write_sclang_conf(const wchar_t *dir) {
     utf8(app, a, sizeof a);
     utf8(home, h, sizeof h);
     fprintf(f, "includePaths:\n    - \"%s/sc/core\"\n    - \"%s/sc/engines\"\n", a, a);
-    fprintf(f, "    - \"%s/sc/linux\"\n    - \"%s/sc/linux-compat\"\n    - \"%s/dust\"\n", a, a, h);
+    fprintf(f, "    - \"%s/sc/linux\"\n    - \"%s/sc/linux-compat\"\n    - \"%s/sc/desktop-safe\"\n    - \"%s/dust\"\n", a, a, a, h); /* sc/desktop-safe (not "windows": sclang skips folders named after a platform it is not running on): a failing extension does not stop the start-up (VerdandiSafeInit.sc), the pack check */
     fprintf(f, "    - \"%s/extensions\"\n", h); /* M6: plug-in packs seeded from extensions-seed (mi-UGens, NamAmp) and what a script installs there */
     fprintf(f, "excludePaths:\n    []\npostInlineWarnings: false\n");
     fclose(f);
@@ -473,6 +474,22 @@ static void heal_plugins(void) {
 }
 
 /* plug-in packs shipped in the program folder (extensions-seed\<pack>\...: mi-UGens, NamAmp for Windows) are copied to <home>\extensions when the pack is not there yet; nothing is ever overwritten */
+/* the first line of a small text file (a pack marker) as UTF-8-ish text, cleaned; "" when it is not there */
+static void read_marker(const wchar_t *dir, const wchar_t *name, char *out, size_t n) {
+    wchar_t p[MAX_PATH * 2];
+    char buf[256];
+    out[0] = 0;
+    join(p, MAX_PATH * 2, dir, name);
+    FILE *f = _wfopen(p, L"rb");
+    if (!f) return;
+    size_t got = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[got] = 0;
+    pack_id_clean(buf, out, n);
+}
+
+/* plug-in packs of extensions-seed (docs/port/phase-m7.md): a pack is copied when it is not in <home>\extensions; a pack of ours that carries another PACK-ID.txt (or is the first release of the packs, which
+ * had none) is REPLACED: the old folder is moved to <home>\disabled first (never deleted), then the new one is copied. nothing else in extensions is touched (pack_refresh.h has the rules) */
 static void seed_extensions(void) {
     wchar_t seed[MAX_PATH * 2], pat[MAX_PATH * 2], dst[MAX_PATH * 2];
     join(seed, MAX_PATH * 2, g_app, L"extensions-seed");
@@ -485,10 +502,37 @@ static void seed_extensions(void) {
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
-        wchar_t from[MAX_PATH * 2], to[MAX_PATH * 2];
+        wchar_t from[MAX_PATH * 2], to[MAX_PATH * 2], t[MAX_PATH * 2];
+        char seed_id[128], inst_id[128];
         join(from, MAX_PATH * 2, seed, fd.cFileName);
         join(to, MAX_PATH * 2, dst, fd.cFileName);
-        if (!exists(to)) {
+        read_marker(from, L"PACK-ID.txt", seed_id, sizeof seed_id);
+        read_marker(to, L"PACK-ID.txt", inst_id, sizeof inst_id);
+        int there = exists(to);
+        join(t, MAX_PATH * 2, to, L"SOURCE-REVISION.txt");
+        int first_release = there && exists(t);
+        join(t, MAX_PATH * 2, to, L"plugins");
+        first_release = first_release && exists(t);
+        pack_action act = pack_decide(there, seed_id, inst_id, first_release);
+        if (act == PACK_REPLACE) {
+            wchar_t dis[MAX_PATH * 2], old[MAX_PATH * 2], nm[MAX_PATH];
+            join(dis, MAX_PATH * 2, g_home, L"disabled");
+            make_dirs(dis);
+            int k = 0, ok = 0;
+            for (; k < 100 && !ok; k++) {
+                if (k == 0) _snwprintf(nm, MAX_PATH, L"%ls-replaced", fd.cFileName);
+                else _snwprintf(nm, MAX_PATH, L"%ls-replaced-%d", fd.cFileName, k + 1);
+                join(old, MAX_PATH * 2, dis, nm);
+                if (!exists(old) && MoveFileExW(to, old, MOVEFILE_COPY_ALLOWED)) ok = 1;
+            }
+            if (!ok) {
+                say(L"plug-in pack %ls: the old copy could not be moved to disabled\\ (is a program using it?): it stays as it is", fd.cFileName);
+                continue;
+            }
+            say(L"plug-in pack %ls: the old copy (marker '%hs') was moved to %ls, the new one (marker '%hs') is copied", fd.cFileName, inst_id[0] ? inst_id : "none", old, seed_id);
+            there = 0;
+        }
+        if (!there) {
             copy_tree(from, to);
             say(L"plug-in pack %ls was copied to %ls", fd.cFileName, to);
         }

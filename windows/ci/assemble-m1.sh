@@ -70,14 +70,14 @@ assemble() {
         for pack in "$PLUGINS_DIR"/seed/*/; do
             [ -d "$pack" ] || continue
             n=$(basename "$pack")
-            if find "$pack" -name '*.scx' | grep -q .; then
+            if find "$pack" -name '*.scx' | grep -q . && [ -f "$pack/PACK-ID.txt" ]; then
                 cp -r "$pack" "$APP/extensions-seed/$n" || return 1
                 mkdir -p "$APP/licenses/$n"
                 cp "$pack"/COPYING* "$pack"/LICENSE* "$APP/licenses/$n/" 2> /dev/null || true
                 [ -d "$pack/licences" ] && cp -r "$pack/licences"/. "$APP/licenses/$n/"
                 echo "found: plug-in pack $n ($(find "$pack" -name '*.scx' | wc -l) .scx files)"
             else
-                echo "NOTE: pack $n has no .scx files, not in the zip"
+                echo "NOTE: pack $n has no .scx files or no PACK-ID.txt (the build found no class files, or a class twice), not in the zip"
             fi
         done
         cp "$PLUGINS_DIR/m7-report.txt" "$APP/extensions-seed/BUILD-REPORT.txt" 2> /dev/null || true

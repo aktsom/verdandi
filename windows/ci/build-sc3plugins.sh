@@ -75,6 +75,48 @@ build_pack() {
     return 0
 }
 
+# --- begin pack checks (linux/tests/pack_check_test.sh runs this part on Linux)
+PACK_LAYOUT=2 # the layout of a pack folder: bump it when the folder is arranged differently (it goes into PACK-ID.txt, which makes the launcher replace an older copy)
+
+# all .sc text of a folder without comments (a class that appears twice inside a block comment is not defined twice)
+sc_text() { # dir...
+    # one file at a time: a file without a final newline must not glue its last line to the first line of the next one
+    # shellcheck disable=SC2016
+    find "$@" -name '*.sc' -print0 2> /dev/null | xargs -0 perl -0777 -ne 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g; print $_, "\n"' 2> /dev/null
+}
+class_names() { sc_text "$@" | grep -oE '^[[:space:]]*[A-Z][A-Za-z0-9_]*[[:space:]]*(:|\{|\[)' | sed -E 's/[[:space:]]*(:|\{|\[)$//; s/^[[:space:]]*//' | sort; }
+
+# finish_pack <name> <unit source dir> <revision source dir>: the checks of a pack and its marker.
+#   - UNITS.txt: the UGen names the plug-in files define (from the sources: DefineSimpleUnit(Name), DefineDtorUnit(Name), ..., fDefineUnit)("Name"))
+#   - every unit has to have a class, in the pack or in SuperCollider's own class library: the ones that do not are listed (an engine that calls such a UGen stops with "Class 'X' not found")
+#   - no class name is defined twice in the pack (comments are not counted)
+#   - PACK-ID.txt: <revision>-L<layout>, written only for a pack that has plug-in files AND class files: the launcher copies a pack that has this marker and replaces its own older copy when it differs
+finish_pack() {
+    local name="$1" unitsrc="$2" revsrc="$3" dest="$OUT/seed/$1" scx classes missing dup rev
+    [ -d "$dest" ] || return 0
+    scx=$(find "$dest" -name '*.scx' | wc -l)
+    classes=$(find "$dest" -name '*.sc' | wc -l)
+    { grep -rhoE 'Define[A-Za-z]*Unit\(\s*[A-Za-z0-9_]+' "$unitsrc" --include='*.cpp' --include='*.h' --include='*.hpp' 2> /dev/null | sed -E 's/.*\(\s*//';
+      grep -rhoE 'fDefineUnit\)\(\s*"[A-Za-z0-9_]+"' "$unitsrc" --include='*.cpp' 2> /dev/null | sed -E 's/.*"([^"]+)"/\1/'; } | grep -E '^[A-Z]' | grep -vE '^(Name|Unit|Class)$' | sort -u > "$dest/UNITS.txt"
+    class_names "$dest" "$SC_SRC/SCClassLibrary" | sort -u > "$OUT/logs/known-classes-$name.txt"
+    missing=$(comm -23 "$dest/UNITS.txt" "$OUT/logs/known-classes-$name.txt" | tr '\n' ' ')
+    class_names "$dest" | uniq -d | tr '\n' ' ' > "$OUT/logs/duplicate-classes-$name.txt"
+    dup=$(cat "$OUT/logs/duplicate-classes-$name.txt")
+    say "$name: $scx plug-in files, $classes class files, $(wc -l < "$dest/UNITS.txt") UGen names in the sources"
+    if [ -n "$missing" ]; then say "$name: UGENS WITHOUT A CLASS (in no .sc of the pack and not in SuperCollider's class library): $missing"; else say "$name: every UGen has a class"; fi
+    if [ -n "$dup" ]; then say "$name: ERROR: class names defined twice (comments not counted): $dup"; else say "$name: no class name is defined twice"; fi
+    rev=$(git -C "$revsrc" rev-parse HEAD 2> /dev/null | cut -c1-12)
+    git -C "$revsrc" rev-parse HEAD > "$dest/SOURCE-REVISION.txt" 2> /dev/null
+    if [ "$scx" -gt 0 ] && [ "$classes" -gt 0 ] && [ -n "$rev" ] && [ -z "$dup" ]; then
+        echo "${rev}-L${PACK_LAYOUT}" > "$dest/PACK-ID.txt"
+        say "$name: PACK-ID $(cat "$dest/PACK-ID.txt")"
+    else
+        say "$name: NO PACK-ID (needs plug-in files AND class files AND no duplicate class): the pack is NOT put into the zip"
+    fi
+}
+
+# --- end pack checks
+
 # ---- sc3-plugins: the class files of every directory that has them are copied beside the .scx files
 SC3P_SRC="$WORK/sc3-plugins"
 if clone https://github.com/supercollider/sc3-plugins.git "$SC3P_TAG" "$SC3P_SRC" > "$OUT/logs/clone-sc3p.log" 2>&1; then
@@ -96,17 +138,14 @@ if clone https://github.com/supercollider/sc3-plugins.git "$SC3P_TAG" "$SC3P_SRC
             done
         )
     done
-    # a class name defined in two files of the pack is what stops sclang: say so here, in the report, not only in the start test
-    grep -rhoE "^[A-Z][A-Za-z0-9_]* *(:|\{)" "$dest/classes" --include='*.sc' 2> /dev/null | sed -E 's/ *(:|\{)$//' | sort | uniq -d > "$OUT/logs/duplicate-classes.txt"
-    if [ -s "$OUT/logs/duplicate-classes.txt" ]; then say "WARNING: class names defined twice in the pack: $(head -n 10 "$OUT/logs/duplicate-classes.txt" | tr '\n' ' ')"; else say "no class name is defined twice in the sc3-plugins pack"; fi
     cp "$SC3P_SRC"/COPYING* "$SC3P_SRC"/LICENSE* "$SC3P_SRC"/README* "$dest/" 2> /dev/null || true
     find "$SC3P_SRC/source" -maxdepth 2 \( -iname 'COPYING*' -o -iname 'LICENSE*' \) -exec sh -c 'for f; do mkdir -p "$0/licences/$(basename "$(dirname "$f")")" && cp "$f" "$0/licences/$(basename "$(dirname "$f")")/"; done' "$dest" {} +
-    git -C "$SC3P_SRC" rev-parse HEAD > "$dest/SOURCE-REVISION.txt" 2> /dev/null
+    finish_pack sc3-plugins "$SC3P_SRC/source" "$SC3P_SRC"
 else
     say "FAIL: could not clone sc3-plugins"
 fi
 
-# ---- mi-UGens
+# ---- mi-UGens (the class files are in sc/Classes of the repository, the sources of the plug-ins in projects/)
 MI_SRC="$WORK/mi-UGens"
 if clone https://github.com/v7b1/mi-UGens.git "$MIUGENS_REF" "$MI_SRC" > "$OUT/logs/clone-mi.log" 2>&1; then
     # MiBraids links a libsamplerate that its source tree expects pre-built in projects/MiBraids/libsamplerate/build (Release, as a Visual Studio build puts it)
@@ -121,9 +160,17 @@ if clone https://github.com/v7b1/mi-UGens.git "$MIUGENS_REF" "$MI_SRC" > "$OUT/l
     fi
     build_pack mi-UGens "$MI_SRC"
     dest="$OUT/seed/mi-UGens"
-    [ -d "$MI_SRC/Classes" ] && mkdir -p "$dest/Classes" && cp -r "$MI_SRC/Classes"/. "$dest/Classes/"
-    cp "$MI_SRC"/LICENSE* "$MI_SRC"/README* "$dest/" 2> /dev/null || true
-    git -C "$MI_SRC" rev-parse HEAD > "$dest/SOURCE-REVISION.txt" 2> /dev/null
+    # the class files: sc/Classes (an earlier version looked for Classes at the top of the repository, which does not exist: the pack had plug-in files and no classes)
+    if [ -d "$MI_SRC/sc/Classes" ]; then
+        mkdir -p "$dest/Classes" && cp "$MI_SRC"/sc/Classes/*.sc "$dest/Classes/"
+    else
+        say "mi-UGens: ERROR: no sc/Classes folder in the repository: the pack would have no classes"
+    fi
+    # licences: GPL-3.0 text, the MIT licence of the Mutable Instruments code (eurorack/LICENSE.txt) and the readme
+    [ -f "$MI_SRC/gpl-3.0.md" ] && cp "$MI_SRC/gpl-3.0.md" "$dest/LICENSE-GPL-3.0.md"
+    [ -f "$MI_SRC/eurorack/LICENSE.txt" ] && cp "$MI_SRC/eurorack/LICENSE.txt" "$dest/LICENSE-eurorack-mutable-instruments.txt"
+    cp "$MI_SRC"/README* "$dest/" 2> /dev/null || true
+    finish_pack mi-UGens "$MI_SRC/projects" "$MI_SRC"
 else
     say "FAIL: could not clone mi-UGens"
 fi
@@ -133,6 +180,7 @@ if [ -n "${NAMAMP_URL:-}" ]; then
     NA_SRC="$WORK/namamp"
     if clone "$NAMAMP_URL" "${NAMAMP_REF:-HEAD}" "$NA_SRC" > "$OUT/logs/clone-namamp.log" 2>&1; then
         build_pack NamAmp "$NA_SRC"
+        finish_pack NamAmp "$NA_SRC" "$NA_SRC"
     else
         say "FAIL: could not clone NamAmp ($NAMAMP_URL)"
     fi

@@ -199,6 +199,13 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M7 round 2: mi-UGens classes, pack refresh, safe start-up (version 0.8.1)
+
+- **Cause of the missing classes:** the build script looked for `Classes` at the top of the mi-UGens repository; they are in `sc/Classes`. Fixed, with licences. Pack check on the sources (`UNITS.txt`, a class for every UGen, no class twice with comments stripped), `PACK-ID.txt` per pack, packs without it are not shipped.
+- **Launcher:** replaces its own older pack (marker differs, or the 0.8.0 layout without marker) after moving the old folder to `disabled\<pack>-replaced`; other folders in `extensions` are never touched (`pack_refresh.h`, tested).
+- **sclang:** `sc/desktop-safe/VerdandiSafeInit.sc` makes a failing `initClass` a log line instead of a cut-off start-up (reproduced and fixed with the real sclang here); `VerdandiPackCheck.sc` prints one line naming UGens without a class.
+- **CI:** real SynthDefs (MiPlaits, MiBraids, Decimator) built through the sclang console, server answers `s.sync`, no class missing / duplicate / initClass failure, pack replace and untouched own folder checked. Not yet run on a real PC.
+
 ## Windows M7: plug-in packs (version 0.8.0, built in CI, results in docs/port/phase-m7.md section 6)
 
 - Job `plugins` (windows/ci/build-sc3plugins.sh): the whole sc3-plugins collection, mi-UGens, NamAmp when `NAMAMP_URL` is set, built per directory (`ninja -k 0`); `assemble-m1.sh` puts every pack with .scx files into `extensions-seed\`, with licences and source offers. Start-up check: one line naming all missing classes (`sc_class_check.lua` summary, also on Windows). NamAmp: source not identified. CI run 43286335050 (16d2107, all green): sc3-plugins 171 .scx and mi-UGens 12 .scx built, 0 failed; both packs add about 6.8 MB zipped (default zip 81.1 MB); sclang compiles with them. NamAmp not built (source not named). Not tried on a real PC.

@@ -145,6 +145,8 @@ run_input() {
     seed_home "$IN_HOME"
     printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nblock=128\n' > "$IN_HOME/audio.conf"
     # M6: a plug-in pack in the program folder that the launcher must copy to <home>\extensions
+    # M7: an older copy of a pack (the first release of the packs: SOURCE-REVISION.txt and plugins\\, no PACK-ID.txt) must be replaced and moved to disabled\\; a folder of the owner's own must not be touched
+    mkdir -p "$IN_HOME/extensions/mi-UGens/plugins" "$IN_HOME/extensions/MyOwnExt" && echo oldrev > "$IN_HOME/extensions/mi-UGens/SOURCE-REVISION.txt" && echo x > "$IN_HOME/extensions/mi-UGens/plugins/Old.txt" && echo "MyOwnExt { }" > "$IN_HOME/extensions/MyOwnExt/MyOwnExt.sc"
     mkdir -p "$APP/extensions-seed/SmokePack" && echo "SmokePack { *smoke { ^42 } }" > "$APP/extensions-seed/SmokePack/SmokePack.sc"
     # M6: maiden and the consoles are asked from outside while the program runs (windows/ci/maiden_probe.py)
     PROBE_OUT="$M0_OUT/m6-probe.txt"
@@ -192,7 +194,9 @@ chk_maiden() {
 chk_repl() {
     has "$M0_OUT/m6-probe.txt" "PROBE repl-norns ok" "the norns console (websocket 5555, ws-wrapper.exe around norns.exe) ran a line of Lua" \
         && has "$M0_OUT/m6-probe.txt" "PROBE repl-origin ok" "a page from another site gets no console" \
-        && has "$M0_OUT/m6-probe.txt" "PROBE repl-sclang ok" "the sclang console (websocket 5556) evaluated a line"
+        && has "$M0_OUT/m6-probe.txt" "PROBE repl-sclang ok" "the sclang console (websocket 5556) evaluated a line" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE repl-ugens ok" "SynthDefs with MiPlaits.ar, MiBraids.ar and Decimator.ar were built (the classes of the packs are known to sclang)" \
+        && has "$M0_OUT/m6-probe.txt" "PROBE repl-server ok" "the server answered after a SynthDef with Decimator.ar was added"
 }
 chk_tools() {
     local l="$IN_HOME/logs/norns.log"
@@ -201,6 +205,27 @@ chk_tools() {
         && has "$l" "VERDANDI_SMOKE_TOOLS busybox ok" "busybox sh: cp and cmp work (scripts that copy files)" \
         && has "$l" "VERDANDI_SMOKE_TOOLS applets .*unzip.*wget" "busybox has unzip and wget" \
         && has "$l" "VERDANDI_SMOKE_TOOLS submodule ok" "git clones a repository with a submodule (nb voices)"
+}
+# M7: the plug-in packs: copied with their class files and marker, an older copy replaced (moved to disabled), the owner's own folder untouched, sclang started cleanly with them (no class missing, none twice, no initClass failure)
+chk_packs() {
+    local H="$IN_HOME" S="$IN_HOME/logs/sclang.log" bad=0 f
+    grep -a -E "plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
+    for f in mi-UGens/PACK-ID.txt mi-UGens/Classes/MiPlaits.sc mi-UGens/UNITS.txt sc3-plugins/PACK-ID.txt sc3-plugins/UNITS.txt sc3-plugins/classes/DistortionUGens/sc/DistortionPlugins.sc; do
+        [ -f "$H/extensions/$f" ] && echo "found: extensions/$f" || { echo "NOT FOUND: extensions/$f"; bad=1; }
+    done
+    ls "$H"/extensions/mi-UGens/plugins/*.scx > /dev/null 2>&1 && echo "found: plug-in files in extensions/mi-UGens/plugins" || { echo "NOT FOUND: .scx in extensions/mi-UGens/plugins"; bad=1; }
+    [ -d "$H/disabled/mi-UGens-replaced" ] && [ -f "$H/disabled/mi-UGens-replaced/plugins/Old.txt" ] && echo "found: the old copy of mi-UGens was moved to disabled/mi-UGens-replaced" || { echo "NOT FOUND: disabled/mi-UGens-replaced"; bad=1; }
+    [ ! -f "$H/extensions/mi-UGens/plugins/Old.txt" ] && echo "found: the new mi-UGens does not hold the old file" || { echo "NOT FOUND: the old file is still in extensions/mi-UGens"; bad=1; }
+    [ -f "$H/extensions/MyOwnExt/MyOwnExt.sc" ] && echo "found: the owner's own folder in extensions was not touched" || { echo "NOT FOUND: MyOwnExt untouched"; bad=1; }
+    has "$S" "Class tree inited" "sclang initialised its class tree with the packs" || bad=1
+    if grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" "$S" | head -5 | grep -q .; then
+        echo "NOT FOUND (must be absent): class not found / duplicate / initClass failure in sclang.log:"; grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" "$S" | head -10; bad=1
+    else
+        echo "found: no 'Class not found', no 'duplicate Class', no initClass failure in sclang.log"
+    fi
+    echo "--- the pack check line of sclang:"; grep -a "plug-in packs" "$S" | head -3
+    grep -a -q "plug-in packs" "$S" || { echo "NOT FOUND: the pack check line (VerdandiPackCheck.sc ran)"; bad=1; }
+    return "$bad"
 }
 chk_heal() {
     local H="$IN_HOME"
@@ -341,6 +366,7 @@ m0_run m6-check-maiden chk_maiden
 m0_run m6-check-repl chk_repl
 m0_run m6-check-tools chk_tools
 m0_run m6-check-heal chk_heal
+m0_run m7-check-packs chk_packs
 m0_run m2-run-cycles run_cycles
 m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard

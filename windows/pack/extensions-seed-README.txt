@@ -1,3 +1,5 @@
-extensions-seed: SuperCollider plug-in packs for Windows (x86-64 .scx files with their .sc classes) that Verdandi copies to %USERPROFILE%\Verdandi\extensions on the next start when the pack is not there yet.
-One folder per pack (for example mi-UGens, NamAmp). Nothing is ever overwritten. A plug-in of another kind (Raspberry Pi, Mac, ARM) in dust\code or in extensions is moved to %USERPROFILE%\Verdandi\disabled at the start
-(a line in disabled\MANIFEST.txt says which and why): SuperCollider would stop at it. The packs built for Windows (sc3-plugins, mi-UGens, NamAmp when its source is known) are in the folders below when the build made them; BUILD-REPORT.txt says what compiled and what did not.
+extensions-seed: SuperCollider plug-in packs for Windows (x86-64 .scx files with their .sc classes) that Verdandi copies to %USERPROFILE%\Verdandi\extensions at the start.
+One folder per pack (sc3-plugins, mi-UGens, NamAmp when its source is known). Every pack has a PACK-ID.txt: when the copy in extensions has another PACK-ID.txt (or is the first release of the packs, which had none), Verdandi moves the old folder to
+%USERPROFILE%\Verdandi\disabled\<pack>-replaced (never deletes it) and copies the new one. A folder of extensions that is not one of these packs, or has the name of a pack but not our files, is never touched.
+A plug-in of another kind (Raspberry Pi, Mac, ARM) in dust\code or in extensions is moved to %USERPROFILE%\Verdandi\disabled at the start (a line in disabled\MANIFEST.txt says which and why): SuperCollider would stop at it.
+BUILD-REPORT.txt says what compiled and what did not; every pack has UNITS.txt (the UGens of its plug-in files): the sclang log has one line that says whether every one of them has a class.

@@ -550,3 +550,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 - Install a mod with maiden (for example nb): SYSTEM > MODS lists it, can be enabled, and is still there after SYSTEM > RESTART; `norns.log` says `mod found: <name> ... enabled`.
 - Load a script whose engine needs a missing class: within a few seconds the norns screen says `engine <name> failed: class <X> is missing`, norns.log has the same plain line, and the next script loads.
 - After the packs are in: the same script with Decimator (sc3-plugins) starts; `extensions\sc3-plugins` exists in your Verdandi folder; `norns.log` has no `SuperCollider classes missing` line.
+
+## Windows 0.8.1 (packs with their classes, pack refresh, start-up that survives a failing extension)
+- After the first start: `extensions\mi-UGens\Classes\MiPlaits.sc` and `extensions\sc3-plugins\PACK-ID.txt` exist; the old copy of the pack is in `disabled\mi-UGens-replaced` and `disabled\sc3-plugins-replaced`; your own folders in `extensions` are untouched.
+- The emplaitress mod (or any script with `MiPlaits.ar`) starts; `logs\sclang.log` has no `Class 'MiPlaits' not found`, norns does not show SUPERCOLLIDER FAIL.
+- `logs\sclang.log` has one line `plug-in packs: ...`; its list (and `logs\pack-check.txt`) is what is really missing.
