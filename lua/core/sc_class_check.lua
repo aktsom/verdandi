@@ -28,11 +28,11 @@ function M.report(text, ctx)
   local out, seen = {}, {}
   -- missing classes, in log order; the engine that was building comes from the trace ("Meta_Emplaitress:initClass")
   local first_engine = text:match("Meta_(%w+):initClass")
-  for class in text:gmatch("Class '([%w_]+)' not found") do
+  for class in text:gmatch("Class '?([%w_]+)'? not found") do
     if not seen["m" .. class] then
       seen["m" .. class] = true
       local line
-      local folder = home .. EXT
+      local folder = ctx.ext or (home .. EXT)
       local who = first_engine and (" while " .. first_engine .. " was starting") or ""
       if class:match("^Mi%u") then
         local state
@@ -100,6 +100,19 @@ function M.scan(path, ctx)
   f:close()
   if from > 0 then text = text:gsub("^[^\n]*\n", "", 1) end -- the first line is cut
   return M.report(text, ctx)
+end
+
+-- ONE plain line for all missing classes (the start-up check of the Windows build): "SuperCollider classes missing: Decimator, SmoothDecimator (sc3-plugins), MiPlaits (mi-UGens)"
+function M.summary(findings)
+  local names, packs = {}, {}
+  for _, f in ipairs(findings or {}) do
+    if f.kind == "missing" then
+      local pack = f.class:match("^Mi%u") and "mi-UGens" or (f.class:match("^Nam") and "NamAmp") or "sc3-plugins or another extension"
+      names[#names + 1] = f.class .. " (" .. pack .. ")"
+    end
+  end
+  if #names == 0 then return nil end
+  return "SuperCollider classes missing: " .. table.concat(names, ", ") .. "; engines that use them will not start (see logs/sclang.log)"
 end
 
 -- the standing note for the device window

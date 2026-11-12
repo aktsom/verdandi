@@ -309,3 +309,10 @@ Nothing is shipped in a product yet; these are the build inputs and what the M1 
 | MinGit (git for Windows, minimal portable zip) | shipped unmodified as `tools\mingit` (Windows M6); source: github.com/git-for-windows/git | GPL-2.0 (and the licences of its parts) |
 | busybox-w32 (rmyorston) | shipped unmodified as `busybox.exe` (Windows M6); source: github.com/rmyorston/busybox-w32 | GPL-2.0 |
 | nng | linked into `ws-wrapper.exe` (Windows M6), as into norns.exe | MIT |
+
+## M7: SuperCollider plug-in packs for Windows (build-time inputs, shipped as binaries in the zip)
+| Pack | Source | Licence | Notes |
+|---|---|---|---|
+| sc3-plugins | https://github.com/supercollider/sc3-plugins (tag Version-3.13.0) | GPL-2.0-or-later; some directories other free licences (copied to `licenses\sc3-plugins\`) | whole collection, only the parts that compile for Windows x86-64 are shipped |
+| mi-UGens | https://github.com/v7b1/mi-UGens | MIT / GPL-compatible (licence files copied) | based on Mutable Instruments code (Emilie Gillet) |
+| NamAmp | not identified | open | built only when `NAMAMP_URL` is set; licence to be confirmed by the owner |

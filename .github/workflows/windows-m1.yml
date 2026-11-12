@@ -111,6 +111,37 @@ jobs:
           if-no-files-found: warn
 
   # M6: maiden for Windows (cross-built on Linux: Go and static web files) and the portable tools (MinGit, busybox). Not fatal for the other jobs: the package then lacks them and its M6 checks say so
+  # M7: SuperCollider plug-in packs for Windows (the whole sc3-plugins collection, mi-UGens, NamAmp when NAMAMP_URL is set): built per directory with `ninja -k 0`, so that what compiles is shipped and what does not is
+  # listed in the report (m7-report.txt). NOT blocking: without this job the zip is built as before, without the packs.
+  plugins:
+    name: SuperCollider plug-in packs (sc3-plugins, mi-UGens, NamAmp)
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 90
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build the packs
+        env:
+          NAMAMP_URL: ${{ vars.NAMAMP_URL }}
+        run: windows/ci/build-sc3plugins.sh
+      - name: The report
+        if: always()
+        run: cat m7-out/m7-report.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m7-plugins
+          path: m7-out
+          retention-days: 14
+          if-no-files-found: warn
+
   maiden:
     name: maiden for Windows (Go server and web app)
     runs-on: ubuntu-latest
@@ -150,7 +181,7 @@ jobs:
 
   package:
     name: Assemble, start headless, check
-    needs: [sc, norns, maiden, tools]
+    needs: [sc, norns, maiden, tools, plugins]
     if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
     timeout-minutes: 30
@@ -177,8 +208,13 @@ jobs:
         with:
           name: m6-tools
           path: m6-tools
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m7-plugins
+          path: m7-plugins
       - name: Assemble the folder and the zip
-        run: MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
+        run: PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check
         timeout-minutes: 45
         run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
@@ -239,7 +275,7 @@ jobs:
 
   package-asio:
     name: 'ASIO build (assemble, start headless, check)'
-    needs: [sc, norns, asio, maiden, tools]
+    needs: [sc, norns, asio, maiden, tools, plugins]
     if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' && needs.asio.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
     timeout-minutes: 30
@@ -271,10 +307,15 @@ jobs:
         with:
           name: m6-tools
           path: m6-tools
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: m7-plugins
+          path: m7-plugins
       - name: The ASIO DLL must exist
         run: test -f m3-asio/libportaudio-2.dll || { echo "the ASIO build of PortAudio did not make libportaudio-2.dll (see the job 'PortAudio with ASIO' and its step log)"; ls -l m3-asio; exit 1; }
       - name: Assemble the folder and the zip
-        run: FLAVOR=asio MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
+        run: FLAVOR=asio PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check (ASIO host API listed, fallback, input)
         timeout-minutes: 30
         run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m3" SMOKE_SECONDS=60 SMOKE_CYCLES=3 EXPECT_ASIO=1 windows/ci/smoke-m1.sh

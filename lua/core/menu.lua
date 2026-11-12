@@ -530,7 +530,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
     if size == class_size then return end
     class_size = size
     local C = require 'core/sc_class_check'
-    local found = C.scan(home .. "/logs/sclang.log", {home = home, pack = require('core/mi_ugens').info(home).state})
+    local found = C.scan(home .. "/logs/sclang.log", {home = home, pack = require('core/mi_ugens').info(home).state, ext = os.getenv("NORNS_PLATFORM") == "windows" and (home .. "/extensions") or nil})
     local t = C.note(found)
     local key = ""
     for _, x in ipairs(found) do key = key .. x.line .. "\n" end

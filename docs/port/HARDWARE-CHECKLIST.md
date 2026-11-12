@@ -545,3 +545,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 4. A script that downloads things with `wget`/`curl`/`unzip` in its own install step: it works (busybox and git are in the folder).
 5. With serialosc running (as a program or a service) and a grid plugged in: GRID PORTS shows SERIALOSC; K3 twice stops it; with a service that needs administrator rights the page shows the command; AUTO STOP on: a held grid port makes Verdandi stop serialosc by itself.
 6. Put a Raspberry Pi plug-in (an ELF `.scx`) into a script's folder under dust\code and restart: it is moved to `disabled` and sclang still starts.
+
+## Windows 0.8.0 (M6 round 2 + M7), to check on a real PC
+- Install a mod with maiden (for example nb): SYSTEM > MODS lists it, can be enabled, and is still there after SYSTEM > RESTART; `norns.log` says `mod found: <name> ... enabled`.
+- Load a script whose engine needs a missing class: within a few seconds the norns screen says `engine <name> failed: class <X> is missing`, norns.log has the same plain line, and the next script loads.
+- After the packs are in: the same script with Decimator (sc3-plugins) starts; `extensions\sc3-plugins` exists in your Verdandi folder; `norns.log` has no `SuperCollider classes missing` line.

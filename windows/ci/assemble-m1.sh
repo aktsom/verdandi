@@ -65,6 +65,25 @@ assemble() {
     fi
     mkdir -p "$APP/extensions-seed"
     cp "$REPO/windows/pack/extensions-seed-README.txt" "$APP/extensions-seed/README.txt"
+    # M7: the plug-in packs built for Windows (sc3-plugins, mi-UGens, NamAmp when its source was named): one folder per pack, with their licences and revisions
+    if [ -n "${PLUGINS_DIR:-}" ] && [ -d "$PLUGINS_DIR/seed" ]; then
+        for pack in "$PLUGINS_DIR"/seed/*/; do
+            [ -d "$pack" ] || continue
+            n=$(basename "$pack")
+            if find "$pack" -name '*.scx' | grep -q .; then
+                cp -r "$pack" "$APP/extensions-seed/$n" || return 1
+                mkdir -p "$APP/licenses/$n"
+                cp "$pack"/COPYING* "$pack"/LICENSE* "$APP/licenses/$n/" 2> /dev/null || true
+                [ -d "$pack/licences" ] && cp -r "$pack/licences"/. "$APP/licenses/$n/"
+                echo "found: plug-in pack $n ($(find "$pack" -name '*.scx' | wc -l) .scx files)"
+            else
+                echo "NOTE: pack $n has no .scx files, not in the zip"
+            fi
+        done
+        cp "$PLUGINS_DIR/m7-report.txt" "$APP/extensions-seed/BUILD-REPORT.txt" 2> /dev/null || true
+    else
+        echo "NOTE: no plug-in packs in this zip (PLUGINS_DIR='${PLUGINS_DIR:-}')"
+    fi
     [ -f "$APP/ws-wrapper.exe" ] && echo "found: ws-wrapper.exe" || echo "NOTE: no ws-wrapper.exe"
     # the ASIO build: its PortAudio takes the place of the MSYS2 one (the same file name, the loader goes by it), the licence text of the SDK, the notices and the sources
     if [ "$FLAVOR" = asio ]; then
@@ -120,6 +139,15 @@ assemble() {
             echo
             # shellcheck disable=SC2028
             echo "ASIO build: the source of PortAudio as it was built, and of the Steinberg ASIO SDK as it was used, are in this folder: source\\portaudio-source.zip, source\\asio-sdk-source.zip (build record: source\\PA-ASIO-BUILD.txt)."
+        fi
+        if [ -d "$APP/extensions-seed" ] && [ -n "$(find "$APP/extensions-seed" -name '*.scx' 2> /dev/null | head -n 1)" ]; then
+            echo
+            echo "Plug-in packs in extensions-seed\\ (copied to the extensions folder at the first start): the .scx files were built for Windows x86-64 from these public sources, which are the complete corresponding source of what is in the zip:"
+            [ -f "$APP/extensions-seed/sc3-plugins/SOURCE-REVISION.txt" ] && echo "  sc3-plugins (GPL-2.0-or-later, some parts other free licences: licenses\\sc3-plugins\\): https://github.com/supercollider/sc3-plugins at commit $(tr -d '\r\n' < "$APP/extensions-seed/sc3-plugins/SOURCE-REVISION.txt")"
+            [ -f "$APP/extensions-seed/mi-UGens/SOURCE-REVISION.txt" ] && echo "  mi-UGens (licences: licenses\\mi-UGens\\): https://github.com/v7b1/mi-UGens at commit $(tr -d '\r\n' < "$APP/extensions-seed/mi-UGens/SOURCE-REVISION.txt")"
+            [ -f "$APP/extensions-seed/NamAmp/SOURCE-REVISION.txt" ] && echo "  NamAmp (licenses\\NamAmp\\): see extensions-seed\\NamAmp\\SOURCE-REVISION.txt"
+            # shellcheck disable=SC2028
+            echo "  built against the headers of SuperCollider 3.14.1 with MSVC; the build scripts are windows\\ci\\build-sc3plugins.sh of the repository above. The build record is extensions-seed\\BUILD-REPORT.txt."
         fi
     } > "$APP/SOURCE-OFFER.txt"
     # licences

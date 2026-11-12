@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M7: plug-in packs (version 0.8.0, built in CI, results in docs/port/phase-m7.md section 6)
+
+- Job `plugins` (windows/ci/build-sc3plugins.sh): the whole sc3-plugins collection, mi-UGens, NamAmp when `NAMAMP_URL` is set, built per directory (`ninja -k 0`); `assemble-m1.sh` puts every pack with .scx files into `extensions-seed\`, with licences and source offers. Start-up check: one line naming all missing classes (`sc_class_check.lua` summary, also on Windows). NamAmp: source not identified. Nothing here was run on Windows yet; the first CI run says what compiles.
+
 ## Windows M6 round 2: owner test of 0.7.0 (1d5defa): mods not found, failed engines (version 0.7.1)
 
 - **Mods.** Cause: the C `glob()` of the Windows build expands a wildcard in the last path component only, so `<code>/*/lib/mod.lua` found nothing. `Mods.scan` now walks the code folder with `_norns.listdir` when it exists (Windows only; accents and blanks in folder names allowed) and checks `lib/mod.lua` in each; Linux still uses the glob, unchanged. Test `linux/tests/mods_scan_windows_test.lua` (fails on the old code): mods found, enabled, still enabled and found after a restart. Not tested on Windows itself.
