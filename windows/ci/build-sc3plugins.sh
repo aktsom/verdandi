@@ -27,19 +27,35 @@ clone() { # url ref dir
 SC_SRC="$WORK/sc-src"
 clone https://github.com/supercollider/supercollider.git "$SC_TAG" "$SC_SRC" > "$OUT/logs/clone-sc.log" 2>&1 || { say "FAIL: could not clone SuperCollider $SC_TAG"; exit 1; }
 
+# FFTW (single precision, the prebuilt DLL package with an import library made from its .def, as build-sc.sh does): several sc3-plugins directories need it
+FFTW_DIR="$WORK/fftw"
+mkdir -p "$FFTW_DIR"
+(
+    cd "$FFTW_DIR" || exit 1
+    curl -fL --retry 3 -o fftw.zip https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip && 7z x fftw.zip -y > /dev/null && lib.exe /machine:x64 /def:libfftw3f-3.def > /dev/null
+) > "$OUT/logs/fftw.log" 2>&1
+if [ -f "$FFTW_DIR/libfftw3f-3.lib" ]; then
+    FFTW_ARGS=(-DFFTW3F_INCLUDE_DIR="$FFTW_DIR" -DFFTW3F_LIBRARY="$FFTW_DIR/libfftw3f-3.lib" -DFFTW3_INCLUDE_DIR="$FFTW_DIR" -DCMAKE_PREFIX_PATH="$FFTW_DIR")
+    say "FFTW: found ($FFTW_DIR)"
+else
+    FFTW_ARGS=()
+    say "FFTW: NOT available (see logs/fftw.log): directories that need it will fail"
+fi
+
 # build_pack <name> <source dir> <extra cmake args...>: configure + `ninja -k 0`; the .scx files and the class files go to $OUT/seed/<name>
 build_pack() {
     local name="$1" src="$2" bld="$WORK/build-$1" log="$OUT/logs/build-$1.log"
     shift 2
     say "== $name: configure"
-    if ! cmake -S "$src" -B "$bld" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSC_PATH="$SC_SRC" -DSUPERNOVA=OFF "$@" > "$OUT/logs/configure-$name.log" 2>&1; then
-        say "$name: CONFIGURE FAILED. last lines:"; tail -n 15 "$OUT/logs/configure-$name.log" | tee -a "$REPORT"
+    if ! cmake -S "$src" -B "$bld" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSC_PATH="$SC_SRC" -DSUPERNOVA=OFF "${FFTW_ARGS[@]}" "$@" > "$OUT/logs/configure-$name.log" 2>&1; then
+        say "$name: CONFIGURE FAILED. the errors:"; grep -B1 -A8 "CMake Error" "$OUT/logs/configure-$name.log" | head -n 60 | tee -a "$REPORT"; tail -n 5 "$OUT/logs/configure-$name.log" | tee -a "$REPORT"
         return 1
     fi
     say "== $name: build (ninja -k 0)"
     ninja -C "$bld" -k 0 > "$log" 2>&1
     local rc=$?
     say "$name: ninja exit $rc"
+    if [ "$rc" -ne 0 ] && ! grep -q "^FAILED: " "$log"; then say "$name: ninja stopped without a failed target. last lines:"; tail -n 25 "$log" | tee -a "$REPORT"; fi
     # the targets that failed, with their first error
     grep -E "^FAILED: " "$log" | sed 's/^FAILED: //' | sort -u > "$OUT/logs/failed-$name.txt"
     local nfail
@@ -54,7 +70,7 @@ build_pack() {
         [ -n "$t" ] || continue
         say "  FAILED target: $t"
         # the first error line of that target
-        grep -m 1 -A0 -E "error C[0-9]+|fatal error|error LNK[0-9]+|undefined" "$log" | sed 's/^/    first error in the log: /' | head -n 1 | tee -a "$REPORT" > /dev/null
+        grep -F -A12 "FAILED: $t" "$log" | grep -m 1 -E "error C[0-9]+|fatal error|error LNK[0-9]+|undefined" | sed 's/^/    first error: /' | tee -a "$REPORT"
     done < "$OUT/logs/failed-$name.txt"
     return 0
 }
@@ -106,6 +122,7 @@ else
     say "NamAmp: NOT BUILT: no source URL was given (the owner has to name the repository that defines the NamAmp UGen)"
 fi
 
+if ! find "$OUT/seed" -name "*.scx" 2> /dev/null | grep -q .; then echo "::warning::no plug-in pack was built: see m7-report.txt"; fi
 # the size, as the zip will see it
 say "== sizes"
 for p in "$OUT"/seed/*; do [ -d "$p" ] && say "$(basename "$p"): $(du -sk "$p" | cut -f1) KiB unpacked"; done
