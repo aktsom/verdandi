@@ -555,3 +555,9 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 - After the first start: `extensions\mi-UGens\Classes\MiPlaits.sc` and `extensions\sc3-plugins\PACK-ID.txt` exist; the old copy of the pack is in `disabled\mi-UGens-replaced` and `disabled\sc3-plugins-replaced`; your own folders in `extensions` are untouched.
 - The emplaitress mod (or any script with `MiPlaits.ar`) starts; `logs\sclang.log` has no `Class 'MiPlaits' not found`, norns does not show SUPERCOLLIDER FAIL.
 - `logs\sclang.log` has one line `plug-in packs: ...`; its list (and `logs\pack-check.txt`) is what is really missing.
+
+## Windows 0.8.2 (plug-ins in the server, /home/we in sclang, stale maiden)
+- A script with `MiPlaits` / `Decimator` / `MoogLadder` / `SawDPW`: `logs\sclang.log` has no "not installed"; the engine makes sound.
+- Dronecaster: the drone list is not empty; picking Apparatus works (no "does not know this drone").
+- `norns.log` no longer shows `find: ...\.local\share\SuperCollider\Extensions/: No such file or directory`; the folder `C:\Users\<you>\Verdandi\.local\share\SuperCollider\Extensions` exists.
+- MAIDEN button opens maiden (no 404), also after you ran an older program folder before. If another program uses port 5000 the button says so on the window.

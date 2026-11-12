@@ -19,6 +19,7 @@
 #endif
 #include <winsock2.h> /* (before windows.h) */
 #include <windows.h>
+#include <iphlpapi.h>
 
 #include <shellapi.h>
 #include <tlhelp32.h>
@@ -29,6 +30,7 @@
 
 #include "plugin_heal.h"
 #include "pack_refresh.h"
+#include "maiden_port.h"
 
 #define VERDANDI_LAUNCHER_VERSION "0.2 (M2)"
 
@@ -206,6 +208,7 @@ static void write_sclang_conf(const wchar_t *dir) {
     utf8(home, h, sizeof h);
     fprintf(f, "includePaths:\n    - \"%s/sc/core\"\n    - \"%s/sc/engines\"\n", a, a);
     fprintf(f, "    - \"%s/sc/linux\"\n    - \"%s/sc/linux-compat\"\n    - \"%s/sc/desktop-safe\"\n    - \"%s/dust\"\n", a, a, a, h); /* sc/desktop-safe (not "windows": sclang skips folders named after a platform it is not running on): a failing extension does not stop the start-up (VerdandiSafeInit.sc), the pack check */
+    fprintf(f, "    - \"%s/.local/share/SuperCollider/Extensions\"\n", h); /* M7 round 3: the per-user extensions folder of a real norns, where scripts install engines and quarks (docs/port/phase-m7.md section 8) */
     fprintf(f, "    - \"%s/extensions\"\n", h); /* M6: plug-in packs seeded from extensions-seed (mi-UGens, NamAmp) and what a script installs there */
     fprintf(f, "excludePaths:\n    []\npostInlineWarnings: false\n");
     fclose(f);
@@ -471,6 +474,8 @@ static void heal_plugins(void) {
     if (exists(a)) heal_tree(a, a, 0);
     join(a, MAX_PATH * 2, g_home, L"extensions");
     if (exists(a)) heal_tree(a, a, 0);
+    join(a, MAX_PATH * 2, g_home, L".local\\share\\SuperCollider\\Extensions");
+    if (exists(a)) heal_tree(a, a, 0);
 }
 
 /* plug-in packs shipped in the program folder (extensions-seed\<pack>\...: mi-UGens, NamAmp for Windows) are copied to <home>\extensions when the pack is not there yet; nothing is ever overwritten */
@@ -561,6 +566,96 @@ static int port_in_use_tcp(unsigned short port) {
 
 static int g_maiden_port = 5000;
 
+/* the process that listens on a TCP port of this computer (any local address). returns 1 and its id when there is one */
+static int tcp_listener_of(unsigned short port, DWORD *pid) {
+    ULONG sz = 0;
+    GetExtendedTcpTable(NULL, &sz, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0);
+    if (sz == 0) return 0;
+    MIB_TCPTABLE_OWNER_PID *t = (MIB_TCPTABLE_OWNER_PID *)malloc(sz);
+    if (!t) return 0;
+    int found = 0;
+    if (GetExtendedTcpTable(t, &sz, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) == NO_ERROR) {
+        for (DWORD i = 0; i < t->dwNumEntries; i++) {
+            if ((unsigned short)(((t->table[i].dwLocalPort & 0xff) << 8) | ((t->table[i].dwLocalPort >> 8) & 0xff)) == port) {
+                *pid = t->table[i].dwOwningPid;
+                found = 1;
+                break;
+            }
+        }
+    }
+    free(t);
+    return found;
+}
+
+/* the file name (without folder) of a process, from the process list (needs no rights) */
+static void process_name_of(DWORD pid, wchar_t *out, size_t n) {
+    out[0] = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    PROCESSENTRY32W pe;
+    pe.dwSize = sizeof pe;
+    for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+        if (pe.th32ProcessID == pid) {
+            _snwprintf(out, n, L"%ls", pe.szExeFile);
+            break;
+        }
+    }
+    CloseHandle(snap);
+}
+
+static int g_maiden_ok = 0; /* maiden is part of this build and its port is ours (set per round by maiden_prepare) */
+static HANDLE g_maiden_proc = NULL;
+
+/* M7 round 3 (docs/port/phase-m7.md section 8): before every start, who holds maiden's port? a maiden.exe of ANY program folder (an earlier build, a copy left running) serves other files (the MAIDEN button then
+ * gave "404 not found") and is stopped; any other program is left alone, maiden is not started and the MAIDEN button says why (VERDANDI_MAIDEN_WHY: maiden_port.h) */
+static void maiden_prepare(void) {
+    wchar_t mx[MAX_PATH * 2], pv[16];
+    char name8[MAX_PATH], why[200];
+    g_maiden_ok = 0;
+    join(mx, MAX_PATH * 2, g_app, L"maiden\\maiden.exe");
+    set_env(L"VERDANDI_MAIDEN", NULL);
+    set_env(L"VERDANDI_MAIDEN_WHY", NULL);
+    if (!exists(mx)) return; /* no maiden in this build: the window says so (button 9) */
+    int port = GetEnvironmentVariableW(L"NORNS_MAIDEN_PORT", pv, 16) > 0 && _wtoi(pv) > 0 && _wtoi(pv) < 65536 ? _wtoi(pv) : 5000;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        DWORD pid = 0;
+        wchar_t nm[MAX_PATH];
+        nm[0] = 0;
+        int held = tcp_listener_of((unsigned short)port, &pid);
+        if (held) process_name_of(pid, nm, MAX_PATH);
+        WideCharToMultiByte(CP_UTF8, 0, nm, -1, name8, sizeof name8, NULL, NULL);
+        mp_action act = mp_decide(held, name8);
+        if (act == MP_FREE) {
+            g_maiden_ok = 1;
+            break;
+        }
+        if (act == MP_STOP_STALE && attempt == 0) {
+            wchar_t image[MAX_PATH * 2];
+            image[0] = 0;
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+            if (h) {
+                DWORD n = MAX_PATH * 2;
+                if (!QueryFullProcessImageNameW(h, 0, image, &n)) image[0] = 0;
+                say(L"maiden: a maiden.exe (process %lu, %ls) holds port %d: it is not this program's maiden (an earlier program folder or a copy left running): stopping it", (unsigned long)pid, image[0] ? image : L"folder unknown", port);
+                TerminateProcess(h, 1);
+                WaitForSingleObject(h, 5000);
+                CloseHandle(h);
+                for (int i = 0; i < 30 && port_in_use_tcp((unsigned short)port); i++) Sleep(100);
+                continue; /* look again: the port has to be free now */
+            }
+            say(L"maiden: a maiden.exe (process %lu) holds port %d and cannot be opened to stop it (another user or an elevated program?)", (unsigned long)pid, port);
+        }
+        /* another program (or a maiden.exe that could not be stopped) */
+        mp_why(why, sizeof why, port, name8);
+        wchar_t why16[200];
+        MultiByteToWideChar(CP_UTF8, 0, why, -1, why16, 200);
+        say(L"%ls (another port: set NORNS_MAIDEN_PORT)", why16);
+        set_env(L"VERDANDI_MAIDEN_WHY", why16);
+        return;
+    }
+    if (g_maiden_ok) set_env(L"VERDANDI_MAIDEN", L"1"); /* the MAIDEN button of the window opens maiden (sdl_bridge.cc) */
+}
+
 /* maiden (the web editor and script catalog): maiden\maiden.exe in the program folder, on 127.0.0.1 only (a loopback listener does not ask Windows Firewall). its catalog sources are copied to dust\data\sources the
  * first time. returns the process, or NULL (not part of this build, or the port is taken) */
 static HANDLE start_maiden(const wchar_t *logs) {
@@ -570,6 +665,7 @@ static HANDLE start_maiden(const wchar_t *logs) {
     if (!exists(exe)) return NULL;
     wchar_t pv[16];
     if (GetEnvironmentVariableW(L"NORNS_MAIDEN_PORT", pv, 16) > 0 && _wtoi(pv) > 0 && _wtoi(pv) < 65536) g_maiden_port = _wtoi(pv);
+    if (!g_maiden_ok) return NULL; /* maiden_prepare said why (launcher.log, and the MAIDEN button) */
     if (port_in_use_tcp((unsigned short)g_maiden_port)) {
         say(L"maiden: port %d is in use by another program: maiden is not started (another port: set NORNS_MAIDEN_PORT)", g_maiden_port);
         return NULL;
@@ -596,6 +692,7 @@ static HANDLE start_maiden(const wchar_t *logs) {
     DWORD err = 0;
     rotate(logs, L"maiden");
     HANDLE p = start_child(exe, args, dir, logs, L"maiden", &err);
+    g_maiden_proc = p;
     if (!p) {
         say(L"maiden could not be started (error %lu)", (unsigned long)err);
         return NULL;
@@ -919,13 +1016,26 @@ int wmain(int argc, wchar_t **argv) {
         wchar_t mx[MAX_PATH * 2], pv[16];
         join(mx, MAX_PATH * 2, g_app, L"maiden\\maiden.exe");
         if (exists(mx)) {
-            set_env(L"VERDANDI_MAIDEN", L"1"); /* the MAIDEN button of the window opens maiden (sdl_bridge.cc) */
+            /* (VERDANDI_MAIDEN itself is set per round by maiden_prepare: it says that maiden is really ours and running) */
             int port = GetEnvironmentVariableW(L"NORNS_MAIDEN_PORT", pv, 16) > 0 && _wtoi(pv) > 0 && _wtoi(pv) < 65536 ? _wtoi(pv) : 5000;
             wchar_t origins[160];
             /* the REPL websockets only talk to a browser page that maiden served */
             _snwprintf(origins, 160, L"http://127.0.0.1:%d,http://localhost:%d", port, port);
             set_env(L"WS_WRAPPER_ALLOWED_ORIGINS", origins);
         }
+    }
+    {
+        /* M7 round 3: the folders scsynth loads plug-ins (.scx) from besides its own: sclang's include path only gives the server the classes. SC_PLUGIN_PATH is searched recursively and
+         * errors are reported; the standard folders stay. the per-user folder of a real norns is made here: scripts run `find` and `tar` on it */
+        wchar_t ud[MAX_PATH * 2], ex[MAX_PATH * 2], pp[MAX_PATH * 6], old[MAX_PATH * 4];
+        join(ud, MAX_PATH * 2, g_home, L".local\\share\\SuperCollider\\Extensions");
+        make_dirs(ud);
+        join(ex, MAX_PATH * 2, g_home, L"extensions");
+        make_dirs(ex);
+        if (GetEnvironmentVariableW(L"SC_PLUGIN_PATH", old, MAX_PATH * 4) > 0) _snwprintf(pp, MAX_PATH * 6, L"%ls;%ls;%ls", ex, ud, old);
+        else _snwprintf(pp, MAX_PATH * 6, L"%ls;%ls", ex, ud);
+        set_env(L"SC_PLUGIN_PATH", pp);
+        say(L"scsynth plug-in folders besides its own (SC_PLUGIN_PATH): %ls", pp);
     }
     heal_plugins();
     seed_extensions();
@@ -971,6 +1081,7 @@ int wmain(int argc, wchar_t **argv) {
             wait_ports_free(8000);
             say(L"the ports of the earlier start are free (waited %lu ms)", (unsigned long)(GetTickCount64() - pw0));
         }
+        maiden_prepare();
     }
     pn = start_program(norns, L"", g_app, logs, L"norns", 5555, NULL, &err);
     if (!pn) {
@@ -1015,6 +1126,10 @@ int wmain(int argc, wchar_t **argv) {
         TerminateJobObject(g_job, 0); /* sclang, scsynth and anything else started from here */
         wait_job_empty(g_job, 10000);
         say(L"sclang and scsynth stopped (%lu ms)", (unsigned long)(GetTickCount64() - stop0));
+        if (g_maiden_proc) {
+            say(L"maiden %ls with the round", WaitForSingleObject(g_maiden_proc, 0) == WAIT_OBJECT_0 ? L"stopped" : L"is STILL RUNNING (it should have ended with the job)");
+            g_maiden_proc = NULL;
+        }
     }
     if (ps) {
         CloseHandle(ps);

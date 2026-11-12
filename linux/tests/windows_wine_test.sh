@@ -72,7 +72,7 @@ for mode in null locked; do
 done
 
 echo "== launcher"
-$CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 || exit 1; }
+$CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 -liphlpapi 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 -liphlpapi || exit 1; }
 mkdir -p "$T/app/lua/core" "$T/app/supercollider" "$T/app/update"
 mkdir -p "$T/app/dust-seed/code/awake/lib"; echo "-- seed" > "$T/app/dust-seed/code/awake/awake.lua"; echo "-- lib" > "$T/app/dust-seed/code/awake/lib/x.lua"
 printf "9.9.9 abcdef1\nbuilt: test\n" > "$T/app/BUILD.txt"

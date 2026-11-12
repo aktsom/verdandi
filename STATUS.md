@@ -199,6 +199,13 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M7 round 3: server plug-in path, /home/we in sclang, per-user extensions folder, stale maiden (version 0.8.2)
+
+- **Plug-ins not loaded by the server:** scsynth only searched its own folders; `<home>\extensions` was only on sclang's include path. The launcher now sets `SC_PLUGIN_PATH` (extensions and the per-user folder). CI: scsynth run directly with the packs (any load error fails the job), and the real server must start a synth of each of MiPlaits, MiBraids, Decimator, MoogLadder, SawDPW (`s.sync` alone is no longer enough); `sclang.log` must not say "not installed".
+- **/home/we in sclang:** `sc/desktop-safe/NornsVirtualHome.sc` (same code as the Linux file, home from `NORNS_HOME`); tested with the real sclang here and by a SmokePack scan on the runner.
+- **`~/.local/share/SuperCollider/Extensions`:** created at every start, on sclang's include path and `SC_PLUGIN_PATH`, walked by the plug-in heal.
+- **MAIDEN 404:** the launcher looks up the holder of port 5000 before every start: a `maiden.exe` of any folder is stopped, another program is left alone and the MAIDEN button says so. CI starts a copy of maiden from another folder first. Not yet run on a real PC.
+
 ## Windows M7 round 2: mi-UGens classes, pack refresh, safe start-up (version 0.8.1)
 
 - **Cause of the missing classes:** the build script looked for `Classes` at the top of the mi-UGens repository; they are in `sc/Classes`. Fixed, with licences. Pack check on the sources (`UNITS.txt`, a class for every UGen, no class twice with comments stripped), `PACK-ID.txt` per pack, packs without it are not shipped.
