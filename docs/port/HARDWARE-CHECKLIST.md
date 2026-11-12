@@ -434,6 +434,15 @@ New zip from the newest run of the workflow windows-m1 (the program is still 0.2
 3. **AUDIO default:** choose another device, APPLY; then choose `default` (the first entry), APPLY: the sound is on the Windows default device again, `audio.conf` has no `output=` line, the log says `audio: output chosen: the Windows default device`, and the bottom line of the page says `playing: <name>`. Tell me if not, with `audio.conf` and the `audio:` lines.
 4. **If it still crashes:** send the whole `crash-....txt`; it now holds the function names (also resolvable with `python windows\ci\resolve_crash.py norns.exe --report crash-....txt` and the exe of the same build), and it is written even if the process dies at once.
 
+## Windows M3, round 3 (build 0.4.1: fresh start, exclusive, rate, timers): what only your PC and the RME can show
+
+1. **Fresh start:** start Verdandi, load awake, leave BUFFER on auto: it should be as clean as after a re-apply. `logs\norns.log` line `audio: ... hold-back 4` (or more) and `u` on the status line staying near 0.
+2. **Exclusive (Ableton closed):** DRIVER exclusive: if it works, listen at auto, 512, 256. If it is refused the status line scrolls the exact reason (for example `Invalid sample rate; the device runs at 44100 Hz, exclusive takes: ...`) and audio.conf is set to `exclusive=0`; send that line.
+3. **Rate:** `logs\norns.log` has `audio: the device itself runs at N Hz`. Check the RME Settings: still 48000 after trying exclusive? (From this build exclusive and ASIO ask for the device's own rate.)
+4. **Other OUTPUT:** change OUTPUT and read the status line: it says the pair may not be wired. Does choosing the Speakers entry again bring the sound back?
+5. **Timers:** load awake, then load another script (or press the RESET/restart): is `awake.lua:124 invalid paramset index: out` gone from the log? If it still appears, send the 20 lines before the first one.
+6. Not testable without your PC: all of the above.
+
 ## Windows M3, round 2 (live AUDIO page, no crackle by design, readable pages): what only your PC can show
 
 Everything below is new in build 0.4 and was tested only with a fake sound card on Linux. Steps for you: `docs/port/phase-m3.md` section 6 and the "FOR THE OWNER" block of the report.
