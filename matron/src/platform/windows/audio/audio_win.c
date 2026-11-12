@@ -72,6 +72,21 @@ int verdandi_audio_input(int mic_on, int sys_on) { return vaud_input_set(mic_on,
 
 void verdandi_audio_measure(void) { vaud_measure_start(); }
 
+void verdandi_audio_selftest_start(void) { vaud_selftest_start(); }
+
+void verdandi_audio_selftest(verdandi_selftest_t *out) {
+    const vaud_selftest *t = &vaud_get_state()->selftest;
+    out->state = t->state;
+    out->callbacks = t->callbacks;
+    out->verdict = (int)t->verdict;
+    out->avg_ms = t->interval_avg_ms;
+    out->max_ms = t->interval_max_ms;
+    out->expect_ms = t->interval_expect_ms;
+    out->engine_blocks = t->engine_blocks;
+    out->late = t->late;
+    out->glitches = t->glitches;
+}
+
 int verdandi_audio_apply(const char *conf_text, char *msg, size_t n) {
     vaud_config c;
     memset(&c, 0, sizeof c);

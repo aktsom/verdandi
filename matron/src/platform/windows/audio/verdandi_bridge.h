@@ -34,8 +34,8 @@ extern "C" {
 #endif
 
 #define VB_MAGIC 0x42444E56u /* "VNDB" */
-#define VB_VERSION 1u
-#define VB_RING 8u
+#define VB_VERSION 2u
+#define VB_RING 16u
 #define VB_MAXFRAMES 2048u
 #define VB_LATE_LIMIT 2u /* the host never lets more than this many blocks of scsynth wait for it: older ones are dropped (a bound on the latency) */
 

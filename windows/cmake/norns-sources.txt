@@ -83,6 +83,7 @@ matron/src/platform/macos/window_keys.c
 # --- Windows: replacements and stubs (matron/src/platform/windows)
 matron/src/platform/windows/posix_compat.c
 matron/src/platform/windows/hid_win.cc
+matron/src/platform/windows/sdl_modal_win.cc
 matron/src/platform/windows/stubs_win.cc
 matron/src/platform/windows/crash_report_win.cc
 matron/src/platform/windows/jack_null/jack_null.c

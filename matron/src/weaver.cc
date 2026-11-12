@@ -326,6 +326,8 @@ static int _audio_devices(lua_State *l);
 static int _audio_info(lua_State *l);
 static int _audio_measure(lua_State *l);
 static int _audio_apply(lua_State *l);
+static int _audio_selftest_start(lua_State *l);
+static int _audio_selftest(lua_State *l);
 static int _mic_input(lua_State *l);
 static int _app_input(lua_State *l);
 static int _audio_input(lua_State *l);
@@ -575,6 +577,8 @@ void w_init(void) {
     lua_register_norns("mic_input", &_mic_input);         // M3: MIC on or off
     lua_register_norns("app_input", &_app_input);         // M3: SYS (WASAPI loopback)
     lua_register_norns("audio_apply", &_audio_apply);     // M3: new settings live
+    lua_register_norns("audio_selftest_start", &_audio_selftest_start); // M3: TEST without cables
+    lua_register_norns("audio_selftest", &_audio_selftest);
     lua_register_norns("audio_measure", &_audio_measure); // M3: the measured round trip
     lua_register_norns("audio_input", &_audio_input);     // M3: what the input is now (after mic_input / app_input)
 #endif
@@ -3948,6 +3952,46 @@ int _audio_apply(lua_State *l) {
     lua_pushinteger(l, rc);
     lua_pushstring(l, msg);
     return 2;
+}
+
+/***
+ * Windows: TEST without cables: start the two-second self-test of the card and the engine
+ * @function audio_selftest_start
+ */
+int _audio_selftest_start(lua_State *l) {
+    (void)l;
+    verdandi_audio_selftest_start();
+    return 0;
+}
+
+/***
+ * Windows: the self-test: a table {state = 0 never | 1 running | 2 done, verdict = 0 ok | 1 no card | 2 scsynth not attached | 3 card late | 4 engine late | 5 glitches, callbacks, avg_ms, max_ms, expect_ms, engine_blocks, late, glitches}
+ * @function audio_selftest
+ * @treturn table
+ */
+int _audio_selftest(lua_State *l) {
+    verdandi_selftest_t t;
+    verdandi_audio_selftest(&t);
+    lua_newtable(l);
+    lua_pushinteger(l, t.state);
+    lua_setfield(l, -2, "state");
+    lua_pushinteger(l, t.verdict);
+    lua_setfield(l, -2, "verdict");
+    lua_pushinteger(l, t.callbacks);
+    lua_setfield(l, -2, "callbacks");
+    lua_pushnumber(l, t.avg_ms);
+    lua_setfield(l, -2, "avg_ms");
+    lua_pushnumber(l, t.max_ms);
+    lua_setfield(l, -2, "max_ms");
+    lua_pushnumber(l, t.expect_ms);
+    lua_setfield(l, -2, "expect_ms");
+    lua_pushinteger(l, (lua_Integer)t.engine_blocks);
+    lua_setfield(l, -2, "engine_blocks");
+    lua_pushinteger(l, (lua_Integer)t.late);
+    lua_setfield(l, -2, "late");
+    lua_pushinteger(l, (lua_Integer)t.glitches);
+    lua_setfield(l, -2, "glitches");
+    return 1;
 }
 
 /***

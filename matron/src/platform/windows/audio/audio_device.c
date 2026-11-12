@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "audio_bridge_host.h"
 
@@ -268,7 +269,71 @@ static void fifo_pop1(vfifo *f, float *l, float *r) {
     f->n--;
 }
 
+/* the self-test (TEST without cables): the callbacks' timing and the engine's answers for two seconds */
+static volatile int st_active;
+static double st_sum_ms, st_t0_ms, st_last_ms;
+static int st_n;
+static unsigned long long st_blocks0, st_late0, st_x0;
+static double mono_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
+static void selftest_tick(void) {
+    double now = mono_ms();
+    vaud_selftest *t = &S.selftest;
+    if (st_last_ms > 0) {
+        double dt = now - st_last_ms;
+        st_sum_ms += dt;
+        st_n++;
+        if (dt > t->interval_max_ms) t->interval_max_ms = dt;
+    }
+    st_last_ms = now;
+    t->callbacks++;
+    if (now - st_t0_ms >= 2000.0) {
+        unsigned long long to, from, under, drops;
+        int att;
+        verdandi_bridge_host_stats(&to, &from, &under, &drops, &att);
+        t->interval_avg_ms = st_n ? st_sum_ms / st_n : 0.0;
+        t->engine_blocks = from - st_blocks0;
+        t->late = under - st_late0;
+        t->glitches = S.card_xruns - st_x0;
+        if (t->interval_max_ms > 3.0 * t->interval_expect_ms + 5.0) t->verdict = VAUD_ST_CARD_LATE;
+        else if (t->glitches > 0) t->verdict = VAUD_ST_GLITCHES;
+        else if (!att || t->engine_blocks == 0) t->verdict = VAUD_ST_NO_SCSYNTH;
+        else if (t->late > 2) t->verdict = VAUD_ST_ENGINE_LATE;
+        else t->verdict = VAUD_ST_OK;
+        t->state = 2;
+        st_active = 0;
+    }
+}
+
+void vaud_selftest_start(void) {
+    memset(&S.selftest, 0, sizeof S.selftest);
+    if (S.mode != VAUD_MODE_DEVICE) {
+        S.selftest.state = 2;
+        S.selftest.verdict = VAUD_ST_NO_CARD;
+        return;
+    }
+    unsigned long long to, from, under, drops;
+    int att;
+    verdandi_bridge_host_stats(&to, &from, &under, &drops, &att);
+    st_blocks0 = from;
+    st_late0 = under;
+    st_x0 = S.card_xruns;
+    st_sum_ms = 0;
+    st_n = 0;
+    st_last_ms = 0;
+    st_t0_ms = mono_ms();
+    S.selftest.interval_expect_ms = 1000.0 * (S.card_frames ? S.card_frames : S.frames) / (S.rate ? S.rate : 48000);
+    S.selftest.state = 1;
+    st_active = 1;
+}
+
 static void card_callback(const float *in, float *out, unsigned frames, void *user) {
+    if (st_active) {
+        selftest_tick();
+    }
     (void)user;
     if (frames > MAXF) {
         static int told;
@@ -329,7 +394,7 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
         unsigned floor_lag = (S.rate / 200 + S.frames - 1) / S.frames;
         if (S.engine_lag < floor_lag) S.engine_lag = floor_lag;
         if (S.engine_lag < 1) S.engine_lag = 1;
-        if (S.engine_lag > 6) S.engine_lag = 6; /* the ring holds 8 blocks: a card block above six engine blocks cannot be bridged in time (the page offers none) */
+        if (S.engine_lag > 12) S.engine_lag = 12; /* the ring holds 16 blocks, 14 of them can be held back (about 37 ms at 128) */
         verdandi_bridge_host_set_lag(S.engine_lag);
     }
     for (unsigned i = 0; i < frames; i++) {

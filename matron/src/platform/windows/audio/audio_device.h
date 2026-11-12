@@ -88,6 +88,16 @@ typedef struct {
 typedef enum { VAUD_MODE_NONE = 0, VAUD_MODE_DEVICE, VAUD_MODE_NULL, VAUD_MODE_FALLBACK } vaud_mode;
 typedef enum { VAUD_IN_OFF = 0, VAUD_IN_MIC, VAUD_IN_SYS } vaud_input_mode;
 
+/* TEST without cables: two seconds of the card's callbacks and the engine's answers are measured */
+typedef enum { VAUD_ST_OK = 0, VAUD_ST_NO_CARD, VAUD_ST_NO_SCSYNTH, VAUD_ST_CARD_LATE, VAUD_ST_ENGINE_LATE, VAUD_ST_GLITCHES } vaud_selftest_verdict;
+typedef struct {
+    int state;              /* 0 never run, 1 running, 2 done */
+    int callbacks;          /* callbacks of the card in the test */
+    double interval_avg_ms, interval_max_ms, interval_expect_ms; /* time between two callbacks: average, the longest, what it should be (the card's period) */
+    unsigned long long engine_blocks, late, glitches; /* blocks scsynth answered, bridge underruns, glitches of the card during the test */
+    vaud_selftest_verdict verdict;
+} vaud_selftest;
+
 typedef struct {
     vaud_mode mode;
     vaud_opened opened;       /* valid in VAUD_MODE_DEVICE */
@@ -101,6 +111,7 @@ typedef struct {
     unsigned engine_lag;      /* blocks of scsynth's answers held back in the bridge (the engine blocks per card callback) */
     unsigned card_frames;     /* the block of the card's callback (0 = not known) */
     unsigned long long card_xruns; /* callbacks the host API flagged as underflow / overflow (a block was late or lost at the card), counted since the start: the "crackles" counter of the AUDIO page */
+    vaud_selftest selftest;
     double measured_ms;       /* the measured round trip (output to input and back to crone), -1 = none yet, -2 = no signal */
 } vaud_state;
 
@@ -131,6 +142,8 @@ void vaud_bridge_stats(unsigned long long *to_sc, unsigned long long *from_sc, u
 int vaud_input_set(int mic_on, int sys_on);
 /* the round trip: a click goes out, the input is watched for it. needs an input (and a cable or TotalMix Loopback from the output back to it). the result is in vaud_get_state()->measured_ms */
 void vaud_measure_start(void);
+/* TEST without cables: measures two seconds, the result is in vaud_get_state()->selftest */
+void vaud_selftest_start(void);
 
 /* the backend tells the card's glitches (PortAudio's output underflow / input overflow flags): n blocks */
 void vaud_card_xrun(unsigned n);

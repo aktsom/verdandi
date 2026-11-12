@@ -757,6 +757,52 @@ static void scenario_rate(const char *sc) {
     g_dev_rate = 48000;
 }
 
+/* TEST without cables (owner's list, 6d): two seconds of the card's callbacks and of the engine's blocks are measured and judged */
+static void scenario_selftest(const char *sc) {
+    char name[64];
+    snprintf(name, sizeof name, "AudioSelf-%d", (int)getpid());
+    bridge_name = name;
+    g_buffer = 0;
+    g_host_frames = 480;
+    int with_guest = strcmp(sc, "selftest_noguest") != 0;
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.rate = 48000; cfg.period = 128;
+    rec_cap = 48000 * 8; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_state st;
+    if (!strcmp(sc, "selftest_null")) {
+        setenv("VERDANDI_AUDIO", "null", 1);
+        vaud_config_load(&cfg, NULL);
+        unsetenv("VERDANDI_AUDIO");
+    }
+    vaud_start(&FAKE, &cfg, name, &st);
+    crone_start();
+    if (with_guest) {
+        atomic_store(&sc_run, 1);
+        pthread_create(&sc_thread, NULL, sc_loop, NULL);
+    }
+    sleep_ms_f(1500);
+    vaud_selftest_start();
+    CHECK(vaud_get_state()->selftest.state == (!strcmp(sc, "selftest_null") ? 2 : 1), "%s: the self-test starts (state %d)", sc, vaud_get_state()->selftest.state);
+    sleep_ms_f(2600);
+    const vaud_selftest *t = &vaud_get_state()->selftest;
+    CHECK(t->state == 2, "%s: and ends (state %d)", sc, t->state);
+    if (!strcmp(sc, "selftest_null")) {
+        CHECK(t->verdict == VAUD_ST_NO_CARD, "%s: no card is running: said (%d)", sc, t->verdict);
+    } else if (!with_guest) {
+        CHECK(t->callbacks > 100 && t->interval_avg_ms > 8.5 && t->interval_avg_ms < 11.5 && t->verdict == VAUD_ST_NO_SCSYNTH, "%s: the card is fine, scsynth is not attached: %d callbacks, every %.1f ms, verdict %d", sc, t->callbacks, t->interval_avg_ms, t->verdict);
+    } else {
+        CHECK(t->callbacks > 100 && t->interval_avg_ms > 8.5 && t->interval_avg_ms < 11.5, "%s: the card calls every 10 ms: %d callbacks, avg %.2f ms, max %.1f ms", sc, t->callbacks, t->interval_avg_ms, t->interval_max_ms);
+        CHECK(t->engine_blocks > 300 && t->late == 0 && t->glitches == 0 && t->verdict == VAUD_ST_OK, "%s: the engine answered %llu blocks, %llu late, %llu glitches, verdict %d (0 = ok)", sc, t->engine_blocks, t->late, t->glitches, t->verdict);
+    }
+    printf("%s: verdict %d callbacks %d avg %.2f max %.2f engine blocks %llu late %llu glitches %llu\n", sc, t->verdict, t->callbacks, t->interval_avg_ms, t->interval_max_ms, t->engine_blocks, t->late, t->glitches);
+    if (with_guest) {
+        atomic_store(&sc_run, 0);
+        pthread_join(sc_thread, NULL);
+    }
+    vaud_stop();
+}
+
 static void scenario_excl(const char *sc) {
     g_buffer = 0;
     vaud_state st;
@@ -781,6 +827,7 @@ int main(int argc, char **argv) {
     else if (!strncmp(sc, "apply_", 6)) scenario_apply(sc);
     else if (!strncmp(sc, "excl_", 5)) scenario_excl(sc);
     else if (!strncmp(sc, "rate_", 5)) scenario_rate(sc);
+    else if (!strncmp(sc, "selftest", 8)) scenario_selftest(sc);
     else if (!strcmp(sc, "startup")) scenario_startup(sc);
     else if (!strcmp(sc, "lagfirst")) scenario_lagfirst(sc);
     else if (!strcmp(sc, "adapt")) scenario_adapt(sc);

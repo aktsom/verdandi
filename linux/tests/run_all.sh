@@ -129,6 +129,8 @@ fi
 run "windows:start/restart cycle test hook (VERDANDI_TEST_CYCLES: a restart after each start-up until the start number is reached, then a shutdown; inactive without the variable)" lua5.3 linux/tests/test_cycles_test.lua
 run "windows:the cycle test check passes a good run and fails the real failing run with the log of the failing round in the report" bash linux/tests/cycle_check_test.sh
 run "windows:publishing a build to GitHub Releases (tags, assets, windows-latest updated in place and only when no check failed, old releases pruned, the notes) with a stand-in for gh" bash linux/tests/release_publish_test.sh
+pc_ok() { g++ -std=gnu++14 -O1 -pthread linux/tests/present_coalesce_test.cc -o "$T/pct" && "$T/pct"; }
+run "windows:showing a frame never makes the norns thread wait for the SDL thread (a stuck main thread, as in a window drag, does not hold up the Lua event loop; one note outstanding, the newest frame is shown)" pc_ok
 run "windows:metros that are stopped right after their start (and restarted ones) stop for good (metro.cc with NORNS_WINDOWS against a fake event queue: the thread learns its start from its argument, not from a counter that a later stop has moved)" bash linux/tests/metro_win_test.sh
 dedupe_ok() { gcc -std=gnu11 -Wall -o "$T/dedupe_test" linux/tests/dedupe_test.c && "$T/dedupe_test"; }
 run "windows:the same error message again and again is written once and counted (msg_dedupe.h)" dedupe_ok
@@ -173,7 +175,7 @@ audio_chain_ok() {
     gcc -std=gnu11 -O1 -I matron/src/platform/windows/jack_null/include -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c \
         matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/audio/exit_win.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
     local sc
-    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared; do
+    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null; do
         "$T/audio_chain_test" "$sc" 2> /dev/null || return 1
     done
     for sc in 1 2 3 4 5 6 7 8; do

@@ -43,6 +43,14 @@ void verdandi_audio_info(verdandi_audio_info_t *out);
 /* MIC / OFF / SYS as _norns.mic_input and _norns.app_input call it. returns 0 = ok, 1 = that one cannot (see sys_note / in_note) */
 int verdandi_audio_input(int mic_on, int sys_on);
 void verdandi_audio_measure(void);
+/* TEST without cables: result in verdandi_audio_selftest() */
+void verdandi_audio_selftest_start(void);
+typedef struct {
+    int state, callbacks, verdict; /* state 0 never, 1 running, 2 done; verdict 0 ok, 1 no card, 2 scsynth not attached, 3 card late, 4 engine late, 5 glitches */
+    double avg_ms, max_ms, expect_ms;
+    unsigned long long engine_blocks, late, glitches;
+} verdandi_selftest_t;
+void verdandi_audio_selftest(verdandi_selftest_t *out);
 /* the AUDIO page's choices as audio.conf lines; applied live (the stream is reopened, the engine runs on). returns 0 = runs, 1 = reverted (msg says why), 2 = silence. the file is written by the caller on 0 only */
 int verdandi_audio_apply(const char *conf_text, char *msg, size_t n);
 

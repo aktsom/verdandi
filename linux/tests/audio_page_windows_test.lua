@@ -42,6 +42,7 @@ screen.rect = function() end
 screen.fill = function() end
 screen.update = function() end
 
+local selftest_started, selftest
 local applied, restarted, redraws = {}, false, 0
 local apply_rc, apply_msg = 0, ""
 local input_calls = {}
@@ -68,6 +69,8 @@ _norns = {
   audio_devices = function() return DEVS end,
   audio_info = function() return info end,
   audio_measure = function() info.measured_ms = -1 end,
+  audio_selftest_start = function() selftest_started = (selftest_started or 0) + 1; selftest = {state = 1, verdict = 0} end,
+  audio_selftest = function() return selftest end,
   audio_apply = function(text) applied[#applied + 1] = text; if apply_rc == 0 then info.config = text end; return apply_rc, apply_msg end,
 }
 local page
@@ -154,23 +157,63 @@ check(applied[#applied]:find("buffer=128", 1, true), "buffer=128 is applied")
 turn(pos_of("BUFFER"), -9); ticks(6)
 check(applied[#applied]:find("buffer=auto", 1, true), "back to auto")
 
--- ---- TEST: a plain result every time ----
+-- ---- TEST: a plain result every time; without an input (or one that did not open) a self-test of the card and the engine, no cables needed ----
 local function key_test() page.enc(2, -9); page.enc(2, 9); page.key(3, 1); page.redraw() end
-page.init(); key_test()
-check(shown("no input selected") and page.status == "no input selected: choose one on INPUT", "TEST with no input: 'no input selected'")
+local function finish_selftest(t) selftest = t; ticks(1) end
+page.init(); selftest_started = 0; key_test()
+check(selftest_started == 1 and shown("testing"), "TEST with no input: the self-test starts (no cables needed) and the row says testing")
+finish_selftest({state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0})
+page.redraw()
+check(shown("ok") and page.status:find("self-test ok: card calls every 10.0 ms (longest 10.4), engine answered 750 blocks, 0 late, 0 glitches", 1, true), "self-test ok: one sentence with the numbers: " .. tostring(page.status))
+check(page.status:find("no input selected", 1, true), "and it says why there was no click test: no input selected")
+for _, c in ipairs({{1, "no card", "no sound card is running"}, {2, "no scsynth", "SuperCollider is not attached"}, {3, "card late", "the card calls late"}, {4, "engine late", "the engine was late"}, {5, "glitches", "the card glitched"}}) do
+  page.init(); key_test()
+  finish_selftest({state = 2, verdict = c[1], callbacks = 100, avg_ms = 10, max_ms = 80, expect_ms = 10, engine_blocks = 5, late = 7, glitches = 3})
+  page.redraw()
+  check(shown(c[2]) and page.status:find(c[3], 1, true), "self-test verdict " .. c[1] .. ": the row says '" .. c[2] .. "' and the sentence '" .. c[3] .. "': " .. tostring(page.status))
+end
 info = mkinfo({in_active = true, input = "mic", measured_ms = -1, config = "output=\ninput=wasapi:Line In 1/2 (RME Fireface UC)\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
-page.init(); key_test()
-check(shown("listening"), "TEST starts: listening")
+page.init(); selftest_started = 0; key_test()
+check(selftest_started == 0 and shown("listening"), "TEST with an input that is open: the click test starts (no self-test)")
 info.measured_ms = -2; page.redraw()
-check(shown("no click heard") and page.status == "no click heard (is an output wired to the input?)", "no click: 'no click heard', the sentence 'no click heard (is an output wired to the input?)' on the status line")
+check(shown("no click heard") and page.status == "no click heard (is an output wired to the input?)", "no click: 'no click heard' and the sentence on the status line")
 info.measured_ms = 37.4; page.init(); key_test(); info.measured_ms = 37.4; page.redraw()
 check(shown("37 ms"), "a click: the round trip in ms")
 info = mkinfo({in_active = false, config = "output=\ninput=wasapi:Line In 1/2 (RME Fireface UC)\nrate=48000\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
-page.init(); key_test()
-check(shown("input not open") and page.status:find("did not open", 1, true) and page.status:find("choose it again", 1, true), "an input that is chosen but not open: the TEST says what to do")
+page.init(); selftest_started = 0; key_test()
+check(selftest_started == 1, "an input that is chosen but not open: the self-test runs")
+finish_selftest({state = 2, verdict = 0, callbacks = 201, avg_ms = 10.0, max_ms = 10.4, expect_ms = 10.0, engine_blocks = 750, late = 0, glitches = 0}); page.redraw()
+check(page.status:find("did not open", 1, true) and page.status:find("choose it again on INPUT", 1, true), "and the sentence says the input did not open and what to do: " .. tostring(page.status))
+page.enc(2, -9); page.enc(2, 2); page.redraw()
+check(page.value_text("INPUT"):find("(not open)", 1, true), "the INPUT row itself says '(not open)': " .. page.value_text("INPUT"))
 info = mkinfo({mode = "fallback", note = "no sound: audio device is busy"})
 page.init(); key_test()
-check(shown("no sound card"), "no card: said")
+check(shown("no card"), "no card: the row says so at once")
+
+-- ---- the status line says which mode runs ----
+info = mkinfo()
+page.init(); page.redraw()
+check(shown("normal  35 ms  u0 x0"), "the status line starts with the mode: normal")
+info = mkinfo({exclusive = true, total_ms = 21.2})
+page.init(); page.redraw()
+check(shown("exclusive  21 ms  u0 x0"), "exclusive")
+info = mkinfo({host_api = "ASIO", device = "ASIO Fireface USB", total_ms = 9.4})
+page.init(); page.redraw()
+check(shown("ASIO  9 ms"), "ASIO")
+
+-- ---- a help line per row (shown for a few seconds after E2 lands on the row, then the numbers come back) ----
+info = mkinfo()
+page.init()
+local rows_help = {DRIVER = "exclusive", OUTPUT = "wired", INPUT = "MIC button", BUFFER = "auto", TEST = "click"}
+for name, word in pairs(rows_help) do
+  local h = page.help(name)
+  check(h and #h > 20 and #h < 200 and h:find(word, 1, true), "help for " .. name .. " mentions '" .. word .. "': " .. tostring(h))
+end
+page.enc(2, -9); page.enc(2, 1); page.redraw()
+check(page.help_now() and page.help_now():find("wired", 1, true), "moving to OUTPUT shows its help (the pairs may not be wired)")
+check(page.status_text():find("wired", 1, true), "on the status line")
+ticks(40)
+check(not page.help_now(), "after a few seconds the help goes and the numbers come back")
 
 -- ---- every change is confirmed on the status line ----
 info = mkinfo()

@@ -145,19 +145,59 @@ local function say(text, secs)
   m.status, m.status_until = text, m.tick + (secs or 24) * 4
 end
 
+-- one plain line of help per row (shown on the status line for a few seconds when E2 lands on the row)
+local HELP = {
+  DRIVER = "normal works next to other programs. exclusive: shortest delay, but only Verdandi can use the device. low latency: the ASIO driver.",
+  OUTPUT = "where the sound goes. default follows Windows. Pairs on the interface may not be wired to anything.",
+  ["OUT CH"] = "which two outputs of the ASIO driver the sound uses.",
+  INPUT = "sound in. none keeps it off. The MIC button of the window switches it on; it is always off at the start.",
+  ["IN CH"] = "which input channels are left and right. n mono: one channel heard on both sides.",
+  BUFFER = "auto is the safest. A smaller buffer means less delay but more risk of clicks (u and x on the status line).",
+  TEST = "K3: with an input and a cable (or loopback) a click goes out and is listened for. Without: a 2 second self-test of the card and the engine.",
+}
+m.help = function(row) return HELP[row] end
+
+local SELFTEST_SHORT = {[0] = "ok", "no card", "no scsynth", "card late", "engine late", "glitches"}
+local function selftest_sentence(t, why)
+  local v = t.verdict
+  local text
+  if v == 0 then
+    text = string.format("self-test ok: card calls every %.1f ms (longest %.1f), engine answered %d blocks, %d late, %d glitches", t.avg_ms, t.max_ms, t.engine_blocks, t.late, t.glitches)
+  elseif v == 1 then text = "self-test: no sound card is running"
+  elseif v == 2 then text = "self-test: SuperCollider is not attached to norns yet (wait a moment, or restart)"
+  elseif v == 3 then text = string.format("self-test: the card calls late (longest %.0f ms, should be %.0f)", t.max_ms, t.expect_ms)
+  elseif v == 4 then text = string.format("self-test: the engine was late %d times: raise BUFFER or close other programs", t.late)
+  else text = string.format("self-test: the card glitched %d times: try a larger BUFFER", t.glitches) end
+  if why then text = text .. " (" .. why .. ")" end
+  return text
+end
+
 local function value_text(row)
   if row == "DRIVER" then
     for _, d in ipairs(drivers()) do if d.id == m.cfg.driver then return d.name end end
     return "normal"
   elseif row == "OUTPUT" then return cur_out().name
   elseif row == "OUT CH" then return outpairs()[index_where(outpairs(), function(p) return p.first == m.cfg.out_first end)].name
-  elseif row == "INPUT" then return cur_in().name
+  elseif row == "INPUT" then
+    local n = cur_in().name
+    local inf = _norns.audio_info()
+    if m.cfg.input ~= "" and inf and inf.mode == "device" and not inf.in_active then n = n .. " (not open)" end
+    return n
   elseif row == "IN CH" then
     local p = inpairs()[index_where(inpairs(), function(q) return q.l == m.cfg.in_l and q.r == m.cfg.in_r end)]
     return p.name
   elseif row == "BUFFER" then return buffer_text(m.cfg.buffer)
   elseif row == "TEST" then
-    if m.testing then
+    if m.selftesting then
+      local t = _norns.audio_selftest()
+      if t and t.state == 2 then
+        m.selftesting = false
+        m.test = SELFTEST_SHORT[t.verdict] or "?"
+        say(selftest_sentence(t, m.selftest_why), 60)
+      else
+        return "testing..."
+      end
+    elseif m.testing then
       local info = _norns.audio_info()
       local ms = info and info.measured_ms or -1
       if ms == -2 then
@@ -168,7 +208,7 @@ local function value_text(row)
         say(string.format("round trip %.0f ms (click out, heard in)", ms), 60)
       else return "listening..." end
     end
-    return m.test or "K3: click out, heard in"
+    return m.test or "K3: test"
   end
   return ""
 end
@@ -249,12 +289,14 @@ local function apply()
   print("audio: AUDIO page: " .. (rc == 0 and "applied" or (rc == 1 and "reverted" or "silence")) .. (msg ~= "" and (": " .. msg) or ""))
 end
 
+m.value_text = value_text
 local timer
 m.init = function()
   read_devices()
   from_running()
   m.pos, m.top, m.tick, m.pending, m.test, m.testing = 1, 1, 0, nil, nil, false
   m.status = nil
+  m.help_until = nil
   local failed = util.file_exists(FAILED)
   if failed then say("failed: back to default", 40) end
   if metro and metro.init and not timer then
@@ -281,19 +323,17 @@ m.key = function(n, z)
     _menu.set_page("SYSTEM")
   elseif n == 3 and rows()[m.pos] == "TEST" then
     local info = _norns.audio_info()
+    m.test, m.testing, m.selftesting, m.selftest_why = nil, false, false, nil
     if not info or info.mode ~= "device" then
-      m.test, m.testing = "no sound card", false
+      m.test = "no card"
       say("no sound card is running (see the status line)", 60)
     elseif not info.in_active then
-      if m.cfg.input == "" then
-        m.test, m.testing = "no input selected", false
-        say("no input selected: choose one on INPUT", 60)
-      else
-        m.test, m.testing = "input not open", false
-        say("the input did not open: choose it again on INPUT", 60)
-      end
+      -- nothing to listen on: the card and the engine are tested by themselves, no cables needed
+      m.selftest_why = m.cfg.input == "" and "no input selected, so no click test" or "the input did not open: choose it again on INPUT; no click test"
+      m.selftesting = true
+      _norns.audio_selftest_start()
     else
-      m.test, m.testing = nil, true
+      m.testing = true
       _norns.audio_measure()
     end
     _menu.redraw()
@@ -316,6 +356,7 @@ m.enc = function(n, delta)
     if m.pos < m.top then m.top = m.pos end
     if m.pos > m.top + ROWS_SHOWN - 1 then m.top = m.pos - ROWS_SHOWN + 1 end
     m.tick = 0
+    m.help_until = 24 -- six seconds of help for the row
   elseif n == 3 then
     local row = rows()[m.pos]
     local c = m.cfg
@@ -357,22 +398,36 @@ m.enc = function(n, delta)
 end
 
 -- one short status line: what is wrong, or the numbers
+local function mode_word(info)
+  if (info.host_api or ""):find("ASIO", 1, true) then return "ASIO" end
+  if info.exclusive then return "exclusive" end
+  return "normal"
+end
+
+m.help_now = function()
+  if m.help_until and m.tick < m.help_until then return HELP[rows()[m.pos]] end
+  return nil
+end
+
 local function status_line(info)
   if m.pending then return "..." end
   if m.status and m.tick < m.status_until then return m.status end
+  local h = m.help_now()
+  if h then return h end
   if not info then return "" end
   if info.mode == "fallback" then
     return (info.note:find("busy", 1, true) and "no sound: device busy") or (info.note:find("not found", 1, true) and "no sound: device missing") or "no sound"
   elseif info.mode ~= "device" then
     return "null audio (silent)"
   end
-  local line = string.format("%.0f ms  u%d x%d", info.total_ms or 0, info.underruns or 0, info.xruns or 0)
+  local line = string.format("%s  %.0f ms  u%d x%d", mode_word(info), info.total_ms or 0, info.underruns or 0, info.xruns or 0)
   -- the rate the card itself runs at, when it is not norns's own (shared mode: Windows converts; exclusive and ASIO: the clock of the card)
   if (info.device_rate or 0) > 0 and math.floor(info.device_rate + 0.5) ~= info.rate then
     line = line .. string.format("  card %d Hz", math.floor(info.device_rate + 0.5))
   end
   return line
 end
+m.status_text = function() return status_line(_norns.audio_info()) end
 
 m.redraw = function()
   screen.clear()

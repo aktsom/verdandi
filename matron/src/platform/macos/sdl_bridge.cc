@@ -43,6 +43,9 @@
 #include "platform/linux/extras_layout.h"
 #include "platform/linux/screen_window.h"
 #include "platform/linux/window_actions.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/present_coalesce.h"
+#endif
 #endif
 #ifdef NORNS_LINUX_DESKTOP
 #include <arpa/inet.h>
@@ -3176,13 +3179,57 @@ void sdl_bridge_toggle_window(int which) {
     SDL_PushEvent(&ev);
 }
 
+#ifdef NORNS_WINDOWS
+extern "C" void win_modal_install(void (*tick)(void));
+static void win_present_run(void);
+// during a drag or resize of the window (a modal loop of Windows, in this thread) SDL still calls its event watchers for the window events and our timer ticks: the frames the script drew meanwhile are shown,
+// and the box is drawn again at the new size, so that both stay alive
+static bool in_modal_tick = false;
+static void modal_tick(void) {
+    if (in_modal_tick) {
+        return;
+    }
+    in_modal_tick = true;
+    SDL_Event q;
+    while (SDL_PeepEvents(&q, 1, SDL_GETEVENT, bridge_event_type, bridge_event_type) == 1) {
+        if (q.user.code == 2) {
+            win_present_run();
+        } else {
+            bridge_req_t *req = (bridge_req_t *)q.user.data1;
+            bridge_do(req);
+            bridge_signal(req);
+        }
+    }
+    if (the_window != NULL && have_frame) {
+        redraw(true);
+    }
+    in_modal_tick = false;
+}
+static int SDLCALL win_event_watch(void *, SDL_Event *e) {
+    if (e->type == SDL_WINDOWEVENT && pthread_equal(pthread_self(), main_thread)) {
+        modal_tick();
+    }
+    return 0;
+}
+#endif
+
 void sdl_bridge_run(void) {
     SDL_Event ev;
+#ifdef NORNS_WINDOWS
+    SDL_AddEventWatch(win_event_watch, NULL);
+    win_modal_install(modal_tick);
+#endif
     for (;;) {
         if (!SDL_WaitEvent(&ev)) {
             continue;
         }
         if (ev.type == bridge_event_type) {
+#ifdef NORNS_WINDOWS
+            if (ev.user.code == 2) {
+                win_present_run();
+                continue;
+            }
+#endif
             bridge_req_t *req = (bridge_req_t *)ev.user.data1;
             bridge_do(req);
             bridge_signal(req);
@@ -3436,7 +3483,35 @@ SDL_Window *sdl_bridge_create_window(const char *title, int w, int h) {
     return req.window;
 }
 
+#ifdef NORNS_WINDOWS
+// Windows: showing a frame never makes the norns thread wait for this (main) thread. while the user drags or resizes the window Windows runs a modal loop in this thread and the loop below does not run:
+// a synchronous present stopped the norns thread (the Lua event loop, the handlers of the metros and the clock) until the mouse was let go, and the script went silent. a note (code 2) is posted
+// when none is outstanding; the main loop, or the window watcher during a drag, shows the newest frame
+static vpresent_state win_present;
+static void win_present_run(void) {
+    void *w, *s;
+    vpresent_take(&win_present, &w, &s);
+    if (w != NULL && s != NULL) {
+        present((SDL_Window *)w, (SDL_Surface *)s);
+    }
+}
+#endif
+
 void sdl_bridge_present(SDL_Window *window, SDL_Surface *src) {
+#ifdef NORNS_WINDOWS
+    if (!pthread_equal(pthread_self(), main_thread)) {
+        if (vpresent_request(&win_present, window, src)) {
+            SDL_Event ev;
+            SDL_zero(ev);
+            ev.type = bridge_event_type;
+            ev.user.code = 2;
+            if (SDL_PushEvent(&ev) < 1) {
+                win_present.queued.store(0); // not posted: the next frame tries again
+            }
+        }
+        return;
+    }
+#endif
     bridge_req_t req = {};
     req.op = BRIDGE_PRESENT;
     req.window = window;

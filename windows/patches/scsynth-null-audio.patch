@@ -9,7 +9,7 @@
  
  #define PRINT_PORTAUDIO_ERROR(function, errorcode)                                                                     \
      scprintf("SC_PortAudioDriver: PortAudio failed at %s with error: '%s'\n", #function, Pa_GetErrorText(errorcode))
-@@ -438,3 +438,246 @@
+@@ -438,3 +438,247 @@
  
      return paerror == paNoError;
  }
@@ -179,7 +179,8 @@
 +    void BridgeLoop() {
 +#ifdef _WIN32
 +        // (the wait is on an event: no timer resolution needed; a higher priority keeps the engine ahead of other programs)
-+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
++        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
++        { typedef HANDLE(WINAPI * AvSetFn)(LPCSTR, LPDWORD); HMODULE av = LoadLibraryA("avrt.dll"); AvSetFn f = av ? (AvSetFn)GetProcAddress(av, "AvSetMmThreadCharacteristicsA") : nullptr; DWORD task = 0; if (f && f("Pro Audio", &task)) fprintf(stdout, "SC_BridgeAudioDriver: the bridge thread is registered with MMCSS (Pro Audio)\n"); }
 +#endif
 +        vb_guest_attach(&mBridge);
 +        unsigned long long blocks = 0;
