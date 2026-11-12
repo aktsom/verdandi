@@ -1,6 +1,6 @@
 # Phase M7: SuperCollider plug-in packs for Windows (sc3-plugins, mi-UGens, NamAmp)
 
-Status: **built in CI and tested on Linux for what can be; the first CI run decides what compiles.** The results (which parts compiled, zip growth) are filled in section 6 after the first run.
+Status: **built in CI (all green); not yet tried on a real Windows PC.** Results in section 6.
 
 ## 1. Why
 A script whose engine uses a UGen that the Windows build lacks (owner test of 0.7.0: engine Autumn needs `Decimator`) cannot start. On Linux and on the device these UGens come with the system packages / the norns image. On Windows nothing provides them, so the build ships them.
@@ -23,5 +23,11 @@ A script whose engine uses a UGen that the Windows build lacks (owner test of 0.
 - Licence obligations: the notices and source offers are in the zip as above. GPL-2.0-or-later code combined in one folder with GPL-3.0 Verdandi is compatible (it stays a separate program loaded by scsynth).
 - Needed from the owner: (a) the git URL of NamAmp and its licence (set `NAMAMP_URL`), (b) after the first run, a look at section 6 to say whether any not-built part matters to the scripts in use, (c) on a Windows PC: install a script that needs Decimator (for example the one whose engine Autumn failed) and send `logs\sclang.log` and `norns.log`.
 
-## 6. Results of the first CI run
-(filled in after the run: built / failed per plug-in directory, size of the zip before and after)
+## 6. Results of the CI run of 16d2107 (run 43286335050, all jobs green, release published)
+- **sc3-plugins Version-3.13.0, whole collection, MSVC x64 against SuperCollider 3.14.1: 171 plug-in files (.scx) built, 0 targets failed.** It needed one extra library, FFTW (the prebuilt single-precision 3.3.5 DLL package that SuperCollider's own CI uses); without it CMake could not generate the build. Nothing else was needed and nothing had to be left out. 10.5 MB unpacked.
+- **mi-UGens: 12 plug-in files built, 0 failed.** MiBraids needs libsamplerate built first from the copy in its own source tree (done by the script). 3.2 MB unpacked.
+- **NamAmp: not built** (no source named; see section 2).
+- **Zip growth: about 6.8 MB zipped for both packs** (measured by the job: "all packs zipped: 6800 KiB"). The default zip is 81.1 MB (Verdandi-windows-0.8.0-16d2107.zip), the ASIO zip 91.9 MB.
+- **sclang compiles with both packs in** (the headless start test of the default and the ASIO zip pass: 43 checks, 0 failed). A first attempt (8d68582) copied some class folders twice and sclang stopped with `duplicate Class found`; the start-up check named it, and the copy now takes each `.sc` file once.
+- The build report prints `WARNING: class names defined twice` (for names like BufGrain, AttackSlope). This is a **false positive**: the upstream files contain the same class twice inside one file (inside comments, for example `JoshUGens/sc/classes/GrainSynths.sc`), and sclang does not complain. The real test is the start of sclang.
+- **Not tested:** that each UGen makes sound on a real PC (the CI only starts sclang with the classes; it does not run each UGen), and a script that needs Decimator on Windows (owner test).

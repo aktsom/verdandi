@@ -201,7 +201,7 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 
 ## Windows M7: plug-in packs (version 0.8.0, built in CI, results in docs/port/phase-m7.md section 6)
 
-- Job `plugins` (windows/ci/build-sc3plugins.sh): the whole sc3-plugins collection, mi-UGens, NamAmp when `NAMAMP_URL` is set, built per directory (`ninja -k 0`); `assemble-m1.sh` puts every pack with .scx files into `extensions-seed\`, with licences and source offers. Start-up check: one line naming all missing classes (`sc_class_check.lua` summary, also on Windows). NamAmp: source not identified. Nothing here was run on Windows yet; the first CI run says what compiles.
+- Job `plugins` (windows/ci/build-sc3plugins.sh): the whole sc3-plugins collection, mi-UGens, NamAmp when `NAMAMP_URL` is set, built per directory (`ninja -k 0`); `assemble-m1.sh` puts every pack with .scx files into `extensions-seed\`, with licences and source offers. Start-up check: one line naming all missing classes (`sc_class_check.lua` summary, also on Windows). NamAmp: source not identified. CI run 43286335050 (16d2107, all green): sc3-plugins 171 .scx and mi-UGens 12 .scx built, 0 failed; both packs add about 6.8 MB zipped (default zip 81.1 MB); sclang compiles with them. NamAmp not built (source not named). Not tried on a real PC.
 
 ## Windows M6 round 2: owner test of 0.7.0 (1d5defa): mods not found, failed engines (version 0.7.1)
 
