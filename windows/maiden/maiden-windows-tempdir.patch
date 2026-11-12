@@ -1,0 +1,13 @@
+diff --git a/pkg/dust/project.go b/pkg/dust/project.go
+index 8a79b11..01724a0 100644
+--- a/pkg/dust/project.go
++++ b/pkg/dust/project.go
+@@ -46,7 +46,7 @@ type Project struct {
+ }
+ 
+ func downloadURL(u string) (string, error) {
+-	f, err := ioutil.TempFile("/tmp", "maiden-")
++	f, err := ioutil.TempFile("", "maiden-") // Verdandi (Windows): the system temp folder, not /tmp
+ 	if err != nil {
+ 		return "", err
+ 	}

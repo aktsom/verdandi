@@ -10,7 +10,7 @@ B="${B:-$PWD/maiden-build}"
 MAIDEN_COMMIT=2e64f7d59284962ac68055dd556e3fd8515462f8
 NODE_VERSION=v16.20.2
 YARN_VERSION=1.22.22
-PATCHES="$REPO/macos/patches/maiden-host-flag.patch $(ls "$REPO"/linux/patches/maiden-*.patch | sort | tr '\n' ' ')"
+PATCHES="$REPO/macos/patches/maiden-host-flag.patch $(ls "$REPO"/linux/patches/maiden-*.patch | sort | tr '\n' ' ') $(ls "$REPO"/windows/maiden/maiden-*.patch | sort | tr '\n' ' ')"
 command -v go > /dev/null || { echo "go not found"; exit 1; }
 mkdir -p "$B" "$OUT"
 export GOPATH="$B/gopath" GOCACHE="$B/gocache" GOFLAGS=-mod=mod GOTOOLCHAIN=local

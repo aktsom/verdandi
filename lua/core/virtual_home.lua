@@ -132,8 +132,33 @@ dofile = function(path)
 end
 
 --- shell
+-- Windows, a home folder with a blank in its name (C:/Users/Jane Smith/Verdandi): in a SHELL command the replacement of /home/we must be quoted for the shell, or the path falls in two words. outside quotes the blanks
+-- are escaped, inside quotes (the script quoted it) the path is put in as it is. elsewhere (Linux, macOS, a home without a blank) this is to_real
+local function to_real_shell(s)
+  if type(s) ~= 'string' or package.config:sub(1, 1) ~= '\\' or not real:find('%s') or not s:find(VIRTUAL, 1, true) then
+    return to_real(s)
+  end
+  local escaped = (real:gsub('%s', '\\%0'))
+  local out, i, q = {}, 1, nil
+  while i <= #s do
+    local c = s:sub(i, i)
+    if s:sub(i, i + #VIRTUAL - 1) == VIRTUAL and not (i > 1 and s:sub(i - 1, i - 1):match('[%w_%.%-]')) and not s:sub(i + #VIRTUAL, i + #VIRTUAL):match('[%w_%.%-]') then
+      out[#out + 1] = q and real or escaped
+      i = i + #VIRTUAL
+    elseif c == '\\' and q ~= "'" then
+      out[#out + 1] = s:sub(i, i + 1)
+      i = i + 2
+    else
+      if q == nil and (c == "'" or c == '"') then q = c elseif q == c then q = nil end
+      out[#out + 1] = c
+      i = i + 1
+    end
+  end
+  return table.concat(out)
+end
+
 local execute, popen = os.execute, io.popen
-os.execute = function(cmd) return execute(to_real(cmd)) end
+os.execute = function(cmd) return execute(to_real_shell(cmd)) end
 
 -- a popen handle whose reads come back with virtual paths
 local popen_proxy = {}
@@ -150,7 +175,7 @@ function popen_proxy:setvbuf(...) return self.f:setvbuf(...) end
 function popen_proxy:seek(...) return self.f:seek(...) end
 
 io.popen = function(cmd, mode)
-  local f, err, code = popen(to_real(cmd), mode)
+  local f, err, code = popen(to_real_shell(cmd), mode)
   if f == nil then return f, err, code end
   return setmetatable({f = f}, popen_proxy)
 end
@@ -203,11 +228,19 @@ local function wrap_arg(a)
   end
   return to_real(a)
 end
+local function wrap_shell_arg(a)
+  if type(a) == 'function' then
+    return function(...) return a(map(to_virtual, ...)) end
+  end
+  return to_real_shell(a)
+end
+local SHELL_FUNCTIONS = {execute = true, system_cmd = true} -- their string is a shell command
 
 for _, name in ipairs(PATH_FUNCTIONS) do
   local f = _norns[name]
   if type(f) == 'function' then
-    _norns[name] = function(...) return map(to_virtual, f(map(wrap_arg, ...))) end
+    local wrap = SHELL_FUNCTIONS[name] and wrap_shell_arg or wrap_arg
+    _norns[name] = function(...) return map(to_virtual, f(map(wrap, ...))) end
   end
 end
 

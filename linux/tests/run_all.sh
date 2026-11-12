@@ -222,6 +222,11 @@ windows_rename_ok() {
     gcc -D_WIN32 -I matron/src/platform/linux linux/tests/windows_conf_rename_test.c matron/src/platform/linux/screen_window_conf.c -o "$T/windows_conf_rename_test" || return 1
     "$T/windows_conf_rename_test"
 }
+windows_quote_ok() {
+    local H; H=$(mktemp -d); mkdir -p "$H/home with blank"
+    env HOME="$H/home with blank" lua5.3 linux/tests/windows_cmd_quote_test.lua
+}
+run "windows:a shell command of a script names /home/we: with a blank in the user's folder name the path is quoted for the shell (unquoted, cp and cmp worked on the wrong files)" windows_quote_ok
 run "windows:settings survive a restart (os.rename and rename() replace an existing file on Windows: ui.conf, box.conf, midimap.conf, the window state file; the restart cycle test reads back what the round before saved)" windows_rename_ok
 grid_m5_ok() {
     local GD=matron/src/platform/windows/grid
