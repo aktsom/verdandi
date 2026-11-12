@@ -59,6 +59,7 @@ void matron_cleanup(void) {
     // Windows: every way out ends here (window close, SLEEP, an exit() somewhere). the orderly shutdown below closes the Lua state, the OSC servers and the devices while the card's callback, the metro,
     // clock, sidecar and window threads still run: an access violation after "shutting down lua vm". the Lua side has saved its state before it gets here; the process ends at once (exit_win.h)
     fprintf(stderr, "matron shutdown (fast exit on Windows)\n");
+    dev_list_monome_all_off(800); // the grids' LEDs off first (the exit below skips the orderly shutdown)
     verdandi_win_exit(0);
 #endif
 #ifdef NORNS_LINUX_DESKTOP

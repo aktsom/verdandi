@@ -499,6 +499,67 @@ static void set_icon(SDL_Window *window) {
 
 static void fit_main_window(SDL_Window *w);
 
+#ifdef NORNS_WINDOWS
+// Windows: the size and place of the main window are kept in <home>/main-window.conf (platform/windows/win_state.h) and put back at the next start; saved 600 ms after the last change
+#include "platform/windows/win_state.h"
+static ws_t ws_now;
+static int ws_gen;
+static std::string ws_path() {
+    const char *h = getenv("HOME");
+    return std::string(h != NULL && h[0] != '\0' ? h : ".") + "/main-window.conf";
+}
+static void ws_restore(SDL_Window *w) {
+    ws_t saved, placed;
+    if (!ws_load(ws_path().c_str(), &saved)) {
+        return;
+    }
+    ws_rect screens[8];
+    int n = SDL_GetNumVideoDisplays();
+    if (n > 8) n = 8;
+    for (int i = 0; i < n; i++) {
+        SDL_Rect r;
+        if (SDL_GetDisplayUsableBounds(i, &r) == 0) {
+            screens[i] = {r.x, r.y, r.w, r.h};
+        } else {
+            screens[i] = {0, 0, 0, 0};
+        }
+    }
+    int minw, minh;
+    SDL_GetWindowMinimumSize(w, &minw, &minh);
+    if (!ws_place(&saved, screens, n, minw, minh, &placed)) {
+        return;
+    }
+    if (placed.has_size) SDL_SetWindowSize(w, placed.w, placed.h);
+    if (placed.has_pos) SDL_SetWindowPosition(w, placed.x, placed.y);
+    ws_now = placed;
+    fprintf(stderr, "window: size and place of the last run restored (%dx%d%s)\n", placed.w, placed.h, placed.has_pos ? " at the place it was" : ", the place did not fit the screens now");
+}
+static Uint32 ws_save_timer(Uint32, void *param) {
+    if ((int)(intptr_t)param == ws_gen) {
+        ws_save(ws_path().c_str(), &ws_now);
+    }
+    return 0;
+}
+// the main window moved or was resized (not while maximised or minimised): remember it and save when it has been quiet for a moment
+static void ws_changed(SDL_Window *w, Uint8 e, int d1, int d2) {
+    if (w == NULL || (SDL_GetWindowFlags(w) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP))) {
+        return;
+    }
+    if (e == SDL_WINDOWEVENT_MOVED) {
+        ws_now.has_pos = 1; ws_now.x = d1; ws_now.y = d2;
+    } else if (e == SDL_WINDOWEVENT_SIZE_CHANGED) {
+        ws_now.has_size = 1; ws_now.w = d1; ws_now.h = d2;
+        int x, y;
+        SDL_GetWindowPosition(w, &x, &y);
+        ws_now.has_pos = 1; ws_now.x = x; ws_now.y = y;
+    } else {
+        return;
+    }
+    ws_gen++;
+    SDL_AddTimer(600, ws_save_timer, (void *)(intptr_t)ws_gen);
+}
+#endif
+
 static void bridge_do(bridge_req_t *req) {
     switch (req->op) {
     case BRIDGE_CREATE_WINDOW:
@@ -518,6 +579,9 @@ static void bridge_do(bridge_req_t *req) {
             SDL_SetWindowMinimumSize(req->window, (SKIN_W + 2 * SKIN_MARGIN) / 3, (SKIN_H + 2 * SKIN_MARGIN) / 3);
 #endif
             fit_main_window(req->window);
+#ifdef NORNS_WINDOWS
+            ws_restore(req->window);
+#endif
             set_icon(req->window);
             the_window = req->window;
             // drops from apps other than the Finder
@@ -3444,6 +3508,11 @@ void sdl_bridge_run(void) {
                 }
                 break;
             }
+#ifdef NORNS_WINDOWS
+            if (e == SDL_WINDOWEVENT_MOVED || e == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                ws_changed(the_window, e, ev.window.data1, ev.window.data2);
+            }
+#endif
             if (e == SDL_WINDOWEVENT_CLOSE) {
                 // with a device window open, closing the norns window is no SDL_QUIT
                 SCREEN_SAVE();

@@ -1,0 +1,23 @@
+--- a/src/platform/windows.c	2026-11-12 15:04:06.615730819 +0000
++++ b/src/platform/windows.c	2026-11-12 15:04:06.634417961 +0000
+@@ -286,6 +286,10 @@
+ 	return read_total;
+ }
+ 
++/* Verdandi: the program that embeds libmonome knows better than the instance id what the serial of a port is (a composite USB device has it in its parent, FTDI appends a channel letter, hyphens in the serial).
++ * it sets this hook; its answer is used when it gives one, else the code below runs as before */
++char *(*monome_platform_serial_hook)(const char *path) = NULL;
++
+ char *monome_platform_get_dev_serial(const char *path) {
+ 	HDEVINFO hdevinfo;
+ 	SP_DEVINFO_DATA devinfo;
+@@ -296,6 +300,9 @@
+ 
+ 	serial = NULL;
+ 
++	if (monome_platform_serial_hook && (serial = monome_platform_serial_hook(path)))
++		return serial;
++
+ 	hdevinfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_COMPORT, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+ 
+ 	if (hdevinfo == INVALID_HANDLE_VALUE) {

@@ -223,6 +223,19 @@ windows_rename_ok() {
     "$T/windows_conf_rename_test"
 }
 run "windows:settings survive a restart (os.rename and rename() replace an existing file on Windows: ui.conf, box.conf, midimap.conf, the window state file; the restart cycle test reads back what the round before saved)" windows_rename_ok
+grid_m5_ok() {
+    local GD=matron/src/platform/windows/grid
+    g++ -std=c++17 -Wall -I matron/src linux/tests/grid_core_test.cpp -o "$T/grid_core_test" || return 1
+    "$T/grid_core_test" || return 1
+    g++ -std=c++17 -Wall -I matron/src linux/tests/grid_monitor_test.cpp $GD/grid_monitor.cc -lpthread -o "$T/grid_monitor_test" || return 1
+    "$T/grid_monitor_test" 2> /dev/null || return 1
+    cc -std=gnu11 -Wall -I matron/src/platform/macos -I $GD -I/usr/local/include linux/tests/grid_protocol_test.c matron/src/platform/macos/vgrid_proto.c $GD/grid_reader.c -L/usr/local/lib -lmonome -lpthread -o "$T/grid_protocol_test" || return 1
+    LD_LIBRARY_PATH=/usr/local/lib "$T/grid_protocol_test" || return 1
+    cc -std=gnu11 -Wall -I matron/src/platform/windows linux/tests/win_state_test.c matron/src/platform/windows/win_state.c -o "$T/win_state_test" || return 1
+    "$T/win_state_test"
+}
+run "windows:monome grids (which serial ports are grids: the 128 by USB id, the 2011 256 by its FTDI serial, a generic FTDI port is not and is never opened; the serial from the instance id; two grids, replug on another COM port, a port held by another program, a monome that does not answer; the real libmonome against fake grids on pseudo terminals: sizes, serials, 16 LED levels, keys, all off, the Windows reader loop; the main window's size and place file)" grid_m5_ok
+run "windows:GRID PORTS page (grids by name, size, serial and port, problems with plain help, other ports left alone, the DEVICES entry; widths with the real font)" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/grid_page_windows_test.lua
 link_pair_ok() {
     g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1
     local rc=0

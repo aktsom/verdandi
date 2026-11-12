@@ -172,6 +172,16 @@ Design and reasons: `docs/port/phase-m4.md`. Version 0.5.0. Grids are not in thi
 
 **What to send back:** `logs\norns.log` (the lines starting `midi:` and `clock:`), `audio.conf`, and the answers in the results template of the report. A screenshot of MIDI ROUTES with a test result is welcome.
 
+## Windows M5: monome grids (what to click, what you should see, what to send back)
+Design and reasons: `docs/port/phase-m5.md`. Version 0.6.0. No serialosc is needed: Verdandi talks to the grid's serial port itself, as the Linux build does.
+
+**Plug a grid in** (any USB socket): within a few seconds SYSTEM > DEVICES > GRID PORTS lists it by name, size, serial and port (`monome 128`, `COM6`), and the log says `grid: found m1234567 on COM6`. Give it a vport in SYSTEM > DEVICES > GRID (E2 vport, K3, E3 pick it), as on a norns; scripts use `grid.connect(n)` as always. Two grids at once on two vports work. Pull it out: it leaves the list in a moment; plug it into another socket: it comes back under the same name and serial (so the same vport). The LEDs of every grid go off when Verdandi ends or restarts.
+- **How Verdandi decides what is a grid** (never by COM number): the USB id CAFE:1110 is a grid (your 128). The generic FTDI id 0403:6001 (used by many other devices too) is a grid only when its USB serial looks like a monome's (`M0000163` for your 2011 256); other ports are **never opened** and are listed once as "not a monome". If you have a grid whose serial does not look like one, put it in `%USERPROFILE%\Verdandi\audio.conf`: `monome_serial=<the serial>`; `monome_ignore=COM9;<serial>` leaves ports alone.
+- **A port another program holds** (serialosc, a serial terminal, another app): the page names the port and says `another program has this port open ... Close it there; Verdandi opens the grid when the port is free`. A monome that is on a port but does not answer: `unplug it and plug it in again`; it is tried again every few seconds.
+- **LEDs:** 16 levels are sent (the 128 shows all 16). Your 2011 grid shows its own steps; what it does with the 16 levels is the hardware's, please say what you see (the checklist asks).
+- The AUDIO page shows `card 44100 Hz, norns 48000 Hz, converted by Windows` in turn with the numbers when the card's rate is not norns's. The main window's size and place are kept in `main-window.conf` and put back at the next start.
+- **What to send back:** `logs\norns.log` (lines starting `grid:`), `audio.conf`, a photo or description of the 2011 grid's LEDs with a script that shows levels, and the results template of the report.
+
 ## Scripts and maiden in M1
 - The zip carries a small set of scripts (awake) in `dust-seed\code`; on the first start they are copied to `%USERPROFILE%\Verdandi\dust\code` when that folder is empty (a folder that already has anything is never touched).
 - **Maiden is not in this build yet**; the MAIDEN button says so on the screen. To add scripts, copy a script folder (for example `awake`, from its GitHub page: Code > Download ZIP, unpack so that `awake.lua` is in `dust\code\awake\`) into `%USERPROFILE%\Verdandi\dust\code`, then open SELECT. Scripts that use a shared library (`lib`) bring it in their own folder.

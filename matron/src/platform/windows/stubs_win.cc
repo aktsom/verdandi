@@ -91,8 +91,10 @@ void guid_to_string(uint16_t *guid, char *guidstr) {
 /* ---- device_midi.cc and the device monitor: the MIDI devices are platform/windows/midi (WinMM); the computer keyboard is the HID device of the window ---- */
 void dev_monitor_init(void) {
     vmidi_win_monitor_init();
+    vgrid_win_monitor_init();
 }
 void dev_monitor_deinit(void) {
+    vgrid_win_monitor_deinit();
     vmidi_win_monitor_deinit();
 }
 int dev_monitor_scan(void) {
@@ -100,46 +102,8 @@ int dev_monitor_scan(void) {
     dev_list_add(DEV_TYPE_HID, LINUX_SDL_KEYBOARD_PATH, strdup("keyboard"), NULL);
     // the MIDI devices: the first scan and the thread that looks again
     vmidi_win_monitor_start();
+    vgrid_win_monitor_start();
     return 0;
-}
-
-/* ---- device_monome.cc: grids and arcs ---- */
-int dev_monome_init(void *self) {
-    (void)self;
-    not_yet("grids and arcs");
-    return -1;
-}
-void dev_monome_grid_set_led(struct dev_monome *md, uint8_t x, uint8_t y, int8_t val, bool rel) {
-    (void)md, (void)x, (void)y, (void)val, (void)rel;
-}
-void dev_monome_arc_set_led(struct dev_monome *md, uint8_t n, uint8_t x, int8_t val, bool rel) {
-    (void)md, (void)n, (void)x, (void)val, (void)rel;
-}
-void dev_monome_all_led(struct dev_monome *md, int8_t val, bool rel) {
-    (void)md, (void)val, (void)rel;
-}
-void dev_monome_refresh(struct dev_monome *md) {
-    (void)md;
-}
-int dev_monome_grid_rows(struct dev_monome *md) {
-    (void)md;
-    return 0;
-}
-int dev_monome_grid_cols(struct dev_monome *md) {
-    (void)md;
-    return 0;
-}
-void dev_monome_intensity(struct dev_monome *md, uint8_t i) {
-    (void)md, (void)i;
-}
-void dev_monome_set_rotation(struct dev_monome *md, uint8_t val) {
-    (void)md, (void)val;
-}
-void dev_monome_tilt_enable(struct dev_monome *md, uint8_t val) {
-    (void)md, (void)val;
-}
-void dev_monome_tilt_disable(struct dev_monome *md, uint8_t val) {
-    (void)md, (void)val;
 }
 
 /* ---- vgrid_device.c: the virtual grid and arc are a pty that libmonome opens; Windows has no ptys (an OSC virtual grid comes with M2, PLAN.md Phase 5.5) ---- */

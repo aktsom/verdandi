@@ -108,7 +108,7 @@ target_compile_options(norns PRIVATE -Wno-unused-parameter)
 target_link_libraries(norns PRIVATE
   lua-cjson ${MONOME_LIB}
   PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 PkgConfig::PORTAUDIO ${NNG_LIB}
-  ws2_32 mswsock iphlpapi advapi32 setupapi winmm ole32 shell32 dbghelp psapi pthread m)
+  ws2_32 mswsock iphlpapi advapi32 setupapi cfgmgr32 winmm ole32 shell32 dbghelp psapi pthread m)
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
 install(TARGETS norns RUNTIME DESTINATION .)

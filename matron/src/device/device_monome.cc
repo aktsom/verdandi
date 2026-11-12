@@ -13,6 +13,9 @@
 
 #include "device.h"
 #include "device_monome.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/grid/grid_reader.h"
+#endif
 
 #define clamp_upper(value, max) ((value) < (max) ? (value) : (max))
 #define clamp_lower(value, min) ((value) > (min) ? (value) : (min))
@@ -263,8 +266,18 @@ int dev_monome_grid_cols(struct dev_monome *md) {
 }
 
 void *dev_monome_start(void *md) {
+#ifdef NORNS_WINDOWS
+    // Windows: libmonome has no event loop here (monome_event_loop prints "unimplemented"): the keys are read in slices that look at the cancel flag (platform/windows/grid/grid_reader.h)
+    static volatile int never = 0;
+    int r = vgrid_read_loop(((struct dev_monome *)md)->m, &never);
+    if (r < 0) {
+        fprintf(stderr, "monome: %s stopped answering; it leaves the list when its port is gone\n", ((struct dev_monome *)md)->dev.name != NULL ? ((struct dev_monome *)md)->dev.name : "a grid");
+    }
+    return NULL;
+#else
     monome_event_loop(((struct dev_monome *)md)->m);
     return NULL;
+#endif
 }
 
 void dev_monome_deinit(void *self) {

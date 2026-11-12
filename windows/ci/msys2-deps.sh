@@ -84,6 +84,10 @@ build_libmonome() {
         src="$PWD/m0-work/libmonome-src"
         [ -d "$src/.git" ] || git clone --depth 1 --branch v1.4.9 https://github.com/monome/libmonome.git "$src" || return 1
     fi
+    # M5: the hook that lets Verdandi say what the serial of a port is (windows/patches/libmonome-windows-serial-hook.patch); applied once
+    if ! grep -q monome_platform_serial_hook "$src/src/platform/windows.c"; then
+        patch -p1 -d "$src" < "$REPO/windows/patches/libmonome-windows-serial-hook.patch" || return 1
+    fi
     # upstream builds with -Wall -Werror for GCC; MinGW may warn where Linux does not. first as it is, then (and said in the log) without -Werror, so that the warnings are listed and the build goes on
     if ! { cmake -S "$src" -B "$d" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" && cmake --build "$d"; }; then
         echo "libmonome: the strict build (-Werror) failed, trying again without -Werror"

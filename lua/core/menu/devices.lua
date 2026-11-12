@@ -25,6 +25,14 @@ end
 
 -- Windows build (docs/port/phase-m4.md): one more entry, the MIDI routes page (ports held by other programs, virtual cables, the OSC input, the route tests: lua/core/menu/midiwin.lua)
 local function is_windows() return _norns ~= nil and _norns.midi_status ~= nil end
+-- Windows: the number of ports with a problem (a port another program holds, a monome that did not answer) on the grid page
+local function grid_problem_count()
+  if not (_norns and _norns.grid_status) then return 0 end
+  local n = 0
+  for _ in tostring(_norns.grid_status()):gmatch("\nnote=") do n = n + 1 end
+  if tostring(_norns.grid_status()):sub(1, 5) == "note=" then n = n + 1 end
+  return n
+end
 local function midi_held_count()
   local n = 0
   for _ in tostring(_norns.midi_status()):gmatch("\nnote=") do n = n + 1 end
@@ -35,13 +43,18 @@ local function list_label(name)
     local n = midi_held_count()
     if n > 0 then return "midi: " .. n .. " held" end
   end
+  if is_windows() and name == "grid ports" then
+    local n = grid_problem_count()
+    if n > 0 then return "grid: " .. n .. " problem" .. (n > 1 and "s" or "") end
+  end
   return name
 end
 
 local function sync_list()
   if is_windows() then
-    if #m.list ~= #BASE_LIST + 1 then
+    if #m.list ~= #BASE_LIST + 2 then
       m.list = {table.unpack(BASE_LIST)}
+      m.list[#m.list + 1] = "grid ports"
       m.list[#m.list + 1] = "midi routes"
       if m.mode == "type" then m.len = #m.list end
     end
@@ -156,6 +169,17 @@ local function check_and_rename(dev_type,pos,name)
 end
 
 m.key = function(n,z)
+  if m.mode == "wingrid" then
+    local page = require 'core/menu/gridwin'
+    if page.key(n, z) == "back" then
+      page.deinit()
+      m.mode = "type"
+      m.len = #m.list
+      m.pos = #m.list - 1
+    end
+    _menu.redraw()
+    return
+  end
   if m.mode == "winmidi" then
     local page = require 'core/menu/midiwin'
     if page.key(n, z) == "back" then
@@ -222,6 +246,11 @@ m.key = function(n,z)
       if is_windows() and m.section == "midi routes" then
         m.mode = "winmidi"
         require('core/menu/midiwin').init()
+        _menu.redraw()
+        return
+      elseif is_windows() and m.section == "grid ports" then
+        m.mode = "wingrid"
+        require('core/menu/gridwin').init()
         _menu.redraw()
         return
       elseif m.section == "virmidi" then
@@ -312,6 +341,10 @@ m.key = function(n,z)
 end
 
 m.enc = function(n,delta)
+  if m.mode == "wingrid" then
+    require('core/menu/gridwin').enc(n, delta)
+    return
+  end
   if m.mode == "winmidi" then
     require('core/menu/midiwin').enc(n, delta)
     return
@@ -476,6 +509,10 @@ end
 
 m.redraw = function()
   sync_list()
+  if m.mode == "wingrid" then
+    require('core/menu/gridwin').redraw()
+    return
+  end
   if m.mode == "winmidi" then
     require('core/menu/midiwin').redraw()
     return
@@ -575,6 +612,7 @@ end
 m.deinit = function()
   if vm_poll_stop then vm_poll_stop() end
   if m.mode == "winmidi" then require('core/menu/midiwin').deinit() end
+  if m.mode == "wingrid" then require('core/menu/gridwin').deinit() end
 end
 
 return m

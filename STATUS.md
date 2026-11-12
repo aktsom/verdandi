@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M5: monome grids on Windows (version 0.6.0), small items A and B
+- Done (Linux tests with the real libmonome against fake grids on ptys, fakes for the ports, mingw syntax/link check, libmonome patch compiled with MinGW): grid detection, monitor, reader, GRID PORTS page, all-off at exit paths, card rate on the AUDIO page, main window size and place. Details `docs/port/phase-m5.md`.
+- Not tested without the grids: real SetupAPI answers, the Windows serial I/O of libmonome, the 2011 grid's LED steps, hot-plug on real USB, key latency. Arcs: same code, no arc owned.
+
 ## Windows M4 round 2: owner test of 0.5.0 (version 0.5.1)
 - Done (Linux tests, mingw syntax and link check): the card's clock set by another program (reason shown, follow at the start, watchdog reopen), settings lost at restart (cause: Windows `rename()` does not replace; fixed in Lua and C, with tests and a CI read-back), Link start/stop reviewed and shown, stage timestamps, resize timing log. Details `docs/port/phase-m4.md` section 10.
 - Not tested without the RME and Ableton: the real driver's answers to the rate probe, the shared endpoint at the card's rate.

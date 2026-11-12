@@ -271,6 +271,18 @@ info = mkinfo({host_api = "ASIO", device = "ASIO Fireface USB", total_ms = 9.4})
 check(shown("ASIO  9 ms"), "ASIO")
 info = mkinfo({device_rate = 44100}); page.init(); page.redraw()
 check(shown("card 44100 Hz"), "the card's own rate when it differs")
+-- in turn with the numbers: both rates in plain words, and that Windows converts (shared mode)
+local both = {}
+for t = 0, 100, 5 do page.tick = t; both[#both + 1] = page.status_text() end
+local joined = table.concat(both, " | ")
+check(joined:find("card 44100 Hz, norns 48000 Hz,", 1, true) and joined:find("converted by Windows", 1, true), "A: the rate of the card and of norns, converted by Windows: " .. joined:sub(1, 160))
+for _, l in ipairs(both) do if screen.text_extents(l) > 124 then check(false, "a status line is wider than the screen: " .. l) end end
+info = mkinfo({device_rate = 44100, exclusive = true}); page.init()
+both = {}
+for t = 0, 100, 5 do page.tick = t; both[#both + 1] = page.status_text() end
+joined = table.concat(both, " | ")
+check(joined:find("card 44100 Hz, norns 48000 Hz", 1, true) and not joined:find("converted", 1, true), "exclusive: no 'converted by Windows'")
+info = mkinfo({device_rate = 44100}); page.init(); page.tick = 0; page.redraw()
 info = mkinfo({device_rate = 48000}); page.init(); page.redraw()
 check(not shown(" Hz"), "and nothing when it is the same")
 local line = page.log_line(nil)

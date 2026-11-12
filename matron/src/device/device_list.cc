@@ -403,6 +403,37 @@ int dev_list_midi_ports_listed(const char *node) {
     return n;
 }
 
+#ifdef NORNS_WINDOWS
+int dev_list_path_listed(device_t type, const char *path) {
+    int n = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+        if (dn->d != NULL && dn->d->base.type == type && dn->d->base.path != NULL && path != NULL && strcmp(dn->d->base.path, path) == 0) {
+            n++;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return n;
+}
+
+int dev_list_monome_info(const char *path, char *name, size_t namen, char *serial, size_t serialn, int *cols, int *rows) {
+    int found = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MONOME && dn->d->base.path != NULL && path != NULL && strcmp(dn->d->base.path, path) == 0) {
+            snprintf(name, namen, "%s", dn->d->base.name != NULL ? dn->d->base.name : "monome");
+            snprintf(serial, serialn, "%s", dn->d->base.serial != NULL ? dn->d->base.serial : "");
+            *cols = dn->d->monome.type == DEVICE_MONOME_TYPE_ARC ? 0 : dn->d->monome.cols;
+            *rows = dn->d->monome.type == DEVICE_MONOME_TYPE_ARC ? 0 : dn->d->monome.rows;
+            found = 1;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return found;
+}
+#endif
+
 bool dev_list_has_monome(struct dev_monome *md) {
     pthread_mutex_lock(&lock);
     bool found = false;

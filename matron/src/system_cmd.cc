@@ -218,9 +218,11 @@ bool system_cmd_detached(const char *cmd, const char *unit, int cb_ref) {
 // state); SLEEP (shutdown) ends it with 0 and the launcher ends too. the exit runs from a thread after a moment, so that the Lua side has finished the save it does before asking.
 #include <pthread.h>
 #include "platform/windows/audio/exit_win.h"
+#include "platform/windows/midi/midi_win.h"
 static void *windows_exit_thread(void *arg) {
     struct timespec ts = {0, 400 * 1000 * 1000};
     nanosleep(&ts, NULL);
+    vgrid_win_leds_off(); // a restart or a shutdown: the grids' LEDs off first
     verdandi_win_exit((int)(intptr_t)arg); // (not exit(): see exit_win.h)
     return NULL;
 }

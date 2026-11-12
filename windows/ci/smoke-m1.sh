@@ -170,13 +170,16 @@ chk_input() {
 chk_midi() {
     local l="$IN_HOME/logs/norns.log"
     echo "--- midi and clock lines of norns.log:"
-    grep -a -E "^midi: |^clock: |VERDANDI_SMOKE_MIDI" "$l" 2> /dev/null | head -40
+    grep -a -E "^midi: |^clock: |^grid: |VERDANDI_SMOKE_MIDI|VERDANDI_SMOKE_GRID" "$l" 2> /dev/null | head -40
     echo "---"
     has "$l" "^midi: WinMM \\(midiIn / midiOut\\)" "the MIDI layer started (WinMM)" \
         && has "$l" "OSC input on 127.0.0.1:" "the OSC input is bound to the loopback only" \
         && has "$l" "^midi: found osc " "the OSC input is a device in the list" \
         && has "$l" "VERDANDI_SMOKE_MIDI osc-route osc.*200 of 200|VERDANDI_SMOKE_MIDI osc-route OSC \\(127.0.0.1\\): .* 200 of 200" "the OSC route came back 200 of 200 times: round trip and jitter above" \
         && has "$l" "VERDANDI_SMOKE_MIDI link peers=[0-9]+ tempo=" "Ableton Link switched on and read" \
+        && has "$l" "^grid: serial ports are looked at for monome grids" "the grid monitor started (serial ports, no grid on the runner is expected)" \
+        && has "$l" "VERDANDI_SMOKE_GRID status \\[" "the grid page's table can be read" \
+        && ! grep -a -q -E "^grid: found " "$l" \
         && has "$l" "VERDANDI_SMOKE_MIDI done" "and off again, the program runs on" \
         && has "$l" "^clock: the internal clock thread is registered with MMCSS" "the clock thread has MMCSS" \
         && ! grep -q "norns CRASHED" "$l"

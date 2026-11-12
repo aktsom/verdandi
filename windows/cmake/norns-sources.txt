@@ -11,6 +11,7 @@ matron/src/config.cc
 matron/src/device/device.cc
 matron/src/device/device_list.cc
 matron/src/device/device_midi.cc
+matron/src/device/device_monome.cc
 matron/src/osc.cc
 matron/src/hardware/input.cc
 matron/src/hardware/io.cc
@@ -74,6 +75,7 @@ matron/src/platform/linux/hid_virtual.cc
 matron/src/platform/linux/desktop_shell_linux.cc
 matron/src/platform/macos/device_skin.c
 matron/src/platform/windows/dust_import_win.c
+matron/src/platform/windows/win_state.c
 matron/src/platform/macos/gif_writer.c
 matron/src/platform/macos/hardware_null.cc
 matron/src/platform/macos/sdl_bridge.cc
@@ -104,3 +106,7 @@ matron/src/platform/windows/midi/midi_measure.cc
 matron/src/platform/windows/midi/osc_in.cc
 matron/src/platform/windows/midi/midi_win.cc
 matron/src/platform/windows/midi/midi_winmm.c
+# --- M5: monome grids (serial ports, libmonome with a small patch; docs/port/phase-m5.md)
+matron/src/platform/windows/grid/grid_monitor.cc
+matron/src/platform/windows/grid/grid_reader.c
+matron/src/platform/windows/grid/grid_win.cc

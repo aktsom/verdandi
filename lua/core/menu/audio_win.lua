@@ -470,8 +470,11 @@ local function status_line(info)
     return "null audio (silent)"
   end
   local line = string.format("%s  %.0f ms  u%d x%d", mode_word(info), info.total_ms or 0, info.underruns or 0, info.xruns or 0)
-  -- the rate the card itself runs at, when it is not norns's own (shared mode: Windows converts; exclusive and ASIO: the clock of the card)
+  -- the rate the card itself runs at, when it is not norns's own: the line then shows the numbers and, in turn, the two rates in plain words (shared mode: Windows converts; exclusive and ASIO follow the card)
   if (info.device_rate or 0) > 0 and math.floor(info.device_rate + 0.5) ~= info.rate then
+    local pages = winui.pages(string.format("card %d Hz, norns %d Hz%s", math.floor(info.device_rate + 0.5), info.rate, (info.exclusive or (info.host_api or ""):find("ASIO", 1, true)) and "" or ", converted by Windows"), 124)
+    local phase = math.floor(m.tick / PAGE_TICKS) % (#pages + 1) -- 0: the numbers, then the sentence a line at a time
+    if phase > 0 then return pages[phase] end
     line = line .. string.format("  card %d Hz", math.floor(info.device_rate + 0.5))
   end
   return line

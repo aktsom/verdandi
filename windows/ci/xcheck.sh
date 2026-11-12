@@ -49,7 +49,7 @@ done
 echo "xcheck: $ok compile, $bad do not"
 if [ "${XC_LINK:-0}" = 1 ] && [ "$bad" -eq 0 ]; then
     # every symbol the objects need that neither they nor the compiler's runtime define, minus the third-party libraries that the real link adds
-    $CXX build/xlink/*.o -o /dev/null -Wl,--unresolved-symbols=report-all -lws2_32 -liphlpapi -lpthread -lwinmm -lole32 -lshell32 -ldbghelp -lpsapi 2>&1 \
+    $CXX build/xlink/*.o -o /dev/null -Wl,--unresolved-symbols=report-all -lws2_32 -liphlpapi -lcfgmgr32 -lsetupapi -lpthread -lwinmm -lole32 -lshell32 -ldbghelp -lpsapi 2>&1 \
         | grep -o "undefined reference to .*" | sed -E "s/undefined reference to .(.*).$/\1/" | sort -u \
         | grep -v -E "^(lua|luaL|luaopen|SDL_|cairo_|lo_|nng_|sf_|monome_|FT_|Pa_|abl_link|__imp_|json|cJSON)" > build/xlink/unresolved.txt || true
     echo "unresolved project symbols: $(wc -l < build/xlink/unresolved.txt) (build/xlink/unresolved.txt)"

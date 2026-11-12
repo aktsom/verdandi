@@ -89,6 +89,11 @@ static void *log_run(void *) {
     return NULL;
 }
 
+static void poke_all(void) {
+    vmidi_monitor_poke();
+    vgrid_win_poke();
+}
+
 void vmidi_win_monitor_init(void) {
     bool found;
     std::string ig = conf_value("midi_ignore", &found);
@@ -106,7 +111,7 @@ void vmidi_win_monitor_init(void) {
         snprintf(key, sizeof key, "osc:127.0.0.1:%d", OSC_PORT);
         vmidi_monitor_set_extra(key, "osc");
     }
-    vmidi_winmm_watch(vmidi_monitor_poke);
+    vmidi_winmm_watch(poke_all);
     static char tmp[64][64];
     fprintf(stderr, "midi: WinMM (midiIn / midiOut): %d input and %d output ports now; a change of devices is noticed at once and every 2 seconds%s; OSC input on 127.0.0.1:%d\n", vmidi_winmm_backend.list(1, tmp, 64), vmidi_winmm_backend.list(0, tmp, 64), ig.empty() ? "" : "; midi_ignore is set", OSC_PORT);
 }

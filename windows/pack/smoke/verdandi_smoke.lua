@@ -54,6 +54,7 @@ function init()
     if os.getenv("VERDANDI_SMOKE_INPUT") == "1" and _norns.midi_status then
       local st = _norns.midi_status()
       print("VERDANDI_SMOKE_MIDI status " .. st:gsub("\n", " | "))
+      if _norns.grid_status then print("VERDANDI_SMOKE_GRID status [" .. _norns.grid_status():gsub("\n", " | ") .. "]") end
       local rc, why = _norns.midi_route_test("osc", "")
       print("VERDANDI_SMOKE_MIDI osc-start rc=" .. tostring(rc) .. " " .. tostring(why))
       for _ = 1, 20 do

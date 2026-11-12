@@ -527,3 +527,13 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 3. PARAMS > CLOCK, source = link: the first line says `start/stop sync off` or `on`; with it on in both programs, Ableton's play/stop starts and stops Verdandi's clock and the other way round.
 4. After a slow restart: send `launcher.log` and `norns.log` (lines with `+N s` and `stage:`).
 5. After resizing the window: the `window:` line in norns.log (mean and slowest redraw).
+
+## Windows M5 (0.6.0): monome grids
+1. Plug in the 128: SYSTEM > DEVICES > GRID PORTS lists it (`monome 128`, serial, its COM port); the log has `grid: found ...` and `monome device appears to be a grid; rows=8; cols=16`. Give it a vport, run a grid script (for example `grid_test` or `awake`'s grid use): keys are seen, LEDs light with different brightness.
+2. Plug in the 256 as well (two vports): same, the log says `rows=16; cols=16`. With a script that shows levels (brightness ramp): what do you see on the 2011 grid (4 steps? on/off? nothing)? The serial is `M0000163`: that is the mext family.
+3. Move each grid to another USB socket: it comes back at once with the same name and serial and the same vport; pull it out while a script runs: the script goes on, the entry leaves.
+4. Open serialosc or a terminal program on a grid's COM port first, then start Verdandi (or plug in): GRID PORTS names the port as held in plain words; close the other program: the grid appears within a few seconds.
+5. A different FTDI device (an Arduino, a GPS) on a USB socket: it is listed as `not a monome`, not opened (no LED flicker on it).
+6. SYSTEM > RESTART, SLEEP and closing the window with a lit grid: the LEDs go off. (Killing the program from Task Manager cannot.)
+7. Tilt (if your grid has it) and rotation: `grid:rotation(1)` etc. as on a norns.
+8. Window: resize and move the main window, restart: same size and place (an unplugged second monitor: the window opens on the first).

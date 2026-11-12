@@ -22,6 +22,14 @@ extern bool dev_list_has_monome(struct dev_monome *md);
 extern int dev_list_midi_sweep(void);
 // how many ports of this node are in the list
 extern int dev_list_midi_ports_listed(const char *node);
+#ifdef NORNS_WINDOWS
+#include <stddef.h>
+#include "device.h"
+// Windows: is a device of this type with this path in the list (the grid monitor asks whether libmonome took the port)
+extern int dev_list_path_listed(device_t type, const char *path);
+// Windows: what the monome device at this path is: libmonome's name and serial, columns and rows (0 and 0 for an arc). 0 = no such device
+extern int dev_list_monome_info(const char *path, char *name, size_t namen, char *serial, size_t serialn, int *cols, int *rows);
+#endif
 // let go of every port of this node at once (its handles are closed, Lua is told): for a card that must not be open (the virtual MIDI card a DAW reads); unlike dev_list_remove it does not wait for the card to
 // vanish. returns how many ports were released
 extern int dev_list_midi_release(const char *node);

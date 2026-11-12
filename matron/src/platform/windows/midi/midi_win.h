@@ -8,6 +8,13 @@ extern "C" {
 void vmidi_win_monitor_init(void);
 void vmidi_win_monitor_start(void);
 void vmidi_win_monitor_deinit(void);
+/* the monitor of the grids (platform/windows/grid/grid_win.cc), started and stopped with the MIDI one; the device-change notice reaches both */
+void vgrid_win_monitor_init(void);
+void vgrid_win_monitor_start(void);
+void vgrid_win_monitor_deinit(void);
+void vgrid_win_poke(void);
+int vgrid_win_status(char *buf, size_t n);
+void vgrid_win_leds_off(void);
 /* the UDP port of the OSC input (audio.conf osc_in_port=, default 9201, 0 = off) */
 int vmidi_win_osc_port(void);
 /* the MIDI layer in one table for the DEVICES page: devices, virtual cables, notes ("name: text\n..."), the OSC port, the clock statistics, the last route test. one text, "key=value" lines */
