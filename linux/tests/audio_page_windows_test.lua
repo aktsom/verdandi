@@ -1,5 +1,5 @@
 -- SYSTEM > AUDIO in the Windows build (lua/core/menu/audio_win.lua with lua/core/menu/winui.lua; chosen by audio.lua when _norns.audio_devices exists): ONE rule: E2 selects a row, E3 CHOOSES a value (the row
--- shows it at once and says 'K3 apply'), K3 APPLIES (the row says 'applying...' and then 'applied'), K2 leaves and never applies; a boxed help of at most 3 lines for the selected row, messages that belong to
+-- shows it at once and ends in a * mark), K3 APPLIES (the mark is .. and then ok), K2 leaves and never applies; a boxed help of at most 3 lines for the selected row, messages that belong to
 -- a row and go when E2 moves, TEST results on the row itself, nothing wider than the screen (real font metrics when FONT_WIDTHS is set), bright text.
 -- run from the repo root:   FONT_WIDTHS=<table from linux/tests/font_widths_dump.c> lua5.3 linux/tests/audio_page_windows_test.lua
 local _print = print
@@ -89,6 +89,7 @@ package.loaded["core/menu/winui"] = winui
 check(require("core/menu/audio") == require("core/menu/audio_win"), "audio.lua hands the page to audio_win.lua when the program has audio_devices")
 package.loaded["core/menu/audio"] = nil
 page = dofile("lua/core/menu/audio_win.lua")
+local function mark(m) for _, t in ipairs(drawn) do if t.s == m then return true end end return false end
 local function shown(s) for _, t in ipairs(drawn) do if t.s:find(s, 1, true) then return true end end return false end
 local function conf() local h = real_open(tmp .. "/audio.conf"); if not h then return nil end local c = h:read("a"); h:close(); return c end
 local function select_row(row_pos) page.enc(2, -9); page.enc(2, row_pos - 1) end
@@ -136,19 +137,21 @@ local h3 = help_lines()
 check(#h3 == 3 and h3[3]:find("SYS", 1, true) and h3[3]:find("loopback", 1, true), "INPUT help: the third line says SYS is not available and why: " .. tostring(h3[3]))
 info = mkinfo({sys_available = true})
 page.init(); select_row(3); page.redraw()
-check(#help_lines() == 2, "and nothing about SYS when it is there")
+local h4 = help_lines()
+check(#h4 == 3 and h4[3] == "SYS needs no input.", "and when SYS is there the help says it needs no input: " .. tostring(h4[3]))
 
--- ---- E3 CHOOSES: the new value is on the row at once, the row says K3 apply, nothing is applied yet ----
+-- ---- E3 CHOOSES: the new value is on the row at once, the row ends in *, the help says K3 applies, nothing is applied yet ----
 info = mkinfo()
 page.init(); applied = {}
 select_row(2); page.enc(3, 2); page.redraw()
-check(shown("K3 apply"), "the row says K3 apply")
+check(mark("*") and shown("OUTPUT") and not shown("K3 apply"), "the row keeps its name and ends in the * mark")
+check(help_lines()[3] == "* chosen: K3 applies." and screen.text_extents(help_lines()[3]) <= 118, "and the help box explains it: " .. tostring(help_lines()[3]))
 check(shown("Speakers (RME") or shown("Speakers (Realtek"), "and shows the chosen device at once")
 check(#applied == 0, "nothing is applied by turning E3")
 ticks(40)
 check(#applied == 0, "not by waiting either (no timer applies anything)")
 page.enc(2, 1); page.redraw()
-check(#applied == 0 and shown("K3 apply") == true, "not by moving to another row (the choice stays pending, the row still says so)")
+check(#applied == 0 and mark("*"), "not by moving to another row (the choice stays pending, the row still says so)")
 page.enc(2, -1)
 
 -- ---- K3 APPLIES: 'applying...', then 'applied' on the row, and the confirmation on the status line ----
@@ -156,14 +159,14 @@ local before_rc = apply_rc
 page.key(3, 1); page.redraw()
 check(#applied == 1, "K3 on a changed row applies (one call to the program)")
 check(applied[1]:find("output=wasapi:Speakers", 1, true), "with the audio.conf lines")
-check(shown("applied") and not shown("K3 apply"), "the row says applied now")
+check(mark("ok") and not mark("*"), "the row ends in ok now")
 check(page.status and page.status:find("OUTPUT", 1, true) and page.status:find("applied", 1, true), "and the status line confirms it: " .. tostring(page.status))
 local c = conf()
 check(c and c:find("buffer=auto", 1, true) and c:find("block=128", 1, true), "audio.conf is written after it worked")
 check(#input_calls >= 1 and input_calls[#input_calls][1] == "off", "a new device: the input goes OFF (the MIC button state follows)")
 check(not restarted, "norns is not restarted")
 page.enc(2, 1); page.redraw()
-check(not shown("applied") and page.status == nil, "moving to another row clears the 'applied' mark and the message")
+check(not mark("ok") and not shown("applied") and page.status == nil, "moving to another row clears the ok mark and the message")
 
 -- ---- leaving never applies ----
 info = mkinfo(); page.init(); applied = {}
@@ -172,16 +175,16 @@ page.key(2, 1)
 page.deinit()
 check(#applied == 0, "K2 (and deinit) leave without applying: nothing was applied")
 page.init(); page.redraw()
-check(shown("K3 apply") == false, "and the pending choice is gone when the page is opened again")
+check(not mark("*"), "and the pending choice is gone when the page is opened again")
 page.enc(2, -9); page.enc(2, 3); page.redraw()
 check(shown("auto"), "BUFFER is back to what runs: auto")
 
 -- ---- 'applying...' is visible while it takes time ----
-local seen_applying = false
+local seen_applying, seen_mark = false, false
 local real_apply = _norns.audio_apply
-_norns.audio_apply = function(text) page.redraw(); seen_applying = shown("applying"); return real_apply(text) end
+_norns.audio_apply = function(text) page.redraw(); seen_applying = shown("applying"); seen_mark = mark(".."); return real_apply(text) end
 page.init(); turn(pos_of("BUFFER"), 2); page.key(3, 1)
-check(seen_applying, "during the call the row says applying...")
+check(seen_applying and seen_mark, "during the call the row ends in .. and the status line says applying...")
 _norns.audio_apply = real_apply
 
 -- ---- a setting that cannot be used: back to what runs, one plain line, no 'applied' ----
@@ -190,7 +193,7 @@ info = mkinfo({config = "output=wasapi:Speakers (RME Fireface UC)\ninput=\nrate=
 page.init()
 turn(pos_of("OUTPUT"), -1); page.key(3, 1); page.redraw()
 check(shown("busy: another program has it"), "a busy device: one plain line")
-check(shown("Speakers (RME") and not shown("applied"), "the row shows what runs again and no applied mark")
+check(shown("Speakers (RME") and not mark("ok") and not mark("*"), "the row shows what runs again and no applied mark")
 page.enc(2, 1); page.redraw()
 check(not shown("busy: another program has it"), "and the message goes when E2 moves")
 apply_rc, apply_msg = 0, ""
@@ -198,7 +201,7 @@ apply_rc, apply_msg = 0, ""
 -- ---- DRIVER and ASIO ----
 info = mkinfo(); page.init()
 turn(pos_of("DRIVER"), 1); page.redraw()
-check(shown("exclusive") and shown("K3 apply"), "E3 on DRIVER: exclusive, K3 apply")
+check(shown("exclusive") and mark("*"), "E3 on DRIVER: exclusive, marked")
 page.key(3, 1)
 check(applied[#applied]:find("exclusive=1", 1, true), "exclusive=1 goes to the program on K3")
 info = mkinfo({host_apis = "WASAPI ASIO"}); page.init()
@@ -207,7 +210,7 @@ check(shown("low latency"), "with ASIO: low latency is a DRIVER choice")
 page.enc(2, 1); page.redraw()
 check(shown("ASIO Fireface USB"), "OUTPUT lists the ASIO driver")
 page.enc(2, 1); page.redraw()
-check(shown("OUT CH") or shown("K3 apply") or shown("1+2"), "OUT CH appears")
+check(shown("OUT CH") or shown("1+2"), "OUT CH appears")
 page.key(3, 1)
 check(applied[#applied]:find("output=asio:ASIO Fireface USB", 1, true), "the asio: uid is applied")
 page.init(); page.enc(2, 9); page.redraw()
@@ -311,6 +314,17 @@ if W then
         local bad = W.violations()
         if #bad > 0 then widths_ok = false; _print("   too wide: " .. table.concat(bad, "; ")) end
       end
+      -- the same with a pending choice (the * at the end of the row, the value in full) on this row
+      page.enc(3, 1)
+      for t = 0, 70, 7 do
+        page.tick = t
+        W.clear(); page.redraw()
+        checked = checked + 1
+        local bad = W.violations()
+        if #bad > 0 then widths_ok = false; _print("   too wide (pending): " .. table.concat(bad, "; ")) end
+      end
+      page.init()
+      if drv == 1 then page.enc(2, -9); page.enc(3, 1) end
     end
   end
   check(widths_ok and checked > 100, "no text wider than the screen or over another, " .. checked .. " views with the longest device names (rows, help box, status line, pending marks)")

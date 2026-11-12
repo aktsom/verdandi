@@ -505,3 +505,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 3. The boxed help appears for the selected row only, at most three lines, nothing cut off.
 4. TEST: `testing...` then a short result on the row.
 5. SYS: play a video in a browser, MIC button to SYS: a script with a level meter moves (direct WASAPI loopback, never run on Windows before).
+
+## Windows M3 round 7 (0.4.5)
+1. AUDIO page: turn E3 on INPUT to a long device name: the row keeps `INPUT`, ends in `*`, the full name is readable (it runs on the selected row); the help box says `* chosen: K3 applies.`
+2. MIC button with no INPUT chosen: OFF > MIC shows the note `MIC needs an INPUT...`, the next press gives SYS, the next OFF.
+3. SYS in normal mode works with no INPUT and shows the feedback hint; in exclusive mode it goes back to OFF with `SYS only hears Windows sound in normal mode`.

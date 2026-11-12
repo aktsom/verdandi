@@ -539,6 +539,18 @@ static void scenario_input(const char *sc) {
             adc_means(&l, &r);
             CHECK(fabs(l) < 1e-4 && fabs(r) < 1e-4, "sys: OFF is silent again");
         }
+    } else if (!strcmp(sc, "sys_noinput")) {
+        /* SYS needs no INPUT; MIC without one says what to do */
+        st = start_card("", "", 1, 2, 1, 512);
+        int rc = vaud_input_set(1, 0);
+        CHECK(rc == 1 && vaud_get_state()->input == VAUD_IN_OFF && strstr(vaud_get_state()->sys_note, "MIC needs an INPUT") && strstr(vaud_get_state()->sys_note, "SYSTEM > AUDIO"), "sys_noinput: MIC without an INPUT stays OFF with the plain note: '%s'", vaud_get_state()->sys_note);
+        rc = vaud_input_set(0, 1);
+        CHECK(rc == 0 && vaud_get_state()->input == VAUD_IN_SYS && fake_sys_open, "sys_noinput: SYS works with no INPUT chosen");
+        CHECK(vaud_get_state()->sys_note[0] == 0, "sys_noinput: and the old MIC note is gone: '%s'", vaud_get_state()->sys_note);
+    } else if (!strcmp(sc, "asio_sys")) {
+        st = start_card("asio:Fake ASIO", "", 1, 2, 3, 128);
+        int rc = vaud_input_set(0, 1);
+        CHECK(rc == 1 && vaud_get_state()->input == VAUD_IN_OFF && !fake_sys_open && strstr(vaud_get_state()->sys_note, "SYS only hears Windows sound in normal mode"), "asio_sys: SYS in ASIO mode returns to OFF with the reason: '%s'", vaud_get_state()->sys_note);
     } else if (!strcmp(sc, "measure") || !strcmp(sc, "measure_none")) {
         loop_back = !strcmp(sc, "measure");
         /* the fake interface's inputs 1 and 2 carry 0.1 and 0.2 (below the click threshold) unless the cable is on */
@@ -895,6 +907,13 @@ static void scenario_excl(const char *sc) {
         CHECK(st.mode == VAUD_MODE_DEVICE && last_req.exclusive == 1 && st.opened.exclusive, "excl_ok: exclusive mode asked for and reported");
     }
     sleep_ms_f(300);
+    if (!excl_busy) {
+        int rc = vaud_input_set(0, 1);
+        CHECK(rc == 1 && vaud_get_state()->input == VAUD_IN_OFF && strstr(vaud_get_state()->sys_note, "SYS only hears Windows sound in normal mode"), "excl_ok: SYS in exclusive mode returns to OFF with the reason: '%s'", vaud_get_state()->sys_note);
+    } else {
+        int rc = vaud_input_set(0, 1);
+        CHECK(rc == 0 && vaud_get_state()->input == VAUD_IN_SYS, "excl_busy: exclusive was refused, so the normal mode runs and SYS works");
+    }
     vaud_stop();
 }
 

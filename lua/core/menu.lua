@@ -275,6 +275,8 @@ function _menu.set_input(mode, bundle, name, quiet)
   if (mode == "system" or mode == "app" or mode == "monitor") and not _norns.app_input then mode = "off" end
   if mode == "monitor" and not monitor_ok() then mode = "off" end
   if mode == "app" and not bundle then mode = "off" end
+  -- Windows: the button remembers what was asked for (a MIC that could not open does not block SYS behind it)
+  if _norns.audio_input then _menu.win_cursor = mode end
   set_capture(mode == "mic")
   -- other apps keep playing: the monitor of them goes to TAPE only, not heard a second time
   -- (the sink monitor contains norns' own output: its input monitor must be off too, or it is a loop)
@@ -296,8 +298,12 @@ function _menu.set_input(mode, bundle, name, quiet)
   if _norns.audio_input then
     local actual, why = _norns.audio_input()
     if actual ~= mode and (mode == "mic" or mode == "system") then
-      _menu.input_note = "INPUT: " .. (why ~= "" and why or "not available") .. " (off)"
+      -- the program's own sentences ("MIC needs an INPUT: ...", "SYS only hears ...") are shown as they are
+      if why:find("^MIC") or why:find("^SYS") then _menu.input_note = why
+      else _menu.input_note = "INPUT: " .. (why ~= "" and why or "not available") .. " (off)" end
       mode = actual
+    elseif mode == "system" then
+      _menu.input_note = "SYS can feed back; lower softcut or mute if it howls"
     end
   end
   _menu.input = mode
@@ -347,6 +353,21 @@ function _menu.next_input()
     return
   end
   local mode = INPUT_NEXT[_menu.input] or "mic"
+  if _norns.audio_input and _norns.audio_info then
+    -- Windows: OFF > MIC > SYS > OFF from what was asked for last, so SYS can be reached when MIC could not open; a press never lands on what is already the state
+    local order = {off = "mic", mic = "system", system = "off"}
+    local inf = _norns.audio_info()
+    local sys_ok = not (inf and inf.sys_available == false)
+    local cur = _menu.win_cursor or _menu.input
+    for _ = 1, 3 do
+      mode = order[cur] or "mic"
+      if mode == "system" and not sys_ok then mode = "off" end
+      if mode ~= _menu.input then break end
+      cur = mode
+    end
+    _menu.set_input(mode)
+    return
+  end
   if mode == "system" and not _norns.app_input then mode = "off" end
   -- Windows: without a WASAPI loopback device in this PortAudio there is no SYS; the button goes MIC > OFF (the AUDIO page says why)
   if mode == "system" and _norns.audio_input and _norns.audio_info then

@@ -70,7 +70,7 @@ function winui.pages(text, w)
 end
 
 -- a row at baseline y: bar (8 px high, the whole width) and the text of the selected row at 15, the others at 11 (on a Windows page that is already bright)
-function winui.row(y, label, value, selected, tick)
+function winui.row(y, label, value, selected, tick, mark)
   if selected then
     screen.level(3)
     screen.rect(0, y - 7, 128, 9)
@@ -80,8 +80,15 @@ function winui.row(y, label, value, selected, tick)
   screen.move(2, y)
   screen.text(label)
   local lw = screen.text_extents(label)
-  screen.move(126, y)
-  screen.text_right(winui.fit(value, 126 - 2 - lw - 8, selected, tick))
+  -- a short mark at the very end of the row (the AUDIO page: * = chosen, K3 applies); the value keeps all the room that is left, the name is never replaced
+  local mw = 0
+  if mark and mark ~= "" then
+    mw = screen.text_extents(mark) + 4
+    screen.move(126, y)
+    screen.text_right(mark)
+  end
+  screen.move(126 - mw, y)
+  screen.text_right(winui.fit(value, 126 - 2 - lw - 8 - mw, selected, tick))
 end
 
 return winui

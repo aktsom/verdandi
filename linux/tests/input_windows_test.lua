@@ -14,11 +14,12 @@ local function check(cond, what) if not cond then fails = fails + 1; print("FAIL
 
 local mic, sys, can_mic, can_sys, warn = false, false, true, true, nil
 local sys_available = true
+local sys_why = nil
 local function actual()
   if sys and can_sys then return "system", "" end
   if mic and can_mic then return "mic", "" end
   local why = ""
-  if sys then why = "no loopback device" elseif mic then why = "no input device chosen" end
+  if sys then why = sys_why or "no loopback device" elseif mic then why = "MIC needs an INPUT: choose one on SYSTEM > AUDIO" end
   return "off", why
 end
 util = {os_capture = function() error("no jack_lsp on Windows") end, file_exists = function() return false end}
@@ -53,11 +54,30 @@ can_mic = false
 _menu.set_input("off")
 _menu.set_input("mic")
 check(_menu.input == "off", "MIC with no input device stays OFF")
-check(warn and warn:find("no input device chosen", 1, true), "and says why on the device: " .. tostring(warn))
+check(warn and warn:find("MIC needs an INPUT: choose one on SYSTEM > AUDIO", 1, true), "and says why on the device: " .. tostring(warn))
+-- the button still reaches SYS when MIC could not open (no INPUT chosen)
+_menu.set_input("off")
+_menu.next_input()
+check(_menu.input == "off" and warn and warn:find("MIC needs an INPUT", 1, true), "button: MIC without an INPUT stays OFF with the note")
+_menu.next_input()
+check(_menu.input == "system" and sys, "button: the next press reaches SYS without an INPUT")
+check(warn and warn:find("SYS can feed back; lower softcut or mute if it howls", 1, true), "SYS on: the hint about feedback: " .. tostring(warn))
+_menu.next_input()
+check(_menu.input == "off", "button: SYS > OFF")
+_menu.next_input()
+check(_menu.input == "off" and warn and warn:find("MIC needs an INPUT", 1, true), "button: and MIC again (with its note)")
+-- exclusive or ASIO: SYS returns to OFF with the reason, and the next press goes on to MIC rather than doing nothing
+can_sys = false; sys_why = "SYS only hears Windows sound in normal mode"
+_menu.set_input("off"); _menu.next_input(); _menu.next_input()
+check(_menu.input == "off" and warn and warn:find("SYS only hears Windows sound in normal mode", 1, true), "exclusive/ASIO: SYS stays OFF with the reason: " .. tostring(warn))
 can_mic = true
+_menu.next_input()
+check(_menu.input == "mic", "the press after a refused SYS is not lost: MIC")
+can_sys = true; sys_why = nil
+_menu.set_input("off")
 _menu.set_input("mic")
-check(_menu.input == "mic" and not (warn or ""):find("INPUT"), "a working input clears the note")
-can_sys = false
+check(_menu.input == "mic" and not (warn or ""):find("INPUT") and not (warn or ""):find("feed back"), "a working input clears the note")
+can_sys = false; sys_why = nil
 _menu.set_input("system")
 check(_menu.input == "off" and warn and warn:find("no loopback device", 1, true), "SYS without a loopback stays OFF with the reason")
 -- SYS is not offered when this PortAudio has no WASAPI loopback: the button goes MIC > OFF, and a direct choice stays OFF with the reason

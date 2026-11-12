@@ -1,5 +1,5 @@
 -- SYSTEM > AUDIO in the Windows build (docs/port/phase-m3.md, "UI rule"). ONE rule, the same on every Windows page that has a setting to apply:
---   E2 selects a row.  E3 CHOOSES a value: the row shows it at once and says "K3 apply".  K3 APPLIES it: the row says "applying..." and then "applied".  K2 leaves and never applies anything.
+--   E2 selects a row.  E3 CHOOSES a value: the row shows it at once with a * at its end (the help says "K3 applies").  K3 APPLIES it: the mark is .. while it works and ok after.  K2 leaves and never applies anything.
 -- a boxed help of at most three short lines for the selected row only; messages belong to the row and go when E2 moves; TEST shows its result on its own row. Rows:
 --   DRIVER   normal (WASAPI shared: works next to other programs)   exclusive (WASAPI: lowest delay Windows allows, nobody else can use the device)   low latency (ASIO, only in the ASIO build)
 --   OUTPUT   the device ("default" follows Windows)      OUT CH   (low latency only) which output pair
@@ -147,7 +147,7 @@ local HELP = {
   DRIVER = {"DRIVER: normal shares the", "card with other programs.", "exclusive: fastest, alone."},
   OUTPUT = {"OUTPUT: where sound goes.", "default follows Windows.", "Some pairs may be unwired."},
   ["OUT CH"] = {"OUT CH: which two outputs", "of the ASIO driver."},
-  INPUT = {"INPUT: sound in; none = off.", "The MIC button turns it on."},
+  INPUT = {"INPUT: sound in; none = off.", "The MIC button turns it on.", "SYS needs no input."},
   ["IN CH"] = {"IN CH: left and right input", "channels. 3 mono = channel 3", "on both sides."},
   BUFFER = {"BUFFER: auto is safest.", "Smaller = less delay,", "more risk of clicks."},
   TEST = {"TEST: K3 sends a click out", "and listens on the input.", "No input: 2 s self-test."},
@@ -161,6 +161,8 @@ m.help = function(row)
     local inf = _norns.audio_info()
     if inf and inf.sys_available == false then lines[3] = "SYS: needs WASAPI loopback." end
   end
+  -- a chosen value that is not applied yet: the last line explains the mark
+  if m.pending and m.pending(row) then lines[3] = "* chosen: K3 applies." end
   return lines
 end
 m.help_lines = function() return m.help(rows()[m.pos]) or {} end
@@ -480,11 +482,12 @@ m.redraw = function()
     local i = m.top + k
     local row = r[i]
     if row then
-      local label = row
-      if i == m.pos and m.busy and (pending(row) or m.applied_row == row) then label = "applying..."
-      elseif pending(row) then label = "K3 apply"
-      elseif m.applied_row == row then label = "applied" end
-      winui.row(8 + 9 * k, label, value_text(row), i == m.pos, m.tick)
+      -- the name of the row stays, the value is the full chosen one; the mark at the end: * = chosen, K3 applies; .. = applying; ok = applied
+      local mark
+      if i == m.pos and m.busy and (pending(row) or m.applied_row == row) then mark = ".."
+      elseif pending(row) then mark = "*"
+      elseif m.applied_row == row then mark = "ok" end
+      winui.row(8 + 9 * k, row, value_text(row), i == m.pos, m.tick, mark)
     end
   end
   -- the help of the selected row: a box over the lower part of the screen, three short lines at most

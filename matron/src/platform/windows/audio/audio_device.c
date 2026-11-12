@@ -787,6 +787,11 @@ int vaud_input_set(int mic_on, int sys_on) {
         snprintf(S.sys_note, sizeof S.sys_note, "%s", S.sys_reason);
         return 1;
     }
+    if (sys_on && S.mode == VAUD_MODE_DEVICE && (S.opened.exclusive || strstr(S.opened.host_api, "ASIO"))) {
+        /* exclusive and ASIO take the card away from Windows: there is no Windows sound on it to listen to */
+        snprintf(S.sys_note, sizeof S.sys_note, "SYS only hears Windows sound in normal mode");
+        return 1;
+    }
     if (sys_on) {
         if (!sys_open) {
             char name[128] = "", err[200] = "";
@@ -826,7 +831,7 @@ int vaud_input_set(int mic_on, int sys_on) {
             } else if (S.mode != VAUD_MODE_DEVICE) {
                 snprintf(S.sys_note, sizeof S.sys_note, "MIC: there is no sound card running (see SYSTEM > AUDIO)");
             } else {
-                snprintf(S.sys_note, sizeof S.sys_note, "MIC: no input chosen. Pick one on SYSTEM > AUDIO > INPUT");
+                snprintf(S.sys_note, sizeof S.sys_note, "MIC needs an INPUT: choose one on SYSTEM > AUDIO");
             }
             return 1;
         }
