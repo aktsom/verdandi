@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NONBLOCKING_CHECKS: 'm6-check-maiden m6-check-repl'
+  NONBLOCKING_CHECKS: ''
   SC_TAG: Version-3.14.1
   M0_REQUIRE: 'sc norns assemble m1'
   TAIL_LINES: '130'
@@ -286,10 +286,12 @@ jobs:
         id: gate
         run: |
           bad=0
-          for f in $(grep -l '^FAIL' m0-out/status/*.status 2> /dev/null); do
+          failed="$(grep -l '^FAIL' m0-out/status/*.status 2> /dev/null || true)"
+          while read -r f; do
+            [ -n "$f" ] || continue
             n="$(basename "$f" .status)"
             case " $NONBLOCKING_CHECKS " in *" $n "*) echo "check $n failed (not blocking)";; *) echo "check $n failed"; bad=1;; esac
-          done
+          done <<< "$failed"
           if [ "$bad" = 1 ]; then echo "a check of the ASIO build failed: its zip is not published"; exit 1; fi
           echo "all checks of the ASIO build passed"
       - uses: actions/upload-artifact@v4
