@@ -13,10 +13,12 @@ T="$(mktemp -d)"; PIDS=""
 trap 'for p in $PIDS; do kill $p 2> /dev/null; done; wait 2> /dev/null; rm -rf "$T"' EXIT
 mkdir -p "$T/dust/code" "$T/dust/data/sources" "$T/dust/data/catalogs" "$T/doc"
 cat > "$T/fake.py" <<'PY'
-import sys
-for line in sys.stdin:
-    if "REPL_" in line: print("REPL_42", flush=True)
-    elif "postln" in line: print("-> 42", flush=True)
+import os, sys
+while True:
+    d = os.read(0, 4096)
+    if not d: break
+    if b"REPL_" in d: print("REPL_42", flush=True)
+    elif b"postln" in d: print("-> 42", flush=True)
 PY
 O="http://127.0.0.1:5000,http://localhost:5000"
 for port in 5555 5556; do

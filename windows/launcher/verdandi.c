@@ -536,6 +536,14 @@ static HANDLE start_maiden(const wchar_t *logs) {
         copy_tree(src, dst);
         say(L"maiden: the catalog sources were copied to %ls", dst);
     }
+    {
+        /* the folders maiden writes to (the catalogs it fetches, the scripts it installs): they must exist */
+        wchar_t d[MAX_PATH * 2];
+        join(d, MAX_PATH * 2, g_home, L"dust\\data\\catalogs");
+        make_dirs(d);
+        join(d, MAX_PATH * 2, g_home, L"dust\\code");
+        make_dirs(d);
+    }
     wchar_t dustf[MAX_PATH * 2], homef[MAX_PATH * 2], appf[MAX_PATH * 2], args[MAX_PATH * 6];
     fwd(g_home, homef, MAX_PATH * 2);
     fwd(g_app, appf, MAX_PATH * 2);

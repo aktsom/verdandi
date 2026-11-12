@@ -113,12 +113,14 @@ if up:
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     import urllib.parse
     url = "http://127.0.0.1:%d/%s" % (srv.server_address[1], urllib.parse.quote(zname))
+    body = ""
     try:
         req = urllib.request.Request("http://127.0.0.1:%d/api/v1/project/install?url=%s" % (PORT, urllib.parse.quote(url, safe="")), method="POST")
         with urllib.request.urlopen(req, timeout=60) as r:
             status = r.status
     except urllib.error.HTTPError as e:
         status = e.code
+        body = e.read().decode("utf-8", "replace")[:300]
     except Exception as e:
         status = str(e)
     found = None
@@ -127,7 +129,7 @@ if up:
         for f in files:
             if f == "café_test.lua":
                 found = os.path.join(root, f)
-    result("maiden-install", status in (200, 201) and found is not None, "install answered %s; the accented script is %s" % (status, found or "NOT in dust/code"))
+    result("maiden-install", status in (200, 201) and found is not None, "install answered %s %s; the accented script is %s" % (status, body.replace("\n", " "), found or "NOT in dust/code"))
     srv.shutdown()
 
 # 3. the norns console
@@ -149,7 +151,7 @@ except Exception as e:
 
 # 5. the sclang console
 try:
-    ok, tail = repl(5556, "(20+22).postln;\n", "42", 150)
+    ok, tail = repl(5556, "(20+22).postln;\x1b", "42", 150) # maiden's web app ends every sclang command with ESC
     result("repl-sclang", ok, "sclang's console on ws://127.0.0.1:5556 evaluated a line" if ok else "no answer: " + repr(tail))
 except Exception as e:
     result("repl-sclang", False, "%s" % e)

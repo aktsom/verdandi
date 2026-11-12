@@ -184,7 +184,7 @@ chk_input() {
 chk_maiden() {
     echo "--- the probe (windows/ci/maiden_probe.py):"; cat "$M0_OUT/m6-probe.txt" 2> /dev/null; echo "--- maiden.log (last 15):"; tail -n 15 "$IN_HOME/logs/maiden.log" 2> /dev/null
     echo "---"
-    has "$IN_HOME/logs/launcher.log" "launcher: maiden started: http://127.0.0.1:5000/maiden" "the launcher started maiden on 127.0.0.1" \
+    has "$IN_HOME/logs/launcher.log" "maiden started: http://127.0.0.1:5000/maiden" "the launcher started maiden on 127.0.0.1" \
         && has "$M0_OUT/m6-probe.txt" "PROBE maiden-api ok" "maiden's API answers" \
         && has "$M0_OUT/m6-probe.txt" "PROBE maiden-web ok" "the web app is served" \
         && has "$M0_OUT/m6-probe.txt" "PROBE maiden-install ok" "a script with an accented, spaced name was installed from a zip into dust/code"
