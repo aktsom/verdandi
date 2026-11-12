@@ -204,14 +204,14 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **Plug-ins not loaded by the server:** scsynth only searched its own folders; `<home>\extensions` was only on sclang's include path. The launcher now sets `SC_PLUGIN_PATH` (extensions and the per-user folder). CI: scsynth run directly with the packs (any load error fails the job), and the real server must start a synth of each of MiPlaits, MiBraids, Decimator, MoogLadder, SawDPW (`s.sync` alone is no longer enough); `sclang.log` must not say "not installed".
 - **/home/we in sclang:** `sc/desktop-safe/NornsVirtualHome.sc` (same code as the Linux file, home from `NORNS_HOME`); tested with the real sclang here and by a SmokePack scan on the runner.
 - **`~/.local/share/SuperCollider/Extensions`:** created at every start, on sclang's include path and `SC_PLUGIN_PATH`, walked by the plug-in heal.
-- **MAIDEN 404:** the launcher looks up the holder of port 5000 before every start: a `maiden.exe` of any folder is stopped, another program is left alone and the MAIDEN button says so. CI starts a copy of maiden from another folder first. Not yet run on a real PC.
+- **MAIDEN 404:** the launcher looks up the holder of port 5000 before every start: a `maiden.exe` of any folder is stopped, another program is left alone and the MAIDEN button says so. CI starts a copy of maiden from another folder first. Run in CI on the Windows runner (all green); not yet on a real PC.
 
 ## Windows M7 round 2: mi-UGens classes, pack refresh, safe start-up (version 0.8.1)
 
 - **Cause of the missing classes:** the build script looked for `Classes` at the top of the mi-UGens repository; they are in `sc/Classes`. Fixed, with licences. Pack check on the sources (`UNITS.txt`, a class for every UGen, no class twice with comments stripped), `PACK-ID.txt` per pack, packs without it are not shipped.
 - **Launcher:** replaces its own older pack (marker differs, or the 0.8.0 layout without marker) after moving the old folder to `disabled\<pack>-replaced`; other folders in `extensions` are never touched (`pack_refresh.h`, tested).
 - **sclang:** `sc/desktop-safe/VerdandiSafeInit.sc` makes a failing `initClass` a log line instead of a cut-off start-up (reproduced and fixed with the real sclang here); `VerdandiPackCheck.sc` prints one line naming UGens without a class.
-- **CI:** real SynthDefs (MiPlaits, MiBraids, Decimator) built through the sclang console, server answers `s.sync`, no class missing / duplicate / initClass failure, pack replace and untouched own folder checked. Not yet run on a real PC.
+- **CI:** real SynthDefs (MiPlaits, MiBraids, Decimator) built through the sclang console, server answers `s.sync`, no class missing / duplicate / initClass failure, pack replace and untouched own folder checked. Run in CI on the Windows runner (all green); not yet on a real PC.
 
 ## Windows M7: plug-in packs (version 0.8.0, built in CI, results in docs/port/phase-m7.md section 6)
 
