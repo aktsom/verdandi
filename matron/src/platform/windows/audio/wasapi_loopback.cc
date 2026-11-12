@@ -15,6 +15,10 @@
 
 #include "loopback_convert.h"
 
+// the two sub-format GUIDs written out here: the MinGW ksmedia.h only declares them, and the link then fails
+static const GUID VWL_SUBTYPE_PCM = {0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};
+static const GUID VWL_SUBTYPE_FLOAT = {0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};
+
 extern "C" void vaud_push_sys(const float *interleaved, unsigned frames);
 
 namespace {
@@ -30,7 +34,7 @@ bool is_float(const WAVEFORMATEX *wf) {
     if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) return true;
     if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE && wf->cbSize >= 22) {
         const WAVEFORMATEXTENSIBLE *e = (const WAVEFORMATEXTENSIBLE *)wf;
-        return IsEqualGUID(e->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) != 0;
+        return IsEqualGUID(e->SubFormat, VWL_SUBTYPE_FLOAT) != 0;
     }
     return false;
 }
@@ -38,7 +42,7 @@ bool is_pcm16(const WAVEFORMATEX *wf) {
     if (wf->wBitsPerSample != 16) return false;
     if (wf->wFormatTag == WAVE_FORMAT_PCM) return true;
     if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE && wf->cbSize >= 22) {
-        return IsEqualGUID(((const WAVEFORMATEXTENSIBLE *)wf)->SubFormat, KSDATAFORMAT_SUBTYPE_PCM) != 0;
+        return IsEqualGUID(((const WAVEFORMATEXTENSIBLE *)wf)->SubFormat, VWL_SUBTYPE_PCM) != 0;
     }
     return false;
 }
