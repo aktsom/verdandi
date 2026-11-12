@@ -246,9 +246,11 @@ m6_ok() {
     g++ -std=c++17 -Wall -I matron/src linux/tests/serialosc_core_test.cpp -o "$T/serialosc_core_test" || return 1
     "$T/serialosc_core_test" || return 1
     cc -std=gnu11 -Wall -I windows/launcher linux/tests/plugin_heal_test.c -o "$T/plugin_heal_test" || return 1
-    "$T/plugin_heal_test"
+    "$T/plugin_heal_test" || return 1
+    g++ -std=c++17 -Wall -I matron/src/platform/windows linux/tests/cmdline_quote_test.cpp -o "$T/cmdline_quote_test" || return 1
+    "$T/cmdline_quote_test"
 }
-run "windows:serialosc handling (exact image names only, a service before its processes, the plain note, the administrator command and how to keep it from coming back) and the plug-in kinds (only a PE x86-64 file is loaded: ELF, Mach-O, ARM are moved aside)" m6_ok
+run "windows:serialosc handling (exact image names only, a service before its processes, the plain note, the administrator command and how to keep it from coming back) and the plug-in kinds (only a PE x86-64 file is loaded: ELF, Mach-O, ARM are moved aside) and the quoting of the sidecar's command line (round trip against an independent parser)" m6_ok
 run "windows:maiden probe of the CI against the Linux stack (maiden answers, a script with an accented, spaced name is installed from a zip over HTTP, the norns and sclang consoles on websockets answer, a page from another site gets no console; skipped when maiden is not built)" bash linux/tests/maiden_probe_test.sh
 link_pair_ok() {
     g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "../../../../norns/sidecar_shell.h"
+#include "cmdline_quote.h"
 
 static std::string exe_dir() {
     char path[MAX_PATH * 2];
@@ -32,14 +33,8 @@ static std::string command_line(const char *cmd) {
     std::string busybox = (bb && *bb) ? bb : exe_dir() + "\\busybox.exe";
     DWORD attr = GetFileAttributesA(busybox.c_str());
     if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-        std::string q;
-        for (const char *c = cmd; *c; c++) { // the command is one argument: quote it for CommandLineToArgvW rules
-            if (*c == '"' || *c == '\\') {
-                q += '\\';
-            }
-            q += *c;
-        }
-        return "\"" + busybox + "\" sh -c \"" + q + "\"";
+        // the command is one argument of sh -c: quoted by the rules of the C runtime (cmdline_quote.h): backslashes are literal unless they stand before a quote
+        return "\"" + busybox + "\" sh -c " + quote_cmdline_arg(cmd);
     }
     return std::string("cmd.exe /d /s /c \"") + cmd + "\"";
 }

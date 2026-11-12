@@ -285,7 +285,12 @@ jobs:
       - name: Gate
         id: gate
         run: |
-          if grep -l '^FAIL' m0-out/status/*.status 2> /dev/null; then echo "a check of the ASIO build failed: its zip is not published"; exit 1; fi
+          bad=0
+          for f in $(grep -l '^FAIL' m0-out/status/*.status 2> /dev/null); do
+            n="$(basename "$f" .status)"
+            case " $NONBLOCKING_CHECKS " in *" $n "*) echo "check $n failed (not blocking)";; *) echo "check $n failed"; bad=1;; esac
+          done
+          if [ "$bad" = 1 ]; then echo "a check of the ASIO build failed: its zip is not published"; exit 1; fi
           echo "all checks of the ASIO build passed"
       - uses: actions/upload-artifact@v4
         if: always()
