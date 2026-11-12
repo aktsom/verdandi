@@ -62,6 +62,11 @@ static int pa_up(char *err, size_t errn) {
     return 0;
 }
 
+static int pa_up_quiet(void) {
+    char err[200];
+    return pa_up(err, sizeof err);
+}
+
 static int ends_with(const char *s, const char *suffix) {
     size_t a = strlen(s), b = strlen(suffix);
     return a >= b && !strcmp(s + a - b, suffix);
@@ -605,7 +610,52 @@ static void pa_describe(char *out, size_t n) {
 #else
 #define HAS_DIRECT_SYS 0
 #endif
-const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe, HAS_DIRECT_SYS};
+/* the clock of a card that another program (an ASIO driver that is running) has set: the device takes, in its own format (exclusive mode), only the rate it runs at; a free card takes several. exactly one rate
+ * taken = that is the clock. 0: not WASAPI, not known, or free */
+static double pa_card_clock(const char *uid) {
+#ifdef HAVE_PA_WASAPI_H
+    static const double rates[4] = {44100, 48000, 88200, 96000};
+    if (!uid || !strncmp(uid, "asio:", 5) || pa_up_quiet() != 0) {
+        return 0;
+    }
+    const char *api = NULL;
+    PaDeviceIndex d = uid[0] ? find_device(uid, 0, &api) : Pa_GetDefaultOutputDevice();
+    if (d == paNoDevice || d < 0) {
+        return 0;
+    }
+    const PaDeviceInfo *di = Pa_GetDeviceInfo(d);
+    if (!di || di->maxOutputChannels < 2) {
+        return 0;
+    }
+    double found = 0;
+    int count = 0;
+    for (int i = 0; i < 4; i++) {
+        sp_t outp;
+        fill_params(&outp, d, "WASAPI", 2, 0, rates[i], 0, NULL, 1);
+        if (Pa_IsFormatSupported(NULL, &outp.p, rates[i]) == paFormatIsSupported) {
+            count++;
+            found = rates[i];
+        }
+    }
+    return count == 1 ? found : 0;
+#else
+    (void)uid;
+    return 0;
+#endif
+}
+
+/* look at the devices again: the list PortAudio made at its start does not know that a card's state changed. only when no stream is open (Pa_Terminate would end it) */
+static void pa_refresh(void) {
+    if (!pa_ready || stream || in_stream || sys_stream) {
+        return;
+    }
+    Pa_Terminate();
+    pa_ready = 0;
+    char err[200];
+    pa_up(err, sizeof err);
+}
+
+const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe, HAS_DIRECT_SYS, pa_card_clock, pa_refresh};
 
 /* what the log shows at start: the host APIs this PortAudio has (WASAPI missing is the first thing to look for when there is no sound) */
 void vaud_backend_pa_describe(char *out, size_t n) { pa_describe(out, n); }

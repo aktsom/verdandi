@@ -24,6 +24,9 @@
 
 #include "crone.h"
 #include "crone_param_dispatch.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/audio/exit_win.h"
+#endif
 
 // address of external DSP environment (e.g. supercollider)
 static lo_address ext_addr;
@@ -785,6 +788,9 @@ void o_poll_callback_softcut_render(int idx, float sec_per_sample, float start, 
 int handle_crone_ready(const char *path, const char *types, lo_arg **argv,
                        int argc, lo_message data, void *user_data) {
     norns_hello_ok();
+#ifdef NORNS_WINDOWS
+    verdandi_stage("SuperCollider answered (crone is ready)");
+#endif
     return 0;
 }
 

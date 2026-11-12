@@ -10,6 +10,9 @@ extern "C" {
  * normal exit() path crashed with an access violation after "shutting down lua vm" on every restart. A watchdog ends the process after 3 s even if stopping the card hangs. Never returns. */
 void verdandi_win_exit(int code);
 
+/* a line "stage: <what> at +12.3 s since norns.exe was started" in norns.log (time of the process, from its creation): where the time of a start or restart goes (docs/port/phase-m5 notes, launcher.log has the other half) */
+void verdandi_stage(const char *what);
+
 #ifdef __cplusplus
 }
 #endif

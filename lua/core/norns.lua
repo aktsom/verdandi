@@ -265,6 +265,7 @@ end
 
 _post_startup = function()
    print('_norns._post_startup')
+   if _norns.stage then _norns.stage('start-up finished (post-startup hooks run)') end
    hook.system_post_startup()
 end
 

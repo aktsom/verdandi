@@ -55,8 +55,13 @@ static void say(const wchar_t *fmt, ...) {
     utf8(msg, u, sizeof u);
     SYSTEMTIME t;
     GetLocalTime(&t);
+    static ULONGLONG t0;
+    if (t0 == 0) {
+        t0 = GetTickCount64();
+    }
     if (g_log) {
-        fprintf(g_log, "%04d-%02d-%02d %02d:%02d:%02d launcher: %s\n", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, u);
+        /* the time of day with milliseconds, and the seconds since the launcher's first line: where the time of a start or restart goes */
+        fprintf(g_log, "%04d-%02d-%02d %02d:%02d:%02d.%03d launcher: [+%.1f s] %s\n", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, (double)(GetTickCount64() - t0) / 1000.0, u);
         fflush(g_log);
     }
     fprintf(stderr, "launcher: %s\n", u);
@@ -732,7 +737,9 @@ int wmain(int argc, wchar_t **argv) {
     {
         int stale = kill_stale_programs();
         if (stale || round > 1) {
+            ULONGLONG pw0 = GetTickCount64();
             wait_ports_free(8000);
+            say(L"the ports of the earlier start are free (waited %lu ms)", (unsigned long)(GetTickCount64() - pw0));
         }
     }
     pn = start_child(norns, L"", g_app, logs, L"norns", &err);
@@ -771,8 +778,10 @@ int wmain(int argc, wchar_t **argv) {
     GetExitCodeProcess(pn, &code);
     say(L"norns.exe ended with exit code 0x%08lx", (unsigned long)code);
     if (g_job) {
+        ULONGLONG stop0 = GetTickCount64();
         TerminateJobObject(g_job, 0); /* sclang, scsynth and anything else started from here */
         wait_job_empty(g_job, 10000);
+        say(L"sclang and scsynth stopped (%lu ms)", (unsigned long)(GetTickCount64() - stop0));
     }
     if (ps) {
         CloseHandle(ps);

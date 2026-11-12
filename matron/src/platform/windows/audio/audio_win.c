@@ -122,6 +122,7 @@ void verdandi_audio_info(verdandi_audio_info_t *out) {
                  c->exclusive, c->out_first, c->in_l, c->in_r);
     }
     out->peak_db = s->in_peak_db;
+    out->clock_rate = s->clock_rate;
     out->measured_ms = s->measured_ms;
     out->card_xruns = s->card_xruns;
     out->in_active = dev && s->opened.in_active;

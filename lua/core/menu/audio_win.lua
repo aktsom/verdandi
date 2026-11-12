@@ -459,7 +459,12 @@ local function status_line(info)
     return pages[(math.floor((m.tick - (m.status_start or 0)) / PAGE_TICKS) % #pages) + 1]
   end
   if not info then return "" end
-  if info.mode == "fallback" then
+  if info.mode == "fallback" and (info.clock_rate or 0) > 0 then
+    -- the card is there but another program set its clock: the whole reason, a line at a time (it is the standing state of the card, not a message of a row)
+    local pages = winui.pages((info.note or ""):gsub("^no sound: ", ""), 124)
+    if #pages == 0 then return "no sound: card clock" end
+    return pages[(math.floor(m.tick / PAGE_TICKS) % #pages) + 1]
+  elseif info.mode == "fallback" then
     return (info.note:find("busy", 1, true) and "no sound: device busy") or (info.note:find("not found", 1, true) and "no sound: device missing") or "no sound"
   elseif info.mode ~= "device" then
     return "null audio (silent)"

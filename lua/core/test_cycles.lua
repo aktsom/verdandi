@@ -10,6 +10,27 @@ function M.settings()
   return total, tonumber(os.getenv("VERDANDI_ROUND") or "") or 1
 end
 
+-- settings that must survive a restart (the Windows rename bug: a second save of ui.conf was lost, the old theme came back): every round saves a brightness into ui.conf and the next round, after the restart,
+-- must read exactly that value. the line VERDANDI_CYCLE_KEEP says what was wanted and what was read; the CI fails on ok=false. `ui` is the ui_settings module (a parameter for the tests)
+function M.keep_value(round) return (1 + (round % 9)) / 10 end
+function M.keep_check(round, ui)
+  if ui == nil then
+    local ok, mod = pcall(require, 'core/ui_settings')
+    ui = ok and mod or nil
+  end
+  if ui == nil or ui.state == nil or ui.save == nil then return nil end
+  local line
+  if round > 1 then
+    local want, got = M.keep_value(round - 1), ui.state.brightness
+    line = string.format("VERDANDI_CYCLE_KEEP round=%d wanted=%.1f got=%s ok=%s", round, want, tostring(got), tostring(got ~= nil and math.abs(got - want) < 0.001))
+  else
+    line = "VERDANDI_CYCLE_KEEP round=1 first"
+  end
+  ui.state.brightness = M.keep_value(round)
+  local saved = ui.save()
+  return line .. " saved=" .. tostring(saved)
+end
+
 -- kind: "ok" or "timeout" (how the start-up ended); the actions are parameters so that the logic can be tested
 function M.after_startup(kind, actions)
   local total, round = M.settings()
@@ -20,6 +41,8 @@ function M.after_startup(kind, actions)
   local restart = actions.restart or function() _norns.restart() end
   local shutdown = actions.shutdown or function() norns.shutdown() end
   print("VERDANDI_CYCLE " .. round .. " of " .. total .. " (start-up " .. tostring(kind) .. ")")
+  local keep = M.keep_check(round, actions.ui)
+  if keep then print(keep) end
   run(function()
     sleep(3)
     if round < total then

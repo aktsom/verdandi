@@ -17,6 +17,7 @@ local function actions()
     run = function(f) f() end,
     restart = function() calls[#calls + 1] = "restart" end,
     shutdown = function() calls[#calls + 1] = "shutdown" end,
+    ui = {}, -- (no settings module: the real one would write ui.conf)
   }
 end
 
@@ -37,6 +38,30 @@ check(table.concat(calls, ",") == "sleep 3,sleep 1,shutdown", "round 3 of 3: shu
 env = {VERDANDI_TEST_CYCLES = "1"}
 M.after_startup("ok", actions())
 check(table.concat(calls, ",") == "sleep 3,sleep 1,shutdown", "no round number: it counts as round 1 (of 1: shutdown)")
+
+-- settings that must survive a restart: the value of the round before is read back, the new one saved
+local fake_disk = nil
+local ui = {state = {}, save = function() fake_disk = nil; return true end}
+env = {VERDANDI_TEST_CYCLES = "5", VERDANDI_ROUND = "1"}
+local printed = {}
+local real_print = print
+print = function(l) printed[#printed + 1] = tostring(l) end
+local a = actions(); a.ui = ui
+M.after_startup("ok", a)
+check(printed[2] and printed[2]:find("round=1 first", 1, true) and ui.state.brightness == M.keep_value(1), "round 1: saves its value, nothing to compare")
+printed = {}
+ui.state.brightness = M.keep_value(1) -- what a restart reads back (the file held it)
+env.VERDANDI_ROUND = "2"
+a = actions(); a.ui = ui
+M.after_startup("ok", a)
+check(printed[2] and printed[2]:find("ok=true", 1, true), "round 2: the value of round 1 was read back: " .. tostring(printed[2]))
+printed = {}
+ui.state.brightness = 1.0 -- a restart that lost the save: the default came back
+env.VERDANDI_ROUND = "3"
+a = actions(); a.ui = ui
+M.after_startup("ok", a)
+check(printed[2] and printed[2]:find("ok=false", 1, true), "a lost save is reported as ok=false: " .. tostring(printed[2]))
+print = real_print
 env = {VERDANDI_TEST_CYCLES = "abc"}
 check(M.settings() == nil, "a total that is not a number: inactive")
 

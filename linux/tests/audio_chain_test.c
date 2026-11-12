@@ -35,6 +35,9 @@ static size_t rec_n, rec_cap;
 static atomic_int card_blocks;
 static int dev_mode; /* 0 all fine, 1 "Busy" is busy, 2 only 48000 */
 static int asio_busy, no_loopback, no_mic_open, fail_all, excl_busy, g_burst; /* scenario switches */
+static unsigned g_clock_owner = 0;         /* another program (an ASIO driver) set the card's clock to this rate: the Windows endpoint then refuses any other rate (the owner's Fireface at 44100 Hz) */
+static int g_card_dead = 0;                /* the card stopped calling back (its clock was changed under the stream) */
+static int g_refreshes = 0;
 static double g_dev_rate = 48000;          /* the rate the fake interface runs at (the Windows setting / the card's clock) */
 static int g_no_loop_dev;                  /* the PortAudio of the fake card lists no loopback device (the owner's MSYS2 build) */
 static volatile int g_guest_delay_ms;      /* the scsynth stand-in answers this much later (a start-up that loads synthdefs, a busy machine) */
@@ -93,7 +96,7 @@ static void *card_loop(void *a) {
             for (unsigned i = 0; i < card_frames; i++) { sysb[2 * i] = 0.6f; sysb[2 * i + 1] = 0.7f; }
             vaud_push_sys(sysb, card_frames);
         }
-        card_cb(in, buf, card_frames, NULL);
+        if (!g_card_dead) card_cb(in, buf, card_frames, NULL);
         if (rec_n + card_frames <= rec_cap) {
             for (unsigned i = 0; i < card_frames; i++) {
                 rec_l[rec_n + i] = buf[2 * i];
@@ -160,6 +163,10 @@ static vaud_error fk_open(const vaud_open_req *rq, vaud_callback cb, void *u, va
         snprintf(err, en, "ASIO driver could not be started (another program has it)");
         return VAUD_BUSY;
     }
+    if (g_clock_owner && !strcmp(uid, "wasapi:Fake Interface") && rq->rate != g_clock_owner) {
+        snprintf(err, en, "Invalid device"); /* what PortAudio's WASAPI says: the endpoint cannot be opened at a rate the hardware clock is not at */
+        return VAUD_NOT_FOUND;
+    }
     if (dev_mode == 2 && rq->rate != 48000) {
         snprintf(err, en, "invalid sample rate");
         res->rate = 48000;
@@ -206,8 +213,10 @@ static int fk_open_sys(unsigned rate, unsigned frames, char *name, size_t nn, ch
     return 0;
 }
 static void fk_close_sys(void) { fake_sys_open = 0; }
+static double fk_card_clock(const char *uid) { return (g_clock_owner && !strcmp(uid, "wasapi:Fake Interface")) ? (double)g_clock_owner : 0.0; }
+static void fk_refresh(void) { g_refreshes++; }
 static void fk_describe(char *o, size_t n) { snprintf(o, n, "Fake PortAudio; host APIs: Fake WASAPI, Fake ASIO"); }
-static const vaud_backend FAKE = {"fake", fk_list, fk_open, fk_start, fk_close, fk_open_sys, fk_close_sys, fk_describe};
+static const vaud_backend FAKE = {"fake", fk_list, fk_open, fk_start, fk_close, fk_open_sys, fk_close_sys, fk_describe, 0, fk_card_clock, fk_refresh};
 
 /* ---- crone stand-in: sends 0.2 to the engines, plays what comes back ---- */
 static jack_client_t *crone;
@@ -846,6 +855,68 @@ static void scenario_rate(const char *sc) {
     g_dev_rate = 48000;
 }
 
+
+/* the owner's Fireface: another program (Ableton's ASIO driver) set the card's clock to 44100 Hz. Windows then refuses Verdandi's 48000 Hz on the endpoint with an error that used to read "output not found / no sound:
+ * device missing". now: the real reason, norns follows the card's rate at the start, and a stream that dies while running is reopened (and says why when it cannot) */
+static void scenario_clock(const char *sc) {
+    g_buffer = 0;
+    rec_cap = 48000 * 4; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    char name[64];
+    snprintf(name, sizeof name, "AudioClock-%d", (int)getpid());
+    bridge_name = name;
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    snprintf(cfg.output, sizeof cfg.output, "wasapi:Fake Interface");
+    cfg.rate = 48000; cfg.period = 128;
+    vaud_state st;
+    if (!strcmp(sc, "clock_start")) {
+        g_clock_owner = 44100;
+        vaud_start(&FAKE, &cfg, NULL, &st);
+        CHECK(st.mode == VAUD_MODE_DEVICE && st.rate == 44100, "clock_start: the card runs, norns follows its clock (%u Hz, mode %d)", st.rate, st.mode);
+        CHECK(strstr(st.note, "44100 Hz") && strstr(st.note, "another program"), "clock_start: and says why in plain words: '%s'", st.note);
+        CHECK(!strstr(st.note, "not found") && !strstr(st.note, "default device"), "clock_start: not 'not found', not the default device: '%s'", st.note);
+        CHECK(g_refreshes >= 1, "clock_start: the list of devices was looked at again before the card was declared missing (%d)", g_refreshes);
+    } else if (!strcmp(sc, "clock_none")) {
+        /* a device that really is not there is still 'not found' (and the default device is used) */
+        snprintf(cfg.output, sizeof cfg.output, "wasapi:Gone Speakers");
+        vaud_start(&FAKE, &cfg, NULL, &st);
+        CHECK(st.mode == VAUD_MODE_DEVICE && strstr(st.note, "not found"), "clock_none: a missing device is still said to be missing: '%s'", st.note);
+    } else { /* clock_live */
+        vaud_start(&FAKE, &cfg, NULL, &st);
+        CHECK(st.mode == VAUD_MODE_DEVICE && st.rate == 48000, "clock_live: runs at 48000 Hz");
+        crone_start();
+        sleep_ms_f(600);
+        /* the clock is changed under the stream: it stops calling back, and 48000 is refused from now on */
+        g_clock_owner = 44100;
+        g_card_dead = 1;
+        int seen_fallback = 0;
+        for (int i = 0; i < 100 && !seen_fallback; i++) {
+            sleep_ms_f(100);
+            seen_fallback = vaud_get_state()->mode == VAUD_MODE_FALLBACK;
+        }
+        const vaud_state *now = vaud_get_state();
+        CHECK(seen_fallback, "clock_live: the stopped card is noticed within 10 s");
+        CHECK(strstr(now->note, "card runs at 44100 Hz") && strstr(now->note, "another program set it") && strstr(now->note, "SYSTEM > RESTART"), "clock_live: the page gets the real reason and what to do: '%s'", now->note);
+        CHECK(now->clock_rate == 44100, "clock_live: the card's rate is known to the page (%u)", now->clock_rate);
+        /* the other program lets go: 48000 again. the card is reopened by itself */
+        g_clock_owner = 0;
+        g_card_dead = 0;
+        int back = 0;
+        for (int i = 0; i < 120 && !back; i++) {
+            sleep_ms_f(100);
+            back = vaud_get_state()->mode == VAUD_MODE_DEVICE;
+        }
+        CHECK(back, "clock_live: when the card is at norns's rate again the stream is reopened by itself");
+        CHECK(vaud_get_state()->clock_rate == 0 && strstr(vaud_get_state()->note, "reopened"), "clock_live: and the page says it: '%s'", vaud_get_state()->note);
+        int b0 = atomic_load(&card_blocks);
+        sleep_ms_f(400);
+        CHECK(atomic_load(&card_blocks) > b0 + 5, "clock_live: the card calls back again");
+    }
+    sleep_ms_f(200);
+    vaud_stop();
+    g_clock_owner = 0; g_card_dead = 0;
+}
+
 /* TEST without cables (owner's list, 6d): two seconds of the card's callbacks and of the engine's blocks are measured and judged */
 static void scenario_selftest(const char *sc) {
     char name[64];
@@ -923,6 +994,7 @@ int main(int argc, char **argv) {
     else if (!strncmp(sc, "apply_", 6)) scenario_apply(sc);
     else if (!strncmp(sc, "excl_", 5)) scenario_excl(sc);
     else if (!strncmp(sc, "rate_", 5)) scenario_rate(sc);
+    else if (!strncmp(sc, "clock_", 6)) scenario_clock(sc);
     else if (!strncmp(sc, "selftest", 8)) scenario_selftest(sc);
     else if (!strcmp(sc, "startup")) scenario_startup(sc);
     else if (!strcmp(sc, "lagfirst")) scenario_lagfirst(sc);

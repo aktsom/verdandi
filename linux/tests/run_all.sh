@@ -175,7 +175,7 @@ audio_chain_ok() {
     gcc -std=gnu11 -O1 -I matron/src/platform/windows/jack_null/include -I matron/src/platform/windows linux/tests/audio_chain_test.c matron/src/platform/windows/audio/audio_device.c \
         matron/src/platform/windows/audio/audio_bridge_host.c matron/src/platform/windows/audio/exit_win.c matron/src/platform/windows/jack_null/jack_null.c -lpthread -lm -lrt -o "$T/audio_chain_test" || return 1
     local sc
-    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null grow_start decay sys_hidden lagcap_auto lagcap_128 sys_noinput asio_sys; do
+    for sc in config device small noguest busy notfound badrate latecrone preconnected null in_duplex in_mono in_separate in_asio in_missing in_asio_other sys sys_none measure measure_none asio_ok asio_busy asio_gone reblock480 reblock64 reblock1024 burst apply_ok apply_revert apply_null excl_busy excl_ok lagfirst startup adapt rate_excl rate_shared selftest selftest_noguest selftest_null grow_start decay sys_hidden lagcap_auto lagcap_128 sys_noinput asio_sys clock_start clock_none clock_live; do
         "$T/audio_chain_test" "$sc" 2> /dev/null || return 1
     done
     for sc in 1 2 3 4 5 6 7 8; do
@@ -216,6 +216,13 @@ midi_m4_ok() {
     "$T/midi_measure_test"
 }
 run "windows:MIDI devices (WinMM names: MIDIIN2 wrappers and '2- ' prefixes, ports of one device put together, keys independent of the system's order, replug, stale entries, 20 devices, midi_ignore, held ports tried again, notes for the DEVICES page, virtual cables named; clock and song position at once on the callback thread with tick statistics; ring and reader that can be cancelled; OSC to MIDI over a real UDP socket on 127.0.0.1; round trip and jitter of a route)" midi_m4_ok
+windows_rename_ok() {
+    local H; H=$(mktemp -d)
+    env HOME="$H" lua5.3 linux/tests/windows_rename_test.lua || return 1
+    gcc -D_WIN32 -I matron/src/platform/linux linux/tests/windows_conf_rename_test.c matron/src/platform/linux/screen_window_conf.c -o "$T/windows_conf_rename_test" || return 1
+    "$T/windows_conf_rename_test"
+}
+run "windows:settings survive a restart (os.rename and rename() replace an existing file on Windows: ui.conf, box.conf, midimap.conf, the window state file; the restart cycle test reads back what the round before saved)" windows_rename_ok
 link_pair_ok() {
     g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1
     local rc=0

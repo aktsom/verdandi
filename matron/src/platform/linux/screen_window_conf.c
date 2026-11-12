@@ -174,6 +174,12 @@ int sw_conf_save(const char *path, const sw_conf_t *c) {
     }
     int ok = fputs(text, f) >= 0;
     ok = fclose(f) == 0 && ok;
+#ifdef _WIN32
+    // Windows: rename() fails when the new name exists (POSIX replaces it): the second save of the window state was lost, and after a restart the first size came back
+    if (ok) {
+        remove(path);
+    }
+#endif
     if (!ok || rename(tmp, path) != 0) {
         remove(tmp);
         return -1;

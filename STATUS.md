@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows M4 round 2: owner test of 0.5.0 (version 0.5.1)
+- Done (Linux tests, mingw syntax and link check): the card's clock set by another program (reason shown, follow at the start, watchdog reopen), settings lost at restart (cause: Windows `rename()` does not replace; fixed in Lua and C, with tests and a CI read-back), Link start/stop reviewed and shown, stage timestamps, resize timing log. Details `docs/port/phase-m4.md` section 10.
+- Not tested without the RME and Ableton: the real driver's answers to the rate probe, the shared endpoint at the card's rate.
+
 ## Windows M4: MIDI devices (WinMM), clock, Link, OSC input, route measurement, MIDI ROUTES page (version 0.5.0)
 - Done (Linux tests + mingw syntax and link check): everything in `docs/port/phase-m4.md`. Not tested without Windows, Push 2, the midronome, loopMIDI, Max for Live, Ableton: the real WinMM calls and hot-plug window, a port held by a real program, the clock jitter, loopMIDI and Windows MIDI Services behaviour on build 26200.9711, Link with Ableton, the look of the new page on a real screen.
 - Open: Windows MIDI Services backend (only if WinMM turns out to be the problem), the MIDI MAP PUSH 2 preset check, a `.amxd` file (the Max steps are written down instead).

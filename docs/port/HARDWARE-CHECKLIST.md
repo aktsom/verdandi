@@ -520,3 +520,10 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 6. OSC: send `/cc 1 74 64` to 127.0.0.1:9201 from any sender (the Max for Live example): `OSC IN (n)` counts, MIDI MAP learns the device `osc`.
 7. Link: with Ableton on the same machine, source = link: `driving: link, 1 peer`, tempo follows both ways; listen for the beat offset against Ableton's click (the latency is added to the beat; if it is off by the audio delay in the wrong direction, tell me).
 8. Clock timing: the `clock: internal ticks woke ... us late` lines (a few hundred microseconds is expected), and `midi: clock in ... jitter` with the midronome.
+
+## Windows M4 round 2 (0.5.1)
+1. Start Ableton with the Fireface at 44100 Hz (ASIO), then start Verdandi at 48000: the AUDIO page should say `the card runs at 44100 Hz; another program set it ...` (never `device missing`) or follow it; close Ableton or set the same rate: the sound comes back by itself within a few seconds.
+2. Change the theme and colours (SYSTEM > THEME, SCREEN), twice, then SYSTEM > RESTART: the last values are there. Resize the detached screen window (F9), restart: size and place kept.
+3. PARAMS > CLOCK, source = link: the first line says `start/stop sync off` or `on`; with it on in both programs, Ableton's play/stop starts and stops Verdandi's clock and the other way round.
+4. After a slow restart: send `launcher.log` and `norns.log` (lines with `+N s` and `stage:`).
+5. After resizing the window: the `window:` line in norns.log (mean and slowest redraw).

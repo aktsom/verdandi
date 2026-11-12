@@ -27,7 +27,7 @@ typedef struct {
     double low_in_ms;
 } vaud_device;
 
-typedef enum { VAUD_OK = 0, VAUD_NOT_FOUND, VAUD_BUSY, VAUD_BAD_RATE, VAUD_FAILED } vaud_error;
+typedef enum { VAUD_OK = 0, VAUD_NOT_FOUND, VAUD_BUSY, VAUD_BAD_RATE, VAUD_FAILED, VAUD_CLOCK } vaud_error; /* VAUD_CLOCK: the card is there but another program set its clock to another rate than norns's (vaud_state.clock_rate) */
 
 typedef struct {
     char out_uid[192]; /* "" = the Windows default output (WASAPI) */
@@ -71,6 +71,11 @@ typedef struct {
     void (*close_sys)(void);
     void (*describe)(char *out, size_t n); /* "PortAudio ...; host APIs: ..." for the log */
     int has_direct_sys;                    /* open_sys can record the system's sound without a loopback device in the list (the direct WASAPI loopback of the Windows build) */
+    /* optional (NULL = not known). the rate the card's clock is set to by another program (an ASIO driver that is running), found by asking which rates the device takes in its own format: exactly one = that one;
+     * 0 = not known or free */
+    double (*card_clock)(const char *out_uid);
+    /* optional. look at the devices again (a list made at the start does not know that the card's state changed); only called when no stream of this backend is open */
+    void (*refresh)(void);
 } vaud_backend;
 
 typedef struct {
@@ -110,6 +115,7 @@ typedef struct {
     char sys_reason[200];     /* why not, in plain words, "" when it is */
     char sys_note[320];       /* why SYS does not work, "" otherwise */
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
+    unsigned clock_rate;      /* the card is there but another program set its clock to this rate (norns runs at `rate`): 0 = no such conflict */
     unsigned engine_prime;    /* frames of extra delay of the re-blocking between the card's block and the engine's (0 when the card's block is a multiple of the engine's) */
     unsigned engine_lag;      /* blocks of scsynth's answers held back in the bridge (the engine blocks per card callback) */
     unsigned card_frames;     /* the block of the card's callback (0 = not known) */

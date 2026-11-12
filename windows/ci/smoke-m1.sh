@@ -234,6 +234,9 @@ chk_cycles() {
     [ "$starts" -eq "$CYCLES" ] && [ "$restarts" -eq $((CYCLES - 1)) ] || ok=1
     grep -q "VERDANDI_CYCLE_DONE $CYCLES" "$L/norns.log" 2> /dev/null || { echo "NOT FOUND: the last round did not reach its end (VERDANDI_CYCLE_DONE $CYCLES)"; ok=1; }
     if grep -q -E "norns CRASHED|0xc0000005" "$L/norns.log" 2> /dev/null; then echo "a crash is in norns.log"; ok=1; fi
+    # settings that must survive a restart: every round saved ui.conf, the next round read it back (the Windows rename bug lost every save but the first)
+    echo "settings kept across restarts: $(cnt "VERDANDI_CYCLE_KEEP .* ok=true" "$L/norns.log") of $((CYCLES - 1)) rounds read back what the round before saved"
+    if grep -q "VERDANDI_CYCLE_KEEP .* ok=false" "$L/norns.log" 2> /dev/null; then echo "A SAVED SETTING WAS LOST AT A RESTART:"; grep "VERDANDI_CYCLE_KEEP" "$L/norns.log"; ok=1; fi
     if ls "$L/crash"/* > /dev/null 2>&1; then echo "crash reports exist"; ok=1; fi
     [ "$(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null)" = "0" ] || { echo "the launcher did not end with 0 (it ended with $(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null))"; ok=1; }
     [ ! -s "$CYCLE_HOME/leftovers.txt" ] || { echo "programs are left behind"; ok=1; }

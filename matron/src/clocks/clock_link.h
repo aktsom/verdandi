@@ -21,6 +21,9 @@ uint64_t clock_link_number_of_peers();
 #ifdef NORNS_WINDOWS
 // Windows: the output latency (ms) that is added to the beat Link gives (0 while there is no sound card)
 double clock_link_latency_ms();
+// Windows: is Link start/stop sync switched on, and does the Link session play now (as far as this program has seen)
+bool clock_link_start_stop_sync_enabled();
+bool clock_link_is_playing();
 #endif
 
 #ifdef __cplusplus

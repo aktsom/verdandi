@@ -332,6 +332,7 @@ static int _mic_input(lua_State *l);
 static int _app_input(lua_State *l);
 static int _audio_input(lua_State *l);
 static int _midi_status(lua_State *l);
+static int _stage(lua_State *l);
 static int _midi_route_test(lua_State *l);
 static int _link_info(lua_State *l);
 #endif
@@ -584,6 +585,7 @@ void w_init(void) {
     lua_register_norns("audio_selftest", &_audio_selftest);
     lua_register_norns("audio_measure", &_audio_measure); // M3: the measured round trip
     lua_register_norns("audio_input", &_audio_input);     // M3: what the input is now (after mic_input / app_input)
+    lua_register_norns("stage", &_stage);                 // M5: a timestamped stage line in norns.log
     lua_register_norns("midi_status", &_midi_status);     // M4: the MIDI layer in key=value lines (the DEVICES page)
     lua_register_norns("midi_route_test", &_midi_route_test); // M4: the loopback measurement of a route
     lua_register_norns("link_info", &_link_info);         // M4: Ableton Link: peers, tempo, latency compensation
@@ -3839,6 +3841,7 @@ int _listdir(lua_State *l) {
 
 #include "platform/windows/audio/audio_win.h"
 #include "platform/windows/midi/midi_win.h"
+#include "platform/windows/audio/exit_win.h"
 
 /***
  * Windows: the sound card's output devices, one per line: uid, name, inputs (0), outputs, separated by tabs (the format of the macOS audio tool, read by SYSTEM > AUDIO)
@@ -3900,6 +3903,7 @@ int _audio_info(lua_State *l) {
     SET_I("underruns", a.underruns);
     SET_I("drops", a.drops);
     SET_I("xruns", a.card_xruns);
+    SET_I("clock_rate", a.clock_rate);
     lua_pushboolean(l, a.in_active);
     lua_setfield(l, -2, "in_active");
     lua_pushboolean(l, a.scsynth_attached);
@@ -3946,6 +3950,11 @@ int _app_input(lua_State *l) {
  * @function midi_status
  * @treturn string
  */
+int _stage(lua_State *l) {
+    verdandi_stage(luaL_checkstring(l, 1));
+    return 0;
+}
+
 int _midi_status(lua_State *l) {
     static char text[8192];
     vmidi_win_status(text, sizeof text);
@@ -3984,6 +3993,10 @@ int _link_info(lua_State *l) {
     lua_setfield(l, -2, "tempo");
     lua_pushnumber(l, clock_link_latency_ms());
     lua_setfield(l, -2, "latency_ms");
+    lua_pushboolean(l, clock_link_start_stop_sync_enabled());
+    lua_setfield(l, -2, "sync");
+    lua_pushboolean(l, clock_link_is_playing());
+    lua_setfield(l, -2, "playing");
     return 1;
 }
 

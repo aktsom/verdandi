@@ -68,9 +68,25 @@ void verdandi_win_exit(int code) {
     }
     exit_code = code;
     start_watchdog();
+    verdandi_stage("ending");
     fprintf(stderr, "norns.exe ends with exit code %d (card stopped first, no atexit handlers)\n", code);
     fflush(NULL);
     vaud_stop();
     fflush(NULL);
     kill_self(code);
+}
+
+void verdandi_stage(const char *what) {
+#ifdef _WIN32
+    FILETIME created, exited, kernel, user, now;
+    if (GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) {
+        GetSystemTimeAsFileTime(&now);
+        ULARGE_INTEGER a, b;
+        a.LowPart = created.dwLowDateTime; a.HighPart = created.dwHighDateTime;
+        b.LowPart = now.dwLowDateTime; b.HighPart = now.dwHighDateTime;
+        fprintf(stderr, "stage: %s at +%.2f s since norns.exe was started\n", what, (double)(b.QuadPart - a.QuadPart) / 1e7);
+        return;
+    }
+#endif
+    fprintf(stderr, "stage: %s\n", what);
 }

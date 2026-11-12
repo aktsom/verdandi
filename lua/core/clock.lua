@@ -251,8 +251,9 @@ local function clock_driving_text()
     return "midi: no clock coming in"
   elseif src == "link" then
     local info = _norns.link_info()
-    if info.peers > 0 then return "driving: link, " .. info.peers .. (info.peers == 1 and " peer, " or " peers, ") .. bpm .. " bpm" end
-    return "link on: no peers yet, " .. bpm .. " bpm"
+    local sync = info.sync and "start/stop sync on" or "start/stop sync off"
+    if info.peers > 0 then return "driving: link, " .. info.peers .. (info.peers == 1 and " peer, " or " peers, ") .. sync end
+    return "link on: no peers yet, " .. sync
   end
   return "driving: " .. src
 end

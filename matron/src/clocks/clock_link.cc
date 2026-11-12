@@ -49,6 +49,12 @@ static void clock_link_refresh_latency() {
 double clock_link_latency_ms() {
     return clock_link_latency_shown_ms;
 }
+bool clock_link_start_stop_sync_enabled() {
+    return clock_link_shared_data.start_stop_sync;
+}
+bool clock_link_is_playing() {
+    return clock_link_shared_data.playing;
+}
 #endif
 
 static clock_reference_t clock_link_reference;

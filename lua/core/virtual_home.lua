@@ -69,7 +69,29 @@ io.output = function(f) return output(to_real(f)) end
 
 local remove, rename = os.remove, os.rename
 os.remove = function(path) return remove(to_real(path)) end
-os.rename = function(a, b) return rename(to_real(a), to_real(b)) end
+if package.config:sub(1, 1) == '\\' then
+  -- Windows: the C runtime's rename fails when the new name exists (POSIX replaces it). every setting that is saved through a temporary file (ui.conf, box.conf, midimap.conf, the state files) was written the first
+  -- time and never again: after a restart the old theme and colours came back. so: when the rename fails and the target is there, the target goes first. (a crash between the two leaves the temporary file, which holds
+  -- the new content; the old file is gone: the defaults are read, never half a file)
+  os.rename = function(a, b)
+    local ra, rb = to_real(a), to_real(b)
+    local ok, err, code = rename(ra, rb)
+    if ok then return ok, err, code end
+    local target = open(rb, 'rb')
+    local source = open(ra, 'rb')
+    if target and source then
+      target:close()
+      source:close()
+      if remove(rb) then return rename(ra, rb) end
+    else
+      if target then target:close() end
+      if source then source:close() end
+    end
+    return ok, err, code
+  end
+else
+  os.rename = function(a, b) return rename(to_real(a), to_real(b)) end
+end
 
 -- loadfile, dofile and require read the real file but name the chunk with the virtual path ("@/home/we/dust/code/x.lua"),
 -- as on the device: libraries find their own folder with debug.getinfo(1).source (nb does:

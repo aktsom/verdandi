@@ -277,6 +277,20 @@ local line = page.log_line(nil)
 check(line and line:find("device 48000 Hz", 1, true) and line:find("hold-back", 1, true), "the log line has the device rate and the hold-back: " .. tostring(line))
 info = mkinfo({mode = "fallback", note = "no sound: audio device 'X' is busy or in use by another program. null audio is used"}); page.init(); page.redraw()
 check(shown("no sound: device busy"), "a busy device is said in one line")
+-- the card's clock was set by another program (the owner's Fireface at 44100 Hz): the real reason, a few lines in turn, never "device missing"
+info = mkinfo({mode = "fallback", clock_rate = 44100, note = "no sound: audio device 'Speakers (RME Fireface UC)' is not usable now: the card runs at 44100 Hz; another program set it (norns runs at 48000 Hz). Use the same rate in both (Windows Sound settings, Advanced), then SYSTEM > RESTART. null audio is used until the card answers again"})
+page.init()
+local seen, wide = {}, false
+for t = 0, 400, 5 do
+  page.tick = t; page.redraw()
+  local line = page.status_text()
+  if seen[#seen] ~= line then seen[#seen + 1] = line end
+  if screen.text_extents(line) > 124 then wide = true end
+end
+local all = table.concat(seen, " ")
+check(all:find("card runs at 44100 Hz", 1, true) and all:find("another program set it", 1, true) and all:find("SYSTEM > RESTART", 1, true), "clock conflict: the reason is said in plain words, page after page: " .. all:sub(1, 200))
+check(not wide, "and every page fits the line")
+check(not all:find("device missing", 1, true) and not all:find("not found", 1, true), "never 'device missing'")
 info = mkinfo({mode = "null"}); page.init(); page.redraw()
 check(shown("null audio (silent)"), "null audio is said")
 info = mkinfo({underruns = 3, xruns = 2, total_ms = 41.2}); page.init(); page.redraw()
