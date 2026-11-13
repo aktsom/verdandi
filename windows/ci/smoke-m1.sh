@@ -402,6 +402,88 @@ chk_twins() {
     has "$M0_OUT/m6-probe.txt" "PROBE repl-twinsfind ok" "twins' own find command, typed into the norns console, finds the class file and the marker" || bad=1
     return "$bad"
 }
+# M10 (docs/port/phase-m10.md): the script twins with its REAL engine file (lib/engine_twins.sc, cloned at a pinned commit) on the real server, as the owner ran it: the launcher starts everything, the script is resumed,
+# a short wav made here is given to both voices through the script's own parameters (engine.read), and the server is asked every few seconds if it lives. a crash is "Server 'localhost' exited with exit code ..." in
+# sclang.log; WER LocalDumps writes a minidump of scsynth.exe, which windows/ci/dump_report.py reads (the module and offset of the instruction, the plug-in files that were loaded, the stack words that point into modules).
+# the first scenario ("all") is the program as shipped. only when it dies are the others run (each takes out one of the three PortedPlugins UGens of the engine, in a copy of the file) to find which one it is
+TW_RESULTS="$M0_OUT/twins-engine-summary.txt"
+twins_scenario() { # name [sed expression applied to the engine file of this scenario's copy]
+    local name="$1" patch="${2:-}" H="$WORK/user home twins $1" out="$M0_OUT/twins-$1" dumps
+    TWINS_REPO="${TWINS_REPO:-danielrigler/twins}"; TWINS_SHA="${TWINS_SHA:-5dc6206aaae83f3b2a167acdd185578f93079e9a}"
+    rm -rf "$H" "$out"; mkdir -p "$out/dumps"
+    seed_home "$H"
+    mkdir -p "$H/dust/audio/ci"
+    if ! git clone -q "https://github.com/$TWINS_REPO" "$H/dust/code/twins" || ! git -C "$H/dust/code/twins" checkout -q "$TWINS_SHA"; then echo "NOT FETCHED: twins at $TWINS_SHA"; echo "$name: not fetched" >> "$TW_RESULTS"; return 1; fi
+    if [ -n "$patch" ]; then
+        cp "$H/dust/code/twins/lib/engine_twins.sc" "$out/engine_twins.sc.orig"
+        sed -i -E "$patch" "$H/dust/code/twins/lib/engine_twins.sc"
+        cmp -s "$out/engine_twins.sc.orig" "$H/dust/code/twins/lib/engine_twins.sc" && { echo "the patch did not change the engine file: $patch"; echo "$name: patch had no effect" >> "$TW_RESULTS"; return 1; }
+    fi
+    # a 3 second stereo wav (48 kHz, 16 bit): two sines and a little noise
+    "$PYTHON" -c "
+import sys, wave, struct, math, random
+w = wave.open(sys.argv[1], 'wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(48000)
+random.seed(1)
+fr = b''.join(struct.pack('<hh', int(9000*math.sin(2*math.pi*220*i/48000) + random.randint(-800, 800)), int(9000*math.sin(2*math.pi*331*i/48000))) for i in range(48000*3))
+w.writeframes(fr); w.close()" "$(native "$H/dust/audio/ci/test.wav")"
+    cat > "$H/dust/data/system.state" <<'ST'
+-- norns system state (seeded by the smoke test)
+norns.state.clean_shutdown = true
+norns.state.script = '/home/we/dust/code/twins/twins.lua'
+norns.state.name = 'twins'
+norns.state.shortname = 'twins'
+norns.state.path = '/home/we/dust/code/twins/'
+norns.state.data = '/home/we/dust/data/twins/'
+ST
+    mkdir -p "$H/dust/data/twins"
+    # WER writes a minidump (type 1: with the stacks) of a crashed scsynth.exe here
+    dumps="$(cygpath -w "$out/dumps" 2> /dev/null || echo "$out/dumps")"
+    for k in scsynth.exe; do
+        MSYS_NO_PATHCONV=1 reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\$k" /v DumpFolder /t REG_EXPAND_SZ /d "$dumps" /f > /dev/null 2>&1 || echo "NOTE: LocalDumps could not be set (not an administrator?)"
+        MSYS_NO_PATHCONV=1 reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\$k" /v DumpType /t REG_DWORD /d 1 /f > /dev/null 2>&1
+        MSYS_NO_PATHCONV=1 reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\$k" /v DumpCount /t REG_DWORD /d 5 /f > /dev/null 2>&1
+    done
+    VERDANDI_PROBE=twins "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 330 "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
+    fi
+    echo "scenario $name: launcher exit code $?"
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    local crashed=0 line
+    line="$(grep -a -h "exited with exit code" "$H/logs/sclang.log" 2> /dev/null | head -2 | tr '\n' ' ')"
+    [ -n "$line" ] && crashed=1
+    grep -q "FAIL" "$out/probe.txt" 2> /dev/null && crashed=1
+    ls "$out/dumps"/*.dmp > /dev/null 2>&1 && "$PYTHON" "$(native "$HERE/dump_report.py")" "$out/dumps"/*.dmp > "$out/dump-report.txt" 2>&1
+    echo "--- scenario $name: probe results"; cat "$out/probe.txt" 2> /dev/null
+    echo "--- scenario $name: sclang.log lines about the server"; grep -a -n -i "exited with exit code\|ERROR: \|exception in\|not installed\|FAILURE\|Class not found" "$H/logs/sclang.log" 2> /dev/null | head -12
+    if [ -f "$out/dump-report.txt" ]; then echo "--- scenario $name: the minidump of scsynth.exe"; cat "$out/dump-report.txt"; else echo "--- scenario $name: no minidump"; fi
+    echo "$name: crashed=$crashed ${line:-no 'exited' line}" >> "$TW_RESULTS"
+    return 0
+}
+run_twins_engine() {
+    : > "$TW_RESULTS"
+    twins_scenario all
+    if grep -q "^all: crashed=1" "$TW_RESULTS"; then
+        # the server died: take out the three UGens one at a time (and all of them) to find the one
+        twins_scenario nochew 's/AnalogChew\.ar\(orig, chew_depth, chew_freq, chew_variance\)/orig/'
+        twins_scenario noloss 's/AnalogLoss\.ar\(sig, 0\.5, 1, 0\.5, 0\.5\)/sig/'
+        twins_scenario nodegrade 's/AnalogDegrade\.ar\(loss, depth, amount, variance, envelope\)/loss/'
+        twins_scenario noanalog 's/AnalogChew\.ar\(orig, chew_depth, chew_freq, chew_variance\)/orig/; s/AnalogLoss\.ar\(sig, 0\.5, 1, 0\.5, 0\.5\)/sig/; s/AnalogDegrade\.ar\(loss, depth, amount, variance, envelope\)/loss/'
+    fi
+    echo "=== summary"; cat "$TW_RESULTS"
+    return 0
+}
+chk_twins_engine() {
+    cat "$TW_RESULTS" 2> /dev/null
+    grep -q "^all: crashed=0" "$TW_RESULTS" 2> /dev/null || { echo "NOT FOUND: the real twins engine ran with the real server without a crash (scenario 'all')"; return 1; }
+    echo "found: the real twins engine ran with a sample loaded, the server lived (scenario 'all')"
+    return 0
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -548,6 +630,8 @@ m0_run m6-check-tools chk_tools
 m0_run m6-check-heal chk_heal
 m0_run m7-check-packs chk_packs
 m0_run m9-check-twins chk_twins
+m0_run m10-run-twins-engine run_twins_engine
+m0_run m10-check-twins-engine chk_twins_engine
 m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server

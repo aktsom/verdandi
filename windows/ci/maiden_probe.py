@@ -82,6 +82,47 @@ def repl(port, line, want, seconds, origin=None):
     finally:
         s.close()
 
+# VERDANDI_PROBE=twins: what the owner did with the script twins (M10): wait for the script and its engine (the real lib/engine_twins.sc), load a sample into both voices, look at the server for a while.
+# nothing else of this file runs then. every result is a line 'PROBE <name> ok|FAIL <what>'
+if os.environ.get("VERDANDI_PROBE") == "twins":
+    WAV = "/home/we/dust/audio/ci/test.wav"
+    def alive(tag, secs=30):
+        try:
+            ok, tail = repl(5556, '("VT_ALIVE " ++ Crone.server.serverRunning).postln;\x1b', "VT_ALIVE true", secs)
+        except Exception as e:
+            ok, tail = False, "sclang did not answer: %s" % e
+        result(tag, ok, "the server answers (serverRunning)" if ok else "the server is not running: " + repr(tail))
+        return ok
+    try:
+        ok, tail = repl(5555, "print('VT_TW ' .. tostring(norns.state.name) .. ' ' .. tostring(engine.name))\n", "VT_TW twins twins", 240)
+        result("twins-script", ok, "the script twins is loaded with engine twins" if ok else "twins did not load: " + repr(tail))
+        ready = False
+        for _ in range(60):
+            ok, tail = repl(5555, "local n = 0 for _ in pairs(engine.names or {}) do n = n + 1 end print('VT_CMDS ' .. n)\n", "VT_CMDS", 10)
+            import re
+            m = re.search(r"VT_CMDS (\d+)", tail or "")
+            if m and int(m.group(1)) > 100:
+                ready = True; result("twins-engine", True, "the engine reported %s commands" % m.group(1)); break
+            time.sleep(2)
+        if not ready:
+            result("twins-engine", False, "the engine did not report its commands")
+        alive("twins-alive-before")
+        time.sleep(3)
+        for v in (1, 2):
+            ok, tail = repl(5555, "params:set('%dsample', '%s') print('VT_SET %d')\n" % (v, WAV, v), "VT_SET %d" % v, 30)
+            result("twins-sample%d" % v, ok, "voice %d was given the wav through the script's own param (engine.read)" % v if ok else "param not set: " + repr(tail))
+            time.sleep(8)
+            alive("twins-alive-after-sample%d" % v)
+        # run for a while, as the owner's session did
+        for k in range(4):
+            time.sleep(10)
+            if not alive("twins-alive-%ds" % (10 * (k + 1)), 20):
+                break
+        result("twins-done", True, "")
+    except Exception as e:
+        result("twins-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):
