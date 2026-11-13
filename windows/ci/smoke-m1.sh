@@ -446,9 +446,9 @@ ST
     VERDANDI_PROBE=twins "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
     local probe_pid=$!
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 10 330 "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
+        VERDANDI_NO_SERVER_RESTART=1 timeout -k 10 330 "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
     else
-        "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
+        VERDANDI_NO_SERVER_RESTART=1 "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
     fi
     echo "scenario $name: launcher exit code $?"
     wait "$probe_pid" 2> /dev/null

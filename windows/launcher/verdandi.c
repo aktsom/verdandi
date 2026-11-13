@@ -1370,7 +1370,7 @@ int wmain(int argc, wchar_t **argv) {
     /* wait for norns. once a second the log of sclang is read: when its server stopped on its own (a crash), the round is started again (norns.exe, sclang, scsynth: the script and its engine load again), twice in a row at most;
      * then one plain line and nothing more is tried. a loading screen never waits for ever on a dead server (docs/port/phase-m10.md) */
     ULONGLONG wait_start = GetTickCount64(), exit_at = exit_after > 0 ? wait_start + (ULONGLONG)exit_after * 1000 : 0;
-    int forced_restart = 0, gave_up = 0;
+    int forced_restart = 0, gave_up = (_wgetenv(L"VERDANDI_NO_SERVER_RESTART") != NULL); /* (the CI measures a crash without the answer to it) */
     if (g_server_stop_tick && wait_start - g_server_stop_tick > SW_QUIET_RESET_MS) g_server_restarts = 0;
     for (;;) {
         DWORD step = 1000;
