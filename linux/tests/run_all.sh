@@ -264,6 +264,8 @@ m6_ok() {
     "$T/dup_heal_test" || return 1
     cc -std=gnu11 -Wall -I windows/launcher linux/tests/sc_fail_test.c -o "$T/sc_fail_test" || return 1
     "$T/sc_fail_test" || return 1
+    cc -std=gnu11 -Wall -I matron/src/platform/windows linux/tests/capture_dir_test.c -o "$T/capture_dir_test" || return 1
+    "$T/capture_dir_test" || return 1
     g++ -std=c++17 -Wall -I matron/src/platform/windows linux/tests/cmdline_quote_test.cpp -o "$T/cmdline_quote_test" || return 1
     "$T/cmdline_quote_test"
 }

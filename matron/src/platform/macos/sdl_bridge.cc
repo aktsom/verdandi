@@ -96,6 +96,11 @@
 #include "platform/linux/clip_text.h"
 #endif
 #include "dust_import.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/capture_dir.h"
+#include "platform/windows/win_messages.h"
+#include "platform/windows/win_paths.h"
+#endif
 #include "gif_writer.h"
 #include "platform/common/desktop_shell.h"
 #include "product.h"
@@ -1980,7 +1985,11 @@ static void *import_worker(void *arg) {
                     msg += (i > 0 ? ", " : "") + parts[i];
                 }
                 if (msg.empty()) {
+#ifdef NORNS_WINDOWS
+                    msg = WIN_IMPORT_NOT_AVAILABLE; // the Windows build has no import yet: say that, not that the files are wrong
+#else
                     msg = failed > 0 ? "could not add it to dust" : "nothing to import: not audio or a script";
+#endif
                 } else if (skipped + failed > 0) {
                     msg += " (" + std::to_string(skipped + failed) + " left out)";
                 }
@@ -2072,8 +2081,27 @@ static void import_chosen(const char *path) {
 
 //--- the screen out: png and gif on the desktop
 
+#ifdef NORNS_WINDOWS
+// Windows: screenshots and GIFs go to the Pictures known folder (it follows a OneDrive redirection; any letters in the user name), in a subfolder "Verdandi"; the dust folder when that cannot be found or made
+static bool capture_in_pictures = false;
+static std::string windows_capture_dir(void) {
+    char pic[2048], sub[2300], out[2400];
+    pic[0] = 0;
+    int made = 0;
+    if (win_known_pictures(pic, sizeof pic) == 0) {
+        snprintf(sub, sizeof sub, "%s/%s", pic, CAPTURE_SUBFOLDER);
+        made = win_mkdirs_utf8(sub) == 0;
+    }
+    capture_in_pictures = capture_dir_pick(pic, made, dust_dir().c_str(), out, sizeof out) == 1;
+    return out;
+}
+#endif
+
 // the user's own desktop (HOME is the norns home here)
 static std::string desktop_dir(void) {
+#ifdef NORNS_WINDOWS
+    return windows_capture_dir();
+#endif
 #ifdef __APPLE__
     std::string d = user_home() + "/Desktop";
 #else
@@ -2116,13 +2144,21 @@ static std::string capture_path(const char *ext) {
     char name[64];
     strftime(name, sizeof name, MACOS_PRODUCT " %Y-%m-%d at %H.%M.%S", &tm);
     std::string dir = desktop_dir(), path = dir + "/" + name + ext;
+#ifdef NORNS_WINDOWS
+    for (int i = 2; win_exists_utf8(path.c_str()) && i < 100; i++) {
+#else
     for (int i = 2; access(path.c_str(), F_OK) == 0 && i < 100; i++) {
+#endif
         path = dir + "/" + name + " " + std::to_string(i) + ext;
     }
     return path;
 }
 
 static const char *where(const std::string &path) {
+#ifdef NORNS_WINDOWS
+    (void)path;
+    return capture_in_pictures ? "Pictures\\Verdandi" : "dust";
+#endif
     if (path.find("/Desktop/") != std::string::npos) {
         return "Desktop";
     }
@@ -2130,6 +2166,25 @@ static const char *where(const std::string &path) {
 }
 
 #define CAPTURE_SCALE 4
+
+#ifdef NORNS_WINDOWS
+// the PNG through a wide-character path (cairo's own file function takes the ANSI code page)
+static cairo_status_t png_write_cb(void *closure, const unsigned char *data, unsigned int len) {
+    return fwrite(data, 1, len, (FILE *)closure) == len ? CAIRO_STATUS_SUCCESS : CAIRO_STATUS_WRITE_ERROR;
+}
+static bool write_png_utf8(cairo_surface_t *surface, const std::string &path) {
+    FILE *f = win_fopen_utf8(path.c_str(), "wb");
+    if (f == NULL) {
+        return false;
+    }
+    cairo_status_t st = cairo_surface_write_to_png_stream(surface, png_write_cb, f);
+    bool ok = fclose(f) == 0 && st == CAIRO_STATUS_SUCCESS;
+    if (!ok) {
+        win_unlink_utf8(path.c_str());
+    }
+    return ok;
+}
+#endif
 
 static void save_screenshot(void) {
     if (!have_frame) {
@@ -2146,7 +2201,12 @@ static void save_screenshot(void) {
     cairo_paint(cr);
     cairo_destroy(cr);
     std::string path = capture_path(".png");
-    if (cairo_surface_write_to_png(big, path.c_str()) == CAIRO_STATUS_SUCCESS) {
+#ifdef NORNS_WINDOWS
+    bool saved = write_png_utf8(big, path);
+#else
+    bool saved = cairo_surface_write_to_png(big, path.c_str()) == CAIRO_STATUS_SUCCESS;
+#endif
+    if (saved) {
         show_toast(std::string("screenshot saved to ") + where(path));
     } else {
         show_toast("screenshot could not be saved");
@@ -2215,7 +2275,11 @@ typedef struct {
 static void *gif_encode(void *arg) {
     gif_job_t *job = (gif_job_t *)arg;
     gif_take_t *take = job->take;
+#ifdef NORNS_WINDOWS
+    FILE *f = win_fopen_utf8(job->path.c_str(), "wb");
+#else
     FILE *f = fopen(job->path.c_str(), "wb");
+#endif
     bool ok = f != NULL;
     if (ok) {
         gif_writer_t g;
@@ -2241,7 +2305,11 @@ static void *gif_encode(void *arg) {
     if (ok) {
         post_toast(std::string("GIF saved to ") + where(job->path));
     } else {
+#ifdef NORNS_WINDOWS
+        win_unlink_utf8(job->path.c_str());
+#else
         unlink(job->path.c_str());
+#endif
         post_toast("GIF could not be saved");
     }
     delete take;

@@ -329,6 +329,15 @@ chk_failing() {
     grep -a -q "in two folders of yours" "$FAIL_HOME/logs/norns.log" 2> /dev/null && echo "found: norns.log has the note for the norns screen" || { echo "NOT FOUND: the launch note in norns.log"; bad=1; }
     return "$bad"
 }
+# M7 round 5: the folder of screenshots and GIFs (the Pictures known folder, letters outside ASCII): the real Windows API on the runner (windows/ci/win_paths_probe.c)
+run_win_paths() {
+    local exe="$WORK/win_paths_probe.exe" gcc_bin
+    gcc_bin=$(command -v gcc 2> /dev/null || command -v x86_64-w64-mingw32-gcc 2> /dev/null)
+    [ -n "$gcc_bin" ] || { echo "NOT FOUND: a C compiler for the probe on the runner"; return 1; }
+    "$gcc_bin" -std=gnu11 -Wall "$(native "$HERE/win_paths_probe.c")" -o "$(native "$exe")" -lole32 -lshell32 || { echo "the probe did not compile"; return 1; }
+    "$exe" | tee "$M0_OUT/win-paths-probe.txt"
+    ! grep -q "WINPATHS FAIL" "$M0_OUT/win-paths-probe.txt" && grep -q "WINPATHS all passed" "$M0_OUT/win-paths-probe.txt"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -478,6 +487,7 @@ m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server
 m0_run m7-check-maiden-stale chk_maiden_stale
+m0_run m7-check-win-paths run_win_paths
 m0_run m7-run-failing run_failing
 m0_run m7-check-failing chk_failing
 m0_run m2-run-cycles run_cycles

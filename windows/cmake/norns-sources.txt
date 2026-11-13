@@ -75,6 +75,7 @@ matron/src/platform/linux/hid_virtual.cc
 matron/src/platform/linux/desktop_shell_linux.cc
 matron/src/platform/macos/device_skin.c
 matron/src/platform/windows/dust_import_win.c
+matron/src/platform/windows/win_paths.c
 matron/src/platform/windows/win_state.c
 matron/src/platform/macos/gif_writer.c
 matron/src/platform/macos/hardware_null.cc

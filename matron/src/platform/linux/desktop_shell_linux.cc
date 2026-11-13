@@ -23,6 +23,12 @@
 #include "keys_midi.h"
 #include "menu_skin.h"
 #include "platform/common/desktop_shell.h"
+#ifdef NORNS_WINDOWS
+#include "platform/windows/win_messages.h"
+#define NO_DIALOG_NOTE WIN_DIALOG_NOT_AVAILABLE
+#else
+#define NO_DIALOG_NOTE "no file dialog (install zenity or an xdg-desktop-portal)"
+#endif
 
 static void (*cb_item)(int id) = NULL;
 static void (*cb_import)(const char *path, int mode) = NULL;
@@ -94,7 +100,7 @@ static void single_done(const char *const *paths, int n, void *ctx) {
 void shell_choose_file(const char *dir, const char *dust, void (*done)(const char *path)) {
     const char *start = dir != NULL && dir[0] != '\0' ? dir : dust;
     if (picker_open(PICK_FILE, start, "Choose a file", single_done, (void *)done) != 0) {
-        note("no file dialog (install zenity or an xdg-desktop-portal)");
+        note(NO_DIALOG_NOTE);
     }
 }
 
@@ -149,7 +155,7 @@ static void menu_import(int folder) {
     if (picker_open(folder ? PICK_FOLDER : PICK_FILES, user_home().c_str(),
                     folder ? "Import a folder into dust" : "Import samples or scripts into dust", import_done,
                     NULL) != 0) {
-        note("no file dialog (install zenity or an xdg-desktop-portal)");
+        note(NO_DIALOG_NOTE);
     }
 }
 
