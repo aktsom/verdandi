@@ -31,6 +31,19 @@ function M.keep_check(round, ui)
   return line .. " saved=" .. tostring(saved)
 end
 
+-- VERDANDI_TEST_SCRIPT_COPY=1: before every restart a script is imitated that copies the classes of the mi-UGens pack into the per-user extensions folder under another name (what the emplaitress mod did with the
+-- Linux build of the pack: the same classes twice on sclang's include path, which stopped the NEXT start with "duplicate Class found"). the launcher's duplicate guard has to move that copy aside before the next
+-- start. returns the line that was printed, or nil when the test is off. `exec` is os.execute (a parameter for the tests)
+function M.simulate_script_copy(round, exec)
+  if os.getenv("VERDANDI_TEST_SCRIPT_COPY") ~= "1" then return nil end
+  exec = exec or os.execute
+  local base = "/home/we/.local/share/SuperCollider/Extensions"
+  local ok = exec("mkdir -p " .. base .. "/mi-UGens-copy && cp -r " .. base .. "/mi-UGens/Classes " .. base .. "/mi-UGens-copy/")
+  local line = "VERDANDI_CYCLE_COPY round=" .. tostring(round) .. " ok=" .. tostring(ok == true or ok == 0)
+  print(line)
+  return line
+end
+
 -- kind: "ok" or "timeout" (how the start-up ended); the actions are parameters so that the logic can be tested
 function M.after_startup(kind, actions)
   local total, round = M.settings()
@@ -46,6 +59,7 @@ function M.after_startup(kind, actions)
   run(function()
     sleep(3)
     if round < total then
+      M.simulate_script_copy(round, actions.exec)
       print("VERDANDI_CYCLE_RESTART " .. round)
       restart()
     else

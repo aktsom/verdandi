@@ -170,6 +170,8 @@ if clone https://github.com/v7b1/mi-UGens.git "$MIUGENS_REF" "$MI_SRC" > "$OUT/l
     [ -f "$MI_SRC/gpl-3.0.md" ] && cp "$MI_SRC/gpl-3.0.md" "$dest/LICENSE-GPL-3.0.md"
     [ -f "$MI_SRC/eurorack/LICENSE.txt" ] && cp "$MI_SRC/eurorack/LICENSE.txt" "$dest/LICENSE-eurorack-mutable-instruments.txt"
     cp "$MI_SRC"/README* "$dest/" 2> /dev/null || true
+    # where the pack goes: the per-user extensions folder of a real norns (the emplaitress mod looks for MiPlaits.sc there and, when it is not there, downloads and unpacks a Linux copy: two copies of every class)
+    echo user > "$dest/PACK-TARGET.txt"
     finish_pack mi-UGens "$MI_SRC/projects" "$MI_SRC"
 else
     say "FAIL: could not clone mi-UGens"

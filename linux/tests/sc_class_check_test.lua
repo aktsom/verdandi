@@ -79,4 +79,18 @@ check(#wf == 3 and wf[1].class == "Decimator" and wf[1].line:find("C:/Users/x/Ve
 local one = C.summary(wf)
 check(one and not one:find("\n", 1, true) and one:find("Decimator (sc3-plugins", 1, true) and one:find("MiPlaits (mi-UGens)", 1, true), "windows: one plain line: " .. tostring(one))
 check(C.summary({}) == nil, "no findings: no line")
+-- M7 round 4: a failed compile is explained (real sclang output)
+local cd = C.compile_failure(slurp("linux/tests/fixtures/sclang-compile-failed-duplicate.log"))
+check(cd and cd.kind == "duplicate" and cd.classes[1] == "MiDupTest" and cd.first == "/tmp/dup/a/MiDupTest.sc" and cd.second == "/tmp/dup/b/MiDupTest.sc", "compile failure: duplicate class, the first two paths")
+check(cd and cd.line:find("two files define the same class", 1, true) and cd.line:find("restart norns", 1, true), "...the line says what and what to do")
+local fits = cd ~= nil
+for _, l in ipairs(cd and cd.detail or {}) do if #l > 21 then fits = false end end
+check(fits and #cd.detail <= 5, "...the screen lines fit (21 characters, at most 5 lines)")
+local cs = C.compile_failure(slurp("linux/tests/fixtures/sclang-compile-failed-syntax.log"))
+check(cs and cs.kind == "error" and cs.file == "/tmp/syn/B.sc" and cs.line:find("Parse error", 1, true), "compile failure: a syntax error names its file")
+local sf = true
+for _, l in ipairs(cs and cs.detail or {}) do if #l > 21 then sf = false end end
+check(sf, "...screen lines fit")
+check(C.compile_failure(slurp("linux/tests/fixtures/sclang-ok.log")) == nil and C.compile_failure(nil) == nil, "a clean start: no explanation")
+check(C.tail("/nonexistent/x.log") == "", "tail of a missing file is empty")
 os.exit(fails == 0 and 0 or 1)

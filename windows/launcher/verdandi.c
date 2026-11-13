@@ -31,6 +31,8 @@
 #include "plugin_heal.h"
 #include "pack_refresh.h"
 #include "maiden_port.h"
+#include "dup_heal.h"
+#include "sc_fail.h"
 
 #define VERDANDI_LAUNCHER_VERSION "0.2 (M2)"
 
@@ -50,13 +52,13 @@ static void utf8(const wchar_t *w, char *out, size_t n) {
 }
 
 static void say(const wchar_t *fmt, ...) {
-    wchar_t msg[2048];
+    wchar_t msg[8192];
     va_list ap;
     va_start(ap, fmt);
-    _vsnwprintf(msg, 2047, fmt, ap);
+    _vsnwprintf(msg, 8191, fmt, ap);
     va_end(ap);
-    msg[2047] = 0;
-    char u[4096];
+    msg[8191] = 0;
+    char u[16384];
     utf8(msg, u, sizeof u);
     SYSTEMTIME t;
     GetLocalTime(&t);
@@ -493,13 +495,62 @@ static void read_marker(const wchar_t *dir, const wchar_t *name, char *out, size
     pack_id_clean(buf, out, n);
 }
 
-/* plug-in packs of extensions-seed (docs/port/phase-m7.md): a pack is copied when it is not in <home>\extensions; a pack of ours that carries another PACK-ID.txt (or is the first release of the packs, which
- * had none) is REPLACED: the old folder is moved to <home>\disabled first (never deleted), then the new one is copied. nothing else in extensions is touched (pack_refresh.h has the rules) */
+/* how many Windows x86-64 and how many other plug-ins (.scx) are below dir (depth-limited) */
+static void count_scx(const wchar_t *dir, int depth, int *x64, int *other) {
+    wchar_t pat[MAX_PATH * 2];
+    join(pat, MAX_PATH * 2, dir, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+        wchar_t full[MAX_PATH * 2];
+        join(full, MAX_PATH * 2, dir, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (depth < 6) count_scx(full, depth + 1, x64, other);
+        } else {
+            size_t n = wcslen(fd.cFileName);
+            if (n > 4 && !_wcsicmp(fd.cFileName + n - 4, L".scx")) {
+                unsigned char b[4096];
+                size_t got = 0;
+                FILE *f = _wfopen(full, L"rb");
+                if (f) {
+                    got = fread(b, 1, sizeof b, f);
+                    fclose(f);
+                }
+                if (ph_classify(b, got) == PH_PE_X64) (*x64)++;
+                else (*other)++;
+            }
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+/* a folder of the extensions moved to <home>\disabled\<name>[-n]: never deleted. returns 1 when moved; old receives the new place */
+static int move_to_disabled(const wchar_t *from, const wchar_t *name, const wchar_t *suffix, wchar_t *old) {
+    wchar_t dis[MAX_PATH * 2], nm[MAX_PATH];
+    join(dis, MAX_PATH * 2, g_home, L"disabled");
+    make_dirs(dis);
+    for (int k = 0; k < 100; k++) {
+        if (k == 0) _snwprintf(nm, MAX_PATH, L"%ls-%ls", name, suffix);
+        else _snwprintf(nm, MAX_PATH, L"%ls-%ls-%d", name, suffix, k + 1);
+        join(old, MAX_PATH * 2, dis, nm);
+        if (!exists(old) && MoveFileExW(from, old, MOVEFILE_COPY_ALLOWED)) return 1;
+    }
+    return 0;
+}
+
+/* plug-in packs of extensions-seed (docs/port/phase-m7.md sections 3 and 9). WHERE a pack goes is in its PACK-TARGET.txt: "user" = <home>\.local\share\SuperCollider\Extensions (the folder a norns script or mod looks
+ * in: the emplaitress mod searches it for MiPlaits.sc and downloads and unpacks a Linux copy when it is not there), anything else = <home>\extensions. a pack that is not in its place yet is copied; one of ours that sits in
+ * the other place (an earlier build seeded it there) is moved to <home>\disabled; a pack of ours that carries another PACK-ID.txt, or the pack of the first release (none), or a copy that cannot work here (the
+ * Linux build that a mod unpacked: no Windows x86-64 plug-in in it) is REPLACED: the old folder is moved to <home>\disabled first (never deleted), then the new one is copied. nothing else is touched (pack_refresh.h) */
 static void seed_extensions(void) {
-    wchar_t seed[MAX_PATH * 2], pat[MAX_PATH * 2], dst[MAX_PATH * 2];
+    wchar_t seed[MAX_PATH * 2], pat[MAX_PATH * 2], dst_ext[MAX_PATH * 2], dst_user[MAX_PATH * 2];
     join(seed, MAX_PATH * 2, g_app, L"extensions-seed");
-    join(dst, MAX_PATH * 2, g_home, L"extensions");
-    make_dirs(dst);
+    join(dst_ext, MAX_PATH * 2, g_home, L"extensions");
+    join(dst_user, MAX_PATH * 2, g_home, L".local\\share\\SuperCollider\\Extensions");
+    make_dirs(dst_ext);
+    make_dirs(dst_user);
     if (!exists(seed)) return;
     join(pat, MAX_PATH * 2, seed, L"*");
     WIN32_FIND_DATAW fd;
@@ -507,34 +558,41 @@ static void seed_extensions(void) {
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
-        wchar_t from[MAX_PATH * 2], to[MAX_PATH * 2], t[MAX_PATH * 2];
-        char seed_id[128], inst_id[128];
+        wchar_t from[MAX_PATH * 2], to[MAX_PATH * 2], alt[MAX_PATH * 2], t[MAX_PATH * 2], old[MAX_PATH * 2];
+        char seed_id[128], inst_id[128], alt_id[128], tgt[32];
         join(from, MAX_PATH * 2, seed, fd.cFileName);
-        join(to, MAX_PATH * 2, dst, fd.cFileName);
         read_marker(from, L"PACK-ID.txt", seed_id, sizeof seed_id);
+        read_marker(from, L"PACK-TARGET.txt", tgt, sizeof tgt);
+        int to_user = pack_target_of(tgt) == PACK_IN_USER;
+        join(to, MAX_PATH * 2, to_user ? dst_user : dst_ext, fd.cFileName);
+        join(alt, MAX_PATH * 2, to_user ? dst_ext : dst_user, fd.cFileName);
+        /* an earlier build seeded it into the other place */
+        if (seed_id[0] && exists(alt)) {
+            read_marker(alt, L"PACK-ID.txt", alt_id, sizeof alt_id);
+            join(t, MAX_PATH * 2, alt, L"SOURCE-REVISION.txt");
+            int first = exists(t);
+            join(t, MAX_PATH * 2, alt, L"plugins");
+            first = first && exists(t);
+            if (pack_legacy_place(1, alt_id, first)) {
+                if (move_to_disabled(alt, fd.cFileName, L"moved", old)) say(L"plug-in pack %ls: the copy in %ls (seeded there by an earlier build) was moved to %ls: the pack now lives in %ls", fd.cFileName, to_user ? L"extensions" : L"the per-user folder", old, to_user ? L"the per-user folder (.local\\share\\SuperCollider\\Extensions): that is where scripts and mods look for it" : L"extensions");
+                else say(L"plug-in pack %ls: the copy in the other place could not be moved to disabled\\ (in use?)", fd.cFileName);
+            }
+        }
         read_marker(to, L"PACK-ID.txt", inst_id, sizeof inst_id);
         int there = exists(to);
         join(t, MAX_PATH * 2, to, L"SOURCE-REVISION.txt");
         int first_release = there && exists(t);
         join(t, MAX_PATH * 2, to, L"plugins");
         first_release = first_release && exists(t);
-        pack_action act = pack_decide(there, seed_id, inst_id, first_release);
+        int x64 = 0, other = 0;
+        if (there && !inst_id[0]) count_scx(to, 0, &x64, &other);
+        pack_action act = pack_decide(there, seed_id, inst_id, first_release, there && !inst_id[0] && x64 == 0);
         if (act == PACK_REPLACE) {
-            wchar_t dis[MAX_PATH * 2], old[MAX_PATH * 2], nm[MAX_PATH];
-            join(dis, MAX_PATH * 2, g_home, L"disabled");
-            make_dirs(dis);
-            int k = 0, ok = 0;
-            for (; k < 100 && !ok; k++) {
-                if (k == 0) _snwprintf(nm, MAX_PATH, L"%ls-replaced", fd.cFileName);
-                else _snwprintf(nm, MAX_PATH, L"%ls-replaced-%d", fd.cFileName, k + 1);
-                join(old, MAX_PATH * 2, dis, nm);
-                if (!exists(old) && MoveFileExW(to, old, MOVEFILE_COPY_ALLOWED)) ok = 1;
-            }
-            if (!ok) {
+            if (!move_to_disabled(to, fd.cFileName, L"replaced", old)) {
                 say(L"plug-in pack %ls: the old copy could not be moved to disabled\\ (is a program using it?): it stays as it is", fd.cFileName);
                 continue;
             }
-            say(L"plug-in pack %ls: the old copy (marker '%hs') was moved to %ls, the new one (marker '%hs') is copied", fd.cFileName, inst_id[0] ? inst_id : "none", old, seed_id);
+            say(L"plug-in pack %ls: the old copy (marker '%hs'%ls) was moved to %ls, the new one (marker '%hs') is copied", fd.cFileName, inst_id[0] ? inst_id : "none", (!inst_id[0] && !first_release) ? L", no Windows plug-in in it: a Linux build that a script or mod unpacked" : L"", old, seed_id);
             there = 0;
         }
         if (!there) {
@@ -543,6 +601,121 @@ static void seed_extensions(void) {
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
+}
+
+/* ---- the duplicate guard (dup_heal.h) on Windows: the file system behind its table ---- */
+static void dh_wide(const char *u, wchar_t *w, size_t n) {
+    MultiByteToWideChar(CP_UTF8, 0, u, -1, w, (int)n);
+    for (wchar_t *q = w; *q; q++) if (*q == L'/') *q = L'\\';
+}
+static int dh_win_listdir(const char *dir, void (*cb)(const char *, int, void *), void *ud) {
+    wchar_t wd[MAX_PATH * 2], pat[MAX_PATH * 2 + 4];
+    dh_wide(dir, wd, MAX_PATH * 2);
+    join(pat, MAX_PATH * 2 + 4, wd, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    do {
+        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; /* no junction loops */
+        char u[MAX_PATH * 4];
+        utf8(fd.cFileName, u, sizeof u);
+        cb(u, (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? 1 : 0, ud);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return 0;
+}
+static char *dh_win_readfile(const char *path) {
+    wchar_t w[MAX_PATH * 2];
+    dh_wide(path, w, MAX_PATH * 2);
+    FILE *f = _wfopen(w, L"rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n < 0 || n > 2000000) {
+        fclose(f);
+        return NULL;
+    }
+    char *b = (char *)malloc((size_t)n + 1);
+    if (!b) {
+        fclose(f);
+        return NULL;
+    }
+    size_t got = fread(b, 1, (size_t)n, f);
+    b[got] = 0;
+    fclose(f);
+    return b;
+}
+static int dh_win_exists(const char *path) {
+    wchar_t w[MAX_PATH * 2];
+    dh_wide(path, w, MAX_PATH * 2);
+    return exists(w);
+}
+static int dh_win_move(const char *from, const char *to) {
+    wchar_t a[MAX_PATH * 2], b[MAX_PATH * 2];
+    dh_wide(from, a, MAX_PATH * 2);
+    dh_wide(to, b, MAX_PATH * 2);
+    return MoveFileExW(a, b, MOVEFILE_COPY_ALLOWED) ? 0 : -1;
+}
+static void dh_win_mkdirs(const char *path) {
+    wchar_t w[MAX_PATH * 2];
+    dh_wide(path, w, MAX_PATH * 2);
+    make_dirs(w);
+}
+static void dh_win_log(const char *line) {
+    wchar_t w[8192];
+    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, 8192);
+    say(L"%ls", w);
+}
+static void dh_win_manifest(const char *line) {
+    wchar_t w[8192];
+    MultiByteToWideChar(CP_UTF8, 0, line, -1, w, 8192);
+    append_manifest(w);
+}
+static const dh_ops g_dh_ops = {dh_win_listdir, dh_win_readfile, dh_win_exists, dh_win_move, dh_win_mkdirs, dh_win_log, dh_win_manifest};
+
+static void dh_root_utf8(const wchar_t *w, char *out, size_t n) {
+    utf8(w, out, n);
+    for (char *q = out; *q; q++) if (*q == '\\') *q = '/';
+}
+
+/* before every start of sclang: the same class in two files, the same plug-in file in two folders. a finding that was left alone goes to norns's screen through VERDANDI_LAUNCH_NOTE */
+static void run_dup_heal(void) {
+    wchar_t w[MAX_PATH * 2];
+    char ext[MAX_PATH * 4], usr[MAX_PATH * 4], dust[MAX_PATH * 4], dis[MAX_PATH * 4], core[MAX_PATH * 4], eng[MAX_PATH * 4], comp[MAX_PATH * 4], safe[MAX_PATH * 4];
+    join(w, MAX_PATH * 2, g_home, L"extensions"); dh_root_utf8(w, ext, sizeof ext);
+    join(w, MAX_PATH * 2, g_home, L".local\\share\\SuperCollider\\Extensions"); dh_root_utf8(w, usr, sizeof usr);
+    join(w, MAX_PATH * 2, g_home, L"dust"); dh_root_utf8(w, dust, sizeof dust);
+    join(w, MAX_PATH * 2, g_home, L"disabled"); dh_root_utf8(w, dis, sizeof dis);
+    join(w, MAX_PATH * 2, g_app, L"sc\\core"); dh_root_utf8(w, core, sizeof core);
+    join(w, MAX_PATH * 2, g_app, L"sc\\engines"); dh_root_utf8(w, eng, sizeof eng);
+    join(w, MAX_PATH * 2, g_app, L"sc\\linux-compat"); dh_root_utf8(w, comp, sizeof comp);
+    join(w, MAX_PATH * 2, g_app, L"sc\\desktop-safe"); dh_root_utf8(w, safe, sizeof safe);
+    dh_root roots[8];
+    int n = 0;
+    roots[n++] = (dh_root){ext, DH_EXT_ROOT};
+    roots[n++] = (dh_root){usr, DH_EXT_ROOT};
+    roots[n++] = (dh_root){dust, DH_DUST_ROOT};
+    roots[n++] = (dh_root){core, DH_PROGRAM_ROOT};
+    roots[n++] = (dh_root){eng, DH_PROGRAM_ROOT};
+    roots[n++] = (dh_root){comp, DH_PROGRAM_ROOT};
+    roots[n++] = (dh_root){safe, DH_PROGRAM_ROOT};
+    dh_result r = dh_run(&g_dh_ops, roots, n, dis);
+    set_env(L"VERDANDI_LAUNCH_NOTE", NULL);
+    if (r.note[0]) {
+        wchar_t nw[500];
+        MultiByteToWideChar(CP_UTF8, 0, r.note, -1, nw, 500);
+        set_env(L"VERDANDI_LAUNCH_NOTE", nw);
+    }
+    if (r.moved_units || r.unresolved_pairs) say(L"duplicate check: %d copy(ies) moved to disabled, %d finding(s) left alone", r.moved_units, r.unresolved_pairs);
+}
+
+/* every start (a restart is a new start): packs first (so that a Linux copy is still recognisable), then the plug-in heal (the wrong-system files), then the duplicate guard */
+static void prepare_extensions(void) {
+    seed_extensions();
+    heal_plugins();
+    run_dup_heal();
 }
 
 /* is something listening on this TCP port of the loopback address? (maiden's port) */
@@ -565,6 +738,40 @@ static int port_in_use_tcp(unsigned short port) {
 }
 
 static int g_maiden_port = 5000;
+
+/* size of a file, 0 when it is not there */
+static ULONGLONG file_size_of(const wchar_t *path) {
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(path, GetFileExInfoStandard, &a)) return 0;
+    return ((ULONGLONG)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+}
+
+/* the end of a round: when sclang's class library did not compile in this round (sclang.log from `from` on), one plain line says what failed and what to do (the norns screen says it too; M7 round 4) */
+static void explain_sclang_failure(const wchar_t *logs, ULONGLONG from) {
+    wchar_t p[MAX_PATH * 2];
+    join(p, MAX_PATH * 2, logs, L"sclang.log");
+    ULONGLONG size = file_size_of(p);
+    if (size <= from) return;
+    ULONGLONG start = size - from > 262144 ? size - 262144 : from;
+    FILE *f = _wfopen(p, L"rb");
+    if (!f) return;
+    _fseeki64(f, (long long)start, SEEK_SET);
+    char *buf = (char *)malloc(262145);
+    if (!buf) {
+        fclose(f);
+        return;
+    }
+    size_t got = fread(buf, 1, 262144, f);
+    buf[got] = 0;
+    fclose(f);
+    char out[2400];
+    if (scf_explain(buf, out, sizeof out)) {
+        wchar_t w[2400];
+        MultiByteToWideChar(CP_UTF8, 0, out, -1, w, 2400);
+        say(L"%ls", w);
+    }
+    free(buf);
+}
 
 /* the process that listens on a TCP port of this computer (any local address). returns 1 and its id when there is one */
 static int tcp_listener_of(unsigned short port, DWORD *pid) {
@@ -1037,9 +1244,6 @@ int wmain(int argc, wchar_t **argv) {
         set_env(L"SC_PLUGIN_PATH", pp);
         say(L"scsynth plug-in folders besides its own (SC_PLUGIN_PATH): %ls", pp);
     }
-    heal_plugins();
-    seed_extensions();
-
     write_sclang_conf(scconf);
 
     if (no_norns) {
@@ -1050,6 +1254,7 @@ int wmain(int argc, wchar_t **argv) {
     DWORD code = 0, w = 0;
     DWORD err = 0;
     HANDLE pn = NULL, ps = NULL;
+    ULONGLONG sclang_log_from = 0;
     for (int round = 1;; round++) {
     /* one round = norns.exe and sclang from the start to the end of norns.exe. SYSTEM > RESTART (and a changed audio device) ends norns.exe with exit code 42: another round */
     wchar_t bridge[64];
@@ -1081,7 +1286,13 @@ int wmain(int argc, wchar_t **argv) {
             wait_ports_free(8000);
             say(L"the ports of the earlier start are free (waited %lu ms)", (unsigned long)(GetTickCount64() - pw0));
         }
+        prepare_extensions(); /* M7 round 4: every start, not only the first: a script copies things between two starts */
         maiden_prepare();
+        {
+            wchar_t sp[MAX_PATH * 2];
+            join(sp, MAX_PATH * 2, logs, L"sclang.log");
+            sclang_log_from = file_size_of(sp);
+        }
     }
     pn = start_program(norns, L"", g_app, logs, L"norns", 5555, NULL, &err);
     if (!pn) {
@@ -1137,6 +1348,7 @@ int wmain(int argc, wchar_t **argv) {
     }
     CloseHandle(pn);
     pumps_finish();
+    explain_sclang_failure(logs, sclang_log_from);
     if (g_job) {
         CloseHandle(g_job);
         g_job = NULL;

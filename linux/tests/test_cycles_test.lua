@@ -69,5 +69,24 @@ check(M.settings() == nil, "a total that is not a number: inactive")
 local src = io.open("lua/core/startup.lua"):read("a")
 check(src:find('os.getenv("VERDANDI_TEST_CYCLES") and require(\'core/test_cycles\') or nil', 1, true) ~= nil, "startup.lua requires the module only with VERDANDI_TEST_CYCLES")
 check(select(2, src:gsub("test_cycles.after_startup", "")) == 2, "and calls it at the end of both start-up handlers")
+-- the simulated script copy (M7 round 4)
+do
+  local mod = require('core/test_cycles')
+  local old = os.getenv
+  local printed = {}
+  local calls = {}
+  local real_print = print
+  print = function(...) printed[#printed + 1] = table.concat({...}, " ") end
+  os.getenv = function(k) if k == "VERDANDI_TEST_SCRIPT_COPY" then return nil end return old(k) end
+  assert(mod.simulate_script_copy(2, function(c) calls[#calls + 1] = c return true end) == nil and #calls == 0, "off: nothing happens")
+  os.getenv = function(k) if k == "VERDANDI_TEST_SCRIPT_COPY" then return "1" end return old(k) end
+  local line = mod.simulate_script_copy(2, function(c) calls[#calls + 1] = c return true end)
+  print = real_print
+  os.getenv = old
+  assert(line == "VERDANDI_CYCLE_COPY round=2 ok=true", "on: the line says it was done: " .. tostring(line))
+  assert(#calls == 1 and calls[1]:find("/home/we/.local/share/SuperCollider/Extensions/mi-UGens-copy", 1, true) and calls[1]:find("mi-UGens/Classes", 1, true), "on: the copy of the classes is made below the per-user folder")
+  print("test_cycles script copy: ok")
+end
+
 if fails == 0 then print("test_cycles_test: all passed") end
 os.exit(fails == 0 and 0 or 1)

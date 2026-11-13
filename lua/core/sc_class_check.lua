@@ -115,6 +115,44 @@ function M.summary(findings)
   return "SuperCollider classes missing: " .. table.concat(names, ", ") .. "; engines that use them will not start (see logs/sclang.log)"
 end
 
+-- the class library did not compile ("Library has not been compiled successfully"): what failed, in plain words, for the log (line) and for the norns screen (detail: short lines). returns nil when the text
+-- does not say so. the same logic is in windows/launcher/sc_fail.h (launcher.log); both are tested on real sclang output
+function M.compile_failure(text)
+  if not text or not text:find("Library has not been compiled", 1, true) then return nil end
+  local names, count = {}, 0
+  for c in text:gmatch("duplicate Class found: '([%w_]+)'") do
+    count = count + 1
+    if count <= 6 then names[#names + 1] = c end
+  end
+  if count > 0 then
+    local p1, p2 = text:match("duplicate Class found: '[%w_]+'[^\n]*\n([^\n]+)\n([^\n]+)")
+    local list = table.concat(names, ", ") .. (count > 6 and ", ..." or "")
+    return {
+      kind = "duplicate", count = count, classes = names, first = p1, second = p2,
+      line = "SuperCollider did not start: two files define the same class (" .. count .. ": " .. list .. "); the first two files: " .. tostring(p1) .. " and " .. tostring(p2) ..
+        ". restart norns: the copy that is not part of Verdandi's own packs is moved to disabled\\ at the start; two folders of your own are not touched: move one by hand",
+      detail = {"SuperCollider failed:", "two files define", "the same class:", (names[1] or "?") .. (count > 1 and (" +" .. (count - 1)) or ""), "restart norns"},
+    }
+  end
+  local msg = text:match("ERROR: ([^\n]+)")
+  local file = text:match("in file '([^']+)'")
+  local line = "SuperCollider did not start: its class library did not compile" .. (msg and (" (" .. msg:gsub("%s+$", "") .. ")") or "") ..
+    (file and (" in the file " .. file .. ". move that file, or its folder, out of dust\\code and the extensions folders (never delete) and restart norns") or ". see logs\\sclang.log")
+  local short = file and file:match("([^/\\]+)$") or nil
+  return {kind = "error", line = line, file = file, detail = {"SuperCollider failed:", "class library did", "not compile", short and ("file " .. short:sub(1, 16)) or "see sclang.log", "move it out, restart"}}
+end
+
+-- the end of a log file (the last TAIL bytes), "" when it is not there
+function M.tail(path)
+  local f = io.open(path, "rb")
+  if not f then return "" end
+  local size = f:seek("end")
+  f:seek("set", size > TAIL and size - TAIL or 0)
+  local text = f:read("a") or ""
+  f:close()
+  return text
+end
+
 -- the standing note for the device window
 function M.note(findings)
   if not findings or #findings == 0 then return nil end

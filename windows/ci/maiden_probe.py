@@ -183,4 +183,12 @@ try:
     result("repl-plugins", ok, "the real server started a synth of each of MiPlaits, MiBraids, Decimator, MoogLadder, SawDPW (5 nodes, no failure)" if ok else "the server did not load the plug-ins: " + repr(tail))
 except Exception as e:
     result("repl-plugins", False, "%s" % e)
+# 8. the check that the emplaitress mod makes before it downloads and unpacks a Linux copy of mi-UGens (lib/mod.lua, system_post_startup): `find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc`
+# through norns's own shell. true = the mod finds the classes and does NOT copy anything (no second copy, no duplicate classes at the next start)
+try:
+    line = "print('VT_MODCHECK ' .. tostring(os.execute('test -n \"$(find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc)\"')))\n"
+    ok, tail = repl(5555, line, "VT_MODCHECK true", 60)
+    result("repl-modcheck", ok, "the mod's own check finds MiPlaits.sc in the per-user extensions folder (it will not download or copy anything)" if ok else "the mod's check says no: " + repr(tail))
+except Exception as e:
+    result("repl-modcheck", False, "%s" % e)
 result("done", True, "")

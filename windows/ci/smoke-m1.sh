@@ -145,8 +145,17 @@ run_input() {
     seed_home "$IN_HOME"
     printf 'output=asio:No Such Driver 4711\ninput=asio:No Such Driver 4711\nrate=48000\nblock=128\n' > "$IN_HOME/audio.conf"
     # M6: a plug-in pack in the program folder that the launcher must copy to <home>\extensions
-    # M7: an older copy of a pack (the first release of the packs: SOURCE-REVISION.txt and plugins\\, no PACK-ID.txt) must be replaced and moved to disabled\\; a folder of the owner's own must not be touched
-    mkdir -p "$IN_HOME/extensions/mi-UGens/plugins" "$IN_HOME/extensions/MyOwnExt" && echo oldrev > "$IN_HOME/extensions/mi-UGens/SOURCE-REVISION.txt" && echo x > "$IN_HOME/extensions/mi-UGens/plugins/Old.txt" && echo "MyOwnExt { }" > "$IN_HOME/extensions/MyOwnExt/MyOwnExt.sc"
+    # M7 round 4: the situation of the owner's report on 0.8.2, prepared before the program starts: (1) our OLD pack in extensions\\mi-UGens (it has a PACK-ID.txt) with the classes, (2) a Linux-style copy of the same classes in the per-user
+    # folder as the emplaitress mod unpacks it (no marker, a Linux plug-in file), so every Mi* class is defined twice; (3) the pack of the first release in extensions\\sc3-plugins (SOURCE-REVISION.txt and plugins\\, no marker) must be
+    # replaced; (4) a folder of the owner's own in extensions must not be touched. the launcher has to put the shipped packs in their places, move the old copies to disabled\\ and start sclang without a duplicate class
+    PER_USER="$IN_HOME/.local/share/SuperCollider/Extensions"
+    if [ -d "$APP/extensions-seed/mi-UGens/Classes" ]; then
+        mkdir -p "$IN_HOME/extensions/mi-UGens/Classes" "$IN_HOME/extensions/mi-UGens/plugins" "$PER_USER/mi-UGens/Classes" "$PER_USER/mi-UGens/plugins"
+        cp "$APP/extensions-seed/mi-UGens/Classes"/*.sc "$IN_HOME/extensions/mi-UGens/Classes/" && cp "$APP/extensions-seed/mi-UGens/Classes"/*.sc "$PER_USER/mi-UGens/Classes/"
+        echo "old-L1" > "$IN_HOME/extensions/mi-UGens/PACK-ID.txt"; echo x > "$IN_HOME/extensions/mi-UGens/plugins/Old.txt"
+        printf '\177ELF\002\001\001\000' > "$PER_USER/mi-UGens/plugins/MiPlaits.scx"
+    fi
+    mkdir -p "$IN_HOME/extensions/sc3-plugins/plugins" "$IN_HOME/extensions/MyOwnExt" && echo oldrev > "$IN_HOME/extensions/sc3-plugins/SOURCE-REVISION.txt" && echo x > "$IN_HOME/extensions/sc3-plugins/plugins/Old.txt" && echo "MyOwnExt { }" > "$IN_HOME/extensions/MyOwnExt/MyOwnExt.sc"
     # M7 round 3: the class also scans a /home/we path at the start of sclang (the virtual home of the Windows build: dronecaster compiles its drones from such a path)
     mkdir -p "$APP/extensions-seed/SmokePack" && printf 'SmokePack {\n\t*smoke { ^42 }\n\t*initClass { StartUp.add { ("VT_VHOME " ++ PathName("/home/we/dust/code/plugin_test").entries.size).postln; ("VT_VHOME_GLOB " ++ "/home/we/dust/code/plugin_test/*".pathMatch.size).postln; } }\n}\n' > "$APP/extensions-seed/SmokePack/SmokePack.sc"
     # M7 round 3: a maiden.exe of ANOTHER program folder holds maiden's port when the program starts (an earlier build left running): the launcher must stop it and start its own
@@ -218,73 +227,57 @@ chk_tools() {
 }
 # M7: the plug-in packs: copied with their class files and marker, an older copy replaced (moved to disabled), the owner's own folder untouched, sclang started cleanly with them (no class missing, none twice, no initClass failure)
 chk_packs() {
-    local H="$IN_HOME" S="$IN_HOME/logs/sclang.log" bad=0 f
-    grep -a -E "plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
-    for f in mi-UGens/PACK-ID.txt mi-UGens/Classes/MiPlaits.sc mi-UGens/UNITS.txt sc3-plugins/PACK-ID.txt sc3-plugins/UNITS.txt sc3-plugins/classes/DistortionUGens/sc/DistortionPlugins.sc; do
-        [ -f "$H/extensions/$f" ] && echo "found: extensions/$f" || { echo "NOT FOUND: extensions/$f"; bad=1; }
+    local H="$IN_HOME" S="$IN_HOME/logs/sclang.log" bad=0 f U="$IN_HOME/.local/share/SuperCollider/Extensions"
+    grep -a -E "plug-in pack|duplicate" "$H/logs/launcher.log" 2> /dev/null | head -12
+    # mi-UGens lives in the per-user folder (where scripts and mods look for it), sc3-plugins in extensions
+    for f in "$U/mi-UGens/PACK-ID.txt" "$U/mi-UGens/PACK-TARGET.txt" "$U/mi-UGens/Classes/MiPlaits.sc" "$U/mi-UGens/UNITS.txt" "$H/extensions/sc3-plugins/PACK-ID.txt" "$H/extensions/sc3-plugins/UNITS.txt" "$H/extensions/sc3-plugins/classes/DistortionUGens/sc/DistortionPlugins.sc"; do
+        [ -f "$f" ] && echo "found: ${f#"$H"/}" || { echo "NOT FOUND: ${f#"$H"/}"; bad=1; }
     done
-    ls "$H"/extensions/mi-UGens/plugins/*.scx > /dev/null 2>&1 && echo "found: plug-in files in extensions/mi-UGens/plugins" || { echo "NOT FOUND: .scx in extensions/mi-UGens/plugins"; bad=1; }
-    [ -d "$H/disabled/mi-UGens-replaced" ] && [ -f "$H/disabled/mi-UGens-replaced/plugins/Old.txt" ] && echo "found: the old copy of mi-UGens was moved to disabled/mi-UGens-replaced" || { echo "NOT FOUND: disabled/mi-UGens-replaced"; bad=1; }
-    [ ! -f "$H/extensions/mi-UGens/plugins/Old.txt" ] && echo "found: the new mi-UGens does not hold the old file" || { echo "NOT FOUND: the old file is still in extensions/mi-UGens"; bad=1; }
+    ls "$U"/mi-UGens/plugins/*.scx > /dev/null 2>&1 && echo "found: Windows plug-in files in the per-user mi-UGens" || { echo "NOT FOUND: .scx in the per-user mi-UGens"; bad=1; }
+    [ ! -d "$H/extensions/mi-UGens" ] && echo "found: no second copy of mi-UGens in extensions" || { echo "NOT FOUND (must be absent): extensions/mi-UGens"; bad=1; }
+    [ -f "$H/disabled/mi-UGens-moved/plugins/Old.txt" ] && echo "found: our old pack in extensions was moved to disabled/mi-UGens-moved (nothing deleted)" || { echo "NOT FOUND: disabled/mi-UGens-moved"; bad=1; }
+    ls -d "$H"/disabled/mi-UGens-replaced* > /dev/null 2>&1 && echo "found: the Linux-style copy a mod unpacked was replaced and moved to disabled/mi-UGens-replaced" || { echo "NOT FOUND: disabled/mi-UGens-replaced"; bad=1; }
+    [ -f "$H/disabled/sc3-plugins-replaced/plugins/Old.txt" ] && echo "found: the first release's sc3-plugins was replaced (old copy in disabled/sc3-plugins-replaced)" || { echo "NOT FOUND: disabled/sc3-plugins-replaced"; bad=1; }
     [ -f "$H/extensions/MyOwnExt/MyOwnExt.sc" ] && echo "found: the owner's own folder in extensions was not touched" || { echo "NOT FOUND: MyOwnExt untouched"; bad=1; }
     has "$S" "Class tree inited" "sclang initialised its class tree with the packs" || bad=1
     # (the pack check line of VerdandiPackCheck.sc is not an error: it is left out)
-    if grep -a -v "^### plug-in packs" "$S" | grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" | head -5 | grep -q .; then
-        echo "NOT FOUND (must be absent): class not found / duplicate / initClass failure in sclang.log:"; grep -a -v "^### plug-in packs" "$S" | grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|### initClass of" | head -10; bad=1
+    if grep -a -v "^### plug-in packs" "$S" | grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|Library has not been compiled|### initClass of" | head -5 | grep -q .; then
+        echo "NOT FOUND (must be absent): class not found / duplicate / failed compile / initClass failure in sclang.log:"; grep -a -v "^### plug-in packs" "$S" | grep -a -n -E "Class '?[A-Za-z0-9_]+'? not found|duplicate Class found|Library has not been compiled|### initClass of" | head -10; bad=1
     else
-        echo "found: no 'Class not found', no 'duplicate Class', no initClass failure in sclang.log"
+        echo "found: no 'Class not found', no 'duplicate Class', no failed compile, no initClass failure in sclang.log"
     fi
     echo "--- the pack check line of sclang:"; grep -a "plug-in packs" "$S" | head -3
     grep -a -q "plug-in packs" "$S" || { echo "NOT FOUND: the pack check line (VerdandiPackCheck.sc ran)"; bad=1; }
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-modcheck ok" "the emplaitress mod's own check (find MiPlaits.sc in the per-user folder) succeeds: it will not download or unpack a copy" || bad=1
     return "$bad"
 }
-# M7 round 3: scsynth itself, with the packs' folder in SC_PLUGIN_PATH, loads every plug-in (-N: no audio device; the plug-ins are loaded when the world is made): any load error is a line "*** ERROR: LoadLibrary '<file>' err '...'"
-# (a missing DLL: FFTW, libsamplerate), "API version" (the wrong SuperCollider) or "ERROR: open directory failed". the job fails on every one
-PLUGIN_LOG="$M0_OUT/m7-scsynth-plugins.log"
-run_plugin_load() {
-    local sc="$APP/supercollider/scsynth$EXE"
-    [ -f "$sc" ] || { echo "no scsynth at $sc"; return 1; }
-    mkdir -p "$M0_OUT"
-    (cd "$IN_HOME" && SC_PLUGIN_PATH="$(native "$IN_HOME/extensions");$(native "$IN_HOME/.local/share/SuperCollider/Extensions")" limited_scsynth "$sc" -N _ _ "$(native "$M0_OUT/plugin-load.wav")" 48000 WAV int16 -V 2 < /dev/null) > "$PLUGIN_LOG" 2>&1
-    echo "scsynth exit code $?; $(wc -l < "$PLUGIN_LOG") lines in $PLUGIN_LOG"
+# M7 round 4: sclang that cannot compile, on purpose: two folders of the OWNER'S (neither is a pack Verdandi ships) define the same class. the launcher must move nothing, say so in launcher.log and (through
+# VERDANDI_LAUNCH_NOTE) in norns.log, and when the round ends say in plain words what failed (the first two paths) and what to do. sclang really fails here: that is the point
+FAIL_HOME="$WORK/user home failing"
+run_failing() {
+    rm -rf "$FAIL_HOME"
+    seed_home "$FAIL_HOME"
+    mkdir -p "$FAIL_HOME/extensions/OwnA" "$FAIL_HOME/extensions/OwnB"
+    echo "OwnClash : Object { }" > "$FAIL_HOME/extensions/OwnA/A.sc"
+    echo "OwnClash : Object { }" > "$FAIL_HOME/extensions/OwnB/B.sc"
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 150 "$APP/Verdandi$EXE" --headless --exit-after=60 --home="$(native "$FAIL_HOME")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=60 --home="$(native "$FAIL_HOME")"
+    fi
+    echo "launcher exit code $?"
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$FAIL_HOME/logs" "$M0_OUT/m7-failing-logs" 2> /dev/null || true
     return 0
 }
-limited_scsynth() { if command -v timeout > /dev/null 2>&1; then timeout -k 5 90 "$@"; else "$@"; fi; }
-chk_plugin_load() {
-    local bad=0
-    sed -n 1,12p "$PLUGIN_LOG" 2> /dev/null
-    if grep -a -n -E "\*\*\* ERROR|ERROR: |API version|not installed|Could not load|could not load|open directory failed" "$PLUGIN_LOG" | head -20 | grep -q .; then
-        echo "NOT FOUND (must be absent): plug-in load errors of scsynth:"; grep -a -n -E "\*\*\* ERROR|ERROR: |API version|not installed|Could not load|could not load|open directory failed" "$PLUGIN_LOG" | head -30; bad=1
-    else
-        echo "found: scsynth loaded every plug-in of the packs without one error line"
-    fi
-    return "$bad"
-}
-# the real server and sclang.log after SynthDefs with the UGens of the packs were sent (probe repl-plugins): nothing may say "not installed"
-chk_plugins_server() {
-    local S="$IN_HOME/logs/sclang.log" bad=0 f
-    has "$M0_OUT/m6-probe.txt" "PROBE repl-plugins ok" "the real server started a synth of each of MiPlaits, MiBraids, Decimator, MoogLadder and SawDPW (5 nodes, 0 failures)" || bad=1
-    if grep -a -n -E "not installed|exception in GraphDef_Recv|\*\*\* ERROR: LoadLibrary|FAILURE IN SERVER /(s_new|d_recv)" "$S" | head -10 | grep -q .; then
-        echo "NOT FOUND (must be absent): the server could not use a plug-in:"; grep -a -n -E "not installed|exception in GraphDef_Recv|\*\*\* ERROR: LoadLibrary|FAILURE IN SERVER /(s_new|d_recv)" "$S" | head -20; bad=1
-    else
-        echo "found: no 'not installed', no GraphDef_Recv exception and no LoadLibrary error in sclang.log"
-    fi
-    grep -a -q "scsynth plug-in folders besides its own" "$IN_HOME/logs/launcher.log" && echo "found: the launcher put the extension folders on the plug-in path (SC_PLUGIN_PATH)" || { echo "NOT FOUND: the SC_PLUGIN_PATH line in launcher.log"; bad=1; }
-    [ -d "$IN_HOME/.local/share/SuperCollider/Extensions" ] && echo "found: the per-user extensions folder of a real norns was created" || { echo "NOT FOUND: .local/share/SuperCollider/Extensions"; bad=1; }
-    for f in "VT_VHOME [1-9]" "VT_VHOME_GLOB [1-9]"; do
-        has "$S" "$f" "sclang resolved /home/we ($f): PathName and pathMatch found the entries of dust/code/plugin_test" || bad=1
-    done
-    return "$bad"
-}
-# the stale maiden of another folder was stopped, ours served, and nothing is left when the program ended
-chk_maiden_stale() {
-    local L="$IN_HOME/logs/launcher.log" bad=0
-    if [ ! -d "$WORK/stale maiden folder/app" ] && [ ! -f "$WORK/stale maiden folder/maiden.exe" ]; then echo "no stale maiden was prepared (no maiden in the zip): skipped"; return 0; fi
-    grep -a -E "maiden:" "$L" | head -5
-    grep -a -q "maiden: a maiden.exe (process .*holds port .*stopping it" "$L" && echo "found: the launcher stopped the maiden.exe of another folder" || { echo "NOT FOUND: 'a maiden.exe ... holds port ... stopping it' in launcher.log"; bad=1; }
-    grep -a -q "maiden started: http://127.0.0.1" "$L" && echo "found: the launcher started its own maiden" || { echo "NOT FOUND: maiden started"; bad=1; }
-    if command -v tasklist > /dev/null 2>&1 && tasklist //FI 'IMAGENAME eq maiden.exe' 2> /dev/null | grep -q maiden.exe; then echo "NOT FOUND (must be absent): a maiden.exe is still running after the program ended"; bad=1; else echo "found: no maiden.exe is left after the program ended"; fi
-    grep -a -q "maiden stopped with the round" "$L" && echo "found: maiden ended with the round (launcher.log)" || { echo "NOT FOUND: 'maiden stopped with the round'"; bad=1; }
+chk_failing() {
+    local L="$FAIL_HOME/logs/launcher.log" bad=0
+    grep -a -E "duplicate|SuperCollider did not start" "$L" | head -5
+    grep -a "NOTHING was moved" "$L" | grep -a "duplicate classes (1: OwnClash)" | grep -a -q OwnA && grep -a "NOTHING was moved" "$L" | grep -a -q OwnB && echo "found: two folders of the owner's: nothing was moved, said in launcher.log with the class and both folders" || { echo "NOT FOUND: the 'NOTHING was moved' line with OwnClash, OwnA and OwnB"; bad=1; }
+    [ -f "$FAIL_HOME/extensions/OwnA/A.sc" ] && [ -f "$FAIL_HOME/extensions/OwnB/B.sc" ] && echo "found: both folders are still where they were" || { echo "NOT FOUND: OwnA and OwnB untouched"; bad=1; }
+    grep -a -q "duplicate Class found: 'OwnClash'" "$FAIL_HOME/logs/sclang.log" 2> /dev/null && echo "found: sclang really failed on it (the test is real)" || { echo "NOT FOUND: sclang did not report the duplicate"; bad=1; }
+    grep -a -q "SuperCollider did not start: two files define the same class (1 class name(s): OwnClash)" "$L" && echo "found: the round end explains the failure in plain words" || { echo "NOT FOUND: 'SuperCollider did not start: two files define the same class' in launcher.log"; bad=1; }
+    grep -a -q "in two folders of yours" "$FAIL_HOME/logs/norns.log" 2> /dev/null && echo "found: norns.log has the note for the norns screen" || { echo "NOT FOUND: the launch note in norns.log"; bad=1; }
     return "$bad"
 }
 chk_heal() {
@@ -328,9 +321,9 @@ run_cycles() {
     # every start may take as long as the 150 s start-up wait of matron plus the restart itself; a hang is cut after cycles * 100 s + 2 minutes, never after half an hour
     local limit=$((CYCLES * 100 + 120)) rc
     if command -v timeout > /dev/null 2>&1; then
-        VERDANDI_TEST_CYCLES="$CYCLES" timeout -k 10 "$limit" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
+        VERDANDI_TEST_SCRIPT_COPY=1 VERDANDI_TEST_CYCLES="$CYCLES" timeout -k 10 "$limit" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
     else
-        VERDANDI_TEST_CYCLES="$CYCLES" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
+        VERDANDI_TEST_SCRIPT_COPY=1 VERDANDI_TEST_CYCLES="$CYCLES" "$APP/Verdandi$EXE" --headless --home="$(native "$CYCLE_HOME")"
     fi
     rc=$?
     echo "launcher exit code $rc"
@@ -371,6 +364,11 @@ chk_cycles() {
     echo "settings kept across restarts: $(cnt "VERDANDI_CYCLE_KEEP .* ok=true" "$L/norns.log") of $((CYCLES - 1)) rounds read back what the round before saved"
     if grep -q "VERDANDI_CYCLE_KEEP .* ok=false" "$L/norns.log" 2> /dev/null; then echo "A SAVED SETTING WAS LOST AT A RESTART:"; grep "VERDANDI_CYCLE_KEEP" "$L/norns.log"; ok=1; fi
     if ls "$L/crash"/* > /dev/null 2>&1; then echo "crash reports exist"; ok=1; fi
+    # M7 round 4: before every restart a script copied the classes of mi-UGens into the per-user folder (VERDANDI_CYCLE_COPY); the failure showed on the NEXT start only. every copy was moved aside by the launcher, sclang never saw a duplicate
+    echo "script copies made: $(cnt "VERDANDI_CYCLE_COPY .* ok=true" "$L/norns.log") of $((CYCLES - 1)); copies moved aside by the launcher: $(cnt "duplicate classes .* were defined in" "$L/launcher.log")"
+    [ "$(cnt "VERDANDI_CYCLE_COPY .* ok=true" "$L/norns.log")" -ge $((CYCLES - 1)) ] || { echo "the simulated script copies did not all happen"; ok=1; }
+    [ "$(cnt "duplicate classes .* were defined in" "$L/launcher.log")" -ge $((CYCLES - 1)) ] || { echo "the launcher did not move every copy aside"; ok=1; }
+    if grep -a -q -E "duplicate Class found|Library has not been compiled" "$L/sclang.log" 2> /dev/null; then echo "sclang.log has a duplicate class or a failed compile:"; grep -a -n -E "duplicate Class found|Library has not been compiled" "$L/sclang.log" | head -5; ok=1; fi
     [ "$(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null)" = "0" ] || { echo "the launcher did not end with 0 (it ended with $(cat "$CYCLE_HOME/launcher.rc" 2> /dev/null))"; ok=1; }
     [ ! -s "$CYCLE_HOME/leftovers.txt" ] || { echo "programs are left behind"; ok=1; }
     if [ "$ok" -ne 0 ]; then
@@ -431,6 +429,8 @@ m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server
 m0_run m7-check-maiden-stale chk_maiden_stale
+m0_run m7-run-failing run_failing
+m0_run m7-check-failing chk_failing
 m0_run m2-run-cycles run_cycles
 m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard

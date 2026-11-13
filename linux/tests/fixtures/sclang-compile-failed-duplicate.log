@@ -1,0 +1,17 @@
+compiling class library...
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Sandboxing disabled by user.
+WebEngineContext used before QtWebEngine::initialize() or OpenGL context creation failed.
+	Found 867 primitives.
+	Compiling directory '/usr/share/SuperCollider/SCClassLibrary'
+	Compiling directory '/usr/share/SuperCollider/Extensions'
+	Compiling directory '/root/.local/share/SuperCollider/Extensions'
+	Compiling directory '/tmp/dup/a'
+	Compiling directory '/tmp/dup/b'
+ERROR: duplicate Class found: 'MiDupTest' 
+/tmp/dup/a/MiDupTest.sc
+/tmp/dup/b/MiDupTest.sc
+
+ERROR: There is a discrepancy.
+numClassDeps 1594   gNumClasses 3186
+Library has not been compiled successfully.

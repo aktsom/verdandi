@@ -1,0 +1,27 @@
+compiling class library...
+QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-root'
+Sandboxing disabled by user.
+WebEngineContext used before QtWebEngine::initialize() or OpenGL context creation failed.
+	Found 867 primitives.
+	Compiling directory '/usr/share/SuperCollider/SCClassLibrary'
+	Compiling directory '/usr/share/SuperCollider/Extensions'
+	Compiling directory '/root/.local/share/SuperCollider/Extensions'
+	Compiling directory '/tmp/syn'
+ERROR: Parse error
+  in file '/tmp/syn/B.sc'
+  line 2 char 24:
+
+  	*ar { ^this.multiNew( }
+                         ^
+  }
+-----------------------------------
+opening bracket was a '(', but found a '}'
+  in file '/tmp/syn/B.sc' line 2 char 24
+Expected class name.  got token: '}' 125
+  in file '/tmp/syn/B.sc'
+  line 3 char 1:
+
+  }
+  ^
+-----------------------------------
+Library has not been compiled successfully.

@@ -3,3 +3,7 @@ One folder per pack (sc3-plugins, mi-UGens, NamAmp when its source is known). Ev
 %USERPROFILE%\Verdandi\disabled\<pack>-replaced (never deletes it) and copies the new one. A folder of extensions that is not one of these packs, or has the name of a pack but not our files, is never touched.
 A plug-in of another kind (Raspberry Pi, Mac, ARM) in dust\code or in extensions is moved to %USERPROFILE%\Verdandi\disabled at the start (a line in disabled\MANIFEST.txt says which and why): SuperCollider would stop at it.
 BUILD-REPORT.txt says what compiled and what did not; every pack has UNITS.txt (the UGens of its plug-in files): the sclang log has one line that says whether every one of them has a class.
+WHERE a pack goes: a pack with a PACK-TARGET.txt that says "user" (mi-UGens) is installed in %USERPROFILE%\Verdandi\.local\share\SuperCollider\Extensions, the folder a norns script or mod looks in (the emplaitress mod searches it for
+MiPlaits.sc and, when it is not there, downloads and unpacks a Linux copy: two copies of every class, SuperCollider stops); the others (sc3-plugins) go to %USERPROFILE%\Verdandi\extensions. At every start (also after a restart) Verdandi checks that no
+class is defined in two files and no plug-in file is in two folders: the copy that is not part of its own packs is moved to %USERPROFILE%\Verdandi\disabled (a line in disabled\MANIFEST.txt), never deleted; two folders of your own are not touched,
+launcher.log and the norns screen say so.

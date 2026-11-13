@@ -248,6 +248,7 @@ run "windows:GRID PORTS page (grids by name, size, serial and port, problems wit
 run "windows:M7 pack checks (UNITS.txt, a class for every UGen, no class twice, PACK-ID only with plug-in files AND class files; the mi-UGens pack without classes)" linux/tests/pack_check_test.sh
 run "windows:M7 a failing initClass of an extension no longer stops sclang's start-up (real sclang: failure reproduced, then fixed), pack check line" linux/tests/safe_init_test.sh
 run "windows:M7 round 3: /home/we in sclang on Windows (a script-like engine scans a /home/we path; NORNS_HOME with a drive, backslashes and a blank; same code as the Linux file)" linux/tests/sc_virtual_home_win_test.sh
+run "windows:M7 round 4: the launcher's duplicate-class guard with the real sclang (the 0.8.2 failure reproduced: duplicate Class found, Library has not been compiled; healed; sclang starts)" linux/tests/dup_heal_sclang_test.sh
 run "windows:the MAIDEN button note when the launcher did not start maiden (port held by another program)" lua5.3 linux/tests/maiden_note_test.lua
 # ---- M6: maiden, serialosc, plug-ins (docs/port/phase-m6.md)
 m6_ok() {
@@ -259,6 +260,10 @@ m6_ok() {
     "$T/pack_refresh_test" || return 1
     cc -std=gnu11 -Wall -I windows/launcher linux/tests/maiden_port_test.c -o "$T/maiden_port_test" || return 1
     "$T/maiden_port_test" || return 1
+    cc -std=gnu11 -Wall -I windows/launcher linux/tests/dup_heal_test.c -o "$T/dup_heal_test" || return 1
+    "$T/dup_heal_test" || return 1
+    cc -std=gnu11 -Wall -I windows/launcher linux/tests/sc_fail_test.c -o "$T/sc_fail_test" || return 1
+    "$T/sc_fail_test" || return 1
     g++ -std=c++17 -Wall -I matron/src/platform/windows linux/tests/cmdline_quote_test.cpp -o "$T/cmdline_quote_test" || return 1
     "$T/cmdline_quote_test"
 }

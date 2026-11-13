@@ -561,3 +561,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 - Dronecaster: the drone list is not empty; picking Apparatus works (no "does not know this drone").
 - `norns.log` no longer shows `find: ...\.local\share\SuperCollider\Extensions/: No such file or directory`; the folder `C:\Users\<you>\Verdandi\.local\share\SuperCollider\Extensions` exists.
 - MAIDEN button opens maiden (no 404), also after you ran an older program folder before. If another program uses port 5000 the button says so on the window.
+
+## Windows 0.8.3 (duplicate classes, restarts, SUPERCOLLIDER FAIL explained)
+- Start, use the emplaitress mod, restart (SYSTEM > RESTART) several times: `logs\sclang.log` never has "duplicate Class" or "Library has not been compiled"; norns.log says "emplaitress found mi ugens" (it does not download anything).
+- `C:\Users\<you>\Verdandi\.local\share\SuperCollider\Extensions\mi-UGens` holds the pack (with `PACK-ID.txt`); `extensions\mi-UGens` is gone (the old copy is in `disabled\mi-UGens-moved`).
+- If you copy a folder that defines the same classes as one of yours into `extensions`: launcher.log says that nothing was moved and names both folders; the window shows a note.

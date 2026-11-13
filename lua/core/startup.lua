@@ -118,6 +118,16 @@ _norns.startup_status.timeout = function()
       end
     end
     norns.scripterror("SUPERCOLLIDER FAIL")
+    -- M7 round 4: say WHY in plain words (the log line and the screen), when sclang's class library did not compile
+    local okc2, C2 = pcall(require, 'core/sc_class_check')
+    if okc2 and os.getenv("NORNS_PLATFORM") ~= nil then
+      local home = os.getenv("NORNS_HOME") or "/home/we"
+      local why = C2.compile_failure(C2.tail(home .. "/logs/sclang.log"))
+      if why then
+        print("### " .. why.line)
+        if _menu then _menu.errordetail = why.detail; if _menu.redraw then pcall(_menu.redraw) end end
+      end
+    end
   end
   if test_cycles then test_cycles.after_startup("timeout") end
 end

@@ -230,7 +230,7 @@ local MONITOR_WARNING = "INPUT: sink monitor hears norns too, feedback possible"
 -- plug-in of the wrong architecture (SuperCollider will not start), serialosc has the grid, the audio is not connected
 function _menu.show_note()
   if not _norns.set_warning then return end
-  _norns.set_warning(_menu.error_note or _menu.input_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.heal_note or _menu.mi_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
+  _norns.set_warning(_menu.error_note or _menu.launch_note or _menu.input_note or _menu.input == "monitor" and MONITOR_WARNING or _menu.maiden_note or _menu.plugin_note or _menu.heal_note or _menu.mi_note or _menu.class_note or _menu.alsa_note or _menu.grid_note or _menu.audio_note or "")
 end
 
 local function show_input()
@@ -880,6 +880,15 @@ if os.getenv("NORNS_PLATFORM") ~= nil then
   m["PICKER"] = require 'core/menu/picker' -- the colour picker, opened by K3 on a hex row (docs/port/colour-picker-plan.md)
   require 'core/clipboard' -- the window's answer to Ctrl+V (_norns.clipboard_text)
   m["CLEANUP"] = require 'core/menu/cleanup' -- docs/port/clean-layout.md
+  -- a finding of the launcher's duplicate guard that it left alone (two folders of the owner's define the same class): one plain line in the log and a standing note on the window
+  do
+    local ln = os.getenv("VERDANDI_LAUNCH_NOTE")
+    if ln and ln ~= "" then
+      _menu.launch_note = ln
+      print("### " .. ln)
+      if _menu.show_note then pcall(_menu.show_note) end
+    end
+  end
   require('core/ui_settings').load_and_apply() -- ui.conf, once at start (does nothing without _norns.ui_look)
   require('core/box_settings').load_and_apply() -- box.conf, once at start (does nothing without _norns.box_look)
   -- the MIDI MAP layer (a tap in midi.lua's event function, after the scripts and the params MAP), its settings (midimap.conf) and the window's pick callback
