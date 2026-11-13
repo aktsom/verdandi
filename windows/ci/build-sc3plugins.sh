@@ -177,6 +177,65 @@ else
     say "FAIL: could not clone mi-UGens"
 fi
 
+# ---- PortedPlugins (GPL-3.0; docs/port/phase-m9.md): AnalogChew, AnalogLoss and AnalogDegrade are what the script twins needs, the rest of the collection is built too (each plug-in on its own: what does not compile is listed).
+# built with the SuperCollider CMake modules of the repository itself (one CMakeLists.txt, sc_add_server_plugin per plug-in). the class file of a plug-in is shipped only when its plug-in file exists.
+# WHERE: the per-user folder (PACK-TARGET.txt = user), where the installer of twins looks. MARKERS: that installer wants, for every library, X.sc AND X.so (or X_scsynth.so); on Windows a plug-in is X_scsynth.scx and
+# scsynth loads only files with the extension .scx (SC_LoadPlugIns: path.extension() == SC_PLUGIN_EXT), so an empty X_scsynth.so beside it only lets the script's file-existence test pass; the launcher's wrong-architecture
+# heal looks at .scx files only.
+PP_REF="${PORTEDPLUGINS_REF:-v0.4.6}"
+PP_SRC="$WORK/portedplugins"
+if clone https://github.com/madskjeldgaard/portedplugins.git "$PP_REF" "$PP_SRC" > "$OUT/logs/clone-portedplugins.log" 2>&1; then
+    git -C "$PP_SRC" describe --tags --always 2> /dev/null | tee -a "$REPORT"
+    build_pack PortedPlugins "$PP_SRC" -DNATIVE=OFF
+    dest="$OUT/seed/PortedPlugins"
+    mkdir -p "$dest/Classes"
+    # the three twins needs: say plainly whether each one was built
+    for need in AnalogChew AnalogLoss AnalogDegrade; do
+        if [ -f "$dest/plugins/${need}_scsynth.scx" ]; then say "PortedPlugins: $need BUILT (needed by twins)"; else say "PortedPlugins: $need NOT BUILT (needed by twins)"; fi
+    done
+    # class files: every .sc of plugins/ once, only for a plug-in that was built (the class calls the UGen: without the plug-in it would stop an engine with 'UGen not installed')
+    find "$PP_SRC/plugins" -name '*.sc' -not -ipath '*HelpSource*' | while read -r f; do
+        n=$(basename "$f" .sc)
+        if [ -f "$dest/plugins/${n}_scsynth.scx" ]; then cp "$f" "$dest/Classes/"; else echo "classes of $n left out (no plug-in file ${n}_scsynth.scx)" >> "$REPORT"; fi
+    done
+    # the markers for twins' two-halves test: an empty X_scsynth.so beside every X_scsynth.scx
+    for scx in "$dest"/plugins/*_scsynth.scx; do
+        [ -f "$scx" ] || continue
+        : > "${scx%.scx}.so"
+    done
+    cat > "$dest/MARKERS-README.txt" <<'MARK'
+The empty files named X_scsynth.so next to the X_scsynth.scx plug-ins are markers, not programs.
+The script "twins" checks that for each library both a class file (X.sc) and a plug-in file (X.so or X_scsynth.so) exist; on Windows the plug-in is X_scsynth.scx, which that check does not know.
+SuperCollider's server loads only files that end in .scx on Windows: it never opens these markers. Do not delete them if you use twins.
+MARK
+    # the licence texts (GPL-3.0 and whatever the plug-in folders carry), the readme, and the source offer
+    cp "$PP_SRC"/LICENSE "$dest/LICENSE-GPL-3.0.txt" 2> /dev/null || true
+    cp "$PP_SRC"/README.md "$PP_SRC"/CHANGELOG.md "$dest/" 2> /dev/null || true
+    find "$PP_SRC/plugins" "$PP_SRC/cmake_modules" \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'LICENCE*' \) -type f 2> /dev/null | while read -r f; do
+        rel=$(dirname "${f#"$PP_SRC"/}")
+        mkdir -p "$dest/licences/$rel" && cp "$f" "$dest/licences/$rel/"
+    done
+    # the licences of the libraries that CMake fetched at configure time (CPM): kept with the pack
+    find "$WORK/build-PortedPlugins/_deps" -maxdepth 3 \( -iname 'LICENSE*' -o -iname 'COPYING*' \) -type f 2> /dev/null | while read -r f; do
+        rel=$(basename "$(dirname "$f")")
+        mkdir -p "$dest/licences/deps/$rel" && cp "$f" "$dest/licences/deps/$rel/"
+    done
+    {
+        echo "PortedPlugins for Windows x86-64, built for SuperCollider 3.14.1 (Verdandi)."
+        echo
+        echo "Licence: GNU General Public License version 3 (LICENSE-GPL-3.0.txt, and the files in licences/)."
+        echo "Source: https://github.com/madskjeldgaard/portedplugins at revision $(git -C "$PP_SRC" rev-parse HEAD 2> /dev/null) (tag $PP_REF)."
+        echo "Build recipe: windows/ci/build-sc3plugins.sh of the Verdandi source (the repository this program was built from; BUILD.txt next to the program names the commit)."
+        echo "Written offer: you may have the complete corresponding source of this pack, as built, for as long as this build is offered: the two sources above are all of it, nothing else was changed."
+        echo "(The class files are those of the source, unchanged; the empty .so files are markers, see MARKERS-README.txt.)"
+    } > "$dest/SOURCE-OFFER.txt"
+    echo user > "$dest/PACK-TARGET.txt"
+    finish_pack PortedPlugins "$PP_SRC/plugins" "$PP_SRC"
+    say "PortedPlugins: $(find "$dest/plugins" -name '*_scsynth.scx' | wc -l) plug-in files built of $(grep -c 'sc_add_server_plugin' "$PP_SRC/CMakeLists.txt") targets in the CMakeLists"
+else
+    say "FAIL: could not clone PortedPlugins"
+fi
+
 # ---- NamAmp: only with a source URL
 if [ -n "${NAMAMP_URL:-}" ]; then
     NA_SRC="$WORK/namamp"
@@ -188,6 +247,26 @@ if [ -n "${NAMAMP_URL:-}" ]; then
     fi
 else
     say "NamAmp: NOT BUILT: no source URL was given (the owner has to name the repository that defines the NamAmp UGen)"
+fi
+
+# ---- classes defined by two different packs (sclang stops at a class that exists twice): listed; a class of PortedPlugins that another pack, or SuperCollider itself, already defines is taken out of PortedPlugins
+if [ -d "$OUT/seed/PortedPlugins" ]; then
+    class_names "$OUT/seed/PortedPlugins" | sort -u > "$OUT/logs/classes-ported.txt"
+    { for other in "$OUT"/seed/*/; do [ "$(basename "$other")" = PortedPlugins ] || class_names "$other"; done; class_names "$SC_SRC/SCClassLibrary"; } | sort -u > "$OUT/logs/classes-others.txt"
+    cross=$(comm -12 "$OUT/logs/classes-ported.txt" "$OUT/logs/classes-others.txt" | tr '\n' ' ')
+    if [ -n "$cross" ]; then
+        say "PortedPlugins: classes that another pack or SuperCollider already defines (taken out of PortedPlugins): $cross"
+        for c in $cross; do
+            for f in "$OUT"/seed/PortedPlugins/Classes/*.sc; do
+                if sc_text "$f" | grep -qE "^[[:space:]]*${c}[[:space:]]*(:|\{|\[)"; then say "  removed $(basename "$f") (defines $c)"; rm -f "$f"; fi
+            done
+        done
+    else
+        say "PortedPlugins: no class is defined by another pack or by SuperCollider too"
+    fi
+    for need in AnalogChew AnalogLoss AnalogDegrade; do
+        if [ -f "$OUT/seed/PortedPlugins/Classes/$need.sc" ]; then say "PortedPlugins: class $need present"; else say "PortedPlugins: class $need MISSING"; fi
+    done
 fi
 
 if ! find "$OUT/seed" -name "*.scx" 2> /dev/null | grep -q .; then echo "::warning::no plug-in pack was built: see m7-report.txt"; fi
