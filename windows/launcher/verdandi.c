@@ -1394,6 +1394,13 @@ int wmain(int argc, wchar_t **argv) {
                 continue;
             }
             g_server_stop_tick = GetTickCount64();
+            if (_wgetenv(L"VERDANDI_SERVER_WATCH_LOG_ONLY") != NULL) {
+                /* the CI looks at the older start-up checks without the answer to a stop: it is only said */
+                sw_message(what == 1 ? 1 : 2, scode, g_server_restarts + 1, msg, sizeof msg);
+                say(L"scsynth.exe stopped on its own, exit code 0x%08lx (round %d): only logged, nothing is restarted (VERDANDI_SERVER_WATCH_LOG_ONLY)", scode, round);
+                gave_up = 1;
+                continue;
+            }
             if (what == 1) {
                 g_server_restarts++;
                 sw_message(1, scode, g_server_restarts, msg, sizeof msg);

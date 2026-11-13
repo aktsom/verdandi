@@ -496,9 +496,9 @@ run_server_kill() {
     VERDANDI_PROBE=kill "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$KILL_HOME")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
     local probe_pid=$!
     if command -v timeout > /dev/null 2>&1; then
-        env -u VERDANDI_NO_SERVER_RESTART timeout -k 10 800 "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
+        env -u VERDANDI_NO_SERVER_RESTART -u VERDANDI_SERVER_WATCH_LOG_ONLY timeout -k 10 800 "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
     else
-        env -u VERDANDI_NO_SERVER_RESTART "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
+        env -u VERDANDI_NO_SERVER_RESTART -u VERDANDI_SERVER_WATCH_LOG_ONLY "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
     fi
     echo "launcher exit code $?"
     wait "$probe_pid" 2> /dev/null
@@ -650,7 +650,7 @@ collect() {
     echo "collected into $M0_OUT/m1-run"
 }
 
-export VERDANDI_NO_SERVER_RESTART=1 # the checks of the older milestones look at a start as it is; only the server-kill run (M10) wants the automatic restart
+export VERDANDI_SERVER_WATCH_LOG_ONLY=1 # the checks of the older milestones look at a start as it is (a stop of the server is only logged); only the server-kill run (M10) wants the automatic restart
 m0_init
 m0_run m1-unpack unpack || exit 0
 set_app
