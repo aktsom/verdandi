@@ -186,7 +186,8 @@ PP_REF="${PORTEDPLUGINS_REF:-v0.4.6}"
 PP_SRC="$WORK/portedplugins"
 if clone https://github.com/madskjeldgaard/portedplugins.git "$PP_REF" "$PP_SRC" > "$OUT/logs/clone-portedplugins.log" 2>&1; then
     git -C "$PP_SRC" describe --tags --always 2> /dev/null | tee -a "$REPORT"
-    build_pack PortedPlugins "$PP_SRC" -DNATIVE=OFF
+    # DaisySP (fetched by CMake; 13 of the plug-ins need it) uses M_E and M_PI, which MSVC only has with _USE_MATH_DEFINES (the first build failed there: adsr.cpp(86) C2065 'M_E'). CXXFLAGS of the environment is added to CMake's own defaults
+    CXXFLAGS="/D_USE_MATH_DEFINES" build_pack PortedPlugins "$PP_SRC" -DNATIVE=OFF
     dest="$OUT/seed/PortedPlugins"
     mkdir -p "$dest/Classes"
     # the three twins needs: say plainly whether each one was built
@@ -231,6 +232,8 @@ MARK
     } > "$dest/SOURCE-OFFER.txt"
     echo user > "$dest/PACK-TARGET.txt"
     finish_pack PortedPlugins "$PP_SRC/plugins" "$PP_SRC"
+    say "PortedPlugins: built: $(find "$dest/plugins" -name '*_scsynth.scx' -exec basename {} _scsynth.scx \; | sort | tr '\n' ' ')"
+    say "PortedPlugins: not built: $(grep -A1 'sc_add_server_plugin(' "$PP_SRC/CMakeLists.txt" | grep -A1 'destination\|project_name' | grep -oE '"[A-Za-z0-9]+" # target name' | tr -d '"' | sed 's/ # target name//' | sort -u | while read -r t; do [ -f "$dest/plugins/${t}_scsynth.scx" ] || printf '%s ' "$t"; done)"
     say "PortedPlugins: $(find "$dest/plugins" -name '*_scsynth.scx' | wc -l) plug-in files built of $(grep -c 'sc_add_server_plugin' "$PP_SRC/CMakeLists.txt") targets in the CMakeLists"
 else
     say "FAIL: could not clone PortedPlugins"
