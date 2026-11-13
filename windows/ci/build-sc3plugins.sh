@@ -186,8 +186,8 @@ PP_REF="${PORTEDPLUGINS_REF:-v0.4.6}"
 PP_SRC="$WORK/portedplugins"
 if clone https://github.com/madskjeldgaard/portedplugins.git "$PP_REF" "$PP_SRC" > "$OUT/logs/clone-portedplugins.log" 2>&1; then
     git -C "$PP_SRC" describe --tags --always 2> /dev/null | tee -a "$REPORT"
-    # DaisySP (fetched by CMake; 13 of the plug-ins need it) uses M_E and M_PI, which MSVC only has with _USE_MATH_DEFINES (the first build failed there: adsr.cpp(86) C2065 'M_E'). CXXFLAGS of the environment is added to CMake's own defaults
-    CXXFLAGS="/D_USE_MATH_DEFINES" build_pack PortedPlugins "$PP_SRC" -DNATIVE=OFF
+    # DaisySP (fetched by CMake; 13 of the plug-ins need it) uses M_E and M_PI, which MSVC only has with _USE_MATH_DEFINES (the first build failed there: adsr.cpp(86) C2065 'M_E'). CXXFLAGS of the environment is added to CMake's own defaults; written -D, not /D: Git Bash turns an argument that starts with a slash into a path (the configure then failed)
+    CXXFLAGS="-D_USE_MATH_DEFINES" build_pack PortedPlugins "$PP_SRC" -DNATIVE=OFF
     dest="$OUT/seed/PortedPlugins"
     mkdir -p "$dest/Classes"
     # the three twins needs: say plainly whether each one was built

@@ -104,7 +104,8 @@ function init()
           while I.update.state == "checking" and util.time() - t0 < 60 do clock.sleep(0.5) end
           print("VERDANDI_SMOKE_TWINS check-uptodate state=" .. tostring(I.update.state) .. " behind=" .. tostring(I.update.behind))
           -- the author pushes a commit that changes an engine file
-          sh("cd " .. T .. "/work && echo 'engine { var two; }' > lib/engine_x.sc && git add -A && git commit -q -m two && git push -q")
+          print("VERDANDI_SMOKE_TWINS push-two [" .. sh("cd " .. T .. "/work && echo 'engine { var two; }' > lib/engine_x.sc && git add -A && git commit -q -m two && git push -q"):gsub("\n", " ") .. "]")
+          print("VERDANDI_SMOKE_TWINS behind-manual [" .. sh("git -C '" .. T .. "/clone' fetch --quiet; echo B$(git -C '" .. T .. "/clone' rev-list --count HEAD..@{u} 2>&1); git -C '" .. T .. "/clone' log --oneline -3 origin/HEAD 2>&1; git -C '" .. T .. "/origin.git' log --oneline -3 2>&1"):gsub("\n", " | ") .. "]")
           I.update.state = nil
           I:check()
           t0 = util.time()
