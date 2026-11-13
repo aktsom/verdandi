@@ -338,6 +338,16 @@ run_win_paths() {
     "$exe" | tee "$M0_OUT/win-paths-probe.txt"
     ! grep -q "WINPATHS FAIL" "$M0_OUT/win-paths-probe.txt" && grep -q "WINPATHS all passed" "$M0_OUT/win-paths-probe.txt"
 }
+# M8: extra sample folders: the junction backend of platform/common/extfolders.c on the real Windows (windows/ci/extfolders_probe.c): a path with a blank and an accent, the refusals, a real folder is never touched,
+# only a link is removed, the files survive, removal with a file open, a missing target, a long path, a script-like reader through the junction
+run_extfolders() {
+    local exe="$WORK/extfolders_probe.exe" gcc_bin
+    gcc_bin=$(command -v gcc 2> /dev/null || command -v x86_64-w64-mingw32-gcc 2> /dev/null)
+    [ -n "$gcc_bin" ] || { echo "NOT FOUND: a C compiler for the probe on the runner"; return 1; }
+    "$gcc_bin" -std=gnu11 -Wall -Wno-format-truncation -I "$(native "$HERE/../../matron/src/platform/common")" "$(native "$HERE/extfolders_probe.c")" "$(native "$HERE/../../matron/src/platform/common/extfolders.c")" -o "$(native "$exe")" || { echo "the probe did not compile"; return 1; }
+    "$exe" | tee "$M0_OUT/extfolders-probe.txt"
+    ! grep -q "EXTFOLDERS FAIL" "$M0_OUT/extfolders-probe.txt" && grep -q "EXTFOLDERS all passed" "$M0_OUT/extfolders-probe.txt"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -488,6 +498,7 @@ m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server
 m0_run m7-check-maiden-stale chk_maiden_stale
 m0_run m7-check-win-paths run_win_paths
+m0_run m8-check-extfolders run_extfolders
 m0_run m7-run-failing run_failing
 m0_run m7-check-failing chk_failing
 m0_run m2-run-cycles run_cycles

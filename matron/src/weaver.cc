@@ -13,6 +13,7 @@
 // linux / posix
 #include <glob.h>
 #ifdef NORNS_WINDOWS
+#include "platform/common/extfolders.h"
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -322,6 +323,11 @@ static int _system_action(lua_State *l);
 static int _system_glob(lua_State *l);
 #ifdef NORNS_WINDOWS
 static int _listdir(lua_State *l);
+static int _ext_list(lua_State *l);
+static int _ext_add(lua_State *l);
+static int _ext_remove(lua_State *l);
+static int _ext_pick(lua_State *l);
+static int _ext_sync(lua_State *l);
 static int _audio_devices(lua_State *l);
 static int _audio_info(lua_State *l);
 static int _audio_measure(lua_State *l);
@@ -579,6 +585,11 @@ void w_init(void) {
     lua_register_norns("system_glob", &_system_glob);
 #ifdef NORNS_WINDOWS
     lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
+    lua_register_norns("ext_list", &_ext_list);     // M8: extra sample folders (links in dust/audio), docs/port/phase-m8.md
+    lua_register_norns("ext_add", &_ext_add);
+    lua_register_norns("ext_remove", &_ext_remove);
+    lua_register_norns("ext_pick", &_ext_pick);
+    lua_register_norns("ext_sync", &_ext_sync);
     lua_register_norns("audio_devices", &_audio_devices); // M2: the output devices for SYSTEM > AUDIO
     lua_register_norns("audio_info", &_audio_info);       // M2: what the audio is running on
     lua_register_norns("mic_input", &_mic_input);         // M3: MIC on or off
@@ -3842,6 +3853,88 @@ int _listdir(lua_State *l) {
         lua_pushstring(l, f.c_str());
         lua_rawseti(l, -2, i++);
     }
+    return 1;
+}
+
+/* ---- M8: extra sample folders. the rules are in platform/common/extfolders.c; here the paths of this home and the Lua shape ---- */
+static std::string ext_home(void) {
+    const char *h = getenv("NORNS_HOME");
+    if (!h || !*h) {
+        h = getenv("HOME");
+    }
+    return h && *h ? h : ".";
+}
+static std::string ext_conf(void) { return ext_home() + "/extra-folders.conf"; }
+static std::string ext_dust(void) { return ext_home() + "/dust"; }
+static std::string ext_audio(void) { return ext_home() + "/dust/audio"; }
+
+/***
+ * the extra folders: a list of {name=, path=, state=} with state "ok", "missing" (unplugged, renamed), "nolink" (made again at the next start) or "blocked" (a real folder has that name)
+ * @function ext_list
+ */
+int _ext_list(lua_State *l) {
+    static ef_item items[EF_MAX];
+    int n = ef_list(ext_conf().c_str(), ext_audio().c_str(), items, EF_MAX);
+    static const char *states[] = {"ok", "missing", "nolink", "blocked"};
+    lua_newtable(l);
+    for (int i = 0; i < n; i++) {
+        lua_newtable(l);
+        lua_pushstring(l, items[i].name);
+        lua_setfield(l, -2, "name");
+        lua_pushstring(l, items[i].path);
+        lua_setfield(l, -2, "path");
+        lua_pushstring(l, states[items[i].state >= 0 && items[i].state <= 3 ? items[i].state : 1]);
+        lua_setfield(l, -2, "state");
+        lua_rawseti(l, -2, i + 1);
+    }
+    return 1;
+}
+
+/***
+ * add a folder: returns ok (false = refused), a plain sentence, the link name
+ * @function ext_add
+ * @tparam string path
+ */
+int _ext_add(lua_State *l) {
+    const char *path = luaL_checkstring(l, 1);
+    char msg[400], name[200];
+    int r = ef_add(ext_conf().c_str(), ext_audio().c_str(), ext_dust().c_str(), path, msg, sizeof msg, name, sizeof name);
+    lua_pushboolean(l, r >= 0);
+    lua_pushstring(l, msg);
+    lua_pushstring(l, name);
+    return 3;
+}
+
+/***
+ * remove an extra folder's shortcut (never its files): returns ok, a plain sentence
+ * @function ext_remove
+ * @tparam string name
+ */
+int _ext_remove(lua_State *l) {
+    const char *name = luaL_checkstring(l, 1);
+    char msg[400];
+    int r = ef_remove(ext_conf().c_str(), ext_audio().c_str(), name, msg, sizeof msg);
+    lua_pushboolean(l, r >= 0);
+    lua_pushstring(l, msg);
+    return 2;
+}
+
+/***
+ * the folder picker of Windows; the choice comes back as _norns.ext_folder_chosen(path) ("" = cancelled)
+ * @function ext_pick
+ */
+int _ext_pick(lua_State *l) {
+    (void)l;
+    sdl_bridge_pick_folder();
+    return 0;
+}
+
+/***
+ * at start: the links that are missing are made again; returns how many
+ * @function ext_sync
+ */
+int _ext_sync(lua_State *l) {
+    lua_pushinteger(l, ef_sync(ext_conf().c_str(), ext_audio().c_str()));
     return 1;
 }
 

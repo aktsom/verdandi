@@ -199,6 +199,12 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.9.0: extra sample folders (docs/port/phase-m8.md)
+- 0.8.4 CI was green and released before this work started (windows-latest was 0.8.4, ae64ac2).
+- Built: `matron/src/platform/common/extfolders.{h,c}` (rules, junction on Windows, symlink on POSIX), the Windows folder picker `folder_picker_win.cc` (IFileOpenDialog, own thread), `_norns.ext_*`, SYSTEM > EXTRA FOLDERS (`lua/core/menu/extra.lua`), the Windows-only right-click menu (hides Import, Copy, file-dialog tick, virtual grid/arc/keyboard; adds Extra folders).
+- Tests: `linux/tests/extfolders_test.c` (rules, POSIX backend), `extra_folders_page_test.lua`, Windows runner probe `windows/ci/extfolders_probe.c` (check `m8-check-extfolders`). Linux build and Linux behaviour unchanged.
+- Cannot be tested here: the picker window, a real unplugged drive, OneDrive-redirected folders: `docs/port/HARDWARE-CHECKLIST.md`, "Windows 0.9.0".
+
 ## Windows 0.8.4: screenshots and GIFs into Pictures, plain "not available yet" messages
 
 - Screenshots and GIFs now go to the Windows Pictures known folder (`SHGetKnownFolderPath`: follows a OneDrive redirection), subfolder `Verdandi`, written through wide-character paths (a user name with any letters); the dust folder when Pictures cannot be found or made (`win_paths.c`, `capture_dir.h`; tests: `capture_dir_test.c`, and on the runner `windows/ci/win_paths_probe.c` against the real API). The two misleading import messages now say plainly that importing is not available yet in this Windows build (`win_messages.h`); `windows/KNOWN-LIMITS.md` corrected (it is the "Known limits" part of the release notes). Not yet seen on a real PC.

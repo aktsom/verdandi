@@ -901,12 +901,20 @@ m["SLEEP"] = require 'core/menu/sleep'
 m["MIX"] = require 'core/menu/mix'
 m["TAPE"] = require 'core/menu/tape'
 m["MODS"] = require 'core/menu/mods'
+-- Windows build: SYSTEM > EXTRA FOLDERS (docs/port/phase-m8.md); the links that are missing are made again once at start. Nothing here runs without norns.exe's _norns.ext_list
+if _norns.ext_list ~= nil then
+  m["EXTRA"] = require 'core/menu/extra'
+  if _norns.ext_sync ~= nil then
+    local made = _norns.ext_sync()
+    if made and made > 0 then print("extra folders: " .. made .. " shortcut(s) made again") end
+  end
+end
 
 -- Windows build only (docs/port/phase-m3.md, "UI principle"): the list pages of the system menu are drawn brighter (unselected rows were level 4 on black: dim and olive under a theme), the numbers of the
 -- audio are written to norns.log every ten seconds, and a MIC that cannot work says what to do. Nothing here runs on Linux or macOS: _norns.audio_devices exists only in norns.exe
 if _norns.audio_devices ~= nil then
   local winui = require 'core/menu/winui'
-  for _, name in ipairs({"SYSTEM", "DISPLAY", "DEVICES", "WIFI", "SETTINGS", "RESTART", "RESET", "UPDATE", "SLEEP", "MODS", "UI", "BOX", "MIDIMAP", "CLEANUP", "SELECT", "PARAMS"}) do
+  for _, name in ipairs({"SYSTEM", "DISPLAY", "DEVICES", "WIFI", "SETTINGS", "RESTART", "RESET", "UPDATE", "SLEEP", "MODS", "UI", "BOX", "MIDIMAP", "CLEANUP", "EXTRA", "SELECT", "PARAMS"}) do
     local page = m[name]
     if page and page.redraw and not page.winui_wrapped then
       page.redraw = winui.wrap(page.redraw)

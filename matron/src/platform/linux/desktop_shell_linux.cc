@@ -183,21 +183,29 @@ static void add_separator(void) {
 
 static void menu_build(void) {
     menu.n = 0;
+#ifndef NORNS_WINDOWS
+    // (the Windows build has no importing yet: extra folders (SYSTEM > EXTRA FOLDERS) replace it. docs/port/phase-m8.md)
     add_item(SHELL_MENU_IMPORT, "Import files...", "Ctrl+O", 0);
     add_item(SHELL_MENU_IMPORT_FOLDER, "Import folder...", "", 0);
     add_item(SHELL_MENU_COPY_SAMPLES, "Copy samples into dust", "", copy_samples);
     add_item(SHELL_MENU_FILE_DIALOG, "Open the file dialog when a script loads a file", "", file_dialog.load());
+#endif
     add_item(SHELL_MENU_SHOW_BUTTONS, "Show the page buttons", "", buttons_shown);
     add_separator();
     add_item(SHELL_MENU_DUST, "Show dust folder", "", 0);
     add_item(SHELL_MENU_TAPE, "Show tape folder", "", 0);
+#ifdef NORNS_WINDOWS
+    add_item(SHELL_MENU_EXTRA_FOLDERS, "Extra folders", "", 0);
+#endif
     add_separator();
     add_item(SHELL_MENU_SCREENSHOT, "Screenshot", "Ctrl+Shift+S", 0);
     add_item(SHELL_MENU_GIF, recording ? "Stop GIF recording" : "Record GIF", "", recording);
     add_separator();
+#ifndef NORNS_WINDOWS
     add_item(SHELL_MENU_GRID, "Virtual grid", "F6", 0);
     add_item(SHELL_MENU_ARC, "Virtual arc", "F8", 0);
     add_item(SHELL_MENU_KEYS, "Virtual keyboard", "F7", 0);
+#endif
     add_item(SHELL_MENU_SCREEN, "Screen in its own window", "F9", screen_out);
     add_separator();
     add_item(SHELL_MENU_MAIDEN, "Open maiden", "", 0);

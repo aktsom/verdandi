@@ -58,6 +58,10 @@ extern void sdl_bridge_app_input(const char *target, const char *label);
 // again while it is open: it goes to dir. close: it goes away
 extern void sdl_bridge_choose_file(const char *dir);
 extern void sdl_bridge_choose_file_close(void);
+#ifdef NORNS_WINDOWS
+// any thread, does not block: the folder picker of Windows for SYSTEM > EXTRA FOLDERS; the choice comes back as _norns.ext_folder_chosen(path), "" when cancelled
+extern void sdl_bridge_pick_folder(void);
+#endif
 
 // any thread, does not block: a note that stays on the device screen until cleared with "" (Linux:
 // audio problems). other messages show over it for a few seconds

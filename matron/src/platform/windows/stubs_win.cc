@@ -191,13 +191,7 @@ int midi_autoconnect_status(int *count, char *names, size_t n) {
     return 0;
 }
 
-/* ---- platform/linux/file_picker.cc: the file chooser (zenity, portal on Linux; the Windows dialog comes later) ---- */
-int picker_open(int mode, const char *start_dir, const char *title, picker_done_fn done, void *ctx) {
-    (void)mode, (void)start_dir, (void)title, (void)done, (void)ctx;
-    not_yet("the file picker");
-    return -1;
-}
-void picker_close(void) {}
+/* ---- platform/linux/file_picker.cc: the file chooser. the folder picker of Windows is folder_picker_win.cc; choosing files is not in this build yet (picker_open there returns -1) ---- */
 
 /* ---- the notes the Linux build shows about plug-ins and serialosc: nothing to say yet ---- */
 const char *mi_foreign_note_text(void) { return ""; }

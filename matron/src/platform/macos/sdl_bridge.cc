@@ -100,6 +100,7 @@
 #include "platform/windows/capture_dir.h"
 #include "platform/windows/win_messages.h"
 #include "platform/windows/win_paths.h"
+#include "platform/linux/file_picker.h"
 #endif
 #include "gif_writer.h"
 #include "platform/common/desktop_shell.h"
@@ -872,6 +873,20 @@ static struct event_custom_ops lua_call_ops = {"macos lua call", lua_call_weave,
 static void call_lua(const char *fn, std::vector<std::string> args) {
     event_post(event_custom_new(&lua_call_ops, new lua_call{fn, std::move(args)}, NULL));
 }
+
+#ifdef NORNS_WINDOWS
+// SYSTEM > EXTRA FOLDERS: the folder picker runs on its own thread; its answer is posted to lua like any event ("" = cancelled)
+static void ext_folder_done(const char *const *paths, int n, void *ctx) {
+    (void)ctx;
+    call_lua("ext_folder_chosen", {n > 0 && paths[0] != NULL ? paths[0] : ""});
+}
+
+void sdl_bridge_pick_folder(void) {
+    if (picker_open(PICK_FOLDER, NULL, "Choose a folder with samples", ext_folder_done, NULL) != 0) {
+        call_lua("ext_folder_chosen", {""});
+    }
+}
+#endif
 
 // Devices > Audio Input: lua decides (lua/core/menu.lua)
 static void input_chosen(const char *mode, const char *bundle, const char *name) {
@@ -2519,6 +2534,9 @@ static void menu_item(int id) {
         break;
     case SHELL_MENU_MANUAL:
         post_window_button(5);
+        break;
+    case SHELL_MENU_EXTRA_FOLDERS:
+        call_lua("open_extra_folders", {}); // lua opens SYSTEM > EXTRA FOLDERS (Windows only: the item is not in the Linux menu)
         break;
     case SHELL_MENU_MIDI_ACTIONS:
         // the menu (or Ctrl+Shift+M) flipped its tick: lua saves it in midimap.conf (core/midimap.lua) and the page row follows
