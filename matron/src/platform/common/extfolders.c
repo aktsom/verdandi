@@ -586,7 +586,7 @@ static int conf_write(const char *conf, const conf_t *c) {
     if (!f) {
         return -1;
     }
-    fprintf(f, "# folders added in SYSTEM > EXTRA FOLDERS: link name, a tab, the folder. edit them there, not here\n");
+    fprintf(f, "# folders added in SYSTEM > EXT FOLDERS: link name, a tab, the folder. edit them there, not here\n");
     for (int i = 0; i < c->n; i++) {
         fprintf(f, "%s\t%s\n", c->it[i].name, c->it[i].path);
     }
@@ -641,7 +641,7 @@ int ef_sync(const char *conf, const char *audio) {
             if (be_make_link(link, c->it[i].path, why, sizeof why) == 0) {
                 made++;
             } else {
-                fprintf(stderr, "extra folders: %s: %s\n", c->it[i].name, why);
+                fprintf(stderr, "ext folders: %s: %s\n", c->it[i].name, why);
             }
         }
     }
@@ -769,7 +769,7 @@ int ef_add(const char *conf, const char *audio, const char *dust, const char *ta
 
 int ef_remove(const char *conf, const char *audio, const char *name, char *msg, size_t n) {
     if (!name_ok(name)) {
-        say(msg, n, "Not removed: that is not the name of an extra folder shortcut.");
+        say(msg, n, "Not removed: that is not the name of an ext folder shortcut.");
         return -1;
     }
     conf_t *c = (conf_t *)malloc(sizeof *c);

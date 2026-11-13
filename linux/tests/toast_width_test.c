@@ -37,7 +37,7 @@ static int failures = 0;
 
 static const char *TEXTS[] = {
     "copied #3B6EA8", "saved #3B6EA8", "restored, not saved", "unchanged", "MIDI actions on", "MIDI actions off", "screenshot saved to Pictures", "screenshot saved to dust",
-    "GIF saved to Desktop", "REC  GIF  \xc2\xb7  shift-cmd-G stops", "Output muted (Ctrl+M)", "app input does not start (see norns.log)", "the screen window could not be opened",
+    "GIF saved to Desktop", "REC  GIF  \xc2\xb7  shift-cmd-G stops", "REC  GIF  \xc2\xb7  Ctrl+Shift+G stops", "Output muted (Ctrl+M)", "app input does not start (see norns.log)", "the screen window could not be opened",
     "3 files linked, 2 copied, 1 left out (1 not audio or a script)", "nothing to import: not audio or a script", "ARC WINDOW IS CLOSED: F8", "LEARN MIX: PRESS A BUTTON", "ACTION SCREENSHOT FAILED",
     "MIDI MAP: NOTE 36 IS ON MANUAL AND MUTE +2 MORE", "ACTIONS NEED THE WINDOW", "FULLSCREEN: DETACH THE SCREEN FIRST (F9)", "MIDI actions on",
     "ERROR key: lua/core/menu/midimap.lua:1234: attempt to index a nil value (field 'ctl')",

@@ -23,6 +23,7 @@
 #include "keys_midi.h"
 #include "menu_skin.h"
 #include "platform/common/desktop_shell.h"
+#include "platform/common/key_names.h"
 #ifdef NORNS_WINDOWS
 #include "platform/windows/win_messages.h"
 #define NO_DIALOG_NOTE WIN_DIALOG_NOT_AVAILABLE
@@ -184,7 +185,7 @@ static void add_separator(void) {
 static void menu_build(void) {
     menu.n = 0;
 #ifndef NORNS_WINDOWS
-    // (the Windows build has no importing yet: extra folders (SYSTEM > EXTRA FOLDERS) replace it. docs/port/phase-m8.md)
+    // (the Windows build has no importing yet: ext folders (SYSTEM > EXT FOLDERS) replace it. docs/port/phase-m8.md)
     add_item(SHELL_MENU_IMPORT, "Import files...", "Ctrl+O", 0);
     add_item(SHELL_MENU_IMPORT_FOLDER, "Import folder...", "", 0);
     add_item(SHELL_MENU_COPY_SAMPLES, "Copy samples into dust", "", copy_samples);
@@ -195,11 +196,11 @@ static void menu_build(void) {
     add_item(SHELL_MENU_DUST, "Show dust folder", "", 0);
     add_item(SHELL_MENU_TAPE, "Show tape folder", "", 0);
 #ifdef NORNS_WINDOWS
-    add_item(SHELL_MENU_EXTRA_FOLDERS, "Extra folders", "", 0);
+    add_item(SHELL_MENU_EXTRA_FOLDERS, "Ext folders", "", 0);
 #endif
     add_separator();
     add_item(SHELL_MENU_SCREENSHOT, "Screenshot", "Ctrl+Shift+S", 0);
-    add_item(SHELL_MENU_GIF, recording ? "Stop GIF recording" : "Record GIF", "", recording);
+    add_item(SHELL_MENU_GIF, recording ? "Stop GIF recording" : "Record GIF", GIF_MENU_HINT, recording);
     add_separator();
 #ifndef NORNS_WINDOWS
     add_item(SHELL_MENU_GRID, "Virtual grid", "F6", 0);
@@ -373,6 +374,11 @@ int shell_menu_key(int down, int scancode, int mods, double px, double py, doubl
         }
         if (ctrl && shift && scancode == SDL_SCANCODE_S) {
             menu_do(SHELL_MENU_SCREENSHOT);
+            return SHELL_USED;
+        }
+        if (ctrl && shift && scancode == SDL_SCANCODE_G) {
+            // the GIF recording on and off: the key the "REC GIF" note names
+            menu_do(SHELL_MENU_GIF);
             return SHELL_USED;
         }
         return 0;

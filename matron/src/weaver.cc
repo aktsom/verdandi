@@ -3864,12 +3864,23 @@ static std::string ext_home(void) {
     }
     return h && *h ? h : ".";
 }
-static std::string ext_conf(void) { return ext_home() + "/extra-folders.conf"; }
+// the list of ext folders; 0.9.0 called the file extra-folders.conf: an old one is renamed once so that nothing added there is lost
+static std::string ext_conf(void) {
+    std::string now = ext_home() + "/ext-folders.conf", old = ext_home() + "/extra-folders.conf";
+    FILE *f = fopen(now.c_str(), "rb");
+    if (f) {
+        fclose(f);
+    } else if ((f = fopen(old.c_str(), "rb")) != NULL) {
+        fclose(f);
+        rename(old.c_str(), now.c_str());
+    }
+    return now;
+}
 static std::string ext_dust(void) { return ext_home() + "/dust"; }
 static std::string ext_audio(void) { return ext_home() + "/dust/audio"; }
 
 /***
- * the extra folders: a list of {name=, path=, state=} with state "ok", "missing" (unplugged, renamed), "nolink" (made again at the next start) or "blocked" (a real folder has that name)
+ * the ext folders: a list of {name=, path=, state=} with state "ok", "missing" (unplugged, renamed), "nolink" (made again at the next start) or "blocked" (a real folder has that name)
  * @function ext_list
  */
 int _ext_list(lua_State *l) {
@@ -3906,7 +3917,7 @@ int _ext_add(lua_State *l) {
 }
 
 /***
- * remove an extra folder's shortcut (never its files): returns ok, a plain sentence
+ * remove an ext folder's shortcut (never its files): returns ok, a plain sentence
  * @function ext_remove
  * @tparam string name
  */

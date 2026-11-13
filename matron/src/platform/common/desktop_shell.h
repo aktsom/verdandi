@@ -84,7 +84,7 @@ enum {
     SHELL_MENU_MAIDEN,       // the menu twins of the MAIDEN and MANUAL buttons, for when the row is hidden
     SHELL_MENU_MANUAL,
     SHELL_MENU_MIDI_ACTIONS, // toggle: the MIDI actions are on (Ctrl+Shift+M too; lua saves it in midimap.conf, docs/port/midi-actions-plan.md)
-    SHELL_MENU_EXTRA_FOLDERS, // Windows build: opens SYSTEM > EXTRA FOLDERS (docs/port/phase-m8.md)
+    SHELL_MENU_EXTRA_FOLDERS, // Windows build: opens SYSTEM > EXT FOLDERS (docs/port/phase-m8.md)
     SHELL_MENU_INPUT_APP = 40, // + n: the n-th application of the list
 };
 

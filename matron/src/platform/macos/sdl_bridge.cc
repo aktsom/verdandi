@@ -104,6 +104,7 @@
 #endif
 #include "gif_writer.h"
 #include "platform/common/desktop_shell.h"
+#include "platform/common/key_names.h"
 #include "product.h"
 #include "sdl_bridge.h"
 #include "varc_skin.h"
@@ -660,7 +661,7 @@ static void show_toast(const std::string &text, Uint32 ms = 3500) {
 }
 
 static void recording_toast(void) {
-    show_toast("REC  GIF  \xc2\xb7  shift-cmd-G stops", 0);
+    show_toast(GIF_STOP_TOAST, 0);
 }
 
 // a standing note (audio problems on Linux): back on screen whenever a toast has gone
@@ -875,15 +876,20 @@ static void call_lua(const char *fn, std::vector<std::string> args) {
 }
 
 #ifdef NORNS_WINDOWS
-// SYSTEM > EXTRA FOLDERS: the folder picker runs on its own thread; its answer is posted to lua like any event ("" = cancelled)
+// SYSTEM > EXT FOLDERS: the folder picker runs on its own thread; its answer is posted to lua like any event ("" = cancelled)
 static void ext_folder_done(const char *const *paths, int n, void *ctx) {
     (void)ctx;
+    if (n < 0) {
+        // it failed (not the user's Cancel): the text says which step and its error code, lua puts it on the screen
+        call_lua("ext_folder_chosen", {"", paths != NULL && paths[0] != NULL ? paths[0] : "the folder window failed"});
+        return;
+    }
     call_lua("ext_folder_chosen", {n > 0 && paths[0] != NULL ? paths[0] : ""});
 }
 
 void sdl_bridge_pick_folder(void) {
     if (picker_open(PICK_FOLDER, NULL, "Choose a folder with samples", ext_folder_done, NULL) != 0) {
-        call_lua("ext_folder_chosen", {""});
+        call_lua("ext_folder_chosen", {"", "the folder window could not be started"});
     }
 }
 #endif
@@ -2536,7 +2542,7 @@ static void menu_item(int id) {
         post_window_button(5);
         break;
     case SHELL_MENU_EXTRA_FOLDERS:
-        call_lua("open_extra_folders", {}); // lua opens SYSTEM > EXTRA FOLDERS (Windows only: the item is not in the Linux menu)
+        call_lua("open_extra_folders", {}); // lua opens SYSTEM > EXT FOLDERS (Windows only: the item is not in the Linux menu)
         break;
     case SHELL_MENU_MIDI_ACTIONS:
         // the menu (or Ctrl+Shift+M) flipped its tick: lua saves it in midimap.conf (core/midimap.lua) and the page row follows

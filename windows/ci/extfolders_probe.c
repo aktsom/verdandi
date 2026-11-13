@@ -63,7 +63,7 @@ int main(void) {
     mk(root);
     snprintf(dust, sizeof dust, "%s\\home\xc3\xa9\\dust", root);
     snprintf(audio, sizeof audio, "%s\\audio", dust);
-    snprintf(conf, sizeof conf, "%s\\extra-folders.conf", root);
+    snprintf(conf, sizeof conf, "%s\\ext-folders.conf", root);
     char t[1400]; snprintf(t, sizeof t, "%s\\home\xc3\xa9", root); mk(t); mk(dust); mk(audio);
     snprintf(music, sizeof music, "%s\\M\xc3\xbasica y sonidos", root); mk(music);
     snprintf(t, sizeof t, "%s\\other", root); mk(t);

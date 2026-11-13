@@ -59,7 +59,7 @@ extern void sdl_bridge_app_input(const char *target, const char *label);
 extern void sdl_bridge_choose_file(const char *dir);
 extern void sdl_bridge_choose_file_close(void);
 #ifdef NORNS_WINDOWS
-// any thread, does not block: the folder picker of Windows for SYSTEM > EXTRA FOLDERS; the choice comes back as _norns.ext_folder_chosen(path), "" when cancelled
+// any thread, does not block: the folder picker of Windows for SYSTEM > EXT FOLDERS; the choice comes back as _norns.ext_folder_chosen(path), "" when cancelled
 extern void sdl_bridge_pick_folder(void);
 #endif
 

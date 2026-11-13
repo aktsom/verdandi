@@ -1,4 +1,4 @@
--- SYSTEM > EXTRA FOLDERS (lua/core/menu/extra.lua) with a fake _norns.ext_*: rows, marks for a missing folder, ADD FOLDER opens the picker, the answer is added, K3 on a folder only asks, K3 again removes, K2 cancels
+-- SYSTEM > EXT FOLDERS (lua/core/menu/extra.lua) with a fake _norns.ext_*: rows, marks for a missing folder, ADD FOLDER opens the picker, the answer is added, K3 on a folder only asks, K3 again removes, K2 cancels
 -- (nothing is removed without the second K3), the warning says the files are NOT deleted. run from the repo root: lua5.3 linux/tests/extra_folders_page_test.lua
 package.path = "lua/?.lua;lua/lib/?.lua;lua/core/?.lua;" .. package.path
 local fails = 0
@@ -27,7 +27,7 @@ _norns = {
 }
 local page = dofile("lua/core/menu/extra.lua")
 page.init(); page.redraw()
-check(shown("EXTRA FOLDERS") and shown("[ext] Drums") and shown("[ext] Loops") and shown("ADD FOLDER"), "the title, both folders and ADD FOLDER are listed")
+check(shown("EXT FOLDERS") and shown("[ext] Drums") and shown("[ext] Loops") and shown("ADD FOLDER"), "the title, both folders and ADD FOLDER are listed")
 check(shown("MISSING"), "an unreachable folder is marked MISSING")
 check(shown("K3: remove the shortcut"), "the hint on a folder says what K3 does")
 -- K3 on a folder only asks
@@ -58,6 +58,12 @@ check(shown("Added [ext] New"), "the chosen folder is added and the answer shown
 check(shown("[ext] New"), "the new folder is in the list")
 _norns.ext_folder_chosen(""); page.redraw()
 check(shown("cancelled"), "a cancelled picker says so")
+-- a failure is not a cancel: the step and the code are shown
+_norns.ext_folder_chosen("", "the folder window could not open (Show, error 0x80070057)")
+local seen_fail, seen_cancel = false, false
+for _ = 1, 40 do _menu.timer.event(); page.redraw(); if shown("0x80070057") then seen_fail = true end; if shown("cancelled") then seen_cancel = true end end
+check(seen_fail, "a failure shows its error code on the screen")
+check(not seen_cancel, "a failure never says cancelled")
 -- K2 on the list goes back to SYSTEM
 page.key(2, 1)
 check(page_now == "SYSTEM", "K2 goes back")
@@ -65,4 +71,4 @@ check(page_now == "SYSTEM", "K2 goes back")
 _norns.open_extra_folders()
 check(page_now == "EXTRA", "the menu item opens the page")
 if fails > 0 then print(fails .. " failed") os.exit(1) end
-print("extra folders page: all passed")
+print("ext folders page: all passed")

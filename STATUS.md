@@ -199,9 +199,15 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.9.1: fixes of 0.9.0 found on a real PC
+- The folder picker said "cancelled" at once: the interface id of the dialog (IID_IFileOpenDialog) was typed by hand with a wrong byte, so CoCreateInstance failed (E_NOINTERFACE) and every failure was reported as a cancel. Now: ids from the headers (`__uuidof`), every step's HRESULT in norns.log and its code on the screen, "cancelled" only for ERROR_CANCELLED, a PowerShell folder window as a fallback if the in-process one cannot open, the owner window only if it is one of this program's.
+- CI probe `windows/ci/picker_probe.cc` (check `m8-check-picker`): opens the real picker code on the runner, waits for the window, closes it as a Cancel. Not proven: a person picking a folder.
+- Renamed to "Ext folders" / "EXT FOLDERS" (menu, page, messages, docs, the file `ext-folders.conf`; an old `extra-folders.conf` is renamed once at start). The `[ext]` marker is unchanged.
+- GIF: the window had no key for it, but the note said "shift-cmd-G stops". Ctrl+Shift+G now starts and stops a recording (Windows and Linux; macOS keeps its Cmd key), the menu shows it, the note names it (`key_names.h`). No other Cmd/Mac-only text was found on screen.
+
 ## Windows 0.9.0: extra sample folders (docs/port/phase-m8.md)
 - 0.8.4 CI was green and released before this work started (windows-latest was 0.8.4, ae64ac2).
-- Built: `matron/src/platform/common/extfolders.{h,c}` (rules, junction on Windows, symlink on POSIX), the Windows folder picker `folder_picker_win.cc` (IFileOpenDialog, own thread), `_norns.ext_*`, SYSTEM > EXTRA FOLDERS (`lua/core/menu/extra.lua`), the Windows-only right-click menu (hides Import, Copy, file-dialog tick, virtual grid/arc/keyboard; adds Extra folders).
+- Built: `matron/src/platform/common/extfolders.{h,c}` (rules, junction on Windows, symlink on POSIX), the Windows folder picker `folder_picker_win.cc` (IFileOpenDialog, own thread), `_norns.ext_*`, SYSTEM > EXT FOLDERS (`lua/core/menu/extra.lua`), the Windows-only right-click menu (hides Import, Copy, file-dialog tick, virtual grid/arc/keyboard; adds Ext folders).
 - Tests: `linux/tests/extfolders_test.c` (rules, POSIX backend), `extra_folders_page_test.lua`, Windows runner probe `windows/ci/extfolders_probe.c` (check `m8-check-extfolders`). Linux build and Linux behaviour unchanged.
 - Cannot be tested here: the picker window, a real unplugged drive, OneDrive-redirected folders: `docs/port/HARDWARE-CHECKLIST.md`, "Windows 0.9.0".
 

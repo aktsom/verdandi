@@ -12,9 +12,9 @@ if os.getenv("NORNS_PLATFORM") ~= nil then
   m.pages = {"DEVICES", "AUDIO", "MODS", "UI", "BOX", "MIDIMAP", "CLEANUP", "RESET", "RESTART"}
 end
 
--- Windows build (norns.exe): EXTRA FOLDERS, folders anywhere on the computer shown in the file browser as [ext] (docs/port/phase-m8.md)
+-- Windows build (norns.exe): EXT FOLDERS, folders anywhere on the computer shown in the file browser as [ext] (docs/port/phase-m8.md)
 if os.getenv("NORNS_PLATFORM") ~= nil and _norns.ext_list ~= nil then
-  table.insert(m.list, 7, "EXTRA FOLDERS >")
+  table.insert(m.list, 7, "EXT FOLDERS >")
   table.insert(m.pages, 7, "EXTRA")
 end
 

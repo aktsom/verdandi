@@ -901,12 +901,12 @@ m["SLEEP"] = require 'core/menu/sleep'
 m["MIX"] = require 'core/menu/mix'
 m["TAPE"] = require 'core/menu/tape'
 m["MODS"] = require 'core/menu/mods'
--- Windows build: SYSTEM > EXTRA FOLDERS (docs/port/phase-m8.md); the links that are missing are made again once at start. Nothing here runs without norns.exe's _norns.ext_list
+-- Windows build: SYSTEM > EXT FOLDERS (docs/port/phase-m8.md); the links that are missing are made again once at start. Nothing here runs without norns.exe's _norns.ext_list
 if _norns.ext_list ~= nil then
   m["EXTRA"] = require 'core/menu/extra'
   if _norns.ext_sync ~= nil then
     local made = _norns.ext_sync()
-    if made and made > 0 then print("extra folders: " .. made .. " shortcut(s) made again") end
+    if made and made > 0 then print("ext folders: " .. made .. " shortcut(s) made again") end
   end
 end
 

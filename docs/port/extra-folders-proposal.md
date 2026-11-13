@@ -23,13 +23,13 @@ On Windows the import items are not built yet (plain message now). On Windows `d
 - Virtual `/home/we` (`lua/core/virtual_home.lua`) maps `/home/we/dust` to the real dust folder; paths are translated by `to_real` before any file call. Anything under a real folder reached by a link inside dust is read and played like any other file (`audio.file_info`, `tape_play_open`, softcut buffer reads all take the translated path).
 - Long paths: `_norns.listdir` buffers are MAX_PATH*2 wide chars, so paths beyond about 260 characters fail without the `\\?\` prefix (needs a small change). Non-ASCII is fine (UTF-8 to wide).
 
-## 3. Options for extra folders
+## 3. Options for ext folders
 
 | Option | How | Pros | Cons | Cost |
 |---|---|---|---|---|
 | A. Copy files into dust by hand | Windows Explorer into `dust\audio\` | Zero code, always works, works for every script | Duplicates big libraries, owner must do it each time | none |
 | B. Links under dust (Linux symlink, Windows junction) | A setting creates `dust/audio/<marker>name` pointing at the folder | Browser, scripts, tape all work unchanged; no listing change | Windows symlinks need privilege, junctions work without; junction targets must be local drives; a deleted target leaves a dead entry | small (Linux: symlink; Windows: `mklink /J` via API) |
-| C. Listing change in fileselect | When the browser lists `_path.audio`, append the extra folders with a marker such as `+ Name/` | Nothing created on disk; marker is obvious | Only fileselect and tape page see them; scripts that scan folders themselves do not; paths outside `/home/we` need a new virtual root; every consumer of the path must understand it | medium |
+| C. Listing change in fileselect | When the browser lists `_path.audio`, append the ext folders with a marker such as `+ Name/` | Nothing created on disk; marker is obvious | Only fileselect and tape page see them; scripts that scan folders themselves do not; paths outside `/home/we` need a new virtual root; every consumer of the path must understand it | medium |
 | D. Mapping in virtual_home | Map `/home/we/extra/<name>` to the real folder | Scripts could open by path | New virtual root, every PATH_FUNCTIONS entry must translate it, shell quoting contexts | medium to large |
 
 Recommendation: **B (junction on Windows, symlink on Linux)**, with the marker in the *name* of the link (for example `[ext] Samples`), so the browser, the tape page and any script show them next to the normal folders with no listing change. It is the same mechanism the Linux importer already uses (`audio/<DUST_LINK_DIR>`), so it works identically on Linux. If the owner only has a few folders and rarely adds more, **A is a perfectly good answer**: copy the files once. B only earns its cost if folders change or are large.
@@ -42,8 +42,8 @@ Works the same on Linux: yes, with a symlink in place of a junction.
 
 Keep the norns style: a single scrolling list, E2 selects, E3 changes, K3 applies, K2 back.
 
-- Best fit: a new **SYSTEM > EXTRA FOLDERS** page (one list: `1: C:\Samples`, `2: (empty)`, ...). K3 on a line opens the *native folder picker* (a Windows picker is needed and does not exist yet in this build) to set or clear it. Stored in a small config file (`ui.conf` next to the existing keys), applied at start and on K3.
-- Alternative with no new picker: a plain text file `extra-folders.txt` (one path per line) in the Verdandi folder, opened from a menu item. Simplest to build, less friendly.
+- Best fit: a new **SYSTEM > EXT FOLDERS** page (one list: `1: C:\Samples`, `2: (empty)`, ...). K3 on a line opens the *native folder picker* (a Windows picker is needed and does not exist yet in this build) to set or clear it. Stored in a small config file (`ui.conf` next to the existing keys), applied at start and on K3.
+- Alternative with no new picker: a plain text file `ext-folders.txt` (one path per line) in the Verdandi folder, opened from a menu item. Simplest to build, less friendly.
 - Not recommended: a right-click item per folder; it grows the menu.
 
 ## 5. Right-click menu: keep, hide or remove on Windows
@@ -54,7 +54,7 @@ Recommendation (owner said most items are not needed):
 - **Hide for now** (not built on Windows): Import files, Import folder, Copy samples into dust, Open the file dialog when a script loads a file, virtual grid / arc / keyboard (until built).
 - **Remove**: nothing from the shared code; hide via the Windows build only so Linux does not change.
 
-If extra folders (option B) are built, Import files / folder and the two ticks stay hidden for good on Windows, and the setting above replaces them.
+If ext folders (option B) are built, Import files / folder and the two ticks stay hidden for good on Windows, and the setting above replaces them.
 
 ## 6. What could not be tested
 No Windows machine here: junction creation, native folder picker and OneDrive/non-ASCII paths all need the owner's PC. Everything above is read from code.

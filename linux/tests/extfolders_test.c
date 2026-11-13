@@ -1,4 +1,4 @@
-/* extfolders.c with the POSIX (symlink) backend: the rules of "extra folders" (docs/port/phase-m8.md).
+/* extfolders.c with the POSIX (symlink) backend: the rules of "ext folders" (docs/port/phase-m8.md).
  * run from the repo root: cc -std=gnu11 -Wall -I matron/src/platform/common linux/tests/extfolders_test.c matron/src/platform/common/extfolders.c -o /tmp/eft && /tmp/eft
  * the Windows runner runs the same cases with the junction backend: windows/ci/extfolders_probe.c */
 #include <stdio.h>
@@ -22,7 +22,7 @@ int main(void) {
     char dust[300], audio[320], conf[320], msg[300], name[200], p[1024], buf[256];
     snprintf(dust, sizeof dust, "%s/home dust/dust", root);
     snprintf(audio, sizeof audio, "%s/audio", dust);
-    snprintf(conf, sizeof conf, "%s/extra-folders.conf", root);
+    snprintf(conf, sizeof conf, "%s/ext-folders.conf", root);
     char cmd[1024]; snprintf(cmd, sizeof cmd, "mkdir -p '%s'", audio); if (system(cmd)) return 2;
     /* two music folders, one with an accent and a blank, one without audio */
     char music[400], music2[400], empty[400], real[400];

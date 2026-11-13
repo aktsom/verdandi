@@ -348,6 +348,16 @@ run_extfolders() {
     "$exe" | tee "$M0_OUT/extfolders-probe.txt"
     ! grep -q "EXTFOLDERS FAIL" "$M0_OUT/extfolders-probe.txt" && grep -q "EXTFOLDERS all passed" "$M0_OUT/extfolders-probe.txt"
 }
+# M8 fix: the folder picker's real code on the runner: the Explorer-style folder window is opened by picker_open, the probe waits for the window, closes it as a Cancel and checks the answer (windows/ci/picker_probe.cc).
+# proves COM, the dialog object, its options and Show work; a person choosing a folder is still the owner's check
+run_picker() {
+    local exe="$WORK/picker_probe.exe" gpp
+    gpp=$(command -v g++ 2> /dev/null || command -v x86_64-w64-mingw32-g++ 2> /dev/null)
+    [ -n "$gpp" ] || { echo "NOT FOUND: a C++ compiler for the probe on the runner"; return 1; }
+    "$gpp" -std=c++17 -Wall -I "$(native "$HERE/../../matron/src")" "$(native "$HERE/picker_probe.cc")" "$(native "$HERE/../../matron/src/platform/windows/folder_picker_win.cc")" -o "$(native "$exe")" -lole32 -lshell32 || { echo "the probe did not compile"; return 1; }
+    timeout 90 "$exe" 2>&1 | tee "$M0_OUT/picker-probe.txt"
+    ! grep -q "PICKER FAIL" "$M0_OUT/picker-probe.txt" && grep -q "PICKER all passed" "$M0_OUT/picker-probe.txt"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -499,6 +509,7 @@ m0_run m7-check-plugins-server chk_plugins_server
 m0_run m7-check-maiden-stale chk_maiden_stale
 m0_run m7-check-win-paths run_win_paths
 m0_run m8-check-extfolders run_extfolders
+m0_run m8-check-picker run_picker
 m0_run m7-run-failing run_failing
 m0_run m7-check-failing chk_failing
 m0_run m2-run-cycles run_cycles

@@ -1,4 +1,4 @@
--- SYSTEM > EXTRA FOLDERS (Windows build; docs/port/phase-m8.md): folders anywhere on the computer whose samples show up in norns's file browser and on the tape page, next to the dust folders, as "[ext] <name>".
+-- SYSTEM > EXT FOLDERS (Windows build; docs/port/phase-m8.md): folders anywhere on the computer whose samples show up in norns's file browser and on the tape page, next to the dust folders, as "[ext] <name>".
 --   the folders already added, one per row (name, the folder, and a mark when it is not reachable: MISSING for an unplugged drive or a renamed folder, BLOCKED when a real folder in dust has the name), then ADD FOLDER.
 --   E2 chooses a row. K3 on ADD FOLDER opens Windows's folder window. K3 on a folder asks (a warning in plain words); K3 again removes the SHORTCUT, K2 cancels. K2 goes back.
 -- a removal only takes away the shortcut in dust\audio; the files in the folder are never touched (platform/common/extfolders.c checks that the entry is really a link first).
@@ -29,8 +29,14 @@ local function say(s)
 end
 
 -- the picker window answered ("" = cancelled)
-_norns.ext_folder_chosen = function(path)
+-- (path, err): a path = chosen; "" and no err = the user pressed Cancel; "" and an err = the window could not open: the error is shown with its code
+_norns.ext_folder_chosen = function(path, err)
   m.waiting = false
+  if err ~= nil and err ~= "" then
+    print("ext folders: " .. err)
+    say(err)
+    return
+  end
   if path == nil or path == "" then
     say("cancelled")
     return
@@ -45,7 +51,7 @@ _norns.ext_folder_chosen = function(path)
   say(text)
 end
 
--- the menu item "Extra folders" of the window
+-- the menu item "Ext folders" of the window
 _norns.open_extra_folders = function()
   if not _menu.mode then _menu.set_mode(true) end
   _menu.set_page("EXTRA")
@@ -134,7 +140,7 @@ m.redraw = function()
   end
   screen.level(15)
   screen.move(2, 8)
-  screen.text("EXTRA FOLDERS")
+  screen.text("EXT FOLDERS")
   local r = rows()
   local first = math.max(1, math.min(m.pos - 1, #r - 3))
   for i = 0, 3 do

@@ -567,11 +567,16 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 - `C:\Users\<you>\Verdandi\.local\share\SuperCollider\Extensions\mi-UGens` holds the pack (with `PACK-ID.txt`); `extensions\mi-UGens` is gone (the old copy is in `disabled\mi-UGens-moved`).
 - If you copy a folder that defines the same classes as one of yours into `extensions`: launcher.log says that nothing was moved and names both folders; the window shows a note.
 
-## Windows 0.9.0 (extra folders)
-1. Right-click the window: the menu no longer has Import files / Import folder / Copy samples / the file-dialog tick / Virtual grid, arc, keyboard; it has Extra folders, Show dust folder, Show tape folder, Screenshot, Record GIF, the Input items, Mute, MIDI actions, Open maiden, Open the manual, Quit.
-2. Extra folders (or SYSTEM > EXTRA FOLDERS): K3 on ADD FOLDER opens the Windows folder window (an Explorer-style window). Choose a folder with samples (try one with an accented letter or a blank in its name, one on a second drive, one under OneDrive). The window comes back with "Added [ext] <name>." The window must not freeze the sound or the clock while it is open (play a script with a clock first).
+## Windows 0.9.0 (ext folders)
+1. Right-click the window: the menu no longer has Import files / Import folder / Copy samples / the file-dialog tick / Virtual grid, arc, keyboard; it has Ext folders, Show dust folder, Show tape folder, Screenshot, Record GIF, the Input items, Mute, MIDI actions, Open maiden, Open the manual, Quit.
+2. Ext folders (or SYSTEM > EXT FOLDERS): K3 on ADD FOLDER opens the Windows folder window (an Explorer-style window). Choose a folder with samples (try one with an accented letter or a blank in its name, one on a second drive, one under OneDrive). The window comes back with "Added [ext] <name>." The window must not freeze the sound or the clock while it is open (play a script with a clock first).
 3. In a script that asks for a sample (or on the TAPE page, PLAY): the browser lists `[ext] <name>` next to the dust folders; open it, play a sample from it.
 4. Restart (SYSTEM > RESTART): the folder is still in the list and in the browser.
 5. Unplug the drive or rename the folder: the list shows MISSING for it; nothing is deleted. Put it back: it works again (restart if it does not).
 6. Try to add: the same folder again, a folder inside dust, a network share (\\server\share): each is refused with a plain sentence.
 7. Remove: K3 on the entry shows the warning; K2 cancels; K3 again removes only the shortcut. Check in Explorer that the original folder and its files are all still there, and that `dust\audio` has no `[ext]` entry left.
+
+## Windows 0.9.1 (picker, rename, GIF keys)
+1. Right-click: the item is "Ext folders" and the page title is EXT FOLDERS. "Record GIF" shows Ctrl+Shift+G.
+2. EXT FOLDERS > ADD FOLDER, K3: the Windows folder window opens (an Explorer-style window); navigate, choose a folder: "Added [ext] <name>." Cancel in the window says "cancelled". If it cannot open, the screen shows the step and the error code, and `logs\norns.log` has a line `windows: folder picker: ... HRESULT 0x...`; a PowerShell window may open instead (older style).
+3. Press Ctrl+Shift+G (or the menu): the screen says "REC GIF - Ctrl+Shift+G stops"; press it again: "GIF saved to Pictures\Verdandi".
