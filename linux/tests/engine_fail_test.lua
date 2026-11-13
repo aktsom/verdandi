@@ -130,6 +130,29 @@ check(n_calls("load_engine:EngA") == 1, "the next script asked for its engine")
 _norns.report.did_engine_load()
 check(INIT_LOG[#INIT_LOG] == "a", "the next script started")
 
+-- M10: the server (scsynth) of sclang dies while a script waits for its engine: the load stops within one tick, with the error code on the screen and in the log, instead of "still waiting for engine" for ever
+check(EF.server_exit("Server 'localhost' exited with exit code -1073741819.\n").short == "SuperCollider stopped", "the exit line of a crash is read")
+check(EF.server_exit("Server 'localhost' exited with exit code -1073741819.\n").line:find("0xC0000005", 1, true), "the code is shown as 0xC0000005")
+check(EF.server_exit("x\nServer 'localhost' exited with exit code 1.\n").line:find("error 1)", 1, true), "a small code is shown as it is")
+check(EF.server_exit("Server 'localhost' exited with exit code 0.\n") == nil, "exit code 0 is a normal end")
+check(EF.server_exit("the script said: Server 'x' exited with exit code 5") == nil, "not at the start of a line: not sclang's")
+for _, l in ipairs(EF.server_exit("Server 'localhost' exited with exit code -1073741819.\n").detail) do check(#l <= 21, "screen line fits 128 px: " .. l) end
+reset()
+NOW = 300
+local fall = script("fall", 'engine.name = "Autumn"\ninit = function() INIT_LOG[#INIT_LOG + 1] = "fall" end\n')
+Script.load(fall)
+local m2 = metros[#metros]
+NOW = 302
+append("Server 'localhost' exited with exit code -1073741819.\n")
+m2.f()
+check(has("scripterror:SuperCollider stopped"), "the load was stopped when the server died (" .. table.concat(calls, ",") .. ")")
+check(engine.is_loading == false and Script.load_pending == nil, "nothing waits for a dead server")
+check(logged("SuperCollider stopped (error 0xC0000005) while the script was loading"), "the plain line is in the log")
+check(_menu.errordetail and _menu.errordetail[1] == "SuperCollider", "the screen detail is set")
+reset()
+Script.load(good_b)
+check(n_calls("load_engine:EngB") == 1, "the next script can load (after the server is back)")
+
 -- an engine named "None" does not watch the log
 reset()
 local noeng = script("noeng", 'init = function() end\n')

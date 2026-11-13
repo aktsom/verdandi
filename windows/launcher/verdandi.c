@@ -33,6 +33,7 @@
 #include "maiden_port.h"
 #include "dup_heal.h"
 #include "sc_fail.h"
+#include "server_watch.h"
 
 #define VERDANDI_LAUNCHER_VERSION "0.2 (M2)"
 
@@ -773,6 +774,50 @@ static void explain_sclang_failure(const wchar_t *logs, ULONGLONG from) {
     free(buf);
 }
 
+/* M10 (docs/port/phase-m10.md): the server stopped on its own. sclang.log from `from` on is read for sclang's own line "Server 'localhost' exited with exit code N." (0 = nothing found) */
+static int server_exit_since(const wchar_t *logs, ULONGLONG from, unsigned long *code) {
+    wchar_t p[MAX_PATH * 2];
+    join(p, MAX_PATH * 2, logs, L"sclang.log");
+    ULONGLONG size = file_size_of(p);
+    if (size <= from) return 0;
+    ULONGLONG start = size - from > 131072 ? size - 131072 : from;
+    FILE *f = _wfopen(p, L"rb");
+    if (!f) return 0;
+    _fseeki64(f, (long long)start, SEEK_SET);
+    char *buf = (char *)malloc(131073);
+    if (!buf) {
+        fclose(f);
+        return 0;
+    }
+    size_t got = fread(buf, 1, 131072, f);
+    buf[got] = 0;
+    fclose(f);
+    int r = sw_find_exit(buf, code);
+    free(buf);
+    return r;
+}
+
+/* a plain line for the norns screen: <home>\.verdandi-note (norns shows it within a few seconds and deletes the file: lua/core/menu.lua) */
+static void write_note(const char *text) {
+    wchar_t p[MAX_PATH * 2];
+    join(p, MAX_PATH * 2, g_home, L".verdandi-note");
+    FILE *f = _wfopen(p, L"wb");
+    if (!f) return;
+    fputs(text, f);
+    fclose(f);
+}
+
+/* <home>\.norns-request-restart: norns takes the request itself (lua/core/menu.lua: _norns.restart(), which saves the state and ends with exit code 42) */
+static void request_norns_restart(void) {
+    wchar_t p[MAX_PATH * 2];
+    join(p, MAX_PATH * 2, g_home, L".norns-request-restart");
+    FILE *f = _wfopen(p, L"wb");
+    if (f) fclose(f);
+}
+
+static int g_server_restarts = 0;       /* automatic restarts after a server stop, in a row */
+static ULONGLONG g_server_stop_tick = 0; /* when the last one was */
+
 /* the process that listens on a TCP port of this computer (any local address). returns 1 and its id when there is one */
 static int tcp_listener_of(unsigned short port, DWORD *pid) {
     ULONG sz = 0;
@@ -1322,9 +1367,55 @@ int wmain(int argc, wchar_t **argv) {
     /* M6: maiden next to norns (ends with the round: it is in the job) */
     start_maiden(logs);
 
-    /* wait for norns */
-    DWORD wait = exit_after > 0 ? (DWORD)exit_after * 1000 : INFINITE;
-    w = WaitForSingleObject(pn, wait);
+    /* wait for norns. once a second the log of sclang is read: when its server stopped on its own (a crash), the round is started again (norns.exe, sclang, scsynth: the script and its engine load again), twice in a row at most;
+     * then one plain line and nothing more is tried. a loading screen never waits for ever on a dead server (docs/port/phase-m10.md) */
+    ULONGLONG wait_start = GetTickCount64(), exit_at = exit_after > 0 ? wait_start + (ULONGLONG)exit_after * 1000 : 0;
+    int forced_restart = 0, gave_up = 0;
+    if (g_server_stop_tick && wait_start - g_server_stop_tick > SW_QUIET_RESET_MS) g_server_restarts = 0;
+    for (;;) {
+        DWORD step = 1000;
+        if (exit_at) {
+            ULONGLONG now = GetTickCount64();
+            if (now >= exit_at) { w = WAIT_TIMEOUT; break; }
+            if (exit_at - now < step) step = (DWORD)(exit_at - now);
+        }
+        w = WaitForSingleObject(pn, step);
+        if (w != WAIT_TIMEOUT) break;
+        unsigned long scode = 0;
+        if (ps && !gave_up && server_exit_since(logs, sclang_log_from, &scode)) {
+            int what = sw_decide(scode, g_server_restarts);
+            char msg[400];
+            if (what == 0) {
+                {
+                    wchar_t lp[MAX_PATH * 2];
+                    join(lp, MAX_PATH * 2, logs, L"sclang.log");
+                    sclang_log_from = file_size_of(lp); /* a normal end of the server (exit code 0): not a stop to answer */
+                }
+                continue;
+            }
+            g_server_stop_tick = GetTickCount64();
+            if (what == 1) {
+                g_server_restarts++;
+                sw_message(1, scode, g_server_restarts, msg, sizeof msg);
+                say(L"scsynth.exe stopped on its own, exit code 0x%08lx (round %d): %hs", scode, round, msg);
+                write_note(msg);
+                request_norns_restart();
+                /* norns takes the request within a few seconds and ends with exit code 42; if it does not, it is ended here */
+                if (WaitForSingleObject(pn, 20000) == WAIT_TIMEOUT) {
+                    say(L"norns.exe did not answer the restart request within 20 s: ending it");
+                    TerminateProcess(pn, 0);
+                    WaitForSingleObject(pn, 5000);
+                    forced_restart = 1;
+                }
+                w = WAIT_OBJECT_0;
+                break;
+            }
+            gave_up = 1;
+            sw_message(2, scode, g_server_restarts, msg, sizeof msg);
+            say(L"scsynth.exe stopped on its own again, exit code 0x%08lx: %hs", scode, msg);
+            write_note(msg);
+        }
+    }
     if (w == WAIT_TIMEOUT) {
         say(L"--exit-after=%d: stopping norns.exe", exit_after);
         TerminateProcess(pn, 0);
@@ -1353,6 +1444,7 @@ int wmain(int argc, wchar_t **argv) {
         CloseHandle(g_job);
         g_job = NULL;
     }
+    if (forced_restart) code = VERDANDI_EXIT_RESTART;
     if (code == VERDANDI_EXIT_RESTART && w != WAIT_TIMEOUT && round < 50) {
         say(L"norns.exe asked for a restart (exit code %d): starting everything again (round %d)", VERDANDI_EXIT_RESTART, round + 1);
         continue;

@@ -12,6 +12,7 @@
 #include <array>
 #include <cmath>
 #include <sndfile.hh>
+#include "sf_path.h"
 #include <utility>
 
 #include "BufDiskWorker.h"
@@ -314,7 +315,7 @@ void BufDiskWorker::copyLoop(float *dst, const float *src,
 
 void BufDiskWorker::readBufferMono(const std::string &path, BufDesc &buf,
                                    float startSrc, float startDst, float dur, int chanSrc, float preserve, float mix) noexcept {
-    SndfileHandle file(path);
+    SndfileHandle file(SF_HANDLE_PATH(path));
 
     if (file.frames() < 1) {
         std::cerr << "readBufferMono(): empty / missing file: " << path << std::endl;
@@ -378,7 +379,7 @@ cleanup:
 void BufDiskWorker::readBufferStereo(const std::string &path, BufDesc &buf0, BufDesc &buf1,
                                      float startTimeSrc, float startTimeDst, float dur,
                                      float preserve, float mix) noexcept {
-    SndfileHandle file(path);
+    SndfileHandle file(SF_HANDLE_PATH(path));
 
     if (file.frames() < 1) {
         std::cerr << "SoftCutClient::readBufferStereo(): empty / missing file: " << path << std::endl;
@@ -448,7 +449,7 @@ void BufDiskWorker::writeBufferMono(const std::string &path, BufDesc &buf, float
     const int channels = 1;
     const int format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
 
-    SndfileHandle file(path, SFM_WRITE, format, channels, sr);
+    SndfileHandle file(SF_HANDLE_PATH(path), SFM_WRITE, format, channels, sr);
 
     if (not file) {
         std::cerr << "BufDiskWorker::writeBufferMono(): cannot open sndfile" << path << " for writing" << std::endl;
@@ -498,7 +499,7 @@ void BufDiskWorker::writeBufferStereo(const std::string &path, BufDesc &buf0, Bu
     const int sr = 48000;
     const int channels = 2;
     const int format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
-    SndfileHandle file(path, SFM_WRITE, format, channels, sr);
+    SndfileHandle file(SF_HANDLE_PATH(path), SFM_WRITE, format, channels, sr);
 
     if (not file) {
         std::cerr << "ERROR: cannot open sndfile" << path << " for writing" << std::endl;

@@ -588,6 +588,19 @@ if _norns.grid_conflict_text and _norns.set_warning then
       end
       -- a script ran "sudo systemctl restart norns-*" (a script's installer): linux/shims/systemctl left a request instead of the Raspberry Pi's
       -- services: restart norns the clean way
+      -- a plain line from the launcher (windows/launcher/verdandi.c, write_note): the SuperCollider server stopped on its own and was restarted, or keeps stopping and is not restarted again
+      local nf = io.open("/home/we/.verdandi-note")
+      if nf then
+        local text = (nf:read("a") or ""):gsub("%s+$", "")
+        nf:close()
+        os.remove("/home/we/.verdandi-note")
+        if text ~= "" then
+          print("### " .. text)
+          _menu.maiden_note = text
+          _menu.maiden_note_until = util.time() + 25
+          _menu.show_note()
+        end
+      end
       local req = io.open("/home/we/.norns-request-restart")
       if req then
         req:close()

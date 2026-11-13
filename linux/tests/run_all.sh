@@ -276,6 +276,8 @@ run "windows:SYSTEM > EXT FOLDERS page (rows, MISSING mark, ADD FOLDER opens the
 run "windows:folder picker and key names as source checks (cancel only for ERROR_CANCELLED, GUIDs from the headers, every step logged with its HRESULT, the failure text reaches the screen, PowerShell fallback present, GIF note says Ctrl on Windows/Linux and Cmd only on macOS)" bash linux/tests/picker_source_test.sh
 run "windows:find -printf as -exec printf (the installer of twins: same files as GNU find, what is left alone)" lua5.3 linux/tests/find_printf_test.lua
 run "windows:shim logic of nice, sudo and systemctl (the command lines twins uses: where the command starts, the restart request, the plain lines)" bash -c 'cc -std=gnu11 -Wall -Wextra -I windows/shims linux/tests/shim_win_logic_test.c -o "$0/swl" && "$0/swl"' "$T"
+run "windows:server watch of the launcher (sclang's 'Server exited with exit code N' line: the crash code, the last line counts, the decision restart twice then stop, the plain sentences)" bash -c 'cc -std=gnu11 -Wall -Wextra -I windows/launcher linux/tests/server_watch_test.c -o "$0/swt" && "$0/swt"' "$T"
+run "windows:fileselect long names (the preview and the selection use the real name, not the row's text cut with '..'; hidden files do not shift the rows)" lua5.3 linux/tests/fileselect_longname_test.lua
 link_pair_ok() {
     g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1
     local rc=0

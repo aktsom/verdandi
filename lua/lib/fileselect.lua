@@ -19,6 +19,7 @@ function fs.enter(folder, callback, filter_string)
   fs.folders = {}
   fs.list = {}
   fs.display_list = {}
+  fs.display_index = {}
   fs.lengths = {}
   fs.pos = 0
   fs.depth = 0
@@ -120,6 +121,7 @@ fs.getlist = function()
   if fs.active and _norns.choose_file and dialog_wanted() then _norns.choose_file(dir) end
   fs.list = util.scandir(dir)
   fs.display_list = {}
+  fs.display_index = {} -- for each row, its place in fs.list: the row text may be shortened with ".." and files can be hidden by the filter
   fs.lengths = {}
   fs.visible = {}
   fs.pos = 0
@@ -162,6 +164,7 @@ fs.getlist = function()
     if fs.visible[k] then
       line = util.trim_string_to_width(line, max_line_length)
       table.insert(fs.display_list, line)
+      table.insert(fs.display_index, k)
       table.insert(fs.lengths, display_length)
     end
   end
@@ -219,11 +222,8 @@ fs.key = function(n, z)
   elseif n == 3 and z == 1 then
     stop()
     if #fs.list > 0 then
-      if string.sub(fs.display_list[fs.pos + 1], -3) == '...' then
-        fs.file = fs.list[fs.pos + 1]
-      else
-        fs.file = fs.display_list[fs.pos + 1]
-      end
+      -- the real name (not the row's text, which is cut with "..." when it is long; and not fs.list[pos] either: files the filter hides are not rows)
+      fs.file = fs.list[fs.display_index[fs.pos + 1]]
       if fs.file == "../" then
         fs.folders[fs.depth] = nil
         fs.depth = fs.depth - 1
@@ -255,7 +255,7 @@ fs.enc = function(n, d)
     fs.pos = util.clamp(fs.pos + d, 0, #fs.display_list - 1)
     fs.redraw()
   elseif n == 3 and d > 0 then
-    fs.file = fs.display_list[fs.pos + 1]
+    fs.file = fs.list[fs.display_index[fs.pos + 1]] -- (the preview opened the cut text "very long na..." of a long name: "cannot open sndfile")
     if fs.lengths[fs.pos + 1] ~= "" then
       start()
     end

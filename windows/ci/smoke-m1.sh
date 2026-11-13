@@ -484,6 +484,43 @@ chk_twins_engine() {
     echo "found: the real twins engine ran with a sample loaded, the server lived (scenario 'all')"
     return 0
 }
+# M10: scsynth.exe is ended from outside three times (windows/ci/maiden_probe.py, VERDANDI_PROBE=kill): the launcher says so in launcher.log, starts everything again twice, then says it stops trying and leaves norns running
+KILL_HOME="$WORK/user home kill"
+run_server_kill() {
+    local out="$M0_OUT/server-kill"
+    rm -rf "$KILL_HOME" "$out"; mkdir -p "$out"
+    seed_home "$KILL_HOME"
+    VERDANDI_PROBE=kill "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$KILL_HOME")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 800 "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
+    fi
+    echo "launcher exit code $?"
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$KILL_HOME/logs" "$out/logs" 2> /dev/null || true
+    return 0
+}
+chk_server_kill() {
+    local out="$M0_OUT/server-kill" bad=0 want
+    echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
+    echo "--- launcher.log (the lines about the server):"; grep -a -i "scsynth\|round\|restart" "$KILL_HOME/logs/launcher.log" 2> /dev/null | head -40
+    for want in kill-1-up kill-1-done kill-1-restarted kill-1-logged kill-2-up kill-2-done kill-2-restarted kill-2-logged kill-3-up kill-3-done kill-3-gave-up kill-3-no-round-4 kill-3-norns-alive kill-3-message kill-notes kill-done; do
+        has "$out/probe.txt" "PROBE $want ok" "$want" || bad=1
+    done
+    return "$bad"
+}
+# M10: a long file name under an [ext] link (the probe of the scenario 'all' made it): matron's audio.file_info and crone's Tape Reader open it; the log has no 'cannot open sndfile'
+chk_longpath() {
+    local bad=0 t="$M0_OUT/twins-all"
+    has "$t/probe.txt" "PROBE twins-ext-add ok" "a folder with a long name was linked as [ext]" || bad=1
+    has "$t/probe.txt" "PROBE twins-longpath-info ok" "audio.file_info opens a file whose whole path is over 260 characters, under an [ext] link" || bad=1
+    has "$t/probe.txt" "PROBE twins-longpath-tape ok" "the Tape Reader was asked to play it" || bad=1
+    if grep -a -q "Tape Reader:: cannot open sndfile" "$t/logs/norns.log" 2> /dev/null; then echo "NOT FOUND (must be absent): 'Tape Reader:: cannot open sndfile' in norns.log"; grep -a "cannot open sndfile" "$t/logs/norns.log" | head -3; bad=1; else echo "found: the Tape Reader opened the long path (no 'cannot open sndfile' in norns.log)"; fi
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -632,6 +669,9 @@ m0_run m7-check-packs chk_packs
 m0_run m9-check-twins chk_twins
 m0_run m10-run-twins-engine run_twins_engine
 m0_run m10-check-twins-engine chk_twins_engine
+m0_run m10-check-longpath chk_longpath
+m0_run m10-run-server-kill run_server_kill
+m0_run m10-check-server-kill chk_server_kill
 m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server

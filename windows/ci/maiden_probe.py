@@ -93,6 +93,33 @@ if os.environ.get("VERDANDI_PROBE") == "twins":
             ok, tail = False, "sclang did not answer: %s" % e
         result(tag, ok, "the server answers (serverRunning)" if ok else "the server is not running: " + repr(tail))
         return ok
+    # M10: a long file name under an [ext] folder (the owner's norns.log: "Tape Reader:: cannot open sndfile ... for input"): a wav with a 130 character name in a folder outside dust, linked as [ext] <folder>; the whole path is
+    # over 260 characters. audio.file_info (matron) and the Tape Reader (crone, tape_play_open) must open it
+    try:
+        import wave, struct, math
+        src = os.path.join(os.path.dirname(HOME.rstrip("\\/")), "long source " + "s" * 70)
+        longname = ("a long sample name " * 8)[:126] + ".wav"
+        def lp(p): return "\\\\?\\" + os.path.abspath(p)
+        os.makedirs(lp(src), exist_ok=True)
+        w = wave.open(lp(os.path.join(src, longname)), "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
+        w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 330 * i / 48000))) for i in range(48000))); w.close()
+        fwd = src.replace("\\", "/")
+        ok, tail = repl(5555, "local ok, msg, name = _norns.ext_add('%s') print('VT_EXT ' .. tostring(ok) .. ' [' .. tostring(name) .. ']')\n" % fwd, "VT_EXT true", 60)
+        import re
+        m = re.search(r"VT_EXT true \[(.*?)\]", tail or "")
+        name = m.group(1) if m else ""
+        result("twins-ext-add", bool(name), "the long folder was linked as [%s]" % name if name else "ext_add: " + repr(tail))
+        vpath = "/home/we/dust/audio/%s/%s" % (name, longname)
+        ok, tail = repl(5555, "local ch, fr, sr = audio.file_info('%s') print('VT_INFO ' .. tostring(ch) .. ' ' .. tostring(fr) .. ' ' .. tostring(sr) .. ' len ' .. %d)\n" % (vpath, len(vpath)), "VT_INFO", 30)
+        m = re.search(r"VT_INFO (\d+) (\d+) (\d+) len (\d+)", tail or "")
+        good = bool(m) and int(m.group(2)) == 48000
+        result("twins-longpath-info", good, "audio.file_info reads the %s character virtual path (frames %s)" % (m.group(4) if m else "?", m.group(2) if m else "?") if good else "audio.file_info could not open it: " + repr(tail))
+        ok, tail = repl(5555, "audio.tape_play_open('%s') audio.tape_play_start() print('VT_TAPE started')\n" % vpath, "VT_TAPE started", 30)
+        time.sleep(3)
+        repl(5555, "audio.tape_play_stop() print('VT_TAPE stopped')\n", "VT_TAPE stopped", 15)
+        result("twins-longpath-tape", ok, "the Tape Reader was asked to play it (its log line is checked in norns.log)")
+    except Exception as e:
+        result("twins-longpath", False, "%s" % e)
     try:
         ok, tail = repl(5555, "print('VT_TW ' .. tostring(norns.state.name) .. ' ' .. tostring(engine.name))\n", "VT_TW twins twins", 240)
         result("twins-script", ok, "the script twins is loaded with engine twins" if ok else "twins did not load: " + repr(tail))
@@ -121,6 +148,60 @@ if os.environ.get("VERDANDI_PROBE") == "twins":
         result("twins-done", True, "")
     except Exception as e:
         result("twins-error", False, "%s" % e)
+    sys.exit(0)
+
+# VERDANDI_PROBE=kill: the server (scsynth.exe) is ended from outside, three times (M10, docs/port/phase-m10.md). the launcher has to notice, say so in launcher.log and on the norns screen, and start everything again twice;
+# the third time it says that it stops trying and leaves norns running. every step is a line 'PROBE <name> ok|FAIL <what>'
+if os.environ.get("VERDANDI_PROBE") == "kill":
+    import subprocess, re
+    LOG = os.path.join(HOME, "logs", "launcher.log")
+    NLOG = os.path.join(HOME, "logs", "norns.log")
+    def text(p):
+        try:
+            return open(p, "r", encoding="utf-8", errors="replace").read()
+        except OSError:
+            return ""
+    def wait_for(fn, secs, step=2):
+        end = time.time() + secs
+        while time.time() < end:
+            try:
+                if fn(): return True
+            except Exception:
+                pass
+            time.sleep(step)
+        return False
+    def norns_up():
+        ok, _ = repl(5555, "print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+        return ok
+    def server_up():
+        ok, _ = repl(5556, '("VT_ALIVE " ++ Crone.server.serverRunning).postln;\x1b', "VT_ALIVE true", 8)
+        return ok
+    try:
+        for k in (1, 2, 3):
+            up = wait_for(lambda: norns_up() and server_up(), 240)
+            result("kill-%d-up" % k, up, "norns and its server answer before the kill (round %d)" % k)
+            if not up: break
+            r = subprocess.run(["taskkill", "/F", "/IM", "scsynth.exe"], capture_output=True, text=True)
+            result("kill-%d-done" % k, r.returncode == 0, "scsynth.exe ended from outside: " + (r.stdout + r.stderr).strip()[:120])
+            if k < 3:
+                saw = wait_for(lambda: ("starting everything again (round %d)" % (k + 1)) in text(LOG), 90)
+                result("kill-%d-restarted" % k, saw, "launcher.log says the round was started again (round %d)" % (k + 1) if saw else "no restart in launcher.log: " + repr(text(LOG)[-300:]))
+                noted = wait_for(lambda: "stopped on its own, exit code" in text(LOG), 5)
+                result("kill-%d-logged" % k, noted, "launcher.log names the stop and its exit code")
+            else:
+                gave = wait_for(lambda: "stopped on its own again" in text(LOG), 60)
+                result("kill-3-gave-up", gave, "launcher.log says it does not restart again" if gave else "no 'again' line: " + repr(text(LOG)[-300:]))
+                time.sleep(15)
+                result("kill-3-no-round-4", "starting everything again (round 4)" not in text(LOG), "no fourth round was started")
+                result("kill-3-norns-alive", norns_up(), "norns is still running and answers")
+                shown = wait_for(lambda: "SuperCollider keeps stopping" in text(NLOG), 30)
+                result("kill-3-message", shown, "norns.log has the plain message that it keeps stopping" if shown else "message not in norns.log")
+        # the messages of the first two stops reached the norns screen
+        n = text(NLOG)
+        result("kill-notes", n.count("### SuperCollider stopped (error") >= 2, "norns.log has the restart message of each of the two restarts (on the screen as well)")
+        result("kill-done", True, "")
+    except Exception as e:
+        result("kill-error", False, "%s" % e)
     sys.exit(0)
 
 # 1. maiden is up

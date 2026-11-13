@@ -75,9 +75,27 @@ function M.since(path, pos)
   return text
 end
 
+-- the server (scsynth) of sclang stopped on its own while a script waits for its engine: sclang prints "Server 'localhost' exited with exit code N." (a crash is a code like -1073741819 = 0xC0000005).
+-- the load must not wait for ever for an engine that a dead server will never build: {line=, short=, detail=} or nil. exit code 0 is a normal end and not a failure
+function M.server_exit(text)
+  if not text then return nil end
+  local code
+  for c in text:gmatch("\nServer '[^']*' exited with exit code (%-?%d+)") do code = c end
+  if not code and text:match("^Server '[^']*' exited with exit code (%-?%d+)") then code = text:match("^Server '[^']*' exited with exit code (%-?%d+)") end
+  code = tonumber(code)
+  if not code or code == 0 then return nil end
+  local shown = (code > 255 or code < 0) and string.format("0x%08X", code % 4294967296) or tostring(code)
+  return {
+    line = "SuperCollider stopped (error " .. shown .. ") while the script was loading",
+    short = "SuperCollider stopped",
+    detail = {"SuperCollider", "stopped (error", shown .. ")", "see logs/sclang.log"},
+  }
+end
+
 function M.check(path, pos, engine)
   if M.size(path) <= (pos or 0) then return nil end
-  return M.find(M.since(path, pos), engine)
+  local text = M.since(path, pos)
+  return M.server_exit(text) or M.find(text, engine)
 end
 
 return M

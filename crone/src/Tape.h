@@ -19,6 +19,8 @@
 #include <jack/types.h>
 #include <sndfile.h>
 
+#include "sf_path.h"
+
 #include "Window.h"
 #include "readerwriterqueue.h"
 
@@ -454,7 +456,7 @@ class Tape {
             }
             sf_info.format = SF_FORMAT_WAV | short_mask;
 
-            if ((this->file = sf_open(this->pendingPath.c_str(), SFM_WRITE, &sf_info)) == nullptr) {
+            if ((this->file = sf_open_path(this->pendingPath.c_str(), SFM_WRITE, &sf_info)) == nullptr) {
                 std::cout << "cannot open sndfile" << this->pendingPath << " for output (" << sf_strerror(nullptr) << ")" << std::endl;
                 this->hasFile = false;
                 return;
@@ -836,7 +838,7 @@ class Tape {
         void diskLoop() override {
             // deferred open: perform sf_open here on the disk thread
             SF_INFO sfInfo;
-            if ((this->file = sf_open(this->pendingPath.c_str(), SFM_READ, &sfInfo)) == nullptr) {
+            if ((this->file = sf_open_path(this->pendingPath.c_str(), SFM_READ, &sfInfo)) == nullptr) {
                 std::cout << "Tape Reader:: cannot open sndfile " << this->pendingPath << " for input (" << sf_strerror(nullptr) << ")" << std::endl;
                 this->hasFile = false;
                 return;
