@@ -86,6 +86,17 @@ def repl(port, line, want, seconds, origin=None):
 # nothing else of this file runs then. every result is a line 'PROBE <name> ok|FAIL <what>'
 if os.environ.get("VERDANDI_PROBE") == "twins":
     WAV = "/home/we/dust/audio/ci/test.wav"
+    _repl = repl
+    def repl(port, line, want, seconds, origin=None):
+        """the consoles take one connection at a time and sometimes refuse for a moment right after another: try again"""
+        last = None
+        for _ in range(8):
+            try:
+                return _repl(port, line, want, seconds, origin)
+            except (ConnectionError, OSError) as e:
+                last = e
+                time.sleep(2)
+        raise last
     def alive(tag, secs=30):
         try:
             ok, tail = repl(5556, '("VT_ALIVE " ++ Crone.server.serverRunning).postln;\x1b', "VT_ALIVE true", secs)
