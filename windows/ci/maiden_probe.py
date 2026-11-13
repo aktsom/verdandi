@@ -104,9 +104,9 @@ if os.environ.get("VERDANDI_PROBE") == "twins":
         w = wave.open(lp(os.path.join(src, longname)), "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
         w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 330 * i / 48000))) for i in range(48000))); w.close()
         fwd = src.replace("\\", "/")
-        ok, tail = repl(5555, "local ok, msg, name = _norns.ext_add('%s') print('VT_EXT ' .. tostring(ok) .. ' [' .. tostring(name) .. ']')\n" % fwd, "VT_EXT true", 60)
+        ok, tail = repl(5555, "local ok, msg, name = _norns.ext_add('%s') print('VT_EXT ' .. tostring(ok) .. ' <<' .. tostring(name) .. '>>')\n" % fwd, "VT_EXT true", 60)
         import re
-        m = re.search(r"VT_EXT true \[(.*?)\]", tail or "")
+        m = re.search(r"VT_EXT true <<(.*?)>>", tail or "")
         name = m.group(1) if m else ""
         result("twins-ext-add", bool(name), "the long folder was linked as [%s]" % name if name else "ext_add: " + repr(tail))
         vpath = "/home/we/dust/audio/%s/%s" % (name, longname)

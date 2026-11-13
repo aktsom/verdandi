@@ -466,6 +466,7 @@ ST
     return 0
 }
 run_twins_engine() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     : > "$TW_RESULTS"
     twins_scenario all
     if grep -q "^all: crashed=1" "$TW_RESULTS"; then
@@ -479,6 +480,7 @@ run_twins_engine() {
     return 0
 }
 chk_twins_engine() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     cat "$TW_RESULTS" 2> /dev/null
     grep -q "^all: crashed=0" "$TW_RESULTS" 2> /dev/null || { echo "NOT FOUND: the real twins engine ran with the real server without a crash (scenario 'all')"; return 1; }
     echo "found: the real twins engine ran with a sample loaded, the server lived (scenario 'all')"
@@ -487,15 +489,16 @@ chk_twins_engine() {
 # M10: scsynth.exe is ended from outside three times (windows/ci/maiden_probe.py, VERDANDI_PROBE=kill): the launcher says so in launcher.log, starts everything again twice, then says it stops trying and leaves norns running
 KILL_HOME="$WORK/user home kill"
 run_server_kill() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     local out="$M0_OUT/server-kill"
     rm -rf "$KILL_HOME" "$out"; mkdir -p "$out"
     seed_home "$KILL_HOME"
     VERDANDI_PROBE=kill "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$KILL_HOME")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
     local probe_pid=$!
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 10 800 "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
+        env -u VERDANDI_NO_SERVER_RESTART timeout -k 10 800 "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
     else
-        "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
+        env -u VERDANDI_NO_SERVER_RESTART "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$KILL_HOME")"
     fi
     echo "launcher exit code $?"
     wait "$probe_pid" 2> /dev/null
@@ -504,6 +507,7 @@ run_server_kill() {
     return 0
 }
 chk_server_kill() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     local out="$M0_OUT/server-kill" bad=0 want
     echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
     echo "--- launcher.log (the lines about the server):"; grep -a -i "scsynth\|round\|restart" "$KILL_HOME/logs/launcher.log" 2> /dev/null | head -40
@@ -514,6 +518,7 @@ chk_server_kill() {
 }
 # M10: a long file name under an [ext] link (the probe of the scenario 'all' made it): matron's audio.file_info and crone's Tape Reader open it; the log has no 'cannot open sndfile'
 chk_longpath() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     local bad=0 t="$M0_OUT/twins-all"
     has "$t/probe.txt" "PROBE twins-ext-add ok" "a folder with a long name was linked as [ext]" || bad=1
     has "$t/probe.txt" "PROBE twins-longpath-info ok" "audio.file_info opens a file whose whole path is over 260 characters, under an [ext] link" || bad=1
@@ -645,6 +650,7 @@ collect() {
     echo "collected into $M0_OUT/m1-run"
 }
 
+export VERDANDI_NO_SERVER_RESTART=1 # the checks of the older milestones look at a start as it is; only the server-kill run (M10) wants the automatic restart
 m0_init
 m0_run m1-unpack unpack || exit 0
 set_app
@@ -653,6 +659,16 @@ m0_run m1-run run_program
 collect > /dev/null 2>&1
 m0_run m1-check-launcher chk_launcher
 m0_run m1-check-lua chk_lua
+# M10 diagnostics: what sclang.log says around a stop of its server (and its first lines), printed whatever happens
+chk_sclang_context() {
+    local l="$LOGS/sclang.log"
+    echo "--- sclang.log: $(wc -l < "$l" 2> /dev/null) lines; the lines around 'exited with exit code':"
+    grep -a -n -B14 -A4 "exited with exit code" "$l" 2> /dev/null | cut -c1-240 | head -50
+    echo "--- the first 25 lines:"; head -n 25 "$l" 2> /dev/null | cut -c1-200
+    echo "--- the last 12 lines:"; tail -n 12 "$l" 2> /dev/null | cut -c1-200
+    return 0
+}
+m0_run m10-sclang-context chk_sclang_context
 m0_run m2-list-audio list_audio
 m0_run m2-check-audio chk_audio
 m0_run m2-audio-numbers chk_audio_numbers

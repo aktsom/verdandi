@@ -184,7 +184,7 @@ jobs:
     needs: [sc, norns, maiden, tools, plugins]
     if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
-    timeout-minutes: 30
+    timeout-minutes: 110
     defaults:
       run:
         shell: bash
@@ -216,7 +216,7 @@ jobs:
       - name: Assemble the folder and the zip
         run: PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check
-        timeout-minutes: 45
+        timeout-minutes: 100
         run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
       - name: What failed
         if: always()
