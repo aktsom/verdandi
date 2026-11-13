@@ -316,3 +316,10 @@ Nothing is shipped in a product yet; these are the build inputs and what the M1 
 | sc3-plugins | https://github.com/supercollider/sc3-plugins (tag Version-3.13.0) | GPL-2.0-or-later; some directories other free licences (copied to `licenses\sc3-plugins\`) | whole collection, only the parts that compile for Windows x86-64 are shipped |
 | mi-UGens | https://github.com/v7b1/mi-UGens | MIT / GPL-compatible (licence files copied) | based on Mutable Instruments code (Emilie Gillet) |
 | NamAmp | not identified | open | built only when `NAMAMP_URL` is set; licence to be confirmed by the owner |
+
+## Windows 0.10.0 (M9): PortedPlugins pack for the script twins
+
+| What | Source | Licence | Notes |
+|---|---|---|---|
+| PortedPlugins (AnalogChew, AnalogLoss, AnalogDegrade and the rest of the collection that compiles with MSVC) | https://github.com/madskjeldgaard/portedplugins, tag v0.4.6 | GPL-3.0 (LICENSE-GPL-3.0.txt in the pack; the licence files of the plug-in folders and of the libraries CMake fetched at configure time are in `licences\` of the pack) | built in CI by `windows/ci/build-sc3plugins.sh`; the pack carries SOURCE-OFFER.txt (source and revision); installed in the per-user SuperCollider extensions folder |
+| nice.exe, sudo.exe, systemctl.exe | `windows/shims/shim_win.c` (this repository) | GPL-3.0 | tiny stand-ins, no new dependency |

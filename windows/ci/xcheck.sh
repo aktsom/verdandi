@@ -34,13 +34,13 @@ DEFS=(-DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONO
 # shellcheck disable=SC2206
 DEFS+=(${XC_DEFS:-})
 files="${XC_FILES:-}"
-[ -n "$files" ] || files="$(grep -v '^#' windows/cmake/norns-sources.txt | grep -v '^$') windows/ws-wrapper/ws_wrapper_win.c"
+[ -n "$files" ] || files="$(grep -v '^#' windows/cmake/norns-sources.txt | grep -v '^$') windows/ws-wrapper/ws_wrapper_win.c windows/shims/shim_win.c"
 ok=0; bad=0
 # XC_LINK=1: compile to objects (build/xlink) and report the symbols that no object defines and no known library provides
 mode=-fsyntax-only; [ "${XC_LINK:-0}" = 1 ] && { mkdir -p build/xlink; rm -f build/xlink/*.o; }
 for f in $files; do
     case "$f" in *.c) cmd="$CC -std=gnu11" ;; *) cmd="$CXX -std=gnu++14" ;; esac
-    extra=""; case "$f" in */sdl_bridge.cc) extra="-include $REPO/matron/src/platform/windows/compat_sock.h" ;; esac
+    extra=""; case "$f" in */sdl_bridge.cc) extra="-include $REPO/matron/src/platform/windows/compat_sock.h" ;; windows/shims/*) extra="-municode -I $REPO/windows/shims" ;; esac
     out=""; if [ "${XC_LINK:-0}" = 1 ]; then out="-o build/xlink/$(echo "$f" | tr / _).o"; mode=-c; fi
     # shellcheck disable=SC2086
     err=$($cmd $mode $out -w "${DEFS[@]}" $INC $extra "$f" 2>&1 | grep -m1 -E "error" -B3 -A2 | tr "\n" " " || true)

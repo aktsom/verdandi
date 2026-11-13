@@ -580,3 +580,10 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 1. Right-click: the item is "Ext folders" and the page title is EXT FOLDERS. "Record GIF" shows Ctrl+Shift+G.
 2. EXT FOLDERS > ADD FOLDER, K3: the Windows folder window opens (an Explorer-style window); navigate, choose a folder: "Added [ext] <name>." Cancel in the window says "cancelled". If it cannot open, the screen shows the step and the error code, and `logs\norns.log` has a line `windows: folder picker: ... HRESULT 0x...`; a PowerShell window may open instead (older style).
 3. Press Ctrl+Shift+G (or the menu): the screen says "REC GIF - Ctrl+Shift+G stops"; press it again: "GIF saved to Pictures\Verdandi".
+
+## Windows 0.10.0 (the script twins)
+1. Install twins with maiden (or copy its folder into `dust\code`) and load it: no "Missing SuperCollider Libraries" screen. The folder `<your Verdandi folder>\.local\share\SuperCollider\Extensions\PortedPlugins` exists and holds the three `*_scsynth.scx` and the empty `*_scsynth.so` files next to them.
+2. Play twins: the engine loads and makes sound; the effects AnalogChew, AnalogLoss and AnalogDegrade (the "chew", "loss" and "degrade" controls of the script) can be heard when turned up. `logs\sclang.log` has no "not installed" and no "duplicate Class".
+3. Clone twins with maiden (a git clone). When the author has pushed new commits, ten seconds after the script starts the screen says "Twins Update Available": K2 skips, K3 installs; after K3 "Update Installed" (a new engine) K3 restarts Verdandi by itself within a few seconds, or the script reloads (no engine change).
+4. A copy of twins that was unpacked from a zip (no `.git`) never shows the update screen: that is as designed.
+5. If you edit a file of the cloned twins, the update prompt stays away (the script's own rule: local changes).

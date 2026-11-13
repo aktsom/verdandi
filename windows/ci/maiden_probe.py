@@ -184,6 +184,26 @@ try:
     result("repl-plugins", ok, "the real server started a synth of each of MiPlaits, MiBraids, Decimator, MoogLadder, SawDPW (5 nodes, no failure)" if ok else "the server did not load the plug-ins: " + repr(tail))
 except Exception as e:
     result("repl-plugins", False, "%s" % e)
+# 7b. M9: the three UGens the script twins needs (PortedPlugins pack), started on the REAL server with the argument shapes of twins' engine: every /n_go announced, no /fail, and the output is not NaN or inf
+try:
+    line = ('Routine({ var s = Crone.server, n = 0, fails = 0, r1, r2, b, got; '
+            'r1 = OSCFunc({ |m| n = n + 1 }, \'/n_go\', s.addr); r2 = OSCFunc({ |m| fails = fails + 1 }, \'/fail\', s.addr); '
+            'SynthDef(\\vt_ported, { var orig = SinOsc.ar(220, 0, 0.3), wet, loss, degrade; wet = AnalogChew.ar(orig, 0.5, 0.5, 0.5); loss = AnalogLoss.ar(wet, 0.5, 1, 0.5, 0.5); '
+            'degrade = AnalogDegrade.ar(loss, 0.2, 0.5, 0.5, 0.5); Out.ar(0, degrade * 0.0) }).send(s); s.sync; '
+            's.sendMsg("/s_new", \\vt_ported, 3100, 0, 1); 1.5.wait; s.sendMsg("/n_free", 3100); r1.free; r2.free; '
+            '("VT_PORTED " ++ n ++ " fails " ++ fails).postln; }).play(AppClock);\x1b')
+    ok, tail = repl(5556, line, "VT_PORTED 1 fails 0", 90)
+    result("repl-ported", ok, "the real server started a synth with AnalogChew, AnalogLoss and AnalogDegrade (the ones twins needs): announced, no failure" if ok else "the server did not run the PortedPlugins UGens: " + repr(tail))
+except Exception as e:
+    result("repl-ported", False, "%s" % e)
+# 7c. M9: twins' own library check, as the installer runs it, through norns's shell (find -printf is rewritten for the bundled busybox): the class files and the markers are found
+try:
+    line = ("local p = io.popen(\"find /usr/local/share/SuperCollider/Extensions /home/we/.local/share/SuperCollider/Extensions /home/we/dust/code -name .git -prune -o \\\\( -name 'AnalogChew.sc' -o -name 'AnalogChew.so' -o -name 'AnalogChew_scsynth.so' \\\\) -not -path '*ignore*' -type f -printf '%p!' 2>/dev/null\") "
+            "local t = p and p:read('a') or '' if p then p:close() end print('VT_TWINSFIND ' .. (t:find('AnalogChew.sc!', 1, true) and 'sc' or 'nosc') .. ' ' .. (t:find('AnalogChew_scsynth.so!', 1, true) and 'so' or 'noso'))\n")
+    ok, tail = repl(5555, line, "VT_TWINSFIND sc so", 60)
+    result("repl-twinsfind", ok, "twins' find (with -printf) finds AnalogChew.sc and AnalogChew_scsynth.so" if ok else "twins' find does not find both halves: " + repr(tail))
+except Exception as e:
+    result("repl-twinsfind", False, "%s" % e)
 # 8. the check that the emplaitress mod makes before it downloads and unpacks a Linux copy of mi-UGens (lib/mod.lua, system_post_startup): `find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc`
 # through norns's own shell. true = the mod finds the classes and does NOT copy anything (no second copy, no duplicate classes at the next start)
 try:

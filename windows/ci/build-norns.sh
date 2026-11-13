@@ -31,10 +31,19 @@ launcher() {
     gcc -municode -mwindows -O2 -Wall -Wextra "$REPO/windows/launcher/verdandi.c" -o "$BLD/Verdandi.exe" -static -lws2_32 -liphlpapi
 }
 
+# M9: nice.exe, sudo.exe and systemctl.exe (one source, the program's name chooses what it does): scripts written for a norns call them (docs/port/phase-m9.md)
+shims_build() {
+    mkdir -p "$BLD"
+    local n
+    for n in nice sudo systemctl; do
+        gcc -municode -mwindows -O2 -Wall -Wextra -I "$REPO/windows/shims" "$REPO/windows/shims/shim_win.c" -o "$BLD/$n.exe" -static || return 1
+    done
+}
+
 # the DLLs of norns.exe that are not Windows's own (ldd lists them recursively); the result is a flat folder
 collect() {
     mkdir -p "$OUT"
-    cp "$BLD/norns.exe" "$BLD/Verdandi.exe" "$BLD/ws-wrapper.exe" "$OUT/" || return 1
+    cp "$BLD/norns.exe" "$BLD/Verdandi.exe" "$BLD/ws-wrapper.exe" "$BLD/nice.exe" "$BLD/sudo.exe" "$BLD/systemctl.exe" "$OUT/" || return 1
     local n=0 dll
     while read -r dll; do
         [ -f "$dll" ] && cp -u "$dll" "$OUT/" && n=$((n + 1))
@@ -60,6 +69,7 @@ m0_init
 m0_run norns-configure configure || exit 0
 m0_run norns-build build
 m0_run launcher-build launcher
+m0_run shims-build shims_build
 m0_run m4-link-pair link_pair
 if [ -f "$BLD/norns.exe" ] && [ -f "$BLD/Verdandi.exe" ]; then
     m0_run norns-collect collect

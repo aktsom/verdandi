@@ -134,7 +134,10 @@ end
 --- shell
 -- Windows, a home folder with a blank in its name (C:/Users/Jane Smith/Verdandi): in a SHELL command the replacement of /home/we must be quoted for the shell, or the path falls in two words. outside quotes the blanks
 -- are escaped, inside quotes (the script quoted it) the path is put in as it is. elsewhere (Linux, macOS, a home without a blank) this is to_real
-local function to_real_shell(s)
+-- Windows build (norns.exe has _norns.listdir): the bundled busybox has no `find -printf`; core/find_printf.lua rewrites the one form scripts use (docs/port/phase-m9.md)
+local find_printf = (type(_norns) == 'table' and _norns.listdir ~= nil) and require('core/find_printf') or nil
+
+local function to_real_shell_path(s)
   if type(s) ~= 'string' or package.config:sub(1, 1) ~= '\\' or not real:find('%s') or not s:find(VIRTUAL, 1, true) then
     return to_real(s)
   end
@@ -187,6 +190,11 @@ local function to_real_shell(s)
     end
   end
   return table.concat(out)
+end
+
+local function to_real_shell(s)
+  if find_printf and type(s) == 'string' then s = find_printf.rewrite(s) end
+  return to_real_shell_path(s)
 end
 
 local execute, popen = os.execute, io.popen

@@ -199,6 +199,12 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.10.0: support for the script twins (docs/port/phase-m9.md)
+- PortedPlugins pack (AnalogChew/Loss/Degrade + the rest that compiles) built in the plug-in job, per-user folder, empty `X_scsynth.so` markers (scsynth loads `.scx` only; the heal looks at `.scx` only), licences and a source offer.
+- `find -printf '%p!'` rewritten to `-exec printf` in the Windows shell path (`lua/core/find_printf.lua`, wired in `virtual_home.lua`); `nice.exe`, `sudo.exe`, `systemctl.exe` stand-ins (`windows/shims`).
+- Tests: Linux (`find_printf_test.lua` against GNU find, `shim_win_logic_test.c`); Windows runner (`m9-check-twins`: the real twins installer unchanged, fake git origin that is ahead of its clone, the real busybox/MinGit/shims; `repl-ported`: a real server starts a synth with the three UGens; ten-start restart cycle with the new pack).
+- Linux build unchanged (all new Lua/shims run only where `_norns.listdir` exists).
+
 ## Windows 0.9.1: fixes of 0.9.0 found on a real PC
 - The folder picker said "cancelled" at once: the interface id of the dialog (IID_IFileOpenDialog) was typed by hand with a wrong byte, so CoCreateInstance failed (E_NOINTERFACE) and every failure was reported as a cancel. Now: ids from the headers (`__uuidof`), every step's HRESULT in norns.log and its code on the screen, "cancelled" only for ERROR_CANCELLED, a PowerShell folder window as a fallback if the in-process one cannot open, the owner window only if it is one of this program's.
 - CI probe `windows/ci/picker_probe.cc` (check `m8-check-picker`): opens the real picker code on the runner, waits for the window, closes it as a Cancel. Not proven: a person picking a folder.

@@ -83,6 +83,58 @@ function init()
       local r = d .. "/subtest"
       sh("mkdir -p " .. r .. " && cd " .. r .. " && git init -q sub && cd sub && echo s > s.txt && git add s.txt && git -c user.name=t -c user.email=t@t commit -q -m s && cd .. && git init -q top && cd top && git -c protocol.file.allow=always submodule add -q ../sub voice && git -c user.name=t -c user.email=t@t commit -q -m t && cd .. && git -c protocol.file.allow=always clone -q --recurse-submodules top copy")
       print("VERDANDI_SMOKE_TOOLS submodule " .. (sh("cat " .. r .. "/copy/voice/s.txt"):find("^s") and "ok" or "FAIL: " .. sh("ls " .. r .. "/copy")))
+      -- M9 (docs/port/phase-m9.md): the installer of the script twins, UNCHANGED (fetched by the workflow), against the real tools: its library check (find -printf, rewritten), its update check (nice, timeout, git against a
+      -- clone that is one commit behind), the pull, and its restart request (sudo systemctl restart norns-*). run beside the rest of the smoke test, not in front of it
+      if util.file_exists(d .. "/installer.lua") then
+        clock.run(function()
+          local T = d .. "/twins"
+          print("VERDANDI_SMOKE_TWINS git-config [" .. sh("git config --show-origin core.autocrlf"):gsub("\n", " ") .. "]")
+          sh("rm -rf " .. T .. " && mkdir -p " .. T .. " && cd " .. T .. " && git init -q --bare origin.git && git clone -q origin.git work && cd work && git config user.name t && git config user.email t@t && mkdir -p lib && echo 'engine { }' > lib/engine_x.sc && echo 'print(1)' > twins.lua && git add -A && git commit -q -m one && git push -q -u origin HEAD && cd .. && git clone -q origin.git clone")
+          print("VERDANDI_SMOKE_TWINS clone-status [" .. sh("git -C " .. T .. "/clone status --porcelain --untracked-files=no | wc -l"):gsub("%s+", "") .. "]")
+          local Installer = dofile(d .. "/installer.lua")
+          local I = Installer:new{requirements = {"AnalogChew", "AnalogLoss", "AnalogDegrade"}, zip = "https://example.invalid/x.zip", path = T .. "/clone"}
+          print("VERDANDI_SMOKE_TWINS library-check satisfied=" .. tostring(I:ready()) .. " missing=[" .. table.concat(I.missing_requirements or {}, ",") .. "]")
+          print("VERDANDI_SMOKE_TWINS find-printf [" .. sh("find " .. T .. "/clone -maxdepth 1 -name 'twins.lua' -type f -printf '%p!'") .. "]")
+          print("VERDANDI_SMOKE_TWINS nice [" .. sh("nice -n 19 echo niced") .. "]")
+          print("VERDANDI_SMOKE_TWINS sudo [" .. sh("sudo echo sudoed") .. "]")
+          print("VERDANDI_SMOKE_TWINS timeout-nice [" .. sh("timeout -k 5 20 nice -n 19 git --version") .. "]")
+          -- up to date: no prompt
+          I:check()
+          local t0 = util.time()
+          while I.update.state == "checking" and util.time() - t0 < 60 do clock.sleep(0.5) end
+          print("VERDANDI_SMOKE_TWINS check-uptodate state=" .. tostring(I.update.state) .. " behind=" .. tostring(I.update.behind))
+          -- the author pushes a commit that changes an engine file
+          sh("cd " .. T .. "/work && echo 'engine { var two; }' > lib/engine_x.sc && git add -A && git commit -q -m two && git push -q")
+          I.update.state = nil
+          I:check()
+          t0 = util.time()
+          while I.update.state == "checking" and util.time() - t0 < 60 do clock.sleep(0.5) end
+          print("VERDANDI_SMOKE_TWINS check-behind state=" .. tostring(I.update.state) .. " behind=" .. tostring(I.update.behind))
+          -- a tracked file with a local change: no prompt (the author's pull would conflict)
+          sh("cd " .. T .. "/clone && echo '-- mine' >> twins.lua")
+          I.update.state = nil
+          I:check()
+          t0 = util.time()
+          while I.update.state == "checking" and util.time() - t0 < 60 do clock.sleep(0.5) end
+          print("VERDANDI_SMOKE_TWINS check-dirty state=" .. tostring(I.update.state))
+          sh("cd " .. T .. "/clone && git checkout -- twins.lua")
+          print("VERDANDI_SMOKE_TWINS clean-again [" .. sh("git -C " .. T .. "/clone status --porcelain --untracked-files=no | wc -l"):gsub("%s+", "") .. "]")
+          -- K3: pull
+          I.update.state = "update"
+          I:key(3, 1)
+          t0 = util.time()
+          while (I.update.state == "update" or I.update.state == "installing") and util.time() - t0 < 90 do clock.sleep(0.5) end
+          print("VERDANDI_SMOKE_TWINS pull state=" .. tostring(I.update.state) .. " behind_now=" .. tostring(I:count_behind()))
+          print("VERDANDI_SMOKE_TWINS after-pull-status [" .. sh("git -C " .. T .. "/clone status --porcelain --untracked-files=no | wc -l"):gsub("%s+", "") .. "] file [" .. sh("cat " .. T .. "/clone/lib/engine_x.sc") .. "]")
+          -- K3 again: the restart request of the installer (sudo systemctl restart norns-...), taken back at once so that this run goes on
+          local t1 = util.time()
+          I:do_restart()
+          local req = io.open("/home/we/.norns-request-restart")
+          print(string.format("VERDANDI_SMOKE_TWINS restart returned_in=%.1fs request_file=%s", util.time() - t1, tostring(req ~= nil)))
+          if req then req:close(); os.remove("/home/we/.norns-request-restart") end
+          print("VERDANDI_SMOKE_TWINS done")
+        end)
+      end
     end
     if _norns.audio_info then
       local a = _norns.audio_info()

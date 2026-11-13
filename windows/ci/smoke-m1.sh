@@ -167,6 +167,15 @@ run_input() {
         sleep 3
         echo "stale maiden started from $STALE: $(tasklist //FI 'IMAGENAME eq maiden.exe' 2> /dev/null | grep -c maiden.exe) maiden.exe process(es)"
     fi
+    # M9: the installer of the script twins, as its author wrote it (pinned): the smoke script runs it against the real tools (windows/pack/smoke/verdandi_smoke.lua, VERDANDI_SMOKE_TWINS)
+    TWINS_REPO="${TWINS_REPO:-danielrigler/twins}"
+    TWINS_SHA="${TWINS_SHA:-5dc6206aaae83f3b2a167acdd185578f93079e9a}"
+    mkdir -p "$IN_HOME/dust/data/verdandi_smoke"
+    if curl -fsSL --retry 3 "https://raw.githubusercontent.com/$TWINS_REPO/$TWINS_SHA/lib/installer/installer.lua" -o "$IN_HOME/dust/data/verdandi_smoke/installer.lua"; then
+        echo "twins installer.lua fetched ($TWINS_SHA): $(wc -l < "$IN_HOME/dust/data/verdandi_smoke/installer.lua") lines"
+    else
+        echo "NOT FETCHED: the twins installer (the twins checks will say so)"
+    fi
     # M6: maiden and the consoles are asked from outside while the program runs (windows/ci/maiden_probe.py)
     PROBE_OUT="$M0_OUT/m6-probe.txt"
     rm -f "$PROBE_OUT"
@@ -358,6 +367,41 @@ run_picker() {
     timeout 90 "$exe" 2>&1 | tee "$M0_OUT/picker-probe.txt"
     ! grep -q "PICKER FAIL" "$M0_OUT/picker-probe.txt" && grep -q "PICKER all passed" "$M0_OUT/picker-probe.txt"
 }
+# M9 (docs/port/phase-m9.md): the PortedPlugins pack, twins' installer against the real tools, the shims, the markers
+chk_twins() {
+    local l="$IN_HOME/logs/norns.log" U="$IN_HOME/.local/share/SuperCollider/Extensions/PortedPlugins" bad=0 n
+    grep -a -E "VERDANDI_SMOKE_TWINS|\[installer\]" "$l" 2> /dev/null | head -40
+    [ -f "$IN_HOME/dust/data/verdandi_smoke/installer.lua" ] || { echo "NOT FOUND: the twins installer was not fetched"; return 1; }
+    for n in AnalogChew AnalogLoss AnalogDegrade; do
+        for f in "$U/Classes/$n.sc" "$U/plugins/${n}_scsynth.scx" "$U/plugins/${n}_scsynth.so"; do
+            [ -f "$f" ] && echo "found: ${f#"$IN_HOME"/}" || { echo "NOT FOUND: ${f#"$IN_HOME"/}"; bad=1; }
+        done
+        [ ! -s "$U/plugins/${n}_scsynth.so" ] && echo "found: the marker ${n}_scsynth.so is empty (not a program)" || { echo "NOT FOUND: ${n}_scsynth.so should be empty"; bad=1; }
+    done
+    for f in PACK-ID.txt PACK-TARGET.txt SOURCE-OFFER.txt LICENSE-GPL-3.0.txt MARKERS-README.txt; do
+        [ -f "$U/$f" ] && echo "found: PortedPlugins/$f" || { echo "NOT FOUND: PortedPlugins/$f"; bad=1; }
+    done
+    if find "$IN_HOME/disabled" -name '*_scsynth.so' 2> /dev/null | grep -q .; then echo "NOT FOUND (must be absent): a marker was moved to disabled by a heal"; bad=1; else echo "found: no marker was moved to disabled"; fi
+    if grep -a -i -E "_scsynth\.so" "$IN_HOME/logs/launcher.log" "$IN_HOME/logs/sclang.log" "$PLUGIN_LOG" 2> /dev/null | grep -a -i -E "error|could not|cannot|wrong|moved" | grep -q .; then echo "NOT FOUND (must be absent): a log complains about a marker"; bad=1; else echo "found: no log complains about the markers (scsynth does not open them)"; fi
+    has "$l" "VERDANDI_SMOKE_TWINS library-check satisfied=true missing=\\[\\]" "twins' library check passes: no 'Missing SuperCollider Libraries' screen (find -printf, class file and plug-in file of the three UGens)" || bad=1
+    has "$l" "\\[installer\\] all libraries installed" "the installer itself says all libraries are installed" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS find-printf \\[.*twins.lua!\\]" "find -printf '%p!' gives its list on the bundled busybox" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS nice \\[niced\\]" "nice -n 19 <command> runs the command (a busybox applet through the shim)" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS sudo \\[sudoed\\]" "sudo <command> runs the command" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS timeout-nice \\[git version" "timeout -k 5 20 nice -n 19 git runs (the update check's command)" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS clone-status \\[0\\]" "a fresh clone has no local changes (line endings of the bundled git)" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS check-uptodate state=nil behind=0" "no prompt when the clone is up to date" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS check-behind state=update behind=1" "the update prompt appears when the author pushed one commit" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS check-dirty state=nil" "a tracked file with a local change silences the prompt (and nothing else does)" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS clean-again \\[0\\]" "after undoing the change the tree is clean again" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS pull state=restart behind_now=0" "K3: git pull --ff-only brought the commit; a changed .sc asks for a restart" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS after-pull-status \\[0\\] file \\[engine \\{ var two; \\}\\]" "the pull left the tree clean and the new engine file is there" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS restart returned_in=[0-9.]+s request_file=true" "the installer's restart command returns at once and leaves the restart request (it does not hang on 'Restarting...')" || bad=1
+    has "$l" "VERDANDI_SMOKE_TWINS done" "the whole twins flow finished" || bad=1
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-ported ok" "the real server started a synth with AnalogChew, AnalogLoss and AnalogDegrade" || bad=1
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-twinsfind ok" "twins' own find command, typed into the norns console, finds the class file and the marker" || bad=1
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -503,6 +547,7 @@ m0_run m6-check-repl chk_repl
 m0_run m6-check-tools chk_tools
 m0_run m6-check-heal chk_heal
 m0_run m7-check-packs chk_packs
+m0_run m9-check-twins chk_twins
 m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server
