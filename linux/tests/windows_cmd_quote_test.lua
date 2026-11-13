@@ -18,6 +18,16 @@ check(os.execute('cp "/home/we/dust/t1" "/home/we/dust/t3"') and read("/home/we/
 check(os.execute("cp '/home/we/dust/t1' '/home/we/dust/t4'") and read("/home/we/dust/t4") == "one\n", "inside single quotes")
 -- a name of the script with a blank, quoted by the script
 check(os.execute('mkdir -p "/home/we/dust/my script" && echo x > "/home/we/dust/my script/f"') and read("/home/we/dust/my script/f") == "x\n", "a script folder with a blank, quoted")
+-- a command substitution inside double quotes starts a NEW quoting context: the replacement must be escaped there. the emplaitress mod asks exactly this before it downloads and unpacks a Linux copy of mi-UGens:
+-- test -n "$(find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc)"  (0.8.3: the path fell in three words inside $( ), find found nothing, the mod copied a second pack: duplicate classes)
+os.execute("mkdir -p /home/we/dust/ext/mi && echo x > /home/we/dust/ext/mi/MiPlaits.sc")
+check(os.execute('test -n "$(find /home/we/dust/ext/ -name MiPlaits.sc)"') == true, "the mod's check: test -n \"$(find /home/we/... -name X)\" is true when the file is there")
+check(os.execute('test -z "$(find /home/we/dust/ext/ -name Nothing.sc)"') == true, "...and the same form is empty when it is not")
+check(os.execute('test -n "`find /home/we/dust/ext/ -name MiPlaits.sc`"') == true, "backticks inside double quotes")
+check(os.execute('x="$(ls "/home/we/dust/ext/mi")"; test -n "$x"') == true, "a $( ) with its own quotes inside double quotes")
+check(os.execute('test "$(cd /home/we/dust/ext && (ls mi | head -n 1))" = "MiPlaits.sc"') == true, "parentheses inside $( ), the path unquoted inside")
+check(os.execute("test -n \"$(find '/home/we/dust/ext/' -name MiPlaits.sc)\"") == true, "single quotes inside $( ) inside double quotes")
+check(os.execute('echo "plain /home/we/dust/ext/mi/MiPlaits.sc in double quotes" | grep -q "MiPlaits"'), "text in double quotes (no substitution) still goes in as it is")
 -- popen, and the output comes back with the virtual path
 local p = io.popen("ls /home/we/dust/t1")
 local out = p:read("a"); p:close()

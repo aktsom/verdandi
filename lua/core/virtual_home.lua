@@ -139,7 +139,9 @@ local function to_real_shell(s)
     return to_real(s)
   end
   local escaped = (real:gsub('%s', '\\%0'))
-  local out, i, q = {}, 1, nil
+  -- the quoting context at the replacement: none (blanks are escaped), "..." or '...' (the path goes in as it is). a command substitution ($( ) or backticks) starts a NEW context even inside double quotes
+  -- (the shell splits its words again): the saved context is pushed on `stack` and none is in force until the substitution ends. (test -n "$(find /home/we/... -name X)": the mod's check)
+  local out, i, q, stack = {}, 1, nil, {}
   while i <= #s do
     local c = s:sub(i, i)
     if s:sub(i, i + #VIRTUAL - 1) == VIRTUAL and not (i > 1 and s:sub(i - 1, i - 1):match('[%w_%.%-]')) and not s:sub(i + #VIRTUAL, i + #VIRTUAL):match('[%w_%.%-]') then
@@ -148,6 +150,36 @@ local function to_real_shell(s)
     elseif c == '\\' and q ~= "'" then
       out[#out + 1] = s:sub(i, i + 1)
       i = i + 2
+    elseif q ~= "'" and c == '$' and s:sub(i + 1, i + 1) == '(' then
+      stack[#stack + 1] = {q = q, par = 0, kind = '$('}
+      q = nil
+      out[#out + 1] = '$('
+      i = i + 2
+    elseif q ~= "'" and c == '`' then
+      local top = stack[#stack]
+      if top and top.kind == '`' then
+        q = top.q
+        stack[#stack] = nil
+      else
+        stack[#stack + 1] = {q = q, par = 0, kind = '`'}
+        q = nil
+      end
+      out[#out + 1] = c
+      i = i + 1
+    elseif q == nil and c == '(' and #stack > 0 and stack[#stack].kind == '$(' then
+      stack[#stack].par = stack[#stack].par + 1
+      out[#out + 1] = c
+      i = i + 1
+    elseif q == nil and c == ')' and #stack > 0 and stack[#stack].kind == '$(' then
+      local top = stack[#stack]
+      if top.par > 0 then
+        top.par = top.par - 1
+      else
+        q = top.q
+        stack[#stack] = nil
+      end
+      out[#out + 1] = c
+      i = i + 1
     else
       if q == nil and (c == "'" or c == '"') then q = c elseif q == c then q = nil end
       out[#out + 1] = c
