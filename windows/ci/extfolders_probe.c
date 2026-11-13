@@ -135,7 +135,7 @@ int main(void) {
 
     /* a real folder with the name of a link: BLOCKED, never touched, never removed */
     char real[1500]; snprintf(real, sizeof real, "%s\\[ext] realone", audio); mk(real); put(real, "mine.wav", "REAL");
-    { FILE *f = fopen(conf, "ab"); fprintf(f, "[ext] realone\t%s\n", music); fclose(f); }
+    { wchar_t *cw = wl(conf); FILE *f = _wfopen(cw, L"ab"); free(cw); if (f) { fprintf(f, "[ext] realone\t%s\n", music); fclose(f); } }
     n = ef_list(conf, audio, it, 16);
     int seen = 0; for (int i = 0; i < n; i++) if (!strcmp(it[i].name, "[ext] realone")) { seen = 1; CHECK(it[i].state == EF_BLOCKED, "a real folder with the name of a link is BLOCKED"); }
     CHECK(seen, "the hand-edited line is listed");
