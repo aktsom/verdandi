@@ -1,0 +1,39 @@
+# twins: what the K3 prompts are, what they need, and what works on Windows and Linux (investigation, no code changed)
+
+Source read: https://github.com/danielrigler/twins at commit 5dc6206 (`twins.lua`, `lib/installer/installer.lua`, `lib/engine_twins.sc`). The library `lib/installer` is not norns code: it is the script's own (the same file is copied by other scripts, see KNOWN-ISSUES 8).
+
+## 1. Two different K3 screens
+`twins.lua` line 50: `installer = include("lib/installer/installer"):new{requirements = {"AnalogChew","AnalogLoss","AnalogDegrade"}, zip = ".../portedplugins/releases/download/v0.4.6/PortedPlugins-RaspberryPi.zip"}`; line 51: `engine.name = installer:ready() and 'twins' or nil`; `init()` returns at once when the libraries are missing; ten seconds after a normal init `installer:check()` runs.
+
+**A. "Missing SuperCollider Libraries ... K3: Install"** (libraries missing; the engine is not even loaded):
+- check (`probe`, at script load): `find /usr/local/share/SuperCollider/Extensions /home/we/.local/share/SuperCollider/Extensions /home/we/dust/code -name .git -prune -o \( -name 'X.sc' -o -name 'X.so' -o -name 'X_scsynth.so' ... \) -not -path '*ignore*' -type f -printf '%p!'` through `util.os_capture`. For each library BOTH a class file `X.sc` and a plug-in `X.so` or `X_scsynth.so` must be found. No version is compared: it is a file-existence test.
+- K3: one shell command through `norns.system_cmd`: `rm -rf /tmp/norns-installer/ignore && mkdir -p /tmp/norns-installer/ignore '/home/we/.local/share/SuperCollider/Extensions/supercollider-plugins' && wget -q -O .../bundle.zip '<zip>' && cd ... && unzip -o -q bundle.zip && find . \( -name X.sc -o ... \) -type f -exec cp {} '<ext>/supercollider-plugins/' ';' ...`; then the probe again; when found: "Libraries Installed / K3: Restart".
+- K3 again: `os.execute("sudo systemctl restart norns-jack.service norns-crone.service norns-matron.service")`, screen "Restarting..." for ever.
+- The bundle is the **Raspberry Pi (32-bit ARM) build**, hard-coded.
+
+**B. "Twins Update Available, N new commits, K2: Skip K3: Install"** (libraries present):
+- check (`Installer:check`, 10 s after init): `nice -n 19 git -C '<script folder>' rev-parse --is-inside-work-tree`, then `timeout -k 5 20 nice -n 19 git -C ... fetch --quiet`, `rev-list --count HEAD..@{u}` (commits behind the upstream branch), `status --porcelain --untracked-files=no | wc -l` (local changes: no prompt then). **Compared: the local commit against the tracked upstream branch of the clone. No date, version file or hardware value; the only outside call is `git fetch` over https.** The prompt appears whenever the author has pushed commits since the clone (the last commit is of 2026-10-24); a copy installed from a zip (no `.git`) never shows it.
+- K3: `git -C ... pull --ff-only`; afterwards, if `*.sc`/`*.scd` changed (`git diff --name-only ORIG_HEAD..HEAD`) it shows "Update Installed, New Engine - Restart Needed, K3: Restart" and runs the same `sudo systemctl restart ...`; otherwise `norns.rerun()` (reload the script).
+
+## 2. Each command, Windows build 0.8.3 and Linux build
+| Command / path | Windows | Linux |
+|---|---|---|
+| `os_capture`, `norns.system_cmd`, `os.execute` through the sidecar (busybox `sh -c`) | works (M6, CI) | works |
+| `/home/we/...` in the strings, also inside single quotes and inside `$( )` | works (0.8.3 fixed the `$( )` case) | works |
+| `find ... -printf '%p!'` (the probe) | **fails**: the bundled busybox-w32 has no `find -printf` (its default config lists the FIND features; no PRINTF): the output is empty, so the libraries always look missing and a finished install "could not install" | works (GNU find) |
+| the probe wants `X.so` / `X_scsynth.so` | **can never be true**: a Windows plug-in is `X_scsynth.scx` | `.so` correct |
+| `nice -n 19 git ...` (the update check) | **fails**: busybox-w32 default config has `# CONFIG_NICE is not set`: "nice: not found", the whole `if` is skipped, behind stays 0: **no update prompt, ever** | works |
+| `timeout -k 5 20`, `wc -l`, `sed`, `printf`, `unzip`, `wget`, `git` (MinGit) | present in the build (applets / MinGit). `wget` with https against github not exercised by CI | present (`wget`/`unzip` not installed by `linux/setup-deps.sh`: may be missing) |
+| `git fetch`, `rev-list HEAD..@{u}`, `status --porcelain`, `pull --ff-only` in `/home/we/dust/code/twins` | works if twins was cloned by maiden (a git clone with an upstream); line-ending settings of MinGit unverified ("local changes" would silence the prompt) | works |
+| `/tmp/norns-installer/...` | busybox-w32 has no `/tmp`: the folders would be made on the current drive's root (`C:\tmp`): works if writable, untidy | `/tmp` ok |
+| the downloaded `PortedPlugins-RaspberryPi.zip` (ARM `*_scsynth.so` + `Classes/*.sc`) | useless: scsynth on Windows loads only `.scx`; the `.sc` classes would be compiled without a UGen behind them ("UGen not installed") | **cannot load on x86_64** (`wrong ELF class`); KNOWN-ISSUES 41's heal moves the ARM files aside at the next start, so the install screen comes back: a loop |
+| `os.execute("sudo systemctl restart norns-...")` | **fails** (`sudo: not found`), the screen stays on "Restarting..." | works: `linux/shims/sudo` and `systemctl` leave a restart request that Lua turns into `_norns.restart()` (KNOWN-ISSUES 8.6) |
+| `norns.rerun()` (reload after a pull without engine changes) | shared Lua, should work, not exercised | works |
+So: on Linux the update prompt (B) would work once the x86_64 libraries exist; the first screen a user meets is A, which cannot succeed on either system. On Windows both A and B are broken at the first command.
+
+## 3. What is missing and the smallest changes (proposals, nothing built)
+1. **The libraries (for A, and so for B).** Build PortedPlugins (GPL-3.0, CMake, `AnalogChew/Loss/Degrade` are in `plugins/ChowDSP`; the repository already includes the SuperCollider CMake modules) for Windows x86-64 with the recipe that built sc3-plugins and mi-UGens in CI (MSVC against the 3.14.1 headers, `ninja -k 0`), ship it as a pack in `extensions-seed` with `PACK-TARGET.txt = user` (the folder the installer searches), and add empty `X_scsynth.so` marker files next to the `.scx` so that the script's two-halves test passes (scsynth never reads `.so` on Windows). Same step on Linux = KNOWN-ISSUES 8.5 B1 (x86_64 PortedPlugins in the package). About 1 day for the build and the pack on Windows (+ CI iterations), 1 day for Linux. Open: how many of the ~30 plug-ins compile on MSVC (C++20, CPM downloads at configure time).
+2. **`find -printf`** on Windows: a small rewrite in the Windows shell path (where `/home/we` is already rewritten, `lua/core/virtual_home.lua`): `-printf '%p<c>'` becomes `-exec printf '%s<c>' {} \;` (busybox has `printf`); tested on Linux against GNU find. About half a day. It is a global command rewrite (the decision on Linux, 8.6, was PATH shims, not interception), but `find` is a busybox applet and an applet cannot be replaced by a PATH program (`PREFER_APPLETS=y`), so a rewrite of this one option is the least invasive.
+3. **`nice`, `sudo`, `systemctl`**: not busybox applets, so PATH shims work as on Linux: three tiny `.exe` in the program folder (like `ws-wrapper.exe`): `nice` just runs the rest of its command line; `sudo` runs the command (or `systemctl restart norns-*` as below); `systemctl restart|try-restart norns-*` writes `<home>\.norns-request-restart` and returns 0 at once (Lua already takes that request on every computer build, `lua/core/menu.lua`). About 1 day with tests (a fake-port style Linux test of the shim logic, a CI check of a restart through the file).
+4. **Optional, to make the failure honest if the UGens are still missing:** nothing to add; with 1-3 the install screen never appears.
+Order: 2 and 3 first (cheap, also help any script that uses `find -printf`, `nice`, `sudo systemctl`); then 1.
