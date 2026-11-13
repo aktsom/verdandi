@@ -16,6 +16,10 @@
 #include <thread>
 
 namespace {
+// the ids written here, not taken from libuuid (which would define a GUID that the program already has: a duplicate at link time)
+const GUID k_clsid_file_open = {0xDC1C5A9C, 0xE88A, 0x4DDE, {0xA5, 0xA1, 0x60, 0xF8, 0x2A, 0x20, 0xAE, 0xF7}};
+const GUID k_iid_file_open = {0xD57C7288, 0xD4AD, 0x4768, {0xBE, 0x9D, 0x96, 0x95, 0x32, 0xD9, 0x60, 0xD6}};
+const GUID k_iid_shell_item = {0x43826D1E, 0xE718, 0x42EE, {0xBC, 0x55, 0xA1, 0xE2, 0x61, 0xC3, 0x7B, 0xFE}};
 std::atomic<int> open_now{0};
 std::atomic<int> cancelled{0};
 
@@ -46,7 +50,7 @@ void run(job *j) {
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     bool com = SUCCEEDED(hr);
     IFileOpenDialog *dlg = NULL;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))) && dlg) {
+    if (SUCCEEDED(CoCreateInstance(k_clsid_file_open, NULL, CLSCTX_INPROC_SERVER, k_iid_file_open, (void **)&dlg)) && dlg) {
         DWORD opts = 0;
         dlg->GetOptions(&opts);
         dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | FOS_NOCHANGEDIR);
@@ -55,7 +59,7 @@ void run(job *j) {
         }
         if (!j->start.empty()) {
             IShellItem *si = NULL;
-            if (SUCCEEDED(SHCreateItemFromParsingName(j->start.c_str(), NULL, IID_PPV_ARGS(&si))) && si) {
+            if (SUCCEEDED(SHCreateItemFromParsingName(j->start.c_str(), NULL, k_iid_shell_item, (void **)&si)) && si) {
                 dlg->SetFolder(si);
                 si->Release();
             }
