@@ -77,7 +77,8 @@ def repl(port, line, want, seconds, origin=None):
         while time.time() < end and want not in text:
             text += ws_frames(s, rest if not text else b"", 2)
             rest = b""
-        return want in text, text[-200:]
+        vt = [l for l in text.splitlines() if 'VT_' in l]
+        return want in text, ('\n'.join(vt) if vt else text[-200:])
     finally:
         s.close()
 
@@ -186,7 +187,8 @@ except Exception as e:
 # 8. the check that the emplaitress mod makes before it downloads and unpacks a Linux copy of mi-UGens (lib/mod.lua, system_post_startup): `find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc`
 # through norns's own shell. true = the mod finds the classes and does NOT copy anything (no second copy, no duplicate classes at the next start)
 try:
-    line = "print('VT_MODCHECK ' .. tostring(os.execute('test -n \"$(find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc)\"')))\n"
+    line = ("local a, b, c = os.execute('test -n \"$(find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc)\"') print('VT_MODCHECK ' .. tostring(a) .. ' ' .. tostring(b) .. ' ' .. tostring(c)) "
+            "local p = io.popen('find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc 2>&1') print('VT_MODFIND ' .. tostring(p and p:read('a')))\n")
     ok, tail = repl(5555, line, "VT_MODCHECK true", 60)
     result("repl-modcheck", ok, "the mod's own check finds MiPlaits.sc in the per-user extensions folder (it will not download or copy anything)" if ok else "the mod's check says no: " + repr(tail))
 except Exception as e:

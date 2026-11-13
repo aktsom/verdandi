@@ -251,6 +251,55 @@ chk_packs() {
     has "$M0_OUT/m6-probe.txt" "PROBE repl-modcheck ok" "the emplaitress mod's own check (find MiPlaits.sc in the per-user folder) succeeds: it will not download or unpack a copy" || bad=1
     return "$bad"
 }
+# M7 round 3: scsynth itself, with the packs' folder in SC_PLUGIN_PATH, loads every plug-in (-N: no audio device; the plug-ins are loaded when the world is made): any load error is a line "*** ERROR: LoadLibrary '<file>' err '...'"
+# (a missing DLL: FFTW, libsamplerate), "API version" (the wrong SuperCollider) or "ERROR: open directory failed". the job fails on every one
+PLUGIN_LOG="$M0_OUT/m7-scsynth-plugins.log"
+run_plugin_load() {
+    local sc="$APP/supercollider/scsynth$EXE"
+    [ -f "$sc" ] || { echo "no scsynth at $sc"; return 1; }
+    mkdir -p "$M0_OUT"
+    (cd "$IN_HOME" && SC_PLUGIN_PATH="$(native "$IN_HOME/extensions");$(native "$IN_HOME/.local/share/SuperCollider/Extensions")" limited_scsynth "$sc" -N _ _ "$(native "$M0_OUT/plugin-load.wav")" 48000 WAV int16 -V 2 < /dev/null) > "$PLUGIN_LOG" 2>&1
+    echo "scsynth exit code $?; $(wc -l < "$PLUGIN_LOG") lines in $PLUGIN_LOG"
+    return 0
+}
+limited_scsynth() { if command -v timeout > /dev/null 2>&1; then timeout -k 5 90 "$@"; else "$@"; fi; }
+chk_plugin_load() {
+    local bad=0
+    sed -n 1,12p "$PLUGIN_LOG" 2> /dev/null
+    if grep -a -n -E "\*\*\* ERROR|ERROR: |API version|not installed|Could not load|could not load|open directory failed" "$PLUGIN_LOG" | head -20 | grep -q .; then
+        echo "NOT FOUND (must be absent): plug-in load errors of scsynth:"; grep -a -n -E "\*\*\* ERROR|ERROR: |API version|not installed|Could not load|could not load|open directory failed" "$PLUGIN_LOG" | head -30; bad=1
+    else
+        echo "found: scsynth loaded every plug-in of the packs without one error line"
+    fi
+    return "$bad"
+}
+# the real server and sclang.log after SynthDefs with the UGens of the packs were sent (probe repl-plugins): nothing may say "not installed"
+chk_plugins_server() {
+    local S="$IN_HOME/logs/sclang.log" bad=0 f
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-plugins ok" "the real server started a synth of each of MiPlaits, MiBraids, Decimator, MoogLadder and SawDPW (5 nodes, 0 failures)" || bad=1
+    if grep -a -n -E "not installed|exception in GraphDef_Recv|\*\*\* ERROR: LoadLibrary|FAILURE IN SERVER /(s_new|d_recv)" "$S" | head -10 | grep -q .; then
+        echo "NOT FOUND (must be absent): the server could not use a plug-in:"; grep -a -n -E "not installed|exception in GraphDef_Recv|\*\*\* ERROR: LoadLibrary|FAILURE IN SERVER /(s_new|d_recv)" "$S" | head -20; bad=1
+    else
+        echo "found: no 'not installed', no GraphDef_Recv exception and no LoadLibrary error in sclang.log"
+    fi
+    grep -a -q "scsynth plug-in folders besides its own" "$IN_HOME/logs/launcher.log" && echo "found: the launcher put the extension folders on the plug-in path (SC_PLUGIN_PATH)" || { echo "NOT FOUND: the SC_PLUGIN_PATH line in launcher.log"; bad=1; }
+    [ -d "$IN_HOME/.local/share/SuperCollider/Extensions" ] && echo "found: the per-user extensions folder of a real norns was created" || { echo "NOT FOUND: .local/share/SuperCollider/Extensions"; bad=1; }
+    for f in "VT_VHOME [1-9]" "VT_VHOME_GLOB [1-9]"; do
+        has "$S" "$f" "sclang resolved /home/we ($f): PathName and pathMatch found the entries of dust/code/plugin_test" || bad=1
+    done
+    return "$bad"
+}
+# the stale maiden of another folder was stopped, ours served, and nothing is left when the program ended
+chk_maiden_stale() {
+    local L="$IN_HOME/logs/launcher.log" bad=0
+    if [ ! -d "$WORK/stale maiden folder/app" ] && [ ! -f "$WORK/stale maiden folder/maiden.exe" ]; then echo "no stale maiden was prepared (no maiden in the zip): skipped"; return 0; fi
+    grep -a -E "maiden:" "$L" | head -5
+    grep -a -q "maiden: a maiden.exe (process .*holds port .*stopping it" "$L" && echo "found: the launcher stopped the maiden.exe of another folder" || { echo "NOT FOUND: 'a maiden.exe ... holds port ... stopping it' in launcher.log"; bad=1; }
+    grep -a -q "maiden started: http://127.0.0.1" "$L" && echo "found: the launcher started its own maiden" || { echo "NOT FOUND: maiden started"; bad=1; }
+    if command -v tasklist > /dev/null 2>&1 && tasklist //FI 'IMAGENAME eq maiden.exe' 2> /dev/null | grep -q maiden.exe; then echo "NOT FOUND (must be absent): a maiden.exe is still running after the program ended"; bad=1; else echo "found: no maiden.exe is left after the program ended"; fi
+    grep -a -q "maiden stopped with the round" "$L" && echo "found: maiden ended with the round (launcher.log)" || { echo "NOT FOUND: 'maiden stopped with the round'"; bad=1; }
+    return "$bad"
+}
 # M7 round 4: sclang that cannot compile, on purpose: two folders of the OWNER'S (neither is a pack Verdandi ships) define the same class. the launcher must move nothing, say so in launcher.log and (through
 # VERDANDI_LAUNCH_NOTE) in norns.log, and when the round ends say in plain words what failed (the first two paths) and what to do. sclang really fails here: that is the point
 FAIL_HOME="$WORK/user home failing"
