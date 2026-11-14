@@ -159,6 +159,15 @@ if os.environ.get("VERDANDI_PROBE") == "twins":
         result("twins-done", True, "")
     except Exception as e:
         result("twins-error", False, "%s" % e)
+        try:
+            import subprocess
+            for im in ("norns.exe", "ws-wrapper.exe", "sclang.exe", "scsynth.exe"):
+                r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq " + im, "/NH"], capture_output=True, text=True)
+                print("PROCESS", im, "->", (r.stdout or r.stderr).strip().replace("\n", " | ")[:200])
+            r = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True)
+            print("LISTENING 5555/5556:", [l.strip() for l in r.stdout.splitlines() if ":5555" in l or ":5556" in l][:6])
+        except Exception as e2:
+            print("diagnostics failed", e2)
     sys.exit(0)
 
 # VERDANDI_PROBE=kill: the server (scsynth.exe) is ended from outside, three times (M10, docs/port/phase-m10.md). the launcher has to notice, say so in launcher.log and on the norns screen, and start everything again twice;

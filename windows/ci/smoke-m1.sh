@@ -460,6 +460,10 @@ ST
     grep -q "FAIL" "$out/probe.txt" 2> /dev/null && crashed=1
     ls "$out/dumps"/*.dmp > /dev/null 2>&1 && "$PYTHON" "$(native "$HERE/dump_report.py")" "$out/dumps"/*.dmp > "$out/dump-report.txt" 2>&1
     echo "--- scenario $name: probe results"; cat "$out/probe.txt" 2> /dev/null
+    echo "--- scenario $name: processes at the end of the probe:"; cat "$out/probe.log" 2> /dev/null | tail -n 12
+    echo "--- scenario $name: the last 60 lines of norns.log"; tail -n 60 "$H/logs/norns.log" 2> /dev/null | cut -c1-220
+    echo "--- scenario $name: the last 30 lines of sclang.log"; tail -n 30 "$H/logs/sclang.log" 2> /dev/null | cut -c1-220
+    echo "--- scenario $name: crash reports"; ls -la "$H/logs/crash" 2> /dev/null | head
     echo "--- scenario $name: sclang.log lines about the server"; grep -a -n -i "exited with exit code\|ERROR: \|exception in\|not installed\|FAILURE\|Class not found" "$H/logs/sclang.log" 2> /dev/null | head -12
     if [ -f "$out/dump-report.txt" ]; then echo "--- scenario $name: the minidump of scsynth.exe"; cat "$out/dump-report.txt"; else echo "--- scenario $name: no minidump"; fi
     echo "$name: crashed=$crashed ${line:-no 'exited' line}" >> "$TW_RESULTS"
