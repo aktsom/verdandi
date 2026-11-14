@@ -33,6 +33,7 @@ local function install_norns()
 end
 install_norns()
 screen = setmetatable({}, {__index = function() return function() end end})
+screen.text_extents = function(s) return (utf8.len(s) or #s) * 5 end -- (the browser draws its info area, which measures text)
 util = {
   clamp = function(x, lo, hi) return math.max(lo, math.min(hi, x)) end,
   scandir = function(dir) return {"a.wav", "b.wav", "sub/"} end,
