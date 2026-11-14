@@ -226,6 +226,28 @@ if os.environ.get("VERDANDI_PROBE") == "kill":
         result("kill-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=burst: a fast turning of the drawn knobs (M11): 4000 turns of E1 in a tight Lua loop (what a MIDI encoder can do), then the window gets a few seconds to catch up. the window logs one line
+# ("enc display: N turns, M draws, slowest draw ..., a turn waited ... ms in the queue at the most, the last draw ... ms after the first turn") that the CI reads from norns.log
+if os.environ.get("VERDANDI_PROBE") == "burst":
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = repl(5555, "print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("burst-up", up, "norns answers")
+        time.sleep(5)
+        ok, tail = repl(5555, "local t0 = util.time() for i = 1, 4000 do _norns.show_control(2, 1, (i % 2 == 0) and 1 or 1) end print('VT_BURST ' .. 'sent')\n", "VT_BURST sent", 60)
+        result("burst-sent", ok, "4000 turns of E1 were sent to the window")
+        time.sleep(8)
+        result("burst-done", True, "")
+    except Exception as e:
+        result("burst-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):
@@ -348,6 +370,24 @@ try:
     result("repl-twinsfind", ok, "twins' find (with -printf) finds AnalogChew.sc and AnalogChew_scsynth.so" if ok else "twins' find does not find both halves: " + repr(tail))
 except Exception as e:
     result("repl-twinsfind", False, "%s" % e)
+# 7d. M11: every page of the menu in the REAL norns.exe: init, redraw, E1-E3 both ways, K1-K3 down and up, redraw, deinit, each call under pcall; any error is a failure. K3 is left out on the pages whose K3 does something that
+# ends or changes the program (RESTART, RESET, UPDATE, SLEEP: restart / clear / update / sleep; SELECT: loads a script; CLEANUP, MODS, EXTRA, PICKER: change files); their other keys and encoders are called
+try:
+    line = ("local errs, n = {}, 0 local skip3 = {RESTART=1, RESET=1, UPDATE=1, SLEEP=1, SELECT=1, CLEANUP=1, MODS=1, EXTRA=1, PICKER=1} local names = {} "
+            "for name in pairs(_menu.m) do names[#names + 1] = name end table.sort(names) "
+            "for _, name in ipairs(names) do local p = _menu.m[name] if type(p) == 'table' then n = n + 1 "
+            "local function try(what, f, ...) local ok, e = pcall(f, ...) if not ok then errs[#errs + 1] = name .. ' ' .. what .. ': ' .. tostring(e):sub(1, 110) end end "
+            "if p.init then try('init', p.init) end if p.redraw then try('redraw', p.redraw) end "
+            "if p.enc then for e = 1, 3 do for _, d in ipairs({1, -1, 5}) do try('enc' .. e, p.enc, e, d) end end end "
+            "if p.key then for k = 1, 3 do if not (k == 3 and skip3[name]) then try('key' .. k, p.key, k, 1) try('key' .. k .. 'up', p.key, k, 0) end end end "
+            "if p.redraw then try('redraw2', p.redraw) end if p.deinit then try('deinit', p.deinit) end end end "
+            "print('VT_PAGES ' .. n .. ' pages ' .. #errs .. ' errors') for _, e in ipairs(errs) do print('VT_PAGE_ERR ' .. e) end print('VT_PAGES_' .. 'DONE')\n")
+    ok, tail = repl(5555, line, "VT_PAGES_DONE", 120)
+    import re
+    m2 = re.search(r"VT_PAGES (\d+) pages (\d+) errors", tail or "")
+    result("repl-menu-pages", bool(m2) and int(m2.group(2)) == 0 and int(m2.group(1)) >= 10, ("%s pages, no error in init, redraw, enc, key, deinit" % m2.group(1)) if m2 and int(m2.group(2)) == 0 else "page errors: " + repr(tail[-700:]))
+except Exception as e:
+    result("repl-menu-pages", False, "%s" % e)
 # 8. the check that the emplaitress mod makes before it downloads and unpacks a Linux copy of mi-UGens (lib/mod.lua, system_post_startup): `find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc`
 # through norns's own shell. true = the mod finds the classes and does NOT copy anything (no second copy, no duplicate classes at the next start)
 try:

@@ -105,6 +105,7 @@
 #include "gif_writer.h"
 #include "platform/common/desktop_shell.h"
 #include "platform/common/key_names.h"
+#include "platform/common/redraw_throttle.h"
 #include "product.h"
 #include "sdl_bridge.h"
 #include "varc_skin.h"
@@ -3100,7 +3101,64 @@ static void run_window_action(int index) {
 }
 #endif
 
+//--- the drawn knobs while an encoder is turned fast (docs/port/phase-m11.md): a turn is an event; a full redraw per event fell behind a fast turning and the knob went on after the turning stopped
+static rt_state enc_rt;                                  // main thread
+static bool enc_throttle = getenv("VERDANDI_ENC_THROTTLE") == NULL || strcmp(getenv("VERDANDI_ENC_THROTTLE"), "0") != 0; // "0": the old way, one draw per turn (to measure it)
+static unsigned enc_turns = 0, enc_draws = 0;            // since the last report
+static Uint32 enc_slowest_draw = 0, enc_worst_wait = 0, enc_first_turn = 0, enc_last_timestamp = 0;
+
+static void enc_stats_report(void) {
+    if (enc_turns >= 50) {
+        // a burst of turning ended: what it cost the window (norns.log; the CI reads this line)
+        fprintf(stderr, "enc display: %u turns, %u draws, slowest draw %u ms, a turn waited %u ms in the queue at the most, the last draw %u ms after the first turn (%s)\n", enc_turns, enc_draws,
+                (unsigned)enc_slowest_draw, (unsigned)enc_worst_wait, (unsigned)(SDL_GetTicks() - enc_first_turn), enc_throttle ? "throttled" : "one draw per turn");
+        fflush(stderr);
+    }
+    enc_turns = enc_draws = 0;
+    enc_slowest_draw = enc_worst_wait = 0;
+}
+
+static void enc_stats_turn(void) {
+    Uint32 now = SDL_GetTicks();
+    if (enc_turns == 0) {
+        enc_first_turn = now;
+    }
+    enc_turns++;
+    if (enc_last_timestamp != 0 && now - enc_last_timestamp > enc_worst_wait) {
+        enc_worst_wait = now - enc_last_timestamp; // how long ago this turn was pushed (the time stamp SDL put on its event)
+    }
+}
+
+static void enc_redraw(void) {
+    Uint32 t0 = SDL_GetTicks();
+    redraw(true);
+    Uint32 t1 = SDL_GetTicks();
+    rt_drawn(&enc_rt, t1);
+    enc_draws++;
+    if (t1 - t0 > enc_slowest_draw) {
+        enc_slowest_draw = t1 - t0;
+    }
+    if (!SDL_HasEvent(show_event_type)) {
+        enc_stats_report();
+    }
+}
+
+static Uint32 enc_draw_due(Uint32 interval, void *unused) {
+    (void)interval, (void)unused;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = show_event_type;
+    ev.user.code = SDL_BRIDGE_SHOW_ENC_DRAW;
+    SDL_PushEvent(&ev);
+    return 0;
+}
+
 static void handle_show(int kind, int n, int value) {
+    if (kind == SDL_BRIDGE_SHOW_ENC_DRAW) {
+        rt_fired(&enc_rt);
+        enc_redraw();
+        return;
+    }
 #ifdef NORNS_LINUX_DESKTOP
     if (kind == SDL_BRIDGE_SHOW_MIDIMAP_ARM) {
         midimap_armed = n != 0;
@@ -3186,7 +3244,23 @@ static void handle_show(int kind, int n, int value) {
     if (kind == SDL_BRIDGE_SHOW_KEY) {
         skin.key_down[n - 1] = value != 0;
     } else {
+        // the drawn knob follows the turns at once (an add); the window is drawn again at most every RT_GAP_MS, counted from the end of the last draw, and the last turn always gets its draw
         skin.enc_ticks[n - 1] += value;
+        enc_stats_turn();
+        if (enc_throttle) {
+            uint32_t delay = 0;
+            switch (rt_request(&enc_rt, SDL_GetTicks(), &delay)) {
+            case RT_DRAW_NOW:
+                break; // draws below
+            case RT_SCHEDULE:
+                SDL_AddTimer(delay, enc_draw_due, NULL);
+                return;
+            case RT_WAIT:
+                return;
+            }
+        }
+        enc_redraw();
+        return;
     }
     redraw(true);
 }
@@ -3392,6 +3466,7 @@ void sdl_bridge_run(void) {
             continue;
         }
         if (ev.type == show_event_type) {
+            enc_last_timestamp = ev.common.timestamp;
             handle_show(ev.user.code, (int)(intptr_t)ev.user.data1, (int)(intptr_t)ev.user.data2);
             continue;
         }

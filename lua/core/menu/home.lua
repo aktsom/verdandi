@@ -49,16 +49,18 @@ local draw_stats = function()
     --screen.move(36,10)
   end
 
+  -- (the numbers come from the stat thread, every two seconds: until the first one has come, and on a system with no stat thread, they are 0 rather than an error. docs/port/phase-m11.md)
+  local cpus = norns.cpu or {}
   screen.move(0,10) screen.text("cpu")
   for i=1,4 do
     screen.move(6+(i*14),10) 
-    screen.text(norns.cpu[i]..".")
+    screen.text((cpus[i] or 0)..".")
   end
 
   screen.move(80,10)
-  local cpu = math.floor(_norns.audio_get_cpu_load())
+  local cpu = _norns.audio_get_cpu_load and math.floor(_norns.audio_get_cpu_load()) or 0
   screen.text(tostring(cpu)..'%')
-  local xruns = _norns.audio_get_xrun_count()
+  local xruns = _norns.audio_get_xrun_count and _norns.audio_get_xrun_count() or 0
   if xruns > 0 then
     xrun_warn_count = 4
   end
@@ -70,17 +72,20 @@ local draw_stats = function()
     xrun_warn_count = xrun_warn_count - 1 
   end
 
-  screen.move(127,10)
-  screen.text_right(norns.temp .. "c")
+  -- a temperature of 0 is "not known" (Windows has no way to read it): nothing is drawn then
+  if (norns.temp or 0) > 0 then
+    screen.move(127,10)
+    screen.text_right(norns.temp .. "c")
+  end
 
   screen.move(0,20)
-  screen.text("disk " .. norns.disk .. "M")
+  screen.text("disk " .. (norns.disk or 0) .. "M")
   screen.move(127,20)
-  if wifi.state > 0 then
+  if wifi and wifi.state and wifi.state > 0 and wifi.ip then
     screen.text_right(wifi.ip)
   end
   screen.move(127,45)
-  screen.text_right(norns.version.update)
+  screen.text_right(norns.version and norns.version.update or "")
   -- Windows build: which build is running ("0.2.0 4c82066", the first line of BUILD.txt; the same as in the first lines of norns.log and launcher.log)
   local build = os.getenv("VERDANDI_BUILD")
   if build and build ~= "" then

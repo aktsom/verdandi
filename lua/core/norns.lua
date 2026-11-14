@@ -119,6 +119,12 @@ _norns.power = function(present)
   --print("power: "..present)
 end
 
+-- the numbers of the stat thread, until its first report (and for a system that has none): the HOME page reads them
+norns.disk = norns.disk or 0
+norns.temp = norns.temp or 0
+norns.cpu_avg = norns.cpu_avg or 0
+norns.cpu = norns.cpu or {0, 0, 0, 0}
+
 -- stat handler
 _norns.stat = function(disk, temp, cpu, cpu1, cpu2, cpu3, cpu4)
   --print("stat",disk,temp,cpu)

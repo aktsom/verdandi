@@ -9,13 +9,16 @@ local function check(ok, what) if not ok then fails = fails + 1; print("FAIL " .
 local function eq(a, b, what) check(a == b, what .. ": got " .. tostring(a) .. ", wanted " .. tostring(b)) end
 local function near(a, b, what) check(math.abs(a - b) < 1e-9, what .. ": got " .. tostring(a) .. ", wanted " .. tostring(b)) end
 
--- ---- the factors: one step per two CC values at sens 5 (absolute), one per unit (relative)
-near(V.factor_abs(5), 0.5, "abs factor sens 5")
-near(V.factor_abs(1), 0.125, "abs factor sens 1 (one step per eight values)")
+-- ---- the factors (the NEW scale, Windows 0.10.2: the table is written out in linux/tests/midimap_sens_test.lua): the new 5 is the old 2 (0.354), the new 9 the old 9 (4), the new 1 is 2/3 of the old 1
+near(V.factor_abs(5), 0.5 * 0.35355339059327373, "abs factor sens 5 (the old 2: one step per 5.66 values)")
+near(V.factor_abs(1), 0.5 * 0.25 * 2 / 3, "abs factor sens 1")
 near(V.factor_abs(9), 2, "abs factor sens 9 (two steps per value)")
-near(V.factor_rel(5), 1, "rel factor sens 5")
-near(V.factor_rel(1), 0.25, "rel factor sens 1")
+near(V.factor_rel(5), 0.35355339059327373, "rel factor sens 5")
+near(V.factor_rel(1), 0.25 * 2 / 3, "rel factor sens 1")
 near(V.factor_rel(9), 4, "rel factor sens 9")
+-- the rest of this file checks the MECHANISMS (carry, jump, pause, the formats, the first message) with whole-number speeds; it runs on the speeds of the OLD scale, which it was written with:
+-- old 5 = one step per unit, old 1 = a quarter, old 9 = four. (the new scale's own numbers are in midimap_sens_test.lua)
+for k = 1, 9 do V.SENS_SPEED[k] = 2 ^ ((k - 5) / 2) end
 eq(V.JUMP, 40, "jump limit")
 near(V.PAUSE, 1.5, "pause")
 

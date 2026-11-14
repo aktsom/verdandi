@@ -90,7 +90,8 @@ check(S.set("e1", "dev", "any") and S.state.ctl.e1.dev == "ANY", "any is ANY in 
 check(S.set("e1", "dev", "  mio  ") and S.state.ctl.e1.dev == "mio", "a stored name is trimmed")
 
 -- ---- damaged files
-local function load_text(t) fresh(); put("/home/we/midimap.conf", t); return S.load() end
+-- (a file with no sens_scale line is on the OLD sensitivity scale and is converted once: the tests of this file are about everything else, so their texts say they are on the new one; midimap_sens_test.lua is about the old)
+local function load_text(t) fresh(); if not t:find("sens_scale=", 1, true) then t = t:gsub("^([^\n]*\n)", "%1sens_scale=2\n", 1) end put("/home/we/midimap.conf", t); return S.load() end
 st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=300\ne2.type=cc\ne2.num=21\ne2.mode=zigzag\ne2.sens=99\ne3.type=note\ne3.num=40\n")
 eq(st.ctl.e1.type, "none", "e1: CC 300 is refused, the control stays none")
 check(logged("e1.num=300"), "e1.num is logged")

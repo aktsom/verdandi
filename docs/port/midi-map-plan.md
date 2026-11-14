@@ -89,7 +89,7 @@ Why there and not in C: all the information (device name, vport number, the para
 | `dev` | `ANY` or a device name as the DEVICES page lists it (matching: 2.1a) | `ANY` |
 | `ch` | `0` = any, 1 to 16 | `0` |
 | encoders: `mode` | `abs`, `rel2c` (two's complement), `relsm` (sign-magnitude), `relob` (offset binary) | `abs` |
-| encoders: `sens` | 1 to 9 (a log scale, 5 = normal, section 2.3) | 5 |
+| encoders: `sens` | 1 to 9 (a log scale; since Windows 0.10.2 a new table, see docs/port/phase-m11.md: 5 = the old 2, 9 = the old 9, 1 = 2/3 of the old 1; `sens_scale=2` marks files on the new scale) | 5 |
 | keys: `threshold` | 0 to 126 (CC only): pressed when value is **above** it | 63 |
 
 #### 2.1a Device selection by name (USB devices such as the mio)

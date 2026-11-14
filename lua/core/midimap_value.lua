@@ -6,10 +6,43 @@ local V = {}
 V.JUMP = 40   -- an absolute change bigger than this is a controller catching up, not a turn: a new baseline, no steps
 V.PAUSE = 1.5 -- seconds: after more than this without a message the next one is a new baseline (a hand taking the knob again)
 
---- steps per CC value for an absolute knob: 1 step per 2 values at sens 5, a log scale (sens 1 = one per 8, sens 9 = two per value)
-function V.factor_abs(sens) return 0.5 * 2 ^ ((sens - 5) / 2) end
---- steps per unit for a relative encoder: 1 at sens 5
-function V.factor_rel(sens) return 2 ^ ((sens - 5) / 2) end
+-- ---------------------------------------------------------------- the sensitivity scale (Windows 0.10.2, docs/port/phase-m11.md)
+-- 1 to 9, 1 = slow, 9 = fast. what a number means is its SPEED: the factor by which one unit of the controller is multiplied (relative encoders: steps per unit; absolute: twice that, per CC value).
+-- the OLD scale (files with no sens_scale line) was 2^((s - 5) / 2): 0.25, 0.354, 0.5, 0.707, 1, 1.414, 2, 2.83, 4. the NEW one keeps the old 2 (0.354) as its middle, 5, and the old 9 (4) as its end, 9,
+-- and lets 1 be two thirds of the old 1 (0.167); the steps between are even (a geometric progression) within each half: 1 to 5 by 1.207 each, 5 to 9 by 1.834 each.
+V.SENS_SCALE = 2          -- the version of the scale; a file that says nothing is on scale 1 (the old one)
+V.SENS_DEFAULT = 5        -- a fresh install: the new 5, the speed the owner used (the old 2)
+local function old_speed(s) return 2 ^ ((s - 5) / 2) end
+V.SENS_SPEED = {}
+do
+  local lo, mid, hi = old_speed(1) * 2 / 3, old_speed(2), old_speed(9)
+  for k = 1, 5 do V.SENS_SPEED[k] = lo * (mid / lo) ^ ((k - 1) / 4) end
+  for k = 6, 9 do V.SENS_SPEED[k] = mid * (hi / mid) ^ ((k - 5) / 4) end
+  V.SENS_SPEED[5], V.SENS_SPEED[9] = mid, hi -- exactly the old 2 and the old 9 (no rounding of the powers)
+end
+V.OLD_SPEED = old_speed
+
+--- the speed of a sensitivity on the new scale (a number outside 1 to 9 is held at the ends)
+function V.speed(sens)
+  sens = math.max(1, math.min(9, math.floor((tonumber(sens) or V.SENS_DEFAULT) + 0.5)))
+  return V.SENS_SPEED[sens]
+end
+
+--- the number on the new scale that has the speed nearest (by ratio) to what a number on the old scale had: old 2 is new 5, old 9 is new 9, old 5 (the old default) is new 7
+function V.sens_from_old(old)
+  local target = old_speed(math.max(1, math.min(9, math.floor((tonumber(old) or 5) + 0.5))))
+  local best, bd = 1, math.huge
+  for k = 1, 9 do
+    local d = math.abs(math.log(V.SENS_SPEED[k] / target))
+    if d < bd - 1e-9 then best, bd = k, d end
+  end
+  return best
+end
+
+--- steps per CC value for an absolute knob: 0.5 of the speed (one step per two values at speed 1)
+function V.factor_abs(sens) return 0.5 * V.speed(sens) end
+--- steps per unit for a relative encoder: the speed
+function V.factor_rel(sens) return V.speed(sens) end
 
 local function trunc(x) return x >= 0 and math.floor(x) or -math.floor(-x) end
 

@@ -544,6 +544,57 @@ chk_longpath() {
     if grep -a -q "Tape Reader:: cannot open sndfile" "$t/logs/norns.log" 2> /dev/null; then echo "NOT FOUND (must be absent): 'Tape Reader:: cannot open sndfile' in norns.log"; grep -a "cannot open sndfile" "$t/logs/norns.log" | head -3; bad=1; else echo "found: the Tape Reader opened the long path (no 'cannot open sndfile' in norns.log)"; fi
     return "$bad"
 }
+# M11: every page of the menu in the real norns.exe (windows/ci/maiden_probe.py, probe repl-menu-pages): no error in init, redraw, enc, key, deinit
+chk_menu_pages() {
+    grep -a "repl-menu-pages\|VT_PAGE" "$M0_OUT/m6-probe.txt" 2> /dev/null | cut -c1-600
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-menu-pages ok" "every page of the menu ran its init, redraw, encoders, keys and deinit without an error in the real program"
+}
+# M11: a fast turning of the drawn encoder knobs, measured in the real window code (headless: SDL's dummy video driver, so a draw is cheaper than on a screen): the throttled way (the program as shipped) and the old
+# way (VERDANDI_ENC_THROTTLE=0: one draw per turn). the line "enc display: ..." of norns.log says how long a turn waited in the queue and how long after the first turn the last draw was
+run_enc_burst() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local mode H out
+    for mode in throttled oldway; do
+        H="$WORK/user home burst $mode"; out="$M0_OUT/enc-burst-$mode"
+        rm -rf "$H" "$out"; mkdir -p "$out"
+        seed_home "$H"
+        VERDANDI_PROBE=burst "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+        local probe_pid=$!
+        if [ "$mode" = oldway ]; then export VERDANDI_ENC_THROTTLE=0; else unset VERDANDI_ENC_THROTTLE; fi
+        if command -v timeout > /dev/null 2>&1; then
+            timeout -k 10 200 "$APP/Verdandi$EXE" --headless --exit-after=80 --home="$(native "$H")"
+        else
+            "$APP/Verdandi$EXE" --headless --exit-after=80 --home="$(native "$H")"
+        fi
+        unset VERDANDI_ENC_THROTTLE
+        wait "$probe_pid" 2> /dev/null
+        if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+        cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    done
+    return 0
+}
+chk_enc_burst() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local bad=0 mode line
+    for mode in throttled oldway; do
+        echo "--- $mode: $(cat "$M0_OUT/enc-burst-$mode/probe.txt" 2> /dev/null | tr '\n' ' ')"
+        line="$(grep -a -h "enc display:" "$M0_OUT/enc-burst-$mode/logs/norns.log" 2> /dev/null | tail -1)"
+        echo "    $line"
+        [ -n "$line" ] || { echo "NOT FOUND: the line 'enc display:' in the $mode run"; bad=1; }
+    done
+    line="$(grep -a -h "enc display:" "$M0_OUT/enc-burst-throttled/logs/norns.log" 2> /dev/null | tail -1)"
+    # the throttled run: far fewer draws than turns, no turn waited long in the queue, the last draw within a second of the first turn
+    if [ -n "$line" ]; then
+        local turns draws wait last
+        turns=$(echo "$line" | sed -E 's/.*: ([0-9]+) turns.*/\1/'); draws=$(echo "$line" | sed -E 's/.* ([0-9]+) draws.*/\1/')
+        wait=$(echo "$line" | sed -E 's/.*a turn waited ([0-9]+) ms.*/\1/'); last=$(echo "$line" | sed -E 's/.*the last draw ([0-9]+) ms after.*/\1/')
+        [ "$turns" -ge 3000 ] && echo "found: $turns turns reached the window" || { echo "NOT FOUND: 3000 or more turns in the throttled run ($turns)"; bad=1; }
+        [ "$draws" -lt $((turns / 4)) ] && echo "found: $draws draws for $turns turns" || { echo "NOT FOUND: fewer than a quarter as many draws as turns ($draws of $turns)"; bad=1; }
+        [ "$wait" -le 1000 ] && echo "found: a turn waited $wait ms in the queue at the most" || { echo "NOT FOUND: no turn waits more than a second ($wait ms)"; bad=1; }
+        [ "$last" -le 3000 ] && echo "found: the last draw came $last ms after the first turn" || { echo "NOT FOUND: the last draw within 3 s of the first turn ($last ms)"; bad=1; }
+    fi
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -701,9 +752,12 @@ m0_run m6-check-tools chk_tools
 m0_run m6-check-heal chk_heal
 m0_run m7-check-packs chk_packs
 m0_run m9-check-twins chk_twins
+m0_run m11-check-menu-pages chk_menu_pages
 m0_run m10-run-twins-engine run_twins_engine
 m0_run m10-check-twins-engine chk_twins_engine
 m0_run m10-check-longpath chk_longpath
+m0_run m11-run-enc-burst run_enc_burst
+m0_run m11-check-enc-burst chk_enc_burst
 m0_run m10-run-server-kill run_server_kill
 m0_run m10-check-server-kill chk_server_kill
 m0_run m7-run-plugin-load run_plugin_load

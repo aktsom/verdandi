@@ -199,6 +199,11 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.10.2: three control fixes (docs/port/phase-m11.md)
+- HOME page: the Windows build had no stat thread, so `norns.cpu` was nil (K2 error): a real stat thread (`stat_win.cc`), defaults in norns.lua, a page that cannot break on a missing number; a CI test calls init, redraw, enc, key and deinit of EVERY menu page in the real norns.exe.
+- MIDI-mapped encoder sensitivity: a new scale 1 to 9 (5 = the old 2, 9 = the old 9, 1 = 2/3 of the old 1, even steps), saved settings and presets converted once (marker `sens_scale=2`), a fresh install at 5. The table is in the phase note.
+- The drawn encoder knob that went on after the turning: a full redraw per turn fell behind a fast turning; now at most one draw every 16 ms and the last turn always drawn (`redraw_throttle.h`).
+
 ## Windows 0.10.1: dead server, long [ext] names, the twins crash (docs/port/phase-m10.md)
 - The owner's scsynth crash with twins (0xC0000005 after a sample) is NOT reproduced: the real twins engine, a real server, samples at 48/44.1/96 kHz, 16/24 bit, 3 to 20 s, a long-named file under an [ext] link: no crash on the runner (no sound card there). No cause found, none claimed.
 - Built and tested: the launcher notices a stopped server and restarts the round twice, then stops with a plain message (CI kills scsynth three times); a loading script no longer waits for a dead server; fileselect preview/selection use the real name (and hidden files no longer shift the rows); sound files open with wide `\\?\` paths on Windows.

@@ -593,3 +593,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 2. While a script waits for an engine and the server dies, the loading screen stops with "SuperCollider stopped" and the next script can be loaded (no waiting for ever).
 3. In the file browser, a sample with a long name in an [ext] folder: E3 (preview) and K3 (choose) open the right file; `norns.log` has no "cannot open sndfile".
 4. Optional, if the crash comes back: Windows can keep a crash dump of scsynth.exe (a registry setting that needs an administrator, "LocalDumps"); the dump plus `logs\launcher.log` and `logs\sclang.log` say which plug-in it was.
+
+## Windows 0.10.2 (HOME page, sensitivity, the drawn knob)
+1. HOME page, K2: the statistics appear (cpu numbers, disk) with no error note; keys and encoders work at once. The statistics change every two seconds.
+2. SYSTEM > MIDI MAP: an encoder that was 2 now shows 5 and turns at the same speed as before; 9 is the same as before; 1 is somewhat slower than the old 1. A new mapping starts at 5.
+3. Turn a MIDI encoder fast, then stop: the drawn knob stops when you stop (it ends where the value is).

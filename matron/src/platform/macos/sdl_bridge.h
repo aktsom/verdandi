@@ -37,6 +37,7 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ACTION 10       // n = the index of a window action (window_actions.h): the main thread does what a click on its button does
 #define SDL_BRIDGE_SHOW_ACTION_FLASH 11 // n = the control that was flashed: its press ends (internal)
 #endif
+#define SDL_BRIDGE_SHOW_ENC_DRAW 12 // (internal) the timer of the throttled knob redraw (platform/common/redraw_throttle.h)
 #define SDL_BRIDGE_SHOW_OUT 5  // n = the output level's place on its scale x 1000, value = muted
 extern void sdl_bridge_show_control(int kind, int n, int value);
 

@@ -202,8 +202,7 @@ void serialosc_device_removed(int id) { (void)id; }
 const char *serialosc_conflict_text(void) { return ""; }
 
 /* ---- hardware/stat.cc (the Pi's temperature, disk, wifi) ---- */
-void stat_init(void) {}
-void stat_deinit(void) {}
+// (stat_init / stat_deinit are in stat_win.cc: free disk and the processor load for the HOME page)
 
 /* ---- platform/macos/open_url.c: the MAIDEN / MANUAL buttons open a page in the browser. the function keeps its macOS name because the shared code calls it ---- */
 int macos_open_url(const char *url) {

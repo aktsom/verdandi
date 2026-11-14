@@ -1,6 +1,8 @@
 -- MIDI MAP on a computer (Linux desktop): which MIDI control turns E1-E3 and presses K1-K3, and the presets of those six mappings. SYSTEM > MIDI MAP (core/menu/midimap.lua),
 -- the layer that acts on messages is core/midimap.lua. docs/port/midi-map-plan.md 2.1, 2.7. the settings live in <norns home>/midimap.conf, key=value lines like ui.conf and box.conf:
 --   verdandi-midimap=1   the header (a file without it is still read, with a log line; another number is read as far as understood and warned about)
+--   sens_scale=2         which scale the numbers of e1.sens to e3.sens are on (core/midimap_value.lua; Windows 0.10.2 made a new one). a file without this line is on the OLD scale: its numbers are converted once, to the new number of the
+--                        nearest speed (old 2 is new 5), and the file is written again with the line, so that it never converts twice. the same in a preset file
 --   preset=PUSH 2        the name of the preset in use (a label: the mappings below are what counts), CUSTOM when none
 --   on_clash=params      params (default): the params MAP gets a CC that both want; both: both react
 --   e1.type=cc e1.num=71 e1.dev=ANY e1.ch=0 e1.mode=abs e1.sens=5     one control: e1 e2 e3 (encoders) and k1 k2 k3 (keys; type cc or note, k1.threshold=63 instead of mode and sens)
@@ -14,6 +16,7 @@
 --   e1.type=cc ... (the same keys, without dev and ch, so that a preset moves between computers and does not name a device)
 
 local M = {}
+local V = require 'core/midimap_value'
 
 M.PATH = "/home/we/midimap.conf"
 M.DIR = "/home/we/midimap-presets/"
@@ -42,7 +45,7 @@ local function is_arc(id) return id:sub(1, 1) == "a" end
 local function new_action() return {type = "none", dev = "ANY", ch = 0, mode = "relob", dir = "up", threshold = 63} end
 
 local function new_ctl(id)
-  if is_enc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", sens = 5} end
+  if is_enc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", sens = V.SENS_DEFAULT} end
   if is_arc(id) then return {type = "none", dev = "ANY", ch = 0, mode = "abs", gain = 8, accel = "off"} end
   return {type = "none", dev = "ANY", ch = 0, threshold = 63}
 end
@@ -267,8 +270,15 @@ function M.load()
   if ver == nil then M.log("does not start with the header verdandi-midimap=1 (read anyway)")
   elseif ver ~= "1" then M.log("version " .. ver .. " is newer than this one knows (read as far as understood)") end
   local fields, afields = {}, {}
+  local file_scale = 1 -- the scale of the sens numbers in the file: 1 (old) until a sens_scale line says another
   each_line(text, function(k, v, line)
     if k == "verdandi-midimap" then return end
+    if k == "sens_scale" then
+      local n = tonumber(v)
+      if n == nil or n < 1 then M.log("sens_scale=" .. v:sub(1, 20) .. " is not a number, read as 1 (the old scale)")
+      else file_scale = math.min(n, V.SENS_SCALE) end
+      return
+    end
     local id, field = k:match("^([eka]%d)%.(%w+)$")
     if id and M.state.ctl[id] == nil then id = nil end -- a5 and the like are unknown keys
     local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
@@ -296,6 +306,18 @@ function M.load()
     end
   end)
   for _, id in ipairs(M.ALL_IDS) do finish_ctl(id, fields[id] or {}, st.ctl[id], "") end
+  -- a file on the old scale: the numbers (and the old default, 5, of an encoder with no sens line) become the new numbers of the same speed. once: the file is written with sens_scale=2 below
+  local converted = false
+  if file_scale < V.SENS_SCALE then
+    for _, id in ipairs(M.IDS) do
+      if is_enc(id) then
+        local old = st.ctl[id].sens
+        if fields[id] == nil or fields[id].sens == nil then old = 5 end -- the default of the old scale
+        st.ctl[id].sens = V.sens_from_old(old)
+        converted = true
+      end
+    end
+  end
   for _, id in ipairs(M.ACTION_IDS) do finish_action(id, afields[id] or {}, st.actions[id], "") end
   M.last_rel = nil
   for i = #M.ALL_IDS, 1, -1 do
@@ -305,6 +327,12 @@ function M.load()
   if st.preset ~= "CUSTOM" and M.preset_by_name(st.preset) == nil then
     M.log("preset=" .. st.preset .. ": there is no such preset, using CUSTOM (the mappings stay)")
     st.preset = "CUSTOM"
+  end
+  if converted then
+    local line = {}
+    for _, id in ipairs(M.IDS) do if is_enc(id) then line[#line + 1] = id .. "=" .. st.ctl[id].sens end end
+    M.log("the sensitivity numbers were on the old scale: converted once to the new scale (" .. table.concat(line, " ") .. "), the file is written again")
+    M.save()
   end
   return st
 end
@@ -358,6 +386,7 @@ function M.save()
   end
   local st = M.state
   f:write("verdandi-midimap=1\n")
+  f:write("sens_scale=" .. V.SENS_SCALE .. "\n")
   f:write("preset=" .. st.preset .. "\n")
   f:write("on_clash=" .. st.on_clash .. "\n")
   f:write("arc_keys=" .. (st.arc_keys and "1" or "0") .. "\n")
@@ -517,7 +546,9 @@ local function read_preset_file(path, file)
   end
   local p = {builtin = false, ctl = {}}
   local fields, afields = {}, {}
+  local file_scale = 1
   each_line(text, function(k, v)
+    if k == "sens_scale" then file_scale = math.min(tonumber(v) or 1, V.SENS_SCALE) return end
     local id, field = k:match("^([eka]%d)%.(%w+)$")
     if id and not in_list(M.ALL_IDS, id) then id = nil end
     local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
@@ -538,6 +569,10 @@ local function read_preset_file(path, file)
   for _, id in ipairs(M.IDS) do
     p.ctl[id] = new_ctl(id)
     finish_ctl(id, fields[id] or {}, p.ctl[id], "preset " .. file .. ": ")
+    if file_scale < V.SENS_SCALE and is_enc(id) then -- a preset saved on the old scale: the same speed on the new one (an encoder with no sens line had the old default, 5)
+      local old = (fields[id] and fields[id].sens ~= nil) and p.ctl[id].sens or 5
+      p.ctl[id].sens = V.sens_from_old(old)
+    end
   end
   -- the arc encoders only if the file has any of their keys (a preset from before them leaves them alone)
   for _, id in ipairs(M.ARC_IDS) do
@@ -646,7 +681,7 @@ function M.save_preset(name, overwrite)
   local tmp = file .. ".tmp"
   local f = io.open(tmp, "w")
   if f == nil then return false, "cannot write " .. file end
-  f:write("verdandi-midimap-preset=1\n", "name=" .. n .. "\n")
+  f:write("verdandi-midimap-preset=1\n", "sens_scale=" .. V.SENS_SCALE .. "\n", "name=" .. n .. "\n")
   for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, M.state.ctl[id], false) end
   for _, id in ipairs(M.ACTION_IDS) do write_action(f, id, M.state.actions[id], false) end
   f:close()

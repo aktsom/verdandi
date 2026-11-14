@@ -3,6 +3,9 @@
 -- the rows and their wording, E2 / E3 / K2 / K3, the detail view of a control, the preset row, the visible learn state (banner, target row, countdown, messages), every handler ends with a redraw,
 -- the device list (the mio and its ports), clash marks, SAVE AS and DELETE, the page being in SYSTEM's list below THEME
 package.path = "lua/?.lua;lua/core/?.lua;lua/lib/?.lua;" .. package.path
+-- (the old sensitivity scale's speeds: this file is about the page and the walk, not about how fast a knob is; midimap_sens_test.lua has the new scale)
+require('core/midimap_value')
+for k = 1, 9 do package.loaded['core/midimap_value'].SENS_SPEED[k] = 2 ^ ((k - 5) / 2) end
 local tmp = os.tmpname()
 os.remove(tmp)
 os.execute("mkdir -p " .. tmp)

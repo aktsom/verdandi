@@ -47,6 +47,8 @@ norns = {pmap = pmap, state = {shortname = "testscript"}, none = function() end,
   menu_midi_event = function(data, dev) pmap_calls[#pmap_calls + 1] = {data[1], data[2], data[3], dev} end}
 midi = require 'core/midi'
 local V = require 'core/midimap_value'
+-- these tests are about what the layer does with messages (filters, clashes, learn, held keys): they were written with the speeds of the OLD sensitivity scale (sens 5 = one step per unit); the new scale's own numbers are in midimap_sens_test.lua
+for k = 1, 9 do V.SENS_SPEED[k] = 2 ^ ((k - 5) / 2) end
 local S = require 'core/midimap_settings'
 S.log = function() end
 local mm = require 'core/midimap'
