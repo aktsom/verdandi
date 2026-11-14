@@ -407,8 +407,8 @@ chk_twins() {
 # sclang.log; WER LocalDumps writes a minidump of scsynth.exe, which windows/ci/dump_report.py reads (the module and offset of the instruction, the plug-in files that were loaded, the stack words that point into modules).
 # the first scenario ("all") is the program as shipped. only when it dies are the others run (each takes out one of the three PortedPlugins UGens of the engine, in a copy of the file) to find which one it is
 TW_RESULTS="$M0_OUT/twins-engine-summary.txt"
-twins_scenario() { # name [sed expression applied to the engine file of this scenario's copy]
-    local name="$1" patch="${2:-}" H="$WORK/user home twins $1" out="$M0_OUT/twins-$1" dumps
+twins_scenario() { # name [sed expression applied to the engine file of this scenario's copy] [server rate] [wav: channels,rate,bits,seconds] [ext = the sample is the file with the long name under an [ext] link]
+    local name="$1" patch="${2:-}" rate="${3:-}" wavspec="${4:-2,48000,16,3}" probewav="${5:-}" H="$WORK/user home twins $1" out="$M0_OUT/twins-$1" dumps
     TWINS_REPO="${TWINS_REPO:-danielrigler/twins}"; TWINS_SHA="${TWINS_SHA:-5dc6206aaae83f3b2a167acdd185578f93079e9a}"
     rm -rf "$H" "$out"; mkdir -p "$out/dumps"
     seed_home "$H"
@@ -419,13 +419,21 @@ twins_scenario() { # name [sed expression applied to the engine file of this sce
         sed -i -E "$patch" "$H/dust/code/twins/lib/engine_twins.sc"
         cmp -s "$out/engine_twins.sc.orig" "$H/dust/code/twins/lib/engine_twins.sc" && { echo "the patch did not change the engine file: $patch"; echo "$name: patch had no effect" >> "$TW_RESULTS"; return 1; }
     fi
-    # a 3 second stereo wav (48 kHz, 16 bit): two sines and a little noise
+    # a wav (default 3 seconds, stereo, 48 kHz, 16 bit): two sines and a little noise
     "$PYTHON" -c "
 import sys, wave, struct, math, random
-w = wave.open(sys.argv[1], 'wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(48000)
+ch, sr, bits, secs = [int(x) for x in sys.argv[2].split(',')]
+w = wave.open(sys.argv[1], 'wb'); w.setnchannels(ch); w.setsampwidth(bits // 8); w.setframerate(sr)
 random.seed(1)
-fr = b''.join(struct.pack('<hh', int(9000*math.sin(2*math.pi*220*i/48000) + random.randint(-800, 800)), int(9000*math.sin(2*math.pi*331*i/48000))) for i in range(48000*3))
-w.writeframes(fr); w.close()" "$(native "$H/dust/audio/ci/test.wav")"
+top = 2 ** (bits - 1) - 1
+def smp(i, f): return int(top * 0.28 * math.sin(2 * math.pi * f * i / sr) + random.randint(-top // 40, top // 40))
+out = bytearray()
+for i in range(sr * secs):
+    for c in range(ch):
+        v = smp(i, 220 if c == 0 else 331)
+        out += v.to_bytes(bits // 8, 'little', signed=True)
+w.writeframes(bytes(out)); w.close()" "$(native "$H/dust/audio/ci/test.wav")" "$wavspec"
+    [ -n "$rate" ] && printf 'rate=%s\nblock=128\n' "$rate" > "$H/audio.conf"
     cat > "$H/dust/data/system.state" <<'ST'
 -- norns system state (seeded by the smoke test)
 norns.state.clean_shutdown = true
@@ -443,7 +451,7 @@ ST
         MSYS_NO_PATHCONV=1 reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\$k" /v DumpType /t REG_DWORD /d 1 /f > /dev/null 2>&1
         MSYS_NO_PATHCONV=1 reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\$k" /v DumpCount /t REG_DWORD /d 5 /f > /dev/null 2>&1
     done
-    VERDANDI_PROBE=twins "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    VERDANDI_PROBE=twins VERDANDI_PROBE_WAV="$probewav" "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
     local probe_pid=$!
     if command -v timeout > /dev/null 2>&1; then
         VERDANDI_NO_SERVER_RESTART=1 timeout -k 10 330 "$APP/Verdandi$EXE" --headless --exit-after=250 --home="$(native "$H")"
@@ -473,6 +481,10 @@ run_twins_engine() {
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     : > "$TW_RESULTS"
     twins_scenario all
+    # what the owner's PC may have that the first run has not: other server rates and sample formats (44.1 and 96 kHz, 24 bit, a long sample), and the sample as a file with a long name under an [ext] link
+    twins_scenario rate44 "" 44100 "2,44100,24,20"
+    twins_scenario rate96 "" 96000 "1,96000,16,8"
+    twins_scenario extlong "" "" "2,48000,16,3" ext
     if grep -q "^all: crashed=1" "$TW_RESULTS"; then
         # the server died: take out the three UGens one at a time (and all of them) to find the one
         twins_scenario nochew 's/AnalogChew\.ar\(orig, chew_depth, chew_freq, chew_variance\)/orig/'
@@ -486,9 +498,11 @@ run_twins_engine() {
 chk_twins_engine() {
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     cat "$TW_RESULTS" 2> /dev/null
-    grep -q "^all: crashed=0" "$TW_RESULTS" 2> /dev/null || { echo "NOT FOUND: the real twins engine ran with the real server without a crash (scenario 'all')"; return 1; }
-    echo "found: the real twins engine ran with a sample loaded, the server lived (scenario 'all')"
-    return 0
+    local bad=0 sc
+    for sc in all rate44 rate96 extlong; do
+        if grep -q "^$sc: crashed=0" "$TW_RESULTS" 2> /dev/null; then echo "found: the real twins engine ran with a sample loaded, the server lived (scenario '$sc')"; else echo "NOT FOUND: the real twins engine ran with the real server without a crash (scenario '$sc')"; bad=1; fi
+    done
+    return "$bad"
 }
 # M10: scsynth.exe is ended from outside three times (windows/ci/maiden_probe.py, VERDANDI_PROBE=kill): the launcher says so in launcher.log, starts everything again twice, then says it stops trying and leaves norns running
 KILL_HOME="$WORK/user home kill"

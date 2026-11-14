@@ -125,6 +125,8 @@ if os.environ.get("VERDANDI_PROBE") == "twins":
         m = re.search(r"VT_INFO (\d+) (\d+) (\d+) len (\d+)", tail or "")
         good = bool(m) and int(m.group(2)) == 48000
         result("twins-longpath-info", good, "audio.file_info reads the %s character virtual path (frames %s)" % (m.group(4) if m else "?", m.group(2) if m else "?") if good else "audio.file_info could not open it: " + repr(tail))
+        if os.environ.get("VERDANDI_PROBE_WAV") == "ext":
+            WAV = vpath # the sample of this scenario is the file with the long name under the [ext] link
         ok, tail = repl(5555, "audio.tape_play_open('%s') audio.tape_play_start() print('VT_TAPE started')\n" % vpath, "VT_TAPE started", 30)
         time.sleep(3)
         repl(5555, "audio.tape_play_stop() print('VT_TAPE stopped')\n", "VT_TAPE stopped", 15)
