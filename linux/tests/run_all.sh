@@ -281,6 +281,7 @@ run "windows:fileselect long names (the preview and the selection use the real n
 run "windows:MIDI MAP encoder sensitivity, the new scale (the table old and new, 5 is the old 2 and 9 is the old 9, 1 is two thirds of the old 1, even steps, the conversion of saved settings and presets once with a marker, a fresh install, the old default's speed kept)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_sens_test.lua
 run "windows:HOME page with no stat numbers (norns.cpu nil: the error of 0.10.1) and with them" lua5.3 linux/tests/home_page_test.lua
 run "windows:the drawn encoder knob while an encoder is turned fast (a simulated window: the old way leaves seconds of lag, the throttled way ends within a draw of the last turn and shows every turn)" bash -c 'cc -std=gnu11 -Wall -Wextra -I matron/src/platform/common linux/tests/redraw_throttle_test.c -o "$0/rtt" && "$0/rtt"' "$T"
+run "windows:MIDI learn remembers the port (stored_port, =Name for two identical devices, existing files load unchanged, an exact port survives a file round trip, ANY by hand)" env NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_port_test.lua
 link_pair_ok() {
     g++ -std=c++14 -w -DLINK_PLATFORM_LINUX=1 -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include windows/ci/link_pair_probe.cpp -o "$T/link_pair_probe" -lpthread || return 1
     local rc=0

@@ -88,7 +88,15 @@ function m.device_choices()
   table.sort(list, function(a, b) return a.value:lower() < b.value:lower() end)
   table.insert(list, 1, {value = "ANY", label = "ANY"})
   local c = (m.mode == "aview" and m.act) and S.state.actions[m.act] or (m.ctl and S.state.ctl[m.ctl])
-  if c and c.dev ~= "ANY" then
+  if c and c.dev ~= "ANY" and c.dev:sub(1, 1) == "=" then
+    -- "=Name": the port LEARN stored when another listed device's name would also have matched: this port and no other
+    local plain = c.dev:sub(2)
+    local have = false
+    for _, e in ipairs(list) do
+      if V.norm_name(e.value) == V.norm_name(plain) then e.value, e.label, have = c.dev, plain:upper() .. " (THIS PORT ONLY)", true end
+    end
+    if not have then list[#list + 1] = {value = c.dev, label = plain:upper() .. " (THIS PORT ONLY, ABSENT)"} end
+  elseif c and c.dev ~= "ANY" then
     local have = false
     for _, e in ipairs(list) do if V.norm_name(e.value) == V.norm_name(c.dev) then have = true end end
     if not have then
@@ -102,6 +110,7 @@ function m.device_choices()
 end
 
 local function device_index(list, c)
+  for i, e in ipairs(list) do if e.value == c.dev then return i end end -- (an exact "=Name" port is in the list under that value)
   for i, e in ipairs(list) do if V.norm_name(e.value) == V.norm_name(c.dev) then return i end end
   return 1
 end

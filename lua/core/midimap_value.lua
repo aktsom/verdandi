@@ -196,11 +196,31 @@ end
 --- does the stored name mean this device? the same name, or the stored name followed by a blank and digits only (an interface name means every port: `mio` is `mio`, `mio 1`, `mio 2`);
 --- a stored port name means that port only
 function V.name_matches(stored, device)
+  -- "=Name": exactly this port and no other (written by LEARN when another listed device would also match the name: two identical devices, "Foo" and "Foo 2")
+  if type(stored) == "string" and stored:sub(1, 1) == "=" then
+    local s, d = V.norm_name(stored:sub(2)), V.norm_name(device)
+    return s ~= "" and d ~= "" and s == d
+  end
   local s, d = V.norm_name(stored), V.norm_name(device)
   if s == "" or d == "" then return false end
   if s == d then return true end
   if #d > #s + 1 and d:sub(1, #s + 1) == s .. " " and d:sub(#s + 2):match("^%d+$") then return true end
   return false
+end
+
+--- the port a learned control remembers (Windows 0.10.3, docs/port/phase-m12.md): the name norns gives the port that sent the message ("Ableton Push 2 1" and "Ableton Push 2 2" are the Live and the User port of a Push 2).
+--- that name is the same after a restart and after the device is plugged in again: it is made from the driver's name and the port, and a second device with the same name gets a number (norns's own rule, the order the devices
+--- are listed in). a stored name also means every listed name that is it followed by a blank and digits ("Foo" is "Foo 2" too): when another listed device would match, the name is stored as "=Foo", exactly this port.
+--- listed = the names of all the devices norns lists now. a message from no device with a name: "ANY"
+function V.stored_port(name, listed)
+  if type(name) ~= "string" or V.norm_name(name) == "" then return "ANY" end
+  local n = V.canonical_name(name)
+  local ambiguous, skipped_self = false, false
+  for _, other in ipairs(listed or {}) do
+    if other == name and not skipped_self then skipped_self = true -- the device itself
+    elseif V.name_matches(n, other) then ambiguous = true end      -- another one the name would also mean (a second "Foo" in the list, or "Foo 2")
+  end
+  return ambiguous and ("=" .. n) or n
 end
 
 --- the name to store for a device name that was typed, chosen or read from a file: the old name of the virtual device becomes "virtual", anything else is as it is

@@ -422,14 +422,17 @@ function M.set(id, field, value)
 end
 
 --- learn: the CC or note a control was taught (type cc or note, its number); the device goes back to ANY and the channel to any (the message may come from anywhere), the rest stays. one write
-function M.assign(id, type_, num)
+--- dev (optional): the port the message came from (a learned control remembers it; nothing or an unusable name: ANY, as before)
+function M.assign(id, type_, num, dev)
   local c = M.state.ctl[id]
   if c == nil then return false, "no such control" end
   local t, why = check_field(id, "type", type_)
   if t == nil or t == "none" then return false, why or "cc or note" end
   local n, why2 = check_field(id, "num", num)
   if n == nil then return false, why2 end
-  c.type, c.num, c.dev, c.ch = t, n, "ANY", 0
+  local d = "ANY"
+  if dev ~= nil and dev ~= "ANY" then d = check_field(id, "dev", dev) or "ANY" end
+  c.type, c.num, c.dev, c.ch = t, n, d, 0
   modified()
   M.save()
   return true
@@ -470,7 +473,9 @@ function M.assign_action(id, kind, num, extra)
     local d2, w3 = check_action_field("dir", dir)
     if d2 == nil then return false, w3 end
   end
-  a.type, a.num, a.dev, a.ch, a.mode, a.dir = kind, n, "ANY", 0, mode, dir
+  local d = "ANY"
+  if extra and extra.dev ~= nil and extra.dev ~= "ANY" then d = check_action_field("dev", extra.dev) or "ANY" end
+  a.type, a.num, a.dev, a.ch, a.mode, a.dir = kind, n, d, 0, mode, dir
   M.save()
   return true
 end

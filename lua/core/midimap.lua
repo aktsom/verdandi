@@ -523,14 +523,14 @@ local function assigned(id, what)
 end
 
 --- a learned note or CC goes to an action (a CC always makes an encoder step in the format of the last encoder or arc mapping; the direction of the first click is the direction), then the walk goes on
-local function finish_action(id, type_, num, first, ch)
+local function finish_action(id, type_, num, first, ch, dev)
   local L = M.learn
   local ok
   if type_ == "note" then
-    ok = S.assign_action(id, "note", num)
+    ok = S.assign_action(id, "note", num, {dev = dev})
   else
     local mode = S.last_rel_mode()
-    ok = S.assign_action(id, "step", num, {mode = mode, dir = V.rel_decode(mode, first) < 0 and "down" or "up"})
+    ok = S.assign_action(id, "step", num, {mode = mode, dir = V.rel_decode(mode, first) < 0 and "down" or "up", dev = dev})
   end
   M.guess[id] = nil
   local text = id:upper() .. " = " .. (type_ == "note" and "NOTE " or "CC ") .. num .. (ch and (" CH " .. ch) or "")
@@ -544,12 +544,19 @@ local function finish_action(id, type_, num, first, ch)
   end
 end
 
+--- the port a learned message came from, as it is stored (core/midimap_value.lua stored_port): the name norns gives that port. "ANY" for a device with no name
+local function port_of(d)
+  local names = {}
+  for _, e in pairs(midi and midi.devices or {}) do if e.name then names[#names + 1] = e.name end end
+  return V.stored_port(d and d.name, names)
+end
+
 --- the learned message goes to the control; if another control already answers to it the question is asked first (K3 yes / K2 no on the page, M.answer)
-local function take(id, type_, num, first, ch)
-  local other = M.find_overlap(id, type_, num, "ANY", 0)
+local function take(id, type_, num, first, ch, dev)
+  local other = M.find_overlap(id, type_, num, dev or "ANY", 0)
   if other then
     local L = M.learn
-    L.state, L.ask, L.deadline = "ask", {id = id, other = other, type = type_, num = num, first = first, ch = ch}, M.clock() + M.TIMEOUT
+    L.state, L.ask, L.deadline = "ask", {id = id, other = other, type = type_, num = num, first = first, ch = ch, dev = dev}, M.clock() + M.TIMEOUT
     window(0, 2, id)
     L.msg = nil
     notify()
@@ -575,10 +582,10 @@ function M.answer(yes)
   L.ask = nil
   local id = a.id
   if is_action(id) then
-    finish_action(id, a.type, a.num, a.first, a.ch)
+    finish_action(id, a.type, a.num, a.first, a.ch, a.dev)
     return
   end
-  S.assign(id, a.type, a.num)
+  S.assign(id, a.type, a.num, a.dev)
   if is_knob(id) then
     L.state, L.msgs, L.src, L.last = "confirm", {a.first}, L.src, M.clock()
     window(0, 2, id)
@@ -598,10 +605,11 @@ local function learn_event(d, kind, ch, d1, d2)
   if L.state == "listen" then
     local id = L.target
     if is_action(id) then
+      local port = port_of(d)
       if kind == 0x90 and d2 > 0 then
-        if take(id, "note", d1, nil, ch) then finish_action(id, "note", d1, nil, ch) end
+        if take(id, "note", d1, nil, ch, port) then finish_action(id, "note", d1, nil, ch, port) end
       elseif kind == 0xB0 and d2 > 0 then
-        if take(id, "cc", d1, d2, ch) then finish_action(id, "cc", d1, d2, ch) end
+        if take(id, "cc", d1, d2, ch, port) then finish_action(id, "cc", d1, d2, ch, port) end
       end
       return
     end
@@ -614,22 +622,24 @@ local function learn_event(d, kind, ch, d1, d2)
         return
       end
       L.src = {dev = d.name, ch = ch, cc = d1}
-      if not take(id, "cc", d1, d2) then return end
-      S.assign(id, "cc", d1)
+      local port = port_of(d)
+      if not take(id, "cc", d1, d2, nil, port) then return end
+      S.assign(id, "cc", d1, port)
       L.state, L.msgs, L.last = "confirm", {d2}, M.clock()
       window(0, 2, id)
       assigned(id, "CC " .. d1)
       L.msg = "TURN IT BOTH WAYS"
       notify()
     else
+      local port = port_of(d)
       if kind == 0xB0 and d2 > 0 then
-        if not take(id, "cc", d1) then return end
-        S.assign(id, "cc", d1)
+        if not take(id, "cc", d1, nil, nil, port) then return end
+        S.assign(id, "cc", d1, port)
         end_learn()
         assigned(id, "CC " .. d1)
       elseif kind == 0x90 and d2 > 0 then
-        if not take(id, "note", d1) then return end
-        S.assign(id, "note", d1)
+        if not take(id, "note", d1, nil, nil, port) then return end
+        S.assign(id, "note", d1, port)
         end_learn()
         assigned(id, "NOTE " .. d1)
       else
