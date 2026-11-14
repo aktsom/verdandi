@@ -1,4 +1,4 @@
-# the left-button drag in the real arc window under Xvfb, with real mouse events from xdotool (docs/port/phase-m14.md): ARC DRAG up and down (up is clockwise, 12 ticks a pixel at 1:1, Shift a quarter, a lap of 1024 ticks
+# the left-button drag in the real arc window under Xvfb, with real mouse events from xdotool (docs/port/phase-m14.md): ARC DRAG up and down (up is clockwise, 12 ticks a pixel at 1:1, a lap of 1024 ticks
 # in 85 pixels) and round the ring (unchanged: a quarter turn of the pointer is 64 ticks), the drag goes on outside the window until the button is let go (the mouse is captured), nothing moves the window, nothing turns after the release.
 # the arc window is 830 x 260 pixels here; ring n is centred at x 130 + 190 (n - 1), y 130 (varc_skin.c). the script is window_probe.lua (it prints "PROBE arcdelta ring delta")
 #sleep 5
@@ -28,11 +28,8 @@ print("PROBE up done")
 #sh ID=$(xdotool search --name '^arc$' | head -1); a="mousemove --window $ID 130 100 mousedown 1"; for i in $(seq 43); do a="$a mousemove_relative -- 0 2"; done; xdotool $a mouseup 1
 #sleep 0.5
 print("PROBE down done")
-# 3. Shift held after the press: a quarter (the keyboard focus is put on the arc window again first: xdotool's key events go to the focused window, and a long run of other tests may have left it elsewhere)
-#xdo search --name ^arc$ windowfocus
-#sleep 0.3
-#sh ID=$(xdotool search --name '^arc$' | head -1); a="mousemove --window $ID 130 150 mousedown 1 keydown shift"; for i in $(seq 43); do a="$a mousemove_relative -- 0 -2"; done; xdotool $a keyup shift mouseup 1
-#sleep 0.5
+# 3. (no Shift step here: xdotool's Shift under Xvfb reached SDL only part of the way through the drag in about one run in seven, so a check on it would be a coin toss. Shift is checked by the C numbers
+#     (arc_input_test.c) and, in the real program, by the Windows CI hook with SDL_SetModState; the real key is on the owner's checklist)
 print("PROBE shift done")
 # 4. the mouse leaves the window: from y 150 straight up 200 pixels (the top of the window is 150 pixels up: 50 pixels outside), the pointer is over another window or the root, still counted; released there
 #sh ID=$(xdotool search --name '^arc$' | head -1); a="mousemove --window $ID 130 150 mousedown 1"; for i in $(seq 100); do a="$a mousemove_relative -- 0 -2"; done; xdotool $a mouseup 1

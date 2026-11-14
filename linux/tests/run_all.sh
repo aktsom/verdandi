@@ -1472,7 +1472,7 @@ PY
     }
     arc_scenario
 
-    # the left-button drag in the real arc window with real mouse events (xdotool), Windows 0.10.5 (docs/port/phase-m14.md): ARC DRAG up and down (up clockwise, 12 ticks a pixel, Shift a quarter, a lap of 1024 in 85 pixels),
+    # the left-button drag in the real arc window with real mouse events (xdotool), Windows 0.10.5 (docs/port/phase-m14.md): ARC DRAG up and down (up clockwise, 12 ticks a pixel, a lap of 1024 in 85 pixels; Shift is not here, see probe_arc_drag.lua),
     # round the ring (the Linux default, unchanged), the drag goes on outside the window until the button is let go, nothing turns after the release, ring 3 only turns ring 3, the right button and the wheel as before, the window never moves
     arc_drag_scenario() {
         DH="$(mktemp -d)"
@@ -1493,7 +1493,6 @@ PY
             chk "the setting reaches the window (UP/DOWN)" 'grep -q "^PROBE setting.updown.true" "$DLOG"'
             chk "up 86 pixels (a third of the window height): about one lap, 1032 ticks, every message clockwise" 'inr "PROBE setting" "PROBE up done" 1 1020 1044 && [ "$(dsum "PROBE setting" "PROBE up done" 1 | cut -d" " -f3)" -gt 0 ]' 'dsum "PROBE setting" "PROBE up done" 1'
             chk "down 86 pixels: the same the other way, every message counter-clockwise" 'inr "PROBE up done" "PROBE down done" 1 -1044 -1020 && [ "$(dsum "PROBE up done" "PROBE down done" 1 | cut -d" " -f4)" -lt 0 ]' 'dsum "PROBE up done" "PROBE down done" 1'
-            chk "Shift (held after the press): a quarter, 258 ticks" 'inr "PROBE down done" "PROBE shift done" 1 250 266' 'dsum "PROBE down done" "PROBE shift done" 1'
             chk "the pointer leaves the window (50 pixels above it) and the drag goes on: 200 pixels, 2400 ticks" 'inr "PROBE shift done" "PROBE outside done" 1 2388 2412 && [ "$(sed -n "s/.*Y=\([0-9]*\).*/\1/p" "$DH/probe.marks.geom0")" -ge 60 ]' 'dsum "PROBE shift done" "PROBE outside done" 1; cat "$DH/probe.marks.geom0"'
             chk "after the release moving over the ring turns nothing" '[ "$(dsum "PROBE outside done" "PROBE free move done" 1 | cut -d" " -f2)" = 0 ]' 'dsum "PROBE outside done" "PROBE free move done" 1'
             chk "ring 3 dragged down 20 pixels: -240 on ring 3, nothing on ring 1" 'inr "PROBE free move done" "PROBE ring3 done" 3 -252 -228 && [ "$(dsum "PROBE free move done" "PROBE ring3 done" 1 | cut -d" " -f2)" = 0 ]' 'dsum "PROBE free move done" "PROBE ring3 done" 3'
@@ -1503,7 +1502,7 @@ PY
             chk "midimap.conf has the setting (arc_drag=updown while it was on, circle after)" 'grep -q "^arc_drag=updown" "$DH/midimap.during" && grep -q "^arc_drag=circle" "$DH/midimap.after"'
             return $bad
         }
-        run "window:arc drag with real mouse events (up and down, Shift, outside the window, round the ring, ring 3, right button, wheel, window stays)" drag_ok
+        run "window:arc drag with real mouse events (up and down, outside the window, round the ring, ring 3, right button, wheel, window stays)" drag_ok
         rm -rf "$DH"
     }
     arc_drag_scenario
