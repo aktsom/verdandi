@@ -561,10 +561,12 @@ run_enc_burst() {
         VERDANDI_PROBE=burst "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
         local probe_pid=$!
         if [ "$mode" = oldway ]; then export VERDANDI_ENC_THROTTLE=0; else unset VERDANDI_ENC_THROTTLE; fi
+        # the old way draws once per turn and takes a good part of the time (the report line comes after the last of 4000 draws): it is given longer before the program is stopped, so that a slow runner does not cut it off (M13: it did, twice)
+        local after=80; [ "$mode" = oldway ] && after=170
         if command -v timeout > /dev/null 2>&1; then
-            timeout -k 10 200 "$APP/Verdandi$EXE" --headless --exit-after=80 --home="$(native "$H")"
+            timeout -k 10 $((after + 120)) "$APP/Verdandi$EXE" --headless --exit-after=$after --home="$(native "$H")"
         else
-            "$APP/Verdandi$EXE" --headless --exit-after=80 --home="$(native "$H")"
+            "$APP/Verdandi$EXE" --headless --exit-after=$after --home="$(native "$H")"
         fi
         unset VERDANDI_ENC_THROTTLE
         wait "$probe_pid" 2> /dev/null
