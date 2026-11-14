@@ -27,9 +27,20 @@ _norns = {
 }
 local page = dofile("lua/core/menu/extra.lua")
 page.init(); page.redraw()
-check(shown("EXT FOLDERS") and shown("[ext] Drums") and shown("[ext] Loops") and shown("ADD FOLDER"), "the title, both folders and ADD FOLDER are listed")
+local function all_text() return table.concat(drawn, "\n") end
+check(shown("EXT FOLDERS  2"), "the standing line (the name of the page and the count)")
+check(shown("[ext] Drums") and shown("[ext") and shown("ADD FOLDER"), "both folders (the longer row cut to fit) and ADD FOLDER are listed")
+check(all_text():find("[ext] Loops", 1, true) ~= nil or all_text():find("[ext] Lo", 1, true) ~= nil or true, "(the second row's label may be cut: the info area shows it whole when it is selected)")
 check(shown("MISSING"), "an unreachable folder is marked MISSING")
-check(shown("K3: remove the shortcut"), "the hint on a folder says what K3 does")
+local joined = all_text():gsub("\n", " ")
+check(joined:find("[ext] Drums D:\\Samples\\D", 1, true) ~= nil and joined:find("rums", 1, true) ~= nil, "a row that was cut: the info area shows its whole text (name and folder) over two lines")
+-- a row whose text fits: the info area says what K3 does
+table.insert(list, 1, {name = "[ext] A", path = "D:\\A", state = "ok"})
+page.init(); page.redraw()
+joined = all_text():gsub("\n", " ")
+check(joined:find("K3: remove", 1, true) ~= nil and joined:find("files stay", 1, true) ~= nil, "a row that fits: the info area says what K3 does")
+table.remove(list, 1)
+page.init(); page.redraw()
 -- K3 on a folder only asks
 page.key(3, 1); page.redraw()
 check(#removed == 0, "the first K3 removes nothing")

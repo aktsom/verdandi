@@ -4,7 +4,7 @@
 local winui = require 'core/menu/winui'
 
 local m = {pos = 1, top = 1, tick = 0, st = {}}
-local ROWS_SHOWN = 3
+local ROWS_SHOWN = winui.ROWS
 local PAGE_TICKS = 12
 
 local function parse(text)
@@ -112,12 +112,7 @@ m.rows = rows
 local function help_text(row) return row and row.help or "" end
 m.help_full = function() return help_text(rows()[m.pos]) end
 m.help_lines = function()
-  local pages = winui.pages(help_text(rows()[m.pos]), 118)
-  if #pages == 0 then return {} end
-  local first = (math.floor(m.tick / PAGE_TICKS) % math.ceil(#pages / 3)) * 3
-  local out = {}
-  for i = first + 1, math.min(first + 3, #pages) do out[#out + 1] = pages[i] end
-  return out
+  return winui.help_pages(help_text(rows()[m.pos]), m.tick, PAGE_TICKS)
 end
 
 m.init = function()
@@ -174,32 +169,12 @@ end
 m.redraw = function()
   screen.clear()
   local r = rows()
-  m.top = util.clamp(m.pos - 1, 1, math.max(1, #r - ROWS_SHOWN + 1))
-  for k = 0, ROWS_SHOWN - 1 do
-    local row = r[m.top + k]
-    if row then
-      local sel = (m.top + k) == m.pos
-      winui.row(8 + 9 * k, winui.fit(row.label, 72, sel, m.tick), row.value, sel, m.tick)
-    end
-  end
-  local lines = m.help_lines()
-  if #lines > 0 then
-    screen.level(0)
-    screen.rect(0, 31, 128, 26)
-    screen.fill()
-    screen.level(15)
-    screen.line_width(1)
-    screen.rect(0.5, 31.5, 127, 25)
-    screen.stroke()
-    for k, l in ipairs(lines) do
-      screen.level(15)
-      screen.move(3, 39 + 8 * (k - 1))
-      screen.text(l)
-    end
-  end
-  screen.level(15)
-  screen.move(2, 63)
-  screen.text(winui.fit(string.format("%d grid%s", #m.st.grids, #m.st.grids == 1 and "" or "s"), 124, false, 0))
+  local list = {}
+  for i, row in ipairs(r) do list[i] = {label = row.label, value = row.value} end
+  local top, full, was_cut = winui.list(list, m.pos)
+  m.top = top
+  winui.status(string.format("%d grid%s", #m.st.grids, #m.st.grids == 1 and "" or "s"))
+  if was_cut then winui.info(full) else winui.info_lines(winui.help_pages(help_text(r[m.pos]), m.tick, PAGE_TICKS)) end
   screen.update()
 end
 

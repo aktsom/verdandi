@@ -9,6 +9,7 @@
 -- reroutes redraw/enc/key
 
 local fs = {}
+local winui = require 'core/menu/winui' -- the info area at the bottom (the same on every list page of the menu)
 
 -- lightweight debounce to avoid rapid start/stop thrashing during preview
 local MIN_PREVIEW_INTERVAL = 0.1 -- seconds between preview restarts
@@ -274,7 +275,8 @@ fs.redraw = function()
     screen.move(0, 20)
     screen.text("(no files)")
   else
-    for i = 1, 6 do
+    -- four rows (10, 20, 30, 40; the selected one third) and the info area at the bottom (docs/port/phase-m12.md): the rows are cut with ... to fit (fs.getlist), the full name of the selected one is below
+    for i = 1, 4 do
       if (i > 2 - fs.pos) and (i < #fs.display_list - fs.pos + 3) then
         local list_index = i + fs.pos - 2
         screen.move(0, 10 * i)
@@ -293,6 +295,12 @@ fs.redraw = function()
           screen.text_right(fs.lengths[list_index])
         end
       end
+    end
+    -- the info area: the full name of the selected row when the row was cut, else the folder it is in (both cut in the middle so that the end shows)
+    local real = fs.list[fs.display_index[fs.pos + 1] or 0]
+    if real then
+      local shown = fs.display_list[fs.pos + 1]
+      winui.info((shown ~= real) and real or fs.getdir())
     end
   end
   screen.update()

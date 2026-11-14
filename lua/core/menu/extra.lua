@@ -126,6 +126,7 @@ end
 m.redraw = function()
   screen.clear()
   if m.confirm then
+    -- the warning: all of the screen, the keys named at the bottom
     local lines = warning_lines(m.confirm)
     for i = 1, math.min(#lines, 5) do
       screen.level(15)
@@ -138,40 +139,25 @@ m.redraw = function()
     screen.update()
     return
   end
-  screen.level(15)
-  screen.move(2, 8)
-  screen.text("EXT FOLDERS")
+  -- the list (the same rows and place as the other list pages), the standing line under it, the info area at the bottom: the full text of the selected row when it was cut, else what K3 does or the last message
   local r = rows()
-  local first = math.max(1, math.min(m.pos - 1, #r - 3))
-  for i = 0, 3 do
-    local row = r[first + i]
-    if row then
-      local y = 19 + i * 10
-      local sel = (first + i == m.pos)
-      if row.add then
-        winui.row(y, "ADD FOLDER", "", sel, m.tick, nil)
-      else
-        winui.row(y, winui.fit(row.name, 70, false), row.path, sel, m.tick, MARKS[row.state])
-      end
-    end
+  local list = {}
+  for i, row in ipairs(r) do
+    if row.add then list[i] = {label = "ADD FOLDER", value = ""}
+    else list[i] = {label = row.name, value = row.path, mark = MARKS[row.state]} end
   end
-  local note = m.msg
-  if not note then
-    local row = r[m.pos]
-    note = (row and row.add) and "K3: choose a folder" or "K3: remove the shortcut"
+  local top, full, was_cut = winui.list(list, m.pos)
+  m.top = top
+  winui.status("EXT FOLDERS  " .. #m.items)
+  local sel = r[m.pos]
+  local text = m.msg
+  if not text then
+    if was_cut then text = full
+    elseif sel and sel.add then text = "K3: choose a folder to add"
+    else text = "K3: remove the shortcut (your files stay)" end
   end
-  -- two lines at a time at the bottom; a longer sentence turns to its next two lines every three seconds
-  local lines = winui.pages(note, 124)
-  local chunks = math.max(1, math.ceil(#lines / 2))
-  local c = m.msg and (math.floor((m.tick - (m.msg_at or 0)) / 12) % chunks) or 0
-  local a, b = lines[c * 2 + 1], lines[c * 2 + 2]
-  screen.level(10)
-  screen.move(2, b and 54 or 62)
-  screen.text(a or "")
-  if b then
-    screen.move(2, 62)
-    screen.text(b)
-  end
+  -- a long message turns to its next two lines every three seconds (the result of an add or a remove; nothing in the list scrolls)
+  if m.msg then winui.info_lines(winui.help_pages(m.msg, m.tick - (m.msg_at or 0), 12)) else winui.info(text) end
   screen.update()
 end
 

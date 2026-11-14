@@ -595,6 +595,21 @@ chk_enc_burst() {
     fi
     return "$bad"
 }
+# M12: the AUDIO page with a very long device name, drawn by the real program (windows/ci/maiden_probe.py, probe repl-audio-shot): the pictures are not blank and are copied to the output of the run, where they can be looked at
+chk_audio_shot() {
+    local d="$IN_HOME/dust/data/verdandi_smoke" bad=0 f
+    has "$M0_OUT/m6-probe.txt" "PROBE repl-audio-shot ok" "the AUDIO page was drawn with a long device name" || bad=1
+    mkdir -p "$M0_OUT/audio-page"
+    for f in audio_page_long audio_page_short; do
+        if [ -f "$d/$f.png" ]; then
+            cp "$d/$f.png" "$M0_OUT/audio-page/$f.png"
+            "$PYTHON" "$(native "$HERE/png_nonblank.py")" "$(native "$d/$f.png")" && echo "found: $f.png is not blank ($(wc -c < "$d/$f.png") bytes)" || { echo "NOT FOUND: $f.png has content"; bad=1; }
+        else
+            echo "NOT FOUND: $f.png in $d"; bad=1
+        fi
+    done
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -753,6 +768,7 @@ m0_run m6-check-heal chk_heal
 m0_run m7-check-packs chk_packs
 m0_run m9-check-twins chk_twins
 m0_run m11-check-menu-pages chk_menu_pages
+m0_run m12-check-audio-shot chk_audio_shot
 m0_run m10-run-twins-engine run_twins_engine
 m0_run m10-check-twins-engine chk_twins_engine
 m0_run m10-check-longpath chk_longpath

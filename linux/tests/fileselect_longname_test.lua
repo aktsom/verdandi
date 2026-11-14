@@ -6,7 +6,12 @@ local function check(c, what) if not c then fails = fails + 1; print("FAIL " .. 
 local LONG = "a very long file name for a sample that sits under an external folder, take 12 (final mix).wav"
 local files = {"notes.txt", LONG, "short.wav", "readme.md"}
 screen = setmetatable({}, {__index = function() return function() end end})
-screen.text_extents = function(s) return #s * 5 end
+screen.text_extents = function(s) return (utf8.len(s) or #s) * 5 end
+local drawn = {}
+screen.clear = function() drawn = {} end
+screen.text = function(s) drawn[#drawn + 1] = s end
+screen.text_right = function(s) drawn[#drawn + 1] = s end
+_norns = {screen_text_extents = function(s) return (utf8.len(s) or #s) * 5 end}
 local opened = {}
 audio = {file_info = function(p) if p:match("%.wav$") then return 2, 480000, 48000 end return 0, 0, 0 end,
   tape_play_open = function(p) opened[#opened + 1] = p end, tape_play_start = function() end, tape_play_stop = function() end}
@@ -30,6 +35,19 @@ check(last == nil or last == "/home/we/dust/audio/[ext] Pack/" .. LONG, "the pre
 -- K3 on the first row: the chosen path is the real one
 fs.key(3, 1)
 check(fs.path == "/home/we/dust/audio/[ext] Pack/" .. LONG, "the chosen path is the real name: " .. tostring(fs.path))
+-- the info area (Windows 0.10.3): the row is cut with ..., the info area at the bottom has the whole name over two lines with its end
+fs.done = false; fs.path = nil; fs.pos = 0
+fs.redraw()
+local lines = table.concat(drawn, "\n")
+check(drawn[1] and drawn[1]:sub(-3) == "...", "the long name's row is cut with ...: " .. tostring(drawn[1]))
+check(lines:find("%.wav") ~= nil and lines:find("final mix", 1, true) ~= nil, "the info area has the end of the real name (the file type) after the middle ellipsis")
+local first_info, second_info
+for i, t in ipairs(drawn) do if t:sub(1, 3) == "..." then second_info = t end end
+check(second_info and second_info:sub(-4) == ".wav" and screen.text_extents(second_info) <= 124, "the second line starts with ... and ends with .wav: " .. tostring(second_info))
+for _, t in ipairs(drawn) do check(screen.text_extents(t) <= 128, "no text wider than the screen: " .. t) end
+fs.pos = 1; fs.redraw()
+lines = table.concat(drawn, "\n"):gsub("\n", " ")
+check(lines:find("Pack/", 1, true) ~= nil and lines:find("dust/audio", 1, true) ~= nil, "a row that fits: the info area shows the folder it is in: " .. lines:sub(1, 120))
 -- the second row is short.wav (the hidden notes.txt does not shift it)
 fs.done = false; fs.path = nil
 fs.pos = 1

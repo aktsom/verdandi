@@ -1,5 +1,6 @@
 local tabutil = require "tabutil"
 
+local winui = require 'core/menu/winui' -- the info area at the bottom (the same on every list page)
 local m = {
   pos = 0,
   list = {},
@@ -126,19 +127,29 @@ m.redraw = function()
     screen.level(4)
     screen.text_center("install some from maiden")
   else
-    for i=1,6 do
+    -- four rows (10, 20, 30, 40; the selected one third), cut with ... to fit, and the info area at the bottom: the full name of the selected script when its row was cut, else the file it is
+    local cutrow = false
+    for i=1,4 do
       if (i > 2 - m.pos) and (i < m.len - m.pos + 3) then
         screen.move(0,10*i)
-        local line = m.list[i+m.pos-2].name
+        local item = m.list[i+m.pos-2]
+        local line = item.name
         if(i==3) then
           screen.level(15)
         else
           screen.level(4)
         end
         local is_fave = "  "
-        if contains(m.favorites, m.list[i+m.pos-2]) then is_fave = "* " else is_fave = "  " end
-        screen.text(is_fave .. string.upper(line))
+        if contains(m.favorites, item) then is_fave = "* " else is_fave = "  " end
+        local full = is_fave .. string.upper(line)
+        local shown = util.trim_string_to_width(full, 128)
+        if i == 3 then cutrow = shown ~= full end
+        screen.text(shown)
       end
+    end
+    local sel = m.list[m.pos+1]
+    if sel and sel.name ~= '-' then
+      winui.info(cutrow and sel.name or (sel.file or sel.name))
     end
   end
   screen.update()

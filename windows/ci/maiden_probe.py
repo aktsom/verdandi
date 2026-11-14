@@ -388,6 +388,16 @@ try:
     result("repl-menu-pages", bool(m2) and int(m2.group(2)) == 0 and int(m2.group(1)) >= 10, ("%s pages, no error in init, redraw, enc, key, deinit" % m2.group(1)) if m2 and int(m2.group(2)) == 0 else "page errors: " + repr(tail[-700:]))
 except Exception as e:
     result("repl-menu-pages", False, "%s" % e)
+# 7e. M12: the AUDIO page with a very long device name, drawn by the real program and saved as a picture (audio_page_long.png in the data folder of the running script; the CI copies it to its output)
+try:
+    line = ("local LONG = 'Digital Audio Interface (Professional Multichannel Studio Sound Card Extended Edition) 7-8' local real = _norns.audio_devices "
+            "_norns.audio_devices = function() return (real() or '') .. 'wasapi:' .. LONG .. '\\t' .. LONG .. '\\t0\\t8\\tWASAPI\\t21\\t0\\t0\\n' end "
+            "local p = _menu.m['AUDIO'] p.init() p.cfg.output = 'wasapi:' .. LONG p.pos = 2 p.redraw() screen.export_screenshot('audio_page_long') "
+            "p.pos = 1 p.redraw() screen.export_screenshot('audio_page_short') p.deinit() _norns.audio_devices = real print('VT_SHOT ' .. 'done')\n")
+    ok, tail = repl(5555, line, "VT_SHOT done", 60)
+    result("repl-audio-shot", ok, "the AUDIO page with a long device name was drawn and saved (audio_page_long.png, audio_page_short.png)" if ok else "not drawn: " + repr(tail))
+except Exception as e:
+    result("repl-audio-shot", False, "%s" % e)
 # 8. the check that the emplaitress mod makes before it downloads and unpacks a Linux copy of mi-UGens (lib/mod.lua, system_post_startup): `find /home/we/.local/share/SuperCollider/Extensions/ -name MiPlaits.sc`
 # through norns's own shell. true = the mod finds the classes and does NOT copy anything (no second copy, no duplicate classes at the next start)
 try:

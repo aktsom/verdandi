@@ -118,34 +118,42 @@ for _, t in ipairs(drawn) do if t.l < 11 then dim = true end end
 check(not dim, "every text is at level 11 or more")
 check(timer_running and _menu.timer.time == 0.25 and _menu.timer.count == -1, "the page uses the menu's own timer (metro 32), not a script metro that a script change could take away")
 
--- ---- the help box: at most 3 short lines of plain words, for the selected row only, gone when E2 moves ----
+-- ---- the info area (Windows 0.10.3): the help of the selected row, at most two lines, at the bottom of the screen; the rows above it are never covered ----
 local ROWS5 = {"DRIVER", "OUTPUT", "INPUT", "BUFFER", "TEST"}
 for i, name in ipairs(ROWS5) do
   select_row(i); page.redraw()
   local h = help_lines()
-  check(#h >= 2 and #h <= 3, "help for " .. name .. " has 2 or 3 lines (" .. #h .. ")")
-  check(h[1] and h[1]:find(name, 1, true) == 1, "and starts with the name of the row: " .. tostring(h[1]))
-  for _, l in ipairs(h) do if screen.text_extents(l) > 118 then check(false, "a help line is wider than the box: " .. l) end end
-  check(#boxes >= 1, "a box is drawn for the help of " .. name)
+  check(#h >= 1 and #h <= 2, "the info for " .. name .. " is one or two lines (" .. #h .. ")")
+  for _, l in ipairs(h) do
+    if screen.text_extents(l) > 124 then check(false, "an info line is wider than the screen: " .. l) end
+    check(shown(l), "an info line of " .. name .. " is drawn: " .. l)
+  end
+  local tall = false
+  for _, b in ipairs(boxes) do if b.h > 9 then tall = true end end
+  check(not tall, "no box is drawn over the list any more: only the row bar and the thin rule (" .. name .. ")")
   local others = true
-  for j, other in ipairs(ROWS5) do if j ~= i and shown(other .. ": ") then others = false end end
-  check(others, "only the help of the selected row (" .. name .. ") is on the screen")
+  for j, other in ipairs(ROWS5) do
+    if j ~= i then
+      local oh = HELP_OF and HELP_OF(other) or nil
+    end
+  end
+  check(others, "only the info of the selected row (" .. name .. ") is on the screen")
 end
 info = mkinfo({sys_available = false, sys_reason = "SYS is off: no WASAPI loopback"})
 page.init(); select_row(3); page.redraw()
 local h3 = help_lines()
-check(#h3 == 3 and h3[3]:find("SYS", 1, true) and h3[3]:find("loopback", 1, true), "INPUT help: the third line says SYS is not available and why: " .. tostring(h3[3]))
+check(#h3 >= 1 and (table.concat(h3, " "):find("SYS", 1, true)) and (table.concat(h3, " "):find("loopback", 1, true)), "INPUT info: says SYS is not available and why: " .. table.concat(h3, " | "))
 info = mkinfo({sys_available = true})
 page.init(); select_row(3); page.redraw()
 local h4 = help_lines()
-check(#h4 == 3 and h4[3] == "SYS needs no input.", "and when SYS is there the help says it needs no input: " .. tostring(h4[3]))
+check(table.concat(h4, " "):find("SYS needs no input", 1, true) ~= nil, "and when SYS is there the info says it needs no input: " .. table.concat(h4, " | "))
 
 -- ---- E3 CHOOSES: the new value is on the row at once, the row ends in *, the help says K3 applies, nothing is applied yet ----
 info = mkinfo()
 page.init(); applied = {}
 select_row(2); page.enc(3, 2); page.redraw()
 check(mark("*") and shown("OUTPUT") and not shown("K3 apply"), "the row keeps its name and ends in the * mark")
-check(help_lines()[3] == "* chosen: K3 applies." and screen.text_extents(help_lines()[3]) <= 118, "and the help box explains it: " .. tostring(help_lines()[3]))
+check(table.concat(help_lines(), " "):find("* chosen: K3 applies.", 1, true) == 1 and screen.text_extents(help_lines()[1]) <= 124, "and the info area explains it: " .. table.concat(help_lines(), " | "))
 check(shown("Speakers (RME") or shown("Speakers (Realtek"), "and shows the chosen device at once")
 check(#applied == 0, "nothing is applied by turning E3")
 ticks(40)
@@ -322,6 +330,47 @@ check(conf() and conf():find("exclusive=0", 1, true) and not conf():find("exclus
 check(#printed_lines == 2 and printed_lines[1]:find("Invalid sample rate", 1, true), "and the reason is written once to the log")
 check(page.forget_exclusive(info) == false, "nothing happens a second time")
 
+-- ---- Windows 0.10.3: a long device name: the row is cut with ..., nothing scrolls, and the info area at the bottom shows the whole name over two lines, at once, with its end (the port numbers) ----
+do
+  local LONGNAME = "Digital Audio Interface (Professional Multichannel Studio Sound Card Extended Edition) 7-8"
+  local saved = DEVS
+  DEVS = DEVS .. "wasapi:" .. LONGNAME .. "\t" .. LONGNAME .. "\t0\t8\tWASAPI\t21\t0\t0\n"
+  info = mkinfo({config = "output=wasapi:" .. LONGNAME .. "\ninput=\nrate=48000\nblock=128\nbuffer=0\n"})
+  page.init(); select_row(2)
+  W.clear(); page.redraw()
+  local row_text, info_texts, info_y = nil, {}, {}
+  for _, t in ipairs(drawn) do
+    if t.s:sub(1, 7) == "Digital" and t.s:sub(-3) == "..." then row_text = t.s end
+  end
+  check(row_text ~= nil and row_text:sub(-3) == "..." and screen.text_extents(row_text) <= 124, "the OUTPUT row shows the long name cut with ...: " .. tostring(row_text))
+  local first = row_text and row_text:sub(1, 8) or "?"
+  local lines = page.help_lines()  -- the help (not the case here: the row was cut)
+  -- the info area is what winui.info drew: the two lines under the rule
+  local joined = {}
+  for _, t in ipairs(drawn) do if t.s:find("OUTPUT", 1, true) and t.s:find("Digital", 1, true) then joined[#joined + 1] = t.s end end
+  local all = {}
+  for _, t in ipairs(drawn) do all[#all + 1] = t.s end
+  local text = table.concat(all, "\n")
+  check(text:find("7%-8") ~= nil, "the end of the long name (the port numbers 7-8) is on the screen in the info area")
+  check(text:find("OUTPUT Digital", 1, true) ~= nil or text:find("OUTPUT  Digital", 1, true) ~= nil or text:find("OUTPUT Digital Audio", 1, true) ~= nil, "the info area starts with the row's label and name")
+  -- it changes at once with E2: moving to DRIVER shows its own text, not the long name
+  select_row(1); page.redraw()
+  local all2 = {}
+  for _, t in ipairs(drawn) do all2[#all2 + 1] = t.s end
+  check(not table.concat(all2, "\n"):find("7%-8"), "moving with E2 changes the info area at once: the long name is gone")
+  -- the row text is the same on every redraw (no scrolling): ticks make no difference
+  select_row(2)
+  local seen = {}
+  for t = 0, 120, 7 do
+    page.tick = t; page.redraw()
+    for _, tx in ipairs(drawn) do if tx.s:find("Digital", 1, true) and tx.s:sub(-3) == "..." then seen[tx.s] = true end end
+  end
+  local n = 0 for _ in pairs(seen) do n = n + 1 end
+  check(n == 1, "the row text does not move over time (" .. n .. " different texts in 18 redraws)")
+  DEVS = saved
+  info = mkinfo()
+end
+
 -- ---- widths: nothing wider than the screen, every row, with the longest device names ----
 local widths_ok, checked = true, 0
 if W then
@@ -368,10 +417,9 @@ screen.level(1)
 check(not ok and seen[#seen] == 1, "and gives screen.level back even when the page fails")
 screen.level = real
 local long = "A very long device name that cannot fit on the screen of a norns"
-check(screen.text_extents(winui.fit(long, 80, false, 0)) <= 80 and winui.fit(long, 80, false, 0):sub(-2) == "..", "a long value is cut with ..")
-check(winui.fit(long, 80, true, 0):sub(1, 6) == long:sub(1, 6), "the selected row's marquee rests first")
-check(winui.fit(long, 80, true, 20) ~= winui.fit(long, 80, true, 0) and screen.text_extents(winui.fit(long, 80, true, 20)) <= 80, "then runs, and always fits")
-check(winui.fit("short", 80, true, 50) == "short", "a short value never moves")
+check(screen.text_extents(winui.fit(long, 80)) <= 80 and winui.fit(long, 80):sub(-3) == "...", "a long value is cut with ...")
+check(winui.fit(long, 80, true, 0) == winui.fit(long, 80, true, 20) and winui.fit(long, 80, true, 50) == winui.fit(long, 80), "and it never scrolls: the selected row, any tick, the same cut text")
+check(winui.fit("short", 80, true, 50) == "short", "a short value is left alone")
 
 os.execute("rm -rf " .. tmp)
 print = _print

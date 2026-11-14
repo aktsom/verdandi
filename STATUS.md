@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.10.3: MIDI learn remembers the port; long names readable in the list pages (docs/port/phase-m12.md)
+- LEARN stores the port the message came from (an exact `=Name` when another listed device's name would also match) for encoders, keys, arc encoders and actions; existing mappings untouched; ANY by hand still works.
+- The list pages (AUDIO, GRID PORTS, MIDI ROUTES, EXT FOLDERS, the file browser and the script browser) cut long rows with "..." (nothing scrolls) and show the full text of the selected row in a fixed info area at the bottom, two lines, an ellipsis in the middle that keeps the end; common code in `winui.lua`. CI saves a picture of the AUDIO page with a long device name.
+
 ## Windows 0.10.2: three control fixes (docs/port/phase-m11.md)
 - HOME page: the Windows build had no stat thread, so `norns.cpu` was nil (K2 error): a real stat thread (`stat_win.cc`), defaults in norns.lua, a page that cannot break on a missing number; a CI test calls init, redraw, enc, key and deinit of EVERY menu page in the real norns.exe.
 - MIDI-mapped encoder sensitivity: a new scale 1 to 9 (5 = the old 2, 9 = the old 9, 1 = 2/3 of the old 1, even steps), saved settings and presets converted once (marker `sens_scale=2`), a fresh install at 5. The table is in the phase note.

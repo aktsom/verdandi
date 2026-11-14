@@ -598,3 +598,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 1. HOME page, K2: the statistics appear (cpu numbers, disk) with no error note; keys and encoders work at once. The statistics change every two seconds.
 2. SYSTEM > MIDI MAP: an encoder that was 2 now shows 5 and turns at the same speed as before; 9 is the same as before; 1 is somewhat slower than the old 1. A new mapping starts at 5.
 3. Turn a MIDI encoder fast, then stop: the drawn knob stops when you stop (it ends where the value is).
+
+## Windows 0.10.3 (learn remembers the port, readable long names)
+1. SYSTEM > MIDI MAP: LEARN an encoder or a button on the Push 2 User port: the DEVICE row shows that port (for example ABLETON PUSH 2 2), not ANY; the same control on the Live port no longer moves it. Set a row to ANY by hand: it matches both again. Mappings you made before are as they were.
+2. SYSTEM > AUDIO with a long device name: the row is cut with "...", nothing scrolls, the bottom of the screen shows the whole name over two lines (the end, for example the port numbers, stays), changing at once with E2.
+3. The file browser of a script (and TAPE) and the script browser (SELECT): the same bottom area with the full file or script name.

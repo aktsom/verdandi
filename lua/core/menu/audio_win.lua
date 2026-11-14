@@ -12,7 +12,7 @@ local winui = require 'core/menu/winui'
 local CONF = "/home/we/audio.conf"
 local FAILED = "/home/we/audio.conf.failed"
 local BUFFERS = {0, 64, 128, 256, 512}
-local ROWS_SHOWN = 3 -- the selected row and its neighbours; the help box fills the lower part of the screen
+local ROWS_SHOWN = winui.ROWS -- the rows of a list (winui.lua); under them the status line and the info area at the bottom
 
 local m = {pos = 1, top = 1, tick = 0, extra = {}, devs = {}, hosts = {}, cfg = {}, run = {}, busy = false, status = nil, status_until = 0, test = nil, testing = false}
 
@@ -142,28 +142,32 @@ local function say(text, secs)
   m.status, m.status_until, m.status_start = text, m.tick + (secs or 24) * 4, m.tick
 end
 
--- the help of a row: at most three short lines of plain words, drawn in a box over the lower part of the screen while the row is selected (the first words are the name of the row)
+-- the help of a row, in plain words: what the info area at the bottom shows for the selected row when the row's own text is not cut (winui.info wraps it over two lines)
 local HELP = {
-  DRIVER = {"DRIVER: normal shares the", "card with other programs.", "exclusive: fastest, alone."},
-  OUTPUT = {"OUTPUT: where sound goes.", "default follows Windows.", "Some pairs may be unwired."},
-  ["OUT CH"] = {"OUT CH: which two outputs", "of the ASIO driver."},
-  INPUT = {"INPUT: sound in; none = off.", "The MIC button turns it on.", "SYS needs no input."},
-  ["IN CH"] = {"IN CH: left and right input", "channels. 3 mono = channel 3", "on both sides."},
-  BUFFER = {"BUFFER: auto is safest.", "Smaller = less delay,", "more risk of clicks."},
-  TEST = {"TEST: K3 sends a click out", "and listens on the input.", "No input: 2 s self-test."},
+  DRIVER = "normal shares the card with other programs; exclusive: fastest, alone",
+  OUTPUT = "where the sound goes; default follows Windows. some pairs may be unwired",
+  ["OUT CH"] = "which two outputs of the ASIO driver",
+  INPUT = "sound in; none = off. the MIC button turns it on; SYS needs no input",
+  ["IN CH"] = "left and right input channels; 3 mono = channel 3 on both sides",
+  BUFFER = "auto is safest; smaller = less delay, more risk of clicks",
+  TEST = "K3 sends a click out and listens on the input; no input: a 2 s self-test",
 }
-m.help = function(row)
+-- the text: a chosen value that is not applied yet says what the mark means, first
+m.help_text = function(row)
   local h = HELP[row]
   if not h then return nil end
-  local lines = {}
-  for i, l in ipairs(h) do lines[i] = l end
   if row == "INPUT" then
     local inf = _norns.audio_info()
-    if inf and inf.sys_available == false then lines[3] = "SYS: needs WASAPI loopback." end
+    if inf and inf.sys_available == false then h = "sound in; none = off. SYS: needs WASAPI loopback (not available)" end
   end
-  -- a chosen value that is not applied yet: the last line explains the mark
-  if m.pending and m.pending(row) then lines[3] = "* chosen: K3 applies." end
-  return lines
+  if m.pending and m.pending(row) then h = "* chosen: K3 applies. " .. h end
+  return h
+end
+-- the two lines as drawn (a test reads them)
+m.help = function(row)
+  local t = m.help_text(row)
+  if not t then return nil end
+  return winui.wrap2(t, winui.INFO_W)
 end
 m.help_lines = function() return m.help(rows()[m.pos]) or {} end
 
@@ -485,38 +489,20 @@ m.redraw = function()
   screen.clear()
   local info = _norns.audio_info()
   local r = rows()
-  m.top = util.clamp(m.pos - 1, 1, math.max(1, #r - ROWS_SHOWN + 1))
-  for k = 0, ROWS_SHOWN - 1 do
-    local i = m.top + k
-    local row = r[i]
-    if row then
-      -- the name of the row stays, the value is the full chosen one; the mark at the end: * = chosen, K3 applies; .. = applying; ok = applied
-      local mark
-      if i == m.pos and m.busy and (pending(row) or m.applied_row == row) then mark = ".."
-      elseif pending(row) then mark = "*"
-      elseif m.applied_row == row then mark = "ok" end
-      winui.row(8 + 9 * k, row, value_text(row), i == m.pos, m.tick, mark)
-    end
+  -- the rows: the name of the row stays, the value is the full chosen one (cut to fit; no scrolling: the full text is in the info area); the mark at the end: * = chosen, K3 applies; .. = applying; ok = applied
+  local list = {}
+  for i, row in ipairs(r) do
+    local mark
+    if i == m.pos and m.busy and (pending(row) or m.applied_row == row) then mark = ".."
+    elseif pending(row) then mark = "*"
+    elseif m.applied_row == row then mark = "ok" end
+    list[i] = {label = row, value = value_text(row), mark = mark}
   end
-  -- the help of the selected row: a box over the lower part of the screen, three short lines at most
-  local lines = m.help(r[m.pos]) or {}
-  if #lines > 0 then
-    screen.level(0)
-    screen.rect(0, 31, 128, 26)
-    screen.fill()
-    screen.level(15)
-    screen.line_width(1)
-    screen.rect(0.5, 31.5, 127, 25)
-    screen.stroke()
-    for k, l in ipairs(lines) do
-      screen.level(15)
-      screen.move(3, 39 + 8 * (k - 1))
-      screen.text(l)
-    end
-  end
-  screen.level(15)
-  screen.move(2, 63)
-  screen.text(winui.fit(status_line(info), 124, false, 0))
+  local top, full, was_cut = winui.list(list, m.pos)
+  m.top = top
+  -- under the list: the standing line (what is wrong, or the numbers), then the info area: the full text of the selected row when it was cut, else its help
+  winui.status(status_line(info))
+  winui.info(was_cut and full or (m.help_text(r[m.pos]) or ""))
   screen.update()
 end
 
