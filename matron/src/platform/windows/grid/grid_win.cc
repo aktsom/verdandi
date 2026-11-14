@@ -171,6 +171,11 @@ int win_probe(const char *port, char *why, size_t whyn) {
 std::string conf_value(const char *key);
 
 char *serial_hook(const char *path) {
+    // the virtual arc (vgrid_device_win.c): "pipe\\verdandi-arc-<pid>-m0000002", the serial is the text after the last '-'
+    if (strncmp(path, "pipe\\verdandi-", 14) == 0) {
+        const char *dash = strrchr(path, '-');
+        return dash ? _strdup(dash + 1) : NULL;
+    }
     std::lock_guard<std::mutex> g(TABLE_LOCK);
     auto it = TABLE.find(path);
     if (it == TABLE.end()) return NULL;

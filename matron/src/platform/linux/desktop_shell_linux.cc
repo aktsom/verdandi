@@ -204,7 +204,9 @@ static void menu_build(void) {
     add_separator();
 #ifndef NORNS_WINDOWS
     add_item(SHELL_MENU_GRID, "Virtual grid", "F6", 0);
+#endif
     add_item(SHELL_MENU_ARC, "Virtual arc", "F8", 0);
+#ifndef NORNS_WINDOWS
     add_item(SHELL_MENU_KEYS, "Virtual keyboard", "F7", 0);
 #endif
     add_item(SHELL_MENU_SCREEN, "Screen in its own window", "F9", screen_out);

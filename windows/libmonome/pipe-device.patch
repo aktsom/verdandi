@@ -1,0 +1,74 @@
+--- a/src/platform/windows.c	2026-11-14 17:55:20.639438028 +0000
++++ b/src/platform/windows.c	2026-11-14 18:01:54.903469030 +0000
+@@ -142,6 +142,16 @@
+ 	return false;
+ }
+ 
++/* Verdandi: the virtual grid and arc of the program that embeds libmonome are an in-process named pipe, \\.\pipe\verdandi-..., given here as "pipe\verdandi-...".
++ * it is not a serial port: no baud rate, no comm mask. everything else (overlapped reads and writes, the protocol on top) is as for a serial port */
++static int m_is_pipe_name(const char *dev) {
++	return strncmp(dev, "pipe\\verdandi-", 14) == 0;
++}
++
++static int m_is_pipe_handle(HANDLE h) {
++	return GetNamedPipeInfo(h, NULL, NULL, NULL, NULL) != 0;
++}
++
+ int monome_platform_open(monome_t *monome, const monome_devmap_t *m,
+                          const char *dev) {
+ 	DCB serparm = {0};
+@@ -169,6 +179,11 @@
+ 	if( hser == INVALID_HANDLE_VALUE )
+ 		goto err_open;
+ 
++	if( m_is_pipe_name(dev) ) {
++		monome->fd = _open_osfhandle((intptr_t) hser, _O_RDWR | _O_BINARY);
++		return 0;
++	}
++
+ 	serparm.DCBlength = sizeof(serparm);
+ 
+ 	if( !GetCommState(hser, &serparm) )
+@@ -264,6 +279,19 @@
+ 		}
+ 
+ start:
++		if (m_is_pipe_handle(hres)) {
++			/* a pipe has no read time limit as a serial port has (SetCommTimeouts): read only what is there, else go back to the wait (which comes back after its own limit) */
++			DWORD avail = 0;
++
++			if (!PeekNamedPipe(hres, NULL, 0, NULL, &avail, NULL)) {
++				CloseHandle(ov.hEvent);
++				return -1;
++			}
++
++			if (avail == 0)
++				continue;
++		}
++
+ 		if (!ReadFile(hres, buf + read_total, nbyte - read_total, &read, &ov)) {
+ 			if (GetLastError() != ERROR_IO_PENDING) {
+ 				fprintf(stderr, "monome_platform_read(): ReadFile failed (%ld)\n", GetLastError());
+@@ -341,6 +369,22 @@
+ 	DWORD event_mask, old_comm_mask;
+ 	int result = 0;
+ 
++	if (m_is_pipe_handle(hres)) {
++		/* a pipe has no comm events: look for bytes now and then until the time is up */
++		DWORD avail, waited = 0;
++
++		for (;;) {
++			if (!PeekNamedPipe(hres, NULL, 0, NULL, &avail, NULL))
++				return -1;
++			if (avail > 0)
++				return 0;
++			if (waited >= msec)
++				return 1;
++			Sleep(1);
++			waited++;
++		}
++	}
++
+ 	if (!GetCommMask(hres, &old_comm_mask)) {
+ 		fprintf(stderr, "monome_platform_wait_for_input(): failed to get comm mask (%ld)\n", GetLastError());
+ 		return -1;

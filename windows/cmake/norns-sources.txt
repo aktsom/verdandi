@@ -115,3 +115,5 @@ matron/src/platform/windows/grid/grid_monitor.cc
 matron/src/platform/windows/grid/grid_reader.c
 matron/src/platform/windows/grid/grid_win.cc
 matron/src/platform/windows/grid/serialosc_win.cc
+# --- M13: the virtual arc (a named pipe that libmonome opens; docs/port/phase-m13.md)
+matron/src/platform/windows/vgrid_device_win.c

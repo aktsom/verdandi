@@ -106,40 +106,7 @@ int dev_monitor_scan(void) {
     return 0;
 }
 
-/* ---- vgrid_device.c: the virtual grid and arc are a pty that libmonome opens; Windows has no ptys (an OSC virtual grid comes with M2, PLAN.md Phase 5.5) ---- */
-vgrid_device_t *vgrid_open(const char *id, int cols, int rows, void (*on_change)(void *ctx), void *ctx) {
-    (void)id, (void)cols, (void)rows, (void)on_change, (void)ctx;
-    not_yet("the virtual grid");
-    return NULL;
-}
-vgrid_device_t *vgrid_open_arc(const char *id, int rings, void (*on_change)(void *ctx), void *ctx) {
-    (void)id, (void)rings, (void)on_change, (void)ctx;
-    not_yet("the virtual arc");
-    return NULL;
-}
-void vgrid_close(vgrid_device_t *g) { (void)g; }
-const char *vgrid_path(const vgrid_device_t *g) {
-    (void)g;
-    return "";
-}
-void vgrid_unlink(vgrid_device_t *g) { (void)g; }
-void vgrid_key(vgrid_device_t *g, int x, int y, int down) { (void)g, (void)x, (void)y, (void)down; }
-void vgrid_enc(vgrid_device_t *g, int n, int delta) { (void)g, (void)n, (void)delta; }
-void vgrid_enc_key(vgrid_device_t *g, int n, int down) { (void)g, (void)n, (void)down; }
-void vgrid_levels(vgrid_device_t *g, uint8_t level[VGRID_MAX][VGRID_MAX], int *intensity) {
-    (void)g;
-    memset(level, 0, (size_t)VGRID_MAX * VGRID_MAX);
-    if (intensity) {
-        *intensity = 15;
-    }
-}
-void vgrid_rings(vgrid_device_t *g, uint8_t ring[VARC_RINGS][VARC_LEDS], int *intensity) {
-    (void)g;
-    memset(ring, 0, (size_t)VARC_RINGS * VARC_LEDS);
-    if (intensity) {
-        *intensity = 15;
-    }
-}
+/* ---- vgrid_device.c: the virtual arc is a named pipe on Windows (platform/windows/vgrid_device_win.c); the virtual grid is switched off there ---- */
 
 /* ---- platform/linux/app_audio_linux.cc, input_route: listening to another program's sound (SYS/APP input) and the MIC/OFF routing ---- */
 int app_audio_available(void) { return 0; }

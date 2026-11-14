@@ -37,6 +37,9 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ACTION 10       // n = the index of a window action (window_actions.h): the main thread does what a click on its button does
 #define SDL_BRIDGE_SHOW_ACTION_FLASH 11 // n = the control that was flashed: its press ends (internal)
 #endif
+#ifdef NORNS_WINDOWS
+#define SDL_BRIDGE_SHOW_ARC_TEST 13 // CI only: n = what * 16 + ring, value (see arc_test in sdl_bridge.cc)
+#endif
 #define SDL_BRIDGE_SHOW_ENC_DRAW 12 // (internal) the timer of the throttled knob redraw (platform/common/redraw_throttle.h)
 #define SDL_BRIDGE_SHOW_OUT 5  // n = the output level's place on its scale x 1000, value = muted
 extern void sdl_bridge_show_control(int kind, int n, int value);
@@ -85,6 +88,10 @@ extern void sdl_bridge_toast(const char *text);
 // or turning); show: the window lights the controls: state 0 off, 1 pick, 2 listen the control (SKIN_K1..SKIN_E3 = 1..6)
 // any thread, does not block: turn a ring of the virtual arc window by ticks (the same path as the mouse); 1 if the window is open and the turn was handed over, 0 if it is closed
 extern int sdl_bridge_arc_turn(int n, int ticks);
+#ifdef NORNS_WINDOWS
+// CI only, any thread: drive the arc window like a mouse (wheel, drag, ring press) and save its picture; 0 unless VERDANDI_TEST_HOOKS=1 and the window is open
+extern int sdl_bridge_arc_test(int what, int ring, int value);
+#endif
 // any thread: the ramp setting of the arc keys in the arc window (the keys of the norns window are lua's)
 extern void sdl_bridge_arc_keys_ramp(int ramp);
 // any thread: a text entry is open (1) or not (0): the arc window takes no key while it is

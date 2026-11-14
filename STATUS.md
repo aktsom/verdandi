@@ -199,6 +199,10 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.10.4: the virtual arc (docs/port/phase-m13.md)
+- The virtual arc of the Linux port now opens on Windows (ARC button, F8, right-click menu "Virtual arc", MIDI action ARC): the window, look and controls are the shared Linux code; the device is a named pipe that libmonome opens (`vgrid_device_win.c`, `windows/libmonome/pipe-device.patch`). MIDI-mapped arc encoders (A1 to A4) and the wheel/drag/keys move the same ring through one path. The virtual grid and keyboard stay off (a toast says so).
+- Tests: Lua (arc LEDs, deltas, keys), C (wheel and drag numbers), and a check in the real norns.exe that drives the window and reads what a script receives (pictures saved). Not tested: a real screen, mouse, DPI scaling, a real arc, a MIDI controller (HARDWARE-CHECKLIST.md).
+
 ## Windows 0.10.3: MIDI learn remembers the port; long names readable in the list pages (docs/port/phase-m12.md)
 - LEARN stores the port the message came from (an exact `=Name` when another listed device's name would also match) for encoders, keys, arc encoders and actions; existing mappings untouched; ANY by hand still works.
 - The list pages (AUDIO, GRID PORTS, MIDI ROUTES, EXT FOLDERS, the file browser and the script browser) cut long rows with "..." (nothing scrolls) and show the full text of the selected row in a fixed info area at the bottom, two lines, an ellipsis in the middle that keeps the end; common code in `winui.lua`. CI saves a picture of the AUDIO page with a long device name.

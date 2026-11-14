@@ -109,6 +109,7 @@
 #include "product.h"
 #include "sdl_bridge.h"
 #include "varc_skin.h"
+#include "platform/linux/arc_input.h"
 #include "vgrid_device.h"
 #include "vgrid_skin.h"
 #include "vkeys_skin.h"
@@ -1325,6 +1326,9 @@ static void toggle_grid(void) {
     vgrid = vgrid_open("virtual grid", cols, rows, grid_changed, NULL);
     if (vgrid == NULL) {
         fprintf(stderr, "sdl_bridge: virtual grid failed\n");
+#ifdef NORNS_WINDOWS
+        post_toast("VIRTUAL GRID: NOT ON WINDOWS YET");
+#endif
         return;
     }
     // one unit per point; arrange_windows fits the windows on the screen
@@ -1418,13 +1422,7 @@ static void grid_motion(const SDL_MouseMotionEvent *m) {
 
 #define ARC_RINGS 4
 #define ARC_NAME "monome arc virtual"
-// encoder ticks per turn, as on the hardware
-#define ARC_TICKS_PER_TURN 1024.0
-// a turn of the mouse round a knob on the screen is a quarter turn of the knob: a small
-// knob under a mouse would otherwise be far touchier than the hardware under a hand
-#define ARC_DRAG_GEAR 0.25
-// ticks a wheel notch (a trackpad scrolls in fractions of one)
-#define ARC_WHEEL_TICKS 2
+// ticks per turn, the drag gear, the ticks of a wheel notch: platform/linux/arc_input.h (the numbers are tested there)
 
 static vgrid_device_t *varc = NULL;
 static varc_geom_t arc_geom = {};
@@ -1500,6 +1498,9 @@ static void toggle_arc(void) {
     varc = vgrid_open_arc(ARC_NAME, ARC_RINGS, arc_changed, NULL);
     if (varc == NULL) {
         fprintf(stderr, "sdl_bridge: virtual arc failed\n");
+#ifdef NORNS_WINDOWS
+        post_toast("VIRTUAL ARC FAILED: SEE LOGS/NORNS.LOG");
+#endif
         return;
     }
     int uw, uh;
@@ -1525,14 +1526,18 @@ static double turn_factor(void) {
     if (mod & KMOD_GUI) {
         return 4;
     }
+#ifdef NORNS_WINDOWS
+    // the Windows key opens the Start menu when it is let go: Ctrl is the faster turn here as well (a Ctrl-click is the push button, so a drag is not started with it)
+    if (mod & KMOD_CTRL) {
+        return 4;
+    }
+#endif
     return 1;
 }
 
 static void arc_turn(int n, double ticks) {
-    arc_acc[n] += ticks;
-    int t = (int)arc_acc[n];
+    int t = arc_input_take(&arc_acc[n], ticks);
     if (t != 0) {
-        arc_acc[n] -= t;
         vgrid_enc(varc, n, t);
         arc_turns[n] += t / ARC_TICKS_PER_TURN;
         arc_redraw();
@@ -1599,35 +1604,112 @@ static void arc_motion(const SDL_MouseMotionEvent *m) {
     }
     // round the knob: clockwise is up. near the centre the angle jumps, so it waits there
     double d, a = arc_angle_at(arc_drag, m->x, m->y, &d);
-    if (d < 8) {
+    if (d < ARC_DRAG_DEAD_ZONE) {
         return;
     }
-    double da = a - arc_last;
-    while (da > M_PI) {
-        da -= 2 * M_PI;
-    }
-    while (da < -M_PI) {
-        da += 2 * M_PI;
-    }
+    double da = arc_input_angle_step(a, arc_last);
     arc_last = a;
-    arc_turn(arc_drag, da / (2 * M_PI) * ARC_TICKS_PER_TURN * ARC_DRAG_GEAR * turn_factor());
+    arc_turn(arc_drag, arc_input_drag_ticks(da, turn_factor()));
 }
 
-static void arc_wheel(const SDL_MouseWheelEvent *w) {
-    int mx, my;
-    SDL_GetMouseState(&mx, &my);
+// the wheel at window point mx,my: over a ring it turns that ring
+static void arc_wheel_at(int mx, int my, double dy, bool flipped) {
     double px, py;
     pane_pixels(&arc_pane, mx, my, &px, &py);
     int n = varc_skin_hit(&arc_geom, px, py);
     if (n < 0) {
         return;
     }
-    double dy = w->preciseY != 0 ? w->preciseY : w->y;
-    if (w->direction == SDL_MOUSEWHEEL_FLIPPED) {
-        dy = -dy;
-    }
-    arc_turn(n, dy * ARC_WHEEL_TICKS * turn_factor());
+    arc_turn(n, arc_input_wheel_ticks(dy, flipped, turn_factor()));
 }
+
+static void arc_wheel(const SDL_MouseWheelEvent *w) {
+    int mx, my;
+    SDL_GetMouseState(&mx, &my);
+    arc_wheel_at(mx, my, w->preciseY != 0 ? w->preciseY : w->y, w->direction == SDL_MOUSEWHEEL_FLIPPED);
+}
+
+#ifdef NORNS_WINDOWS
+// CI only (VERDANDI_TEST_HOOKS=1, _norns.arc_test): the arc window is driven through the same functions the mouse events call, at points computed from the ring
+// geometry, and its picture is saved. docs/port/phase-m13.md
+static bool arc_test_enabled(void) {
+    const char *e = getenv("VERDANDI_TEST_HOOKS");
+    return e != NULL && strcmp(e, "1") == 0;
+}
+
+// a point in the window, in window points: ring n, angle (radians, 0 = right, clockwise), dist units from its centre
+static void arc_test_point(int n, double angle, double dist, int *x, int *y) {
+    int ww = 1, wh = 1;
+    SDL_GetWindowSize(arc_pane.window, &ww, &wh);
+    double k = arc_pane.w > 0 && ww > 0 ? (double)arc_pane.w / ww : 1, cx, cy;
+    varc_skin_center(&arc_geom, n, &cx, &cy);
+    *x = (int)lround((cx + cos(angle) * dist * arc_geom.s) / k);
+    *y = (int)lround((cy + sin(angle) * dist * arc_geom.s) / k);
+}
+
+static int arc_test(int what, int n, int value) {
+    if (varc == NULL || n < 0 || n >= ARC_RINGS) {
+        return 0;
+    }
+    int x, y;
+    SDL_MouseButtonEvent b;
+    SDL_zero(b);
+    b.windowID = SDL_GetWindowID(arc_pane.window);
+    switch (what) {
+    case 1: // wheel: value in hundredths of a notch
+        arc_test_point(n, 0, 40, &x, &y);
+        arc_wheel_at(x, y, value / 100.0, false);
+        return 1;
+    case 2: { // drag: value degrees clockwise round ring n, in steps of 3 degrees, from the top
+        double start = -M_PI / 2, step = (value < 0 ? -3.0 : 3.0) * M_PI / 180;
+        arc_test_point(n, start, 40, &x, &y);
+        b.type = SDL_MOUSEBUTTONDOWN;
+        b.button = SDL_BUTTON_LEFT;
+        b.x = x;
+        b.y = y;
+        arc_button(&b);
+        int steps = abs(value) / 3;
+        for (int i = 1; i <= steps; i++) {
+            SDL_MouseMotionEvent m;
+            SDL_zero(m);
+            arc_test_point(n, start + i * step, 40, &m.x, &m.y);
+            arc_motion(&m);
+        }
+        b.type = SDL_MOUSEBUTTONUP;
+        arc_button(&b);
+        return 1;
+    }
+    case 3: // ring press (the right button): value 1 down, 0 up
+        arc_test_point(n, 0, 40, &x, &y);
+        b.type = value ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+        b.button = SDL_BUTTON_RIGHT;
+        b.x = x;
+        b.y = y;
+        arc_button(&b);
+        return 1;
+    case 4: { // the window's picture, <home>/arc_window_<value>.png (HOME is the norns home of the run)
+        const char *home = getenv("HOME");
+        if (home == NULL || arc_pane.canvas == NULL) {
+            return 0;
+        }
+        arc_redraw();
+        std::string path = std::string(home) + "/arc_window_" + std::to_string(value) + ".png";
+        int ok = cairo_surface_write_to_png(arc_pane.canvas, path.c_str()) == CAIRO_STATUS_SUCCESS;
+        fprintf(stderr, "arc test: picture %s: %s\n", path.c_str(), ok ? "saved" : "NOT saved");
+        return ok;
+    }
+    }
+    return 0;
+}
+
+int sdl_bridge_arc_test(int what, int ring, int value) {
+    if (!arc_test_enabled() || !arc_open_flag) {
+        return 0;
+    }
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_ARC_TEST, what * 16 + ring, value);
+    return 1;
+}
+#endif
 
 //--- virtual keyboard window: a MIDI source matron picks up like any app's port
 // macOS: a CoreMIDI source. linux: shell_keys_* (platform/linux/keys_midi.cc)
@@ -1800,6 +1882,9 @@ static void toggle_keys(void) {
     }
     if (!keys_backend_open()) {
         fprintf(stderr, "sdl_bridge: virtual keyboard failed\n");
+#ifdef NORNS_WINDOWS
+        post_toast("VIRTUAL KEYBOARD: NOT ON WINDOWS YET");
+#endif
         return;
     }
     if (vk.velocity == 0) {
@@ -3188,6 +3273,12 @@ static void handle_show(int kind, int n, int value) {
         }
         return;
     }
+#ifdef NORNS_WINDOWS
+    if (kind == SDL_BRIDGE_SHOW_ARC_TEST) {
+        arc_test(n / 16, n % 16, value);
+        return;
+    }
+#endif
     if (kind == SDL_BRIDGE_SHOW_ARC_TURN) {
         if (varc != NULL && n >= 1 && n <= ARC_RINGS) {
             arc_turn(n - 1, value);

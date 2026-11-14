@@ -248,6 +248,85 @@ if os.environ.get("VERDANDI_PROBE") == "burst":
         result("burst-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=arc (M13): the virtual arc in the real program. the program runs with VERDANDI_TEST_HOOKS=1. the arc window is opened the way its button does it (window_action "arc"), a picture of it is saved with the LEDs off, a small script
+# (windows/ci/arcprobe.lua, seeded in dust/code/arcprobe) draws on the rings and counts the deltas and keys, the window is driven through the functions its mouse events call (a wheel notch, a drag round a ring, a ring press, a turn the way a MIDI-mapped
+# encoder sends it), a second picture is saved, the arc is closed and opened again. the results are 'PROBE arc-... ok|FAIL' lines
+if os.environ.get("VERDANDI_PROBE") == "arc":
+    def run(line, want, seconds=30):
+        return repl(5555, line, want, seconds)
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("arc-up", up, "norns answers")
+        time.sleep(3)
+        # the arc window, the way the ARC button opens it; the device must appear in the arc list a moment later
+        ok, tail = run("print('VT_OPEN ' .. tostring(_norns.window_action('arc')))\n", "VT_OPEN true", 20)
+        result("arc-open", ok, "the ARC action reached the window" if ok else "the window did not take the ARC action: " + repr(tail))
+        found = False
+        for _ in range(20):
+            ok, tail = run("local n = 0 local nm = '' for _, d in pairs(arc.devices) do n = n + 1 nm = d.name end print('VT_ARCS ' .. n .. ' ' .. nm)\n", "VT_ARCS", 8)
+            if ok and "VT_ARCS 1 " in tail:
+                found = True; break
+            time.sleep(1)
+        result("arc-device", found, ("the virtual arc is in the arc list: " + tail.strip()[-60:]) if found else "no arc device after the window opened: " + repr(tail))
+        # a picture with every LED off
+        ok, tail = run("print('VT_SHOT0 ' .. tostring(_norns.arc_test(4, 1, 0)))\n", "VT_SHOT0", 10)
+        result("arc-shot-dark", ok and "VT_SHOT0 true" in tail, "the arc window was saved with the LEDs off (arc_window_0.png)")
+        # the small script
+        ok, tail = run("norns.script.load('/home/we/dust/code/arcprobe/arcprobe.lua') print('VT_LOAD ' .. 'sent')\n", "VT_LOAD sent", 20)
+        ready = False
+        for _ in range(30):
+            ok, tail = run("print('VT_READY ' .. tostring(ARCP and ARCP.ready) .. ' ' .. tostring(ARCP and ARCP.name))\n", "VT_READY", 8)
+            if ok and "VT_READY true" in tail:
+                ready = True; break
+            time.sleep(1)
+        result("arc-script", ready, "the script started and found the arc: " + tail.strip()[-70:] if ready else "the script did not start: " + repr(tail))
+        time.sleep(1)
+        # the window as a mouse drives it: ring 1 one wheel notch (+2), ring 2 a quarter turn round the ring (about +64), ring 3 pressed and let go (a key, no delta), ring 4 turned by 100 ticks the way a mapped encoder does (_norns.arc_turn);
+        # ring 1 also gets a mapped turn of 50 on top of its notch: the sum is 52, nothing counted twice
+        line = ("_norns.arc_test(1, 1, 100) _norns.arc_test(2, 2, 90) _norns.arc_test(3, 3, 1) _norns.arc_test(3, 3, 0) "
+                "print('VT_TURN ' .. tostring(_norns.arc_turn(4, 100)) .. ' ' .. tostring(_norns.arc_turn(1, 50)))\n")
+        ok, tail = run(line, "VT_TURN", 20)
+        result("arc-input-sent", ok and "VT_TURN true true" in tail, "wheel, drag, ring press and mapped turns were sent to the window: " + tail.strip()[-40:])
+        time.sleep(4)
+        ok, tail = run("print('VT_RES ' .. table.concat(ARCP.sum, ',') .. ' ' .. table.concat(ARCP.msgs, ',') .. ' [' .. table.concat(ARCP.keys, ' ') .. ']')\n", "VT_RES", 20)
+        m = None
+        import re
+        m = re.search(r"VT_RES (-?\d+),(-?\d+),(-?\d+),(-?\d+) (\d+),(\d+),(\d+),(\d+) \[([^\]]*)\]", tail)
+        if m:
+            s = [int(m.group(i)) for i in range(1, 5)]; c = [int(m.group(i)) for i in range(5, 9)]; keys = m.group(9)
+            result("arc-wheel", s[0] == 52 and c[0] == 2, "ring 1: a wheel notch (+2) and a mapped turn (+50) arrived as %d in %d messages (52 in 2 expected: nothing counted twice)" % (s[0], c[0]))
+            result("arc-drag", 60 <= s[1] <= 68, "ring 2: a quarter turn of the pointer round the ring arrived as %d ticks (64 expected, +-4)" % s[1])
+            result("arc-press", keys == "3:1 3:0" and s[2] == 0, "ring 3: the press and the release reached the script as keys [%s] and no delta (%d)" % (keys, s[2]))
+            result("arc-mapped", s[3] == 100, "ring 4: a mapped turn of 100 ticks arrived as %d" % s[3])
+        else:
+            result("arc-wheel", False, "no result line: " + repr(tail))
+        # the picture with the LEDs the script drew
+        ok, tail = run("print('VT_SHOT1 ' .. tostring(_norns.arc_test(4, 1, 1)))\n", "VT_SHOT1", 10)
+        result("arc-shot-lit", ok and "VT_SHOT1 true" in tail, "the arc window was saved with the script's LEDs (arc_window_1.png)")
+        # closed and opened again: the device goes and comes back, the script's port is the same
+        ok, tail = run("print('VT_CLOSE ' .. tostring(_norns.window_action('arc')))\n", "VT_CLOSE", 10)
+        time.sleep(3)
+        ok, tail = run("local n = 0 for _ in pairs(arc.devices) do n = n + 1 end print('VT_AFTERCLOSE ' .. n)\n", "VT_AFTERCLOSE", 10)
+        result("arc-close", ok and "VT_AFTERCLOSE 0" in tail, "closing the window removes the arc device: " + tail.strip()[-30:])
+        ok, tail = run("print('VT_REOPEN ' .. tostring(_norns.window_action('arc')))\n", "VT_REOPEN", 10)
+        back = False
+        for _ in range(15):
+            ok, tail = run("local n = 0 local port for _, d in pairs(arc.devices) do n = n + 1 port = d.port end print('VT_BACK ' .. n .. ' port ' .. tostring(port))\n", "VT_BACK", 8)
+            if ok and "VT_BACK 1 port 1" in tail:
+                back = True; break
+            time.sleep(1)
+        result("arc-reopen", back, "opened again: the arc is back on port 1: " + tail.strip()[-30:])
+    except Exception as e:
+        result("arc-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):

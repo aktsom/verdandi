@@ -610,6 +610,51 @@ chk_audio_shot() {
     done
     return "$bad"
 }
+# M13: the virtual arc in the real program (windows/ci/maiden_probe.py, VERDANDI_PROBE=arc; the program runs with VERDANDI_TEST_HOOKS=1): the arc window opens like the ARC button opens it, a picture of it with the LEDs off, a small script
+# (windows/ci/arcprobe.lua) draws on the rings and counts the deltas and keys, a wheel notch, a drag, a ring press and mapped turns are sent through the functions the mouse events call, a picture with the LEDs lit, the window is closed and opened again
+run_arc_probe() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local H="$WORK/user home arc" out="$M0_OUT/arc"
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    mkdir -p "$H/dust/code/arcprobe"
+    cp "$HERE/arcprobe.lua" "$H/dust/code/arcprobe/arcprobe.lua"
+    VERDANDI_PROBE=arc "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    export VERDANDI_TEST_HOOKS=1
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 220 "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=100 --home="$(native "$H")"
+    fi
+    unset VERDANDI_TEST_HOOKS
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    cp "$H"/arc_window_*.png "$out/" 2> /dev/null || true
+    return 0
+}
+chk_arc() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local bad=0 out="$M0_OUT/arc" f p
+    cat "$out/probe.txt" 2> /dev/null
+    for p in arc-up arc-open arc-device arc-shot-dark arc-script arc-input-sent arc-wheel arc-drag arc-press arc-mapped arc-shot-lit arc-close arc-reopen; do
+        has "$out/probe.txt" "PROBE $p ok" "the arc check '$p'" || bad=1
+    done
+    for f in arc_window_0 arc_window_1; do
+        if [ -f "$out/$f.png" ]; then
+            "$PYTHON" "$(native "$HERE/png_nonblank.py")" "$(native "$out/$f.png")" && echo "found: $f.png is not blank ($(wc -c < "$out/$f.png") bytes)" || { echo "NOT FOUND: $f.png has content"; bad=1; }
+        else
+            echo "NOT FOUND: $f.png in $out"; bad=1
+        fi
+    done
+    # the picture with the script's LEDs must differ from the dark one: the LEDs the script drew are in the window
+    if [ -f "$out/arc_window_0.png" ] && [ -f "$out/arc_window_1.png" ]; then
+        if cmp -s "$out/arc_window_0.png" "$out/arc_window_1.png"; then echo "NOT FOUND: the lit picture differs from the dark one (the script's LEDs did not reach the window)"; bad=1; else echo "found: the picture with the script's LEDs differs from the dark one"; fi
+    fi
+    has "$out/logs/norns.log" "arc test: picture" "the window saved its picture" || bad=1
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -769,6 +814,8 @@ m0_run m7-check-packs chk_packs
 m0_run m9-check-twins chk_twins
 m0_run m11-check-menu-pages chk_menu_pages
 m0_run m12-check-audio-shot chk_audio_shot
+m0_run m13-run-arc-probe run_arc_probe
+m0_run m13-check-arc chk_arc
 m0_run m10-run-twins-engine run_twins_engine
 m0_run m10-check-twins-engine chk_twins_engine
 m0_run m10-check-longpath chk_longpath

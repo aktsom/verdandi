@@ -404,6 +404,9 @@ static int _clipboard_request(lua_State *l);
 static int _toast(lua_State *l);
 static int _midimap_arm(lua_State *l);
 static int _arc_turn(lua_State *l);
+#ifdef NORNS_WINDOWS
+static int _arc_test(lua_State *l);
+#endif
 static int _arc_keys_config(lua_State *l);
 static int _arc_keys_block(lua_State *l);
 static int _midimap_show(lua_State *l);
@@ -811,6 +814,9 @@ void w_init(void) {
     lua_register_norns("toast", &_toast);
     lua_register_norns("midimap_arm", &_midimap_arm);
     lua_register_norns("arc_turn", &_arc_turn);
+#ifdef NORNS_WINDOWS
+    lua_register_norns("arc_test", &_arc_test);
+#endif
     lua_register_norns("arc_keys_config", &_arc_keys_config);
     lua_register_norns("arc_keys_block", &_arc_keys_block);
     lua_register_norns("midimap_show", &_midimap_show);
@@ -4380,6 +4386,18 @@ int _arc_turn(lua_State *l) {
     lua_pushboolean(l, sdl_bridge_arc_turn((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2)) != 0);
     return 1;
 }
+
+#ifdef NORNS_WINDOWS
+/***
+ * Windows CI only (needs VERDANDI_TEST_HOOKS=1): drive the virtual arc window like a mouse. what 1 wheel (value = hundredths of a notch), 2 drag (value = degrees round the ring), 3 ring press (value 1 down, 0 up), 4 save the window's picture (HOME/arc_window_<value>.png)
+ * @function arc_test
+ * @treturn boolean true if the window is open and the hooks are on
+ */
+int _arc_test(lua_State *l) {
+    lua_pushboolean(l, sdl_bridge_arc_test((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2) - 1, (int)luaL_checkinteger(l, 3)) != 0);
+    return 1;
+}
+#endif
 
 /***
  * Linux desktop: the ramp setting of the arc keys in the arc window

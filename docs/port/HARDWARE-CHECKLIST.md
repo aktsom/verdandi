@@ -603,3 +603,11 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 1. SYSTEM > MIDI MAP: LEARN an encoder or a button on the Push 2 User port: the DEVICE row shows that port (for example ABLETON PUSH 2 2), not ANY; the same control on the Live port no longer moves it. Set a row to ANY by hand: it matches both again. Mappings you made before are as they were.
 2. SYSTEM > AUDIO with a long device name: the row is cut with "...", nothing scrolls, the bottom of the screen shows the whole name over two lines (the end, for example the port numbers, stays), changing at once with E2.
 3. The file browser of a script (and TAPE) and the script browser (SELECT): the same bottom area with the full file or script name.
+
+## Windows 0.10.4 (the virtual arc)
+1. Click ARC (or press F8, or right-click > Virtual arc): a window with four knobs and 64 LEDs round each opens beside the norns window. Close it with its own close button: it goes; open it again: it comes back.
+2. Run the example script `examples\arc_demo` (copy its folder into `dust\code`): ring LEDs follow the values, wheel over a ring turns it (a notch is 2 ticks), left-drag round a ring turns it (a full turn of the pointer is a quarter of a turn of the knob), right button presses it (the value jumps to the middle), Shift is finer, Ctrl is faster.
+3. At 125 or 150 percent display scaling: the picture is sharp and a click lands on the ring you point at. On a second screen with another scaling: the same.
+4. A MIDI controller mapped to A1 (MIDI MAP, learn by clicking the ring): turning it moves the same ring as the wheel, once; with the arc closed one toast says so.
+5. A real arc plugged in next to the virtual one (if you have one): both appear, a mapped encoder only moves the virtual one.
+6. Keys 5 6 T Y G H B N in the arc window and (arc open, a script running) in the norns window.

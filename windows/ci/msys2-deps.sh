@@ -88,6 +88,10 @@ build_libmonome() {
     if ! grep -q monome_platform_serial_hook "$src/src/platform/windows.c"; then
         patch -p1 -d "$src" < "$REPO/windows/libmonome/serial-hook.patch" || return 1
     fi
+    # M13: the virtual arc is a named pipe that libmonome opens like a serial port (windows/libmonome/pipe-device.patch); applied once
+    if ! grep -q m_is_pipe_name "$src/src/platform/windows.c"; then
+        patch -p1 -d "$src" < "$REPO/windows/libmonome/pipe-device.patch" || return 1
+    fi
     # upstream builds with -Wall -Werror for GCC; MinGW may warn where Linux does not. first as it is, then (and said in the log) without -Werror, so that the warnings are listed and the build goes on
     if ! { cmake -S "$src" -B "$d" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" && cmake --build "$d"; }; then
         echo "libmonome: the strict build (-Werror) failed, trying again without -Werror"

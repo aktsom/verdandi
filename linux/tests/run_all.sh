@@ -334,6 +334,9 @@ run "c:MIDI MAP hit test (K1-K3 and E1-E3 are hit alike in every style and pixel
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layout_test.c matron/src/platform/linux/extras_layout.c -lm -o "$T/xlt" 2> "$T/xlt.err" || cat "$T/xlt.err"
 run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux $(pkg-config --cflags sdl2) linux/tests/arc_keys_c_test.c matron/src/platform/linux/arc_keys.c -o "$T/akc" 2> "$T/akc.err" || cat "$T/akc.err"
+cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/arc_input_test.c -o "$T/aic" -lm 2> "$T/aic.err" || cat "$T/aic.err"
+run "c:virtual arc mouse numbers (wheel notch 2 ticks, a full turn of the pointer 256 ticks, Shift a quarter, Super four times, flipped wheel, the angle past the edge, fractions carried, the sum exact; same code on Linux and Windows)" "$T/aic"
+run "lua:virtual arc as a script sees it (led, all, segment, relative levels, deltas and keys once each, wheel plus mapped encoder add up, a real arc next to it, remove and come back)" env NORNS_PLATFORM=linux lua5.3 linux/tests/arc_virtual_test.lua
 run "lua:grid and arc removal without a port (a fifth grid, a callback that raises: the device always goes; the owner's grid.lua:205 error)" env NORNS_PLATFORM=linux lua5.3 linux/tests/grid_remove_test.lua
 run "lua:script clear and load (two quick loads: the second reaches its engine; a failing step does not stop the clear; mod cleanup hooks once; the 15 s watchdog)" env NORNS_PLATFORM=linux lua5.3 linux/tests/script_clear_test.lua
 cc -std=gnu11 -Wall -Wextra -g -O0 -I matron/src/platform/linux linux/tests/crash_symbols_test.c matron/src/platform/linux/crash_symbols.c -o "$T/cst" 2> "$T/cst.err" || cat "$T/cst.err"
