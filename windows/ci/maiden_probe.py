@@ -136,7 +136,7 @@ if os.environ.get("VERDANDI_PROBE") == "twins":
         result("twins-script", ok, "the script twins is loaded with engine twins" if ok else "twins did not load: " + repr(tail))
         ready = False
         for _ in range(60):
-            ok, tail = repl(5555, "local n = 0 for _ in pairs(engine.names or {}) do n = n + 1 end print('VT_CMDS ' .. n)\n", "VT_CMDS", 10)
+            ok, tail = repl(5555, "local n = 0 for _ in pairs(engine.commands or {}) do n = n + 1 end print('VT_CMDS ' .. n)\n", "VT_CMDS", 10)
             import re
             m = re.search(r"VT_CMDS (\d+)", tail or "")
             if m and int(m.group(1)) > 100:
