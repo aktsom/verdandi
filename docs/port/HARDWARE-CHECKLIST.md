@@ -587,3 +587,9 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 3. Clone twins with maiden (a git clone). When the author has pushed new commits, ten seconds after the script starts the screen says "Twins Update Available": K2 skips, K3 installs; after K3 "Update Installed" (a new engine) K3 restarts Verdandi by itself within a few seconds, or the script reloads (no engine change).
 4. A copy of twins that was unpacked from a zip (no `.git`) never shows the update screen: that is as designed.
 5. If you edit a file of the cloned twins, the update prompt stays away (the script's own rule: local changes).
+
+## Windows 0.10.1 (dead server, long names)
+1. Load twins, give it a sample (the file of the crash if you still have it). If the server stops again: within a second or two the screen says "SuperCollider stopped (error 0x...): restarting it and the script (1 of 2)", Verdandi restarts, twins comes back; after the second restart a third stop says "SuperCollider keeps stopping ... not restarting it again". `logs\launcher.log` has the exit code of each stop (send it).
+2. While a script waits for an engine and the server dies, the loading screen stops with "SuperCollider stopped" and the next script can be loaded (no waiting for ever).
+3. In the file browser, a sample with a long name in an [ext] folder: E3 (preview) and K3 (choose) open the right file; `norns.log` has no "cannot open sndfile".
+4. Optional, if the crash comes back: Windows can keep a crash dump of scsynth.exe (a registry setting that needs an administrator, "LocalDumps"); the dump plus `logs\launcher.log` and `logs\sclang.log` say which plug-in it was.

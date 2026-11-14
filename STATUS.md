@@ -199,6 +199,11 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - **6b to 6e done:** mode word on the status line, a help line per row, TEST self-test without cables, MIC / INPUT not-open notes. Tests: `audio_page_windows_test.lua`, `audio_chain_test.c` (`selftest*`).
 - **Could not be tested without Windows or the RME:** exclusive clicks, the drag fix, MMCSS of scsynth, the self-test on a real card.
 
+## Windows 0.10.1: dead server, long [ext] names, the twins crash (docs/port/phase-m10.md)
+- The owner's scsynth crash with twins (0xC0000005 after a sample) is NOT reproduced: the real twins engine, a real server, samples at 48/44.1/96 kHz, 16/24 bit, 3 to 20 s, a long-named file under an [ext] link: no crash on the runner (no sound card there). No cause found, none claimed.
+- Built and tested: the launcher notices a stopped server and restarts the round twice, then stops with a plain message (CI kills scsynth three times); a loading script no longer waits for a dead server; fileselect preview/selection use the real name (and hidden files no longer shift the rows); sound files open with wide `\\?\` paths on Windows.
+- Linux behaviour unchanged (Windows-only branches).
+
 ## Windows 0.10.0: support for the script twins (docs/port/phase-m9.md)
 - PortedPlugins pack (AnalogChew/Loss/Degrade + the rest that compiles) built in the plug-in job, per-user folder, empty `X_scsynth.so` markers (scsynth loads `.scx` only; the heal looks at `.scx` only), licences and a source offer.
 - `find -printf '%p!'` rewritten to `-exec printf` in the Windows shell path (`lua/core/find_printf.lua`, wired in `virtual_home.lua`); `nice.exe`, `sudo.exe`, `systemctl.exe` stand-ins (`windows/shims`).
