@@ -37,6 +37,7 @@ _norns = {midi = {},
   toast = function(t) out[#out + 1] = "toast:" .. t end,
   midimap_arm = function(m) out[#out + 1] = "arm:" .. m end,
   midimap_show = function(s, n) out[#out + 1] = "ring:" .. s .. ":" .. n end,
+  arc_drag_config = function(m) _G.DRAG_SENT = (_G.DRAG_SENT or "") .. "drag:" .. m .. " " end,
   arc_turn = function(n, ticks) out[#out + 1] = "arc:" .. n .. ":" .. ticks; return _G.ARC_OPEN ~= false end}
 local function acts() local r = {} for _, o in ipairs(out) do if o:match("^key:") or o:match("^enc:") then r[#r + 1] = o end end return table.concat(r, " ") end
 params = {lookup = {}, lookup_param = function(self, id) return {name = "Param " .. tostring(id)} end}
@@ -744,6 +745,12 @@ asetup(function() S.assign_action("mix", "note", 36) end); mm.leave(); eq(S.stat
 -- the layer still fires while the page is not open (actions are global)
 reset_out(); T = T + 1; note_on(2, 1, 36, 100); eq(wa(), "wa:mix", "actions work without the MIDI MAP page open")
 mm.on_change = nil
+
+-- ARC DRAG reaches the window: 1 for up and down, 0 for round the ring, after every change of the setting and at load (the window starts with the saved way)
+DRAG_SENT = ""; S.set_arc_drag("updown"); mm.changed(); eq(DRAG_SENT:match("drag:%d"), "drag:1", "up and down is sent to the window as 1")
+DRAG_SENT = ""; S.set_arc_drag("circle"); mm.changed(); eq(DRAG_SENT:match("drag:%d"), "drag:0", "round the ring is sent as 0")
+check(mm.arc_drag_updown() == false, "mm.arc_drag_updown is false for circle"); S.set_arc_drag("updown"); check(mm.arc_drag_updown() == true, "and true for updown")
+DRAG_SENT = ""; mm.load(); check(DRAG_SENT:find("drag:1", 1, true), "mm.load sends the saved way")
 
 if fails == 0 then real_print("midimap layer: all passed") end
 os.execute("rm -rf '" .. tmp .. "'")

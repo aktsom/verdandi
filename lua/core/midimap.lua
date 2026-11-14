@@ -100,6 +100,7 @@ end
 --- a change in the settings (any set, clear, preset, load) releases what is held and starts the values again
 local function push_arc_config()
   if _norns.arc_keys_config then _norns.arc_keys_config(S.state.arc_keys_accel and 1 or 0) end
+  if _norns.arc_drag_config then _norns.arc_drag_config(S.state.arc_drag == "updown" and 1 or 0) end
 end
 
 local function push_menu()
@@ -202,6 +203,7 @@ end
 
 --- the settings the keyboard module asks for (lua/core/keyboard.lua, the arc keys)
 function M.arc_keys_on() return S.state.arc_keys ~= false end
+function M.arc_drag_updown() return S.state.arc_drag == "updown" end
 function M.arc_keys_ramp() return S.state.arc_keys_accel == true end
 
 --- put it in the script hook list (once, at start), and answer the window's click on a control while a pick is armed (sdl_bridge.cc: _norns.midimap_pick("e" or "k", n))

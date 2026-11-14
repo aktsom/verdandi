@@ -335,7 +335,7 @@ cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/extras_layo
 run "c:extras layout (the grid, arc and keys windows go round the norns window, which is never moved or resized; on screen, clear of it and of each other, three screens, no room, an offset display)" "$T/xlt"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux $(pkg-config --cflags sdl2) linux/tests/arc_keys_c_test.c matron/src/platform/linux/arc_keys.c -o "$T/akc" 2> "$T/akc.err" || cat "$T/akc.err"
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/arc_input_test.c -o "$T/aic" -lm 2> "$T/aic.err" || cat "$T/aic.err"
-run "c:virtual arc mouse numbers (wheel notch 2 ticks, a full turn of the pointer 256 ticks, Shift a quarter, Super four times, flipped wheel, the angle past the edge, fractions carried, the sum exact; same code on Linux and Windows)" "$T/aic"
+run "c:virtual arc mouse numbers (up and down drag: 12 ticks a unit, a lap in 85, Shift, Ctrl, outside the window; wheel notch 2 ticks, a full turn of the pointer 256 ticks, Shift a quarter, Super four times, flipped wheel, the angle past the edge, fractions carried, the sum exact; same code on Linux and Windows)" "$T/aic"
 run "lua:virtual arc as a script sees it (led, all, segment, relative levels, deltas and keys once each, wheel plus mapped encoder add up, a real arc next to it, remove and come back)" env NORNS_PLATFORM=linux lua5.3 linux/tests/arc_virtual_test.lua
 run "lua:grid and arc removal without a port (a fifth grid, a callback that raises: the device always goes; the owner's grid.lua:205 error)" env NORNS_PLATFORM=linux lua5.3 linux/tests/grid_remove_test.lua
 run "lua:script clear and load (two quick loads: the second reaches its engine; a failing step does not stop the clear; mod cleanup hooks once; the 15 s watchdog)" env NORNS_PLATFORM=linux lua5.3 linux/tests/script_clear_test.lua
@@ -1471,6 +1471,67 @@ PY
         rm -rf "$AH"
     }
     arc_scenario
+
+    # the left-button drag in the real arc window with real mouse events (xdotool), Windows 0.10.5 (docs/port/phase-m14.md): ARC DRAG up and down (up clockwise, 12 ticks a pixel, Shift a quarter, a lap of 1024 in 85 pixels),
+    # round the ring (the Linux default, unchanged), the drag goes on outside the window until the button is let go, nothing turns after the release, ring 3 only turns ring 3, the right button and the wheel as before, the window never moves
+    arc_drag_scenario() {
+        DH="$(mktemp -d)"
+        ln -s "$REPO" "$DH/norns"
+        mkdir -p "$DH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$DH/dust/code/probe/"
+        DLOG="$T/arc-drag.log"
+        NORNS_HOME="$DH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_arc_drag.lua" "$DLOG" > /dev/null 2>&1
+        # the arc deltas of one ring between two markers: "sum count minimum maximum"
+        dsum() { sed -n "/$1/,/$2/p" "$DLOG" | awk -v r="$3" -F'\t' '$1 == "PROBE arcdelta" && $2 == r { s += $3; n++; if (n == 1 || $3 < mn) mn = $3; if (n == 1 || $3 > mx) mx = $3 } END { printf "%d %d %d %d", s, n, mn, mx }'; }
+        inr() { local v="$(dsum "$1" "$2" "$3" | cut -d" " -f1)"; [ "$v" -ge "$4" ] && [ "$v" -le "$5" ]; }
+        drag_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (got: $(eval "${3:-true}"))"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE arc drag done" "$DLOG"'
+            chk "on Linux the drag is round the ring by default (unchanged)" 'grep -q "^PROBE default.circle" "$DLOG"'
+            chk "round the ring: a quarter turn of the pointer is about 64 ticks, clockwise" 'inr "PROBE default" "PROBE circle done" 1 56 72' 'dsum "PROBE default" "PROBE circle done" 1'
+            chk "the setting reaches the window (UP/DOWN)" 'grep -q "^PROBE setting.updown.true" "$DLOG"'
+            chk "up 86 pixels (a third of the window height): about one lap, 1032 ticks, every message clockwise" 'inr "PROBE setting" "PROBE up done" 1 1020 1044 && [ "$(dsum "PROBE setting" "PROBE up done" 1 | cut -d" " -f3)" -gt 0 ]' 'dsum "PROBE setting" "PROBE up done" 1'
+            chk "down 86 pixels: the same the other way, every message counter-clockwise" 'inr "PROBE up done" "PROBE down done" 1 -1044 -1020 && [ "$(dsum "PROBE up done" "PROBE down done" 1 | cut -d" " -f4)" -lt 0 ]' 'dsum "PROBE up done" "PROBE down done" 1'
+            chk "Shift (held after the press): a quarter, 258 ticks" 'inr "PROBE down done" "PROBE shift done" 1 250 266' 'dsum "PROBE down done" "PROBE shift done" 1'
+            chk "the pointer leaves the window (50 pixels above it) and the drag goes on: 200 pixels, 2400 ticks" 'inr "PROBE shift done" "PROBE outside done" 1 2388 2412 && [ "$(sed -n "s/.*Y=\([0-9]*\).*/\1/p" "$DH/probe.marks.geom0")" -ge 60 ]' 'dsum "PROBE shift done" "PROBE outside done" 1; cat "$DH/probe.marks.geom0"'
+            chk "after the release moving over the ring turns nothing" '[ "$(dsum "PROBE outside done" "PROBE free move done" 1 | cut -d" " -f2)" = 0 ]' 'dsum "PROBE outside done" "PROBE free move done" 1'
+            chk "ring 3 dragged down 20 pixels: -240 on ring 3, nothing on ring 1" 'inr "PROBE free move done" "PROBE ring3 done" 3 -252 -228 && [ "$(dsum "PROBE free move done" "PROBE ring3 done" 1 | cut -d" " -f2)" = 0 ]' 'dsum "PROBE free move done" "PROBE ring3 done" 3'
+            chk "the right button is still the push button (a key down and up, a move with it held turns nothing) and a wheel notch is still 2" '[ "$(sed -n "/PROBE ring3 done/,/PROBE push wheel done/p" "$DLOG" | grep -c "PROBE arckey")" = 2 ] && [ "$(dsum "PROBE ring3 done" "PROBE push wheel done" 1)" = "2 1 2 2" ]' 'dsum "PROBE ring3 done" "PROBE push wheel done" 1'
+            chk "round the ring again: down on the right side of ring 1 is clockwise, about 19 ticks" 'inr "PROBE push wheel done" "PROBE circle again done" 1 12 26' 'dsum "PROBE push wheel done" "PROBE circle again done" 1'
+            chk "the arc window never moved" '[ -s "$DH/probe.marks.geom0" ] && [ "$(cat "$DH/probe.marks.geom0")" = "$(cat "$DH/probe.marks.geom1")" ]' 'cat "$DH/probe.marks.geom0" "$DH/probe.marks.geom1"'
+            chk "midimap.conf has the setting (arc_drag=updown while it was on, circle after)" 'grep -q "^arc_drag=updown" "$DH/midimap.during" && grep -q "^arc_drag=circle" "$DH/midimap.after"'
+            return $bad
+        }
+        run "window:arc drag with real mouse events (up and down, Shift, outside the window, round the ring, ring 3, right button, wheel, window stays)" drag_ok
+        rm -rf "$DH"
+    }
+    arc_drag_scenario
+
+    # the arc window after fast mapped turns (Windows 0.10.5): the old way (VERDANDI_ARC_THROTTLE=0, one full draw for every turn) keeps drawing long after the last turn; the new way ends within a few frames. 1500 turns in a tight loop
+    arc_lag_scenario() {
+        LH="$(mktemp -d)"
+        ln -s "$REPO" "$LH/norns"
+        mkdir -p "$LH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$LH/dust/code/probe/"
+        VERDANDI_ARC_THROTTLE=0 NORNS_HOME="$LH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_arc_lag.lua" "$T/arc-lag-old.log" > /dev/null 2>&1
+        NORNS_HOME="$LH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_arc_lag.lua" "$T/arc-lag-new.log" > /dev/null 2>&1
+        lagline() { grep -a "arc display" "$1" | head -1; }
+        lag_of() { lagline "$1" | sed -n 's/.*the last draw ended \([0-9]*\) ms after the last turn.*/\1/p'; }
+        draws_of() { lagline "$1" | sed -n 's/.*turns, \([0-9]*\) draws.*/\1/p'; }
+        lag_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (got: $(eval "${3:-true}"))"; bad=1; }; }
+            echo "old way: $(lagline "$T/arc-lag-old.log")"
+            echo "new way: $(lagline "$T/arc-lag-new.log")"
+            chk "the old way draws once for every turn and is still drawing more than a second after the last turn (that is the trail)" '[ "$(draws_of "$T/arc-lag-old.log")" -ge 1500 ] && [ "$(lag_of "$T/arc-lag-old.log")" -gt 1000 ]' 'lagline "$T/arc-lag-old.log"'
+            chk "the new way draws far fewer times and its last draw ends within 100 ms of the last turn" '[ "$(draws_of "$T/arc-lag-new.log")" -lt 150 ] && [ "$(lag_of "$T/arc-lag-new.log")" -le 100 ]' 'lagline "$T/arc-lag-new.log"'
+            return $bad
+        }
+        run "window:arc window after fast mapped turns (old way: a trail of seconds; new way: the last draw within 100 ms)" lag_ok
+        rm -rf "$LH"
+    }
+    arc_lag_scenario
     # the pixel looks in the real window (docs/port/retro-look-plan.md): from box.conf, switched live from the THEME page's PIXEL LOOK row, each look is another picture, saved, remembered after a restart, and the
     # colour picker changes a colour live in a retro look
     retro_scenario() {

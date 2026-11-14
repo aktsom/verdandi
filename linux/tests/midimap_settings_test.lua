@@ -275,6 +275,26 @@ eq(st.ctl.a2.type, "cc", "a2 kept"); eq(st.ctl.a2.gain, 8, "a2: a damaged gain i
 check(logged("a2.gain=900") and logged("a2.accel=warp") and logged("a2.mode=zigzag"), "each is logged")
 eq(st.ctl.a3.type, "none", "a3: a note is refused"); check(logged("a3.type=note"), "and logged")
 eq(st.arc_keys, true, "a damaged arc_keys is on"); eq(st.arc_keys_accel, false, "a damaged arc_keys_accel is off"); check(logged("arc_keys=maybe") and logged("arc_keys_accel=2"), "both logged")
+-- ARC DRAG (Windows 0.10.5): how a left drag turns a ring. the default is up and down on Windows and round the ring elsewhere (Linux unchanged); saved in midimap.conf; a missing or damaged value is the default
+do
+  local real_getenv, platform = os.getenv, nil
+  os.getenv = function(k) if k == "NORNS_PLATFORM" and platform ~= nil then return platform end return real_getenv(k) end
+  platform = "windows"; fresh(); st = S.load()
+  eq(st.arc_drag, "updown", "Windows: up and down by default")
+  platform = "linux"; fresh(); st = S.load()
+  eq(st.arc_drag, "circle", "Linux: round the ring by default (unchanged)")
+  platform = "windows"; fresh(); S.load()
+  check(S.set_arc_drag("circle"), "the setting can be changed"); check(not S.set_arc_drag("sideways") and not S.set_arc_drag(true), "and nothing else is taken")
+  check(slurp("/home/we/midimap.conf"):find("arc_drag=circle", 1, true), "the file has arc_drag=circle")
+  logs = {}; again = S.load(); eq(again.arc_drag, "circle", "round trip: circle stays circle on Windows"); eq(#logs, 0, "a good file logs nothing")
+  check(S.set_arc_drag("updown") and slurp("/home/we/midimap.conf"):find("arc_drag=updown", 1, true), "and up and down is saved too")
+  platform = "linux"; again = S.load(); eq(again.arc_drag, "updown", "a saved up and down stays on Linux")
+  st = load_text("verdandi-midimap=1\narc_drag=maybe\n"); eq(st.arc_drag, "circle", "Linux: a damaged value is the default"); check(logged("arc_drag=maybe"), "and logged")
+  platform = "windows"; st = load_text("verdandi-midimap=1\narc_drag=maybe\n"); eq(st.arc_drag, "updown", "Windows: a damaged value is the default")
+  st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\n"); eq(st.arc_drag, "updown", "Windows: an old file without the line gets up and down (nothing is saved for it yet)")
+  platform = "linux"; st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\n"); eq(st.arc_drag, "circle", "Linux: an old file without the line is round the ring as before")
+  os.getenv = real_getenv
+end
 -- an old file without arc keys, and an unknown a5 kept
 st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\na5.num=3\n")
 eq(st.ctl.e1.num, 9, "an old file reads"); eq(st.ctl.a1.type, "none", "arcs default"); eq(st.arc_keys, true, "arc keys default")

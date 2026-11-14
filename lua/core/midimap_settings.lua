@@ -8,6 +8,7 @@
 --   e1.type=cc e1.num=71 e1.dev=ANY e1.ch=0 e1.mode=abs e1.sens=5     one control: e1 e2 e3 (encoders) and k1 k2 k3 (keys; type cc or note, k1.threshold=63 instead of mode and sens)
 --   a1.type=cc a1.num=76 a1.dev=ANY a1.ch=0 a1.mode=relob a1.gain=8 a1.accel=off     the four encoders of the virtual arc (a1 to a4: a CC only; gain 1 to 64 ticks per unit; accel off, low, high; docs/port/arc-plan.md)
 --   arc_keys=1 arc_keys_accel=0     the keys 5/6 T/Y G/H B/N in the norns window, and the ramp of a held arc key
+--   arc_drag=updown                 how a left-button drag turns a ring of the arc window: updown (up is clockwise) or circle (round the ring). missing: updown on Windows, circle elsewhere
 --      dev: ANY or a device name (core/midimap_value.lua name_matches: `mio` is every port of the mio, `mio 2` that port); ch: 0 = any, 1 to 16
 -- unknown keys are ignored with a log line (and kept when the file is written again), missing keys take their defaults, a damaged value falls back to its own default with a log line.
 -- presets: built in (NONE, PUSH 2 (unverified), GENERIC REL 2S) and the owner's own, one small file each in <norns home>/midimap-presets/<slug>.midimap
@@ -40,6 +41,10 @@ M.MAX_PRESET_FILE = 2048
 
 local function is_enc(id) return id:sub(1, 1) == "e" end
 local function is_key(id) return id:sub(1, 1) == "k" end
+M.ARC_DRAGS = {"updown", "circle"}
+--- the way a drag turns a ring when nothing is saved: up and down on Windows (the owner's choice, Windows 0.10.5), round the ring on Linux (unchanged)
+function M.arc_drag_default() return os.getenv("NORNS_PLATFORM") == "windows" and "updown" or "circle" end
+
 local function is_arc(id) return id:sub(1, 1) == "a" end
 
 local function new_action() return {type = "none", dev = "ANY", ch = 0, mode = "relob", dir = "up", threshold = 63} end
@@ -51,7 +56,7 @@ local function new_ctl(id)
 end
 
 local function defaults()
-  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, actions_on = true, ctl = {}, actions = {}, extra = {}}
+  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, arc_drag = M.arc_drag_default(), actions_on = true, ctl = {}, actions = {}, extra = {}}
   for _, id in ipairs(M.ALL_IDS) do st.ctl[id] = new_ctl(id) end
   for _, id in ipairs(M.ACTION_IDS) do st.actions[id] = new_action() end
   return st
@@ -294,6 +299,9 @@ function M.load()
     elseif aid and in_list(ACTION_FIELDS, afield) then
       afields[aid] = afields[aid] or {}
       afields[aid][afield] = v:match("^%s*(.-)%s*$")
+    elseif k == "arc_drag" then
+      if v == "updown" or v == "circle" then st.arc_drag = v
+      else M.log(string.format("arc_drag=%s is not updown or circle, using %s", v:sub(1, 40), M.arc_drag_default())) end
     elseif k == "arc_keys" or k == "arc_keys_accel" then
       if v == "1" or v == "0" then st[k] = v == "1"
       else M.log(string.format("%s=%s is not 0 or 1, using %s", k, v:sub(1, 40), k == "arc_keys" and "1" or "0")) end
@@ -391,6 +399,7 @@ function M.save()
   f:write("on_clash=" .. st.on_clash .. "\n")
   f:write("arc_keys=" .. (st.arc_keys and "1" or "0") .. "\n")
   f:write("arc_keys_accel=" .. (st.arc_keys_accel and "1" or "0") .. "\n")
+  f:write("arc_drag=" .. st.arc_drag .. "\n")
   f:write("actions=" .. (st.actions_on and "1" or "0") .. "\n")
   for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, st.ctl[id], true) end
   for _, id in ipairs(M.ACTION_IDS) do write_action(f, id, st.actions[id], true) end
@@ -523,6 +532,13 @@ end
 function M.set_arc_keys_accel(v)
   if type(v) ~= "boolean" then return false, "on or off" end
   M.state.arc_keys_accel = v
+  M.save()
+  return true
+end
+
+function M.set_arc_drag(v)
+  if v ~= "updown" and v ~= "circle" then return false, "updown or circle" end
+  M.state.arc_drag = v
   M.save()
   return true
 end

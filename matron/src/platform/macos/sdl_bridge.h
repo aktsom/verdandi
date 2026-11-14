@@ -41,6 +41,7 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ARC_TEST 13 // CI only: n = what * 16 + ring, value (see arc_test in sdl_bridge.cc)
 #endif
 #define SDL_BRIDGE_SHOW_ENC_DRAW 12 // (internal) the timer of the throttled knob redraw (platform/common/redraw_throttle.h)
+#define SDL_BRIDGE_SHOW_ARC_DRAW 14 // (internal, Linux and Windows) the same for the arc window
 #define SDL_BRIDGE_SHOW_OUT 5  // n = the output level's place on its scale x 1000, value = muted
 extern void sdl_bridge_show_control(int kind, int n, int value);
 
@@ -94,6 +95,8 @@ extern int sdl_bridge_arc_test(int what, int ring, int value);
 #endif
 // any thread: the ramp setting of the arc keys in the arc window (the keys of the norns window are lua's)
 extern void sdl_bridge_arc_keys_ramp(int ramp);
+// how a left-button drag turns a ring of the arc window: ARC_DRAG_UPDOWN (1) or ARC_DRAG_CIRCLE (0), platform/linux/arc_input.h (Linux and Windows)
+extern void sdl_bridge_arc_drag_config(int updown);
 // any thread: a text entry is open (1) or not (0): the arc window takes no key while it is
 extern void sdl_bridge_arc_keys_block(int blocked);
 // any thread, does not block: a MIDI action (MIDI MAP, docs/port/midi-actions-plan.md): the name is one of the 14 of window_actions.h; 1 if it was handed to the window, 0 for any other name

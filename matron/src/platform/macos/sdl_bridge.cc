@@ -1431,6 +1431,26 @@ static int arc_pushed = 0;          // bit n: push button n held by the right bu
 static int arc_drag = -1;           // knob turned by the left button
 static double arc_last = 0, arc_acc[ARC_RINGS];
 static int arc_pending = 0;
+// how the left button turns a ring: round it (arc_last is the angle) or up and down (arc_last_y is the pointer's y in pixels of the pane). set by MIDI MAP > ARC DRAG through arc_drag_config.
+// Linux and Windows only: the Mac keeps the drag round the ring
+static volatile int arc_drag_updown = 0;
+static double arc_last_y = 0;
+static bool arc_captured = false; // the drag asked for the mouse to be captured (CI reads it)
+static void arc_drag_end(void);
+#ifdef NORNS_LINUX_DESKTOP
+// the redraw of the arc window while rings are turned fast (Windows 0.10.5, docs/port/phase-m14.md): the same as the knobs of the norns window (platform/common/redraw_throttle.h, phase-m11.md 3).
+// the drawn knob turns at once (arc_turns), the window is drawn at most every RT_GAP_MS from the end of the last draw, the last turn always gets its draw. "0": the old way, a full draw for every turn (to measure it)
+static rt_state arc_rt;
+static bool arc_throttle = getenv("VERDANDI_ARC_THROTTLE") == NULL || strcmp(getenv("VERDANDI_ARC_THROTTLE"), "0") != 0;
+#else
+static const bool arc_throttle = false;
+#endif
+static unsigned arc_n_turns = 0, arc_n_draws = 0; // since the last report
+static Uint32 arc_slowest_draw = 0, arc_last_sent = 0, arc_first_sent = 0, arc_event_sent = 0; // arc_event_sent: when the turn being handled was pushed (0: a mouse turn, now)
+
+void sdl_bridge_arc_drag_config(int updown) {
+    arc_drag_updown = updown != 0;
+}
 
 static void arc_changed(void *ctx) {
     (void)ctx;
@@ -1443,7 +1463,74 @@ static void arc_changed(void *ctx) {
     }
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+static Uint32 arc_draw_due(Uint32 interval, void *unused);
+#endif
+static void arc_redraw_now(void);
+
+// what a burst of turns cost the arc window (norns.log; the CI reads this line): one line when the burst is over
+static void arc_stats_report(void) {
+    if (arc_n_turns >= 50) {
+        fprintf(stderr, "arc display: %u turns, %u draws, slowest draw %u ms, the last draw ended %u ms after the last turn was sent, %u ms after the first (%s)\n", arc_n_turns, arc_n_draws,
+                (unsigned)arc_slowest_draw, (unsigned)(SDL_GetTicks() - arc_last_sent), (unsigned)(SDL_GetTicks() - arc_first_sent), arc_throttle ? "throttled" : "one draw per turn");
+        fflush(stderr);
+    }
+    arc_n_turns = arc_n_draws = 0;
+    arc_slowest_draw = 0;
+}
+
 static void arc_redraw(void) {
+    Uint32 t0 = SDL_GetTicks();
+    arc_redraw_now();
+    Uint32 t1 = SDL_GetTicks();
+#ifdef NORNS_LINUX_DESKTOP
+    rt_drawn(&arc_rt, t1);
+#endif
+    arc_n_draws++;
+    if (t1 - t0 > arc_slowest_draw) {
+        arc_slowest_draw = t1 - t0;
+    }
+    if (!SDL_HasEvent(show_event_type)
+#ifdef NORNS_LINUX_DESKTOP
+        && !arc_rt.pending
+#endif
+    ) {
+        arc_stats_report();
+    }
+}
+
+// a turn or a change of the LEDs wants a draw: now, or (throttled) at the latest RT_GAP_MS after the end of the last one; the turns that come meanwhile wait in the counter and one timer draws them
+static void arc_draw_request(void) {
+#ifdef NORNS_LINUX_DESKTOP
+    if (arc_throttle) {
+        uint32_t delay = 0;
+        switch (rt_request(&arc_rt, SDL_GetTicks(), &delay)) {
+        case RT_DRAW_NOW:
+            break;
+        case RT_SCHEDULE:
+            SDL_AddTimer(delay, arc_draw_due, NULL);
+            return;
+        case RT_WAIT:
+            return;
+        }
+    }
+#endif
+    arc_redraw();
+}
+
+#ifdef NORNS_LINUX_DESKTOP
+static Uint32 arc_draw_due(Uint32 interval, void *unused) {
+    (void)interval, (void)unused;
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = show_event_type;
+    ev.user.code = SDL_BRIDGE_SHOW_ARC_DRAW;
+    SDL_PushEvent(&ev);
+    return 0;
+}
+#endif
+
+static void arc_redraw_now(void) {
     __atomic_store_n(&arc_pending, 0, __ATOMIC_RELEASE);
     if (varc == NULL) {
         return;
@@ -1488,7 +1575,9 @@ static void toggle_arc(void) {
 #endif
         pane_close(&arc_pane);
         arc_pushed = 0;
-        arc_drag = -1;
+        if (arc_drag >= 0) {
+            arc_drag_end();
+        }
         skin.arc_open = 0;
         arrange_windows();
         redraw(true);
@@ -1539,8 +1628,14 @@ static void arc_turn(int n, double ticks) {
     int t = arc_input_take(&arc_acc[n], ticks);
     if (t != 0) {
         vgrid_enc(varc, n, t);
-        arc_turns[n] += t / ARC_TICKS_PER_TURN;
-        arc_redraw();
+        arc_turns[n] += t / ARC_TICKS_PER_TURN; // the drawn knob follows at once, whatever the window is drawn
+        Uint32 now = arc_event_sent != 0 ? arc_event_sent : SDL_GetTicks();
+        if (arc_n_turns == 0) {
+            arc_first_sent = now;
+        }
+        arc_n_turns++;
+        arc_last_sent = now;
+        arc_draw_request();
     }
 }
 
@@ -1550,6 +1645,12 @@ static double arc_angle_at(int n, int x, int y, double *dist) {
     varc_skin_center(&arc_geom, n, &cx, &cy);
     *dist = hypot(px - cx, py - cy) / (arc_geom.s > 0 ? arc_geom.s : 1);
     return atan2(py - cy, px - cx);
+}
+
+static void arc_drag_end(void) {
+    arc_drag = -1;
+    arc_captured = false;
+    SDL_CaptureMouse(SDL_FALSE);
 }
 
 static void arc_button(const SDL_MouseButtonEvent *b) {
@@ -1574,11 +1675,13 @@ static void arc_button(const SDL_MouseButtonEvent *b) {
         if (b->type == SDL_MOUSEBUTTONDOWN && n >= 0 && arc_drag < 0) {
             double d;
             arc_drag = n;
-            arc_last = arc_angle_at(n, b->x, b->y, &d);
+            arc_last = arc_angle_at(n, b->x, b->y, &d); // round the ring
+            arc_last_y = py;                            // up and down
+            // the mouse stays ours until the button is let go, also outside the ring and the window (the motion and the release still come here)
+            arc_captured = true;
             SDL_CaptureMouse(SDL_TRUE);
         } else if (b->type == SDL_MOUSEBUTTONUP && arc_drag >= 0) {
-            arc_drag = -1;
-            SDL_CaptureMouse(SDL_FALSE);
+            arc_drag_end();
         }
         return;
     }
@@ -1600,6 +1703,18 @@ static void arc_button(const SDL_MouseButtonEvent *b) {
 
 static void arc_motion(const SDL_MouseMotionEvent *m) {
     if (arc_drag < 0) {
+        return;
+    }
+    // a release that never came (the system took the mouse away): the drag ends with the first motion without the left button
+    if (!(m->state & SDL_BUTTON_LMASK)) {
+        arc_drag_end();
+        return;
+    }
+    if (arc_drag_updown) {
+        // up is clockwise: the distance moved (in units of the window, so a bigger window is not touchier) decides how far. only y counts; the pointer may be anywhere, also outside the window
+        double px, py;
+        pane_pixels(&arc_pane, m->x, m->y, &px, &py);
+        arc_turn(arc_drag, arc_input_ud_ticks(&arc_last_y, py, arc_geom.s, turn_factor()));
         return;
     }
     // round the knob: clockwise is up. near the centre the angle jumps, so it waits there
@@ -1672,6 +1787,7 @@ static int arc_test(int what, int n, int value) {
         for (int i = 1; i <= steps; i++) {
             SDL_MouseMotionEvent m;
             SDL_zero(m);
+            m.state = SDL_BUTTON_LMASK; // as a real motion event with the left button held
             arc_test_point(n, start + i * step, 40, &m.x, &m.y);
             arc_motion(&m);
         }
@@ -1687,6 +1803,39 @@ static int arc_test(int what, int n, int value) {
         b.y = y;
         arc_button(&b);
         return 1;
+    case 5:   // drag up and down (value pixels up, negative down; 3 points a step; the pointer may leave the window), no key held
+    case 6:   // the same with Shift held
+    case 7: { // the same with Ctrl held (let down after the press: with Ctrl at the press it is the push button)
+        // the same functions the mouse events call. the way is forced to up and down for the run (the saved setting is put back); what is logged is read by CI (windows/ci/maiden_probe.py, VERDANDI_PROBE=arc)
+        int was = arc_drag_updown;
+        arc_drag_updown = 1;
+        SDL_SetModState(KMOD_NONE);
+        arc_test_point(n, -M_PI / 2, 40, &x, &y);
+        b.type = SDL_MOUSEBUTTONDOWN;
+        b.button = SDL_BUTTON_LEFT;
+        b.x = x;
+        b.y = y;
+        arc_button(&b);
+        SDL_SetModState(what == 6 ? KMOD_SHIFT : what == 7 ? KMOD_CTRL : KMOD_NONE);
+        int steps = (abs(value) + 2) / 3, y0 = y;
+        for (int i = 1; i <= steps; i++) {
+            SDL_MouseMotionEvent m;
+            SDL_zero(m);
+            m.state = SDL_BUTTON_LMASK;
+            m.x = x;
+            m.y = y0 - (value < 0 ? -1 : 1) * (i * 3 > abs(value) ? abs(value) : i * 3); // y grows downward: up is smaller
+            arc_motion(&m);
+        }
+        bool held = arc_captured && arc_drag == n;
+        SDL_SetModState(KMOD_NONE);
+        b.type = SDL_MOUSEBUTTONUP;
+        arc_button(&b);
+        fprintf(stderr, "arc test: updown drag ring %d, %d px, mod %s: ended at y %d (the window is %d high), drag held and capture asked until the release: %s, after the release: capture %s drag %s\n", n + 1,
+                value, what == 6 ? "shift" : what == 7 ? "ctrl" : "none", y0 - value, arc_pane.h, held ? "yes" : "NO", arc_captured ? "STILL ASKED" : "off", arc_drag >= 0 ? "STILL ON" : "off");
+        fflush(stderr);
+        arc_drag_updown = was;
+        return 1;
+    }
     case 4: { // the window's picture, <home>/arc_window_<value>.png (HOME is the norns home of the run)
         const char *home = getenv("HOME");
         if (home == NULL || arc_pane.canvas == NULL) {
@@ -3245,6 +3394,13 @@ static void handle_show(int kind, int n, int value) {
         return;
     }
 #ifdef NORNS_LINUX_DESKTOP
+    if (kind == SDL_BRIDGE_SHOW_ARC_DRAW) {
+        rt_fired(&arc_rt);
+        arc_redraw();
+        return;
+    }
+#endif
+#ifdef NORNS_LINUX_DESKTOP
     if (kind == SDL_BRIDGE_SHOW_MIDIMAP_ARM) {
         midimap_armed = n != 0;
         return;
@@ -3281,7 +3437,9 @@ static void handle_show(int kind, int n, int value) {
 #endif
     if (kind == SDL_BRIDGE_SHOW_ARC_TURN) {
         if (varc != NULL && n >= 1 && n <= ARC_RINGS) {
+            arc_event_sent = enc_last_timestamp; // when the turn was pushed (the time stamp SDL put on its event), for the report
             arc_turn(n - 1, value);
+            arc_event_sent = 0;
         }
         return;
     }
@@ -3579,7 +3737,7 @@ void sdl_bridge_run(void) {
                 raise_windows();
 #endif
             } else if (ev.user.code == DEV_ARC_LEDS) {
-                arc_redraw();
+                arc_draw_request();
             } else {
                 grid_redraw();
             }

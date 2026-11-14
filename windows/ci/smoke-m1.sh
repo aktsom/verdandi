@@ -640,7 +640,7 @@ chk_arc() {
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
     local bad=0 out="$M0_OUT/arc" f p
     cat "$out/probe.txt" 2> /dev/null
-    for p in arc-up arc-open arc-device arc-shot-dark arc-script arc-input-sent arc-wheel arc-drag arc-press arc-mapped arc-shot-lit arc-close arc-reopen; do
+    for p in arc-up arc-open arc-device arc-shot-dark arc-script arc-input-sent arc-wheel arc-drag arc-press arc-mapped arc-ud-sent arc-ud-up arc-ud-down arc-ud-shift arc-ud-ctrl arc-shot-lit arc-close arc-reopen; do
         has "$out/probe.txt" "PROBE $p ok" "the arc check '$p'" || bad=1
     done
     for f in arc_window_0 arc_window_1; do
@@ -655,6 +655,8 @@ chk_arc() {
         if cmp -s "$out/arc_window_0.png" "$out/arc_window_1.png"; then echo "NOT FOUND: the lit picture differs from the dark one (the script's LEDs did not reach the window)"; bad=1; else echo "found: the picture with the script's LEDs differs from the dark one"; fi
     fi
     has "$out/logs/norns.log" "arc test: picture" "the window saved its picture" || bad=1
+    # the five drags up and down: the drag was held with the mouse captured until the release, and both are off after it (the program logs one line for each)
+    if [ "$(grep -a -c 'arc test: updown drag ring.*drag held and capture asked until the release: yes, after the release: capture off drag off' "$out/logs/norns.log" 2> /dev/null)" = 5 ]; then echo "found: five drags up and down held the capture until the release and let it go after it"; else echo "NOT FOUND: five 'updown drag ... capture off drag off' lines in norns.log"; grep -a 'arc test: updown drag' "$out/logs/norns.log" 2> /dev/null | cut -c1-260; bad=1; fi
     return "$bad"
 }
 chk_heal() {

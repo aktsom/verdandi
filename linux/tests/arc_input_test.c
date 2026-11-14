@@ -1,6 +1,6 @@
 /*
  * arc_input_test.c: what the mouse does to a ring of the virtual arc window (matron/src/platform/linux/arc_input.h, the same code on Linux and Windows):
- * a wheel notch is 2 ticks, a full turn of the pointer round a ring 256 ticks (a quarter of the hardware's 1024), Shift a quarter of that and Super four times, the direction flag of the system
+ * (the up and down drag is at the end of main) a wheel notch is 2 ticks, a full turn of the pointer round a ring 256 ticks (a quarter of the hardware's 1024), Shift a quarter of that and Super four times, the direction flag of the system
  * flips the wheel, the angle goes the short way past the left edge of the circle, fractions of a tick are kept per ring and only whole ticks go out (the sum is exact).
  */
 #include <math.h>
@@ -92,6 +92,68 @@ int main(void) {
     CHECK(abs(sum - 256) <= 1, "360 steps of one degree are 256 ticks (got %d)", sum);
 
     CHECK(ARC_DRAG_DEAD_ZONE == 8, "the pointer near the centre waits");
+
+    // ---- the up and down drag (ARC DRAG = UP/DOWN): the pointer moves in steps of 3 pixels, as motion events come; `unit` is the pixels of one window unit (1 at 1:1, 2 on a 200 percent screen)
+    CHECK(ARC_DRAG_CIRCLE == 0 && ARC_DRAG_UPDOWN == 1 && ARC_UD_TICKS_PER_UNIT == 12.0, "drag modes and the number of ticks a unit");
+    {
+        double lap_units = ARC_TICKS_PER_TURN / ARC_UD_TICKS_PER_UNIT, window_h = 260;
+        CHECK(fabs(lap_units / window_h - 1.0 / 3) < 0.01, "one lap of 1024 ticks is a third of the arc window's height (%.1f units of 260 = %.1f percent)", lap_units, 100 * lap_units / window_h);
+    }
+    // the pointer from y0 to y1 in steps of `step` pixels, each step one call; returns the whole ticks sent
+    #define UD(y0, y1, step, unit, factor, accp)                                                                        \
+        ({                                                                                                              \
+            double last = (y0), y = (y0);                                                                               \
+            int sent_ = 0, n_ = (int)(fabs((double)(y1) - (y0)) / (step) + 0.5);                                        \
+            for (int i_ = 0; i_ < n_; i_++) {                                                                           \
+                y += ((y1) > (y0) ? 1.0 : -1.0) * (step);                                                               \
+                sent_ += arc_input_take(accp, arc_input_ud_ticks(&last, y, unit, factor));                              \
+            }                                                                                                           \
+            sent_;                                                                                                      \
+        })
+    acc = 0;
+    int up = UD(200.0, 200.0 - 260.0 / 3, 1.0, 1.0, 1.0, &acc); // up by a third of the window height (86 pixels)
+    CHECK(abs(up - 1032) <= 12 && up > 0, "up by a third of the height (86 px) turns clockwise by about one lap: %d ticks (1024 for 85.3 px)", up);
+    acc = 0;
+    int down = UD(100.0, 100.0 + 260.0 / 3, 1.0, 1.0, 1.0, &acc);
+    CHECK(down == -up, "down by the same distance turns counter-clockwise by the same number: %d and %d", down, up);
+    acc = 0;
+    CHECK(UD(200.0, 200.0 - 85.0, 1.0, 1.0, 1.0, &acc) == 1020 && UD(200.0, 115.0, 1.0, 1.0, 1.0, &acc) == 1020, "85 pixels are 1020 ticks, whatever the carry");
+    acc = 0;
+    CHECK(UD(150.0, 149.0, 1.0, 1.0, 1.0, &acc) == 12, "one pixel up is 12 ticks, one pixel down -12");
+    acc = 0;
+    CHECK(UD(150.0, 151.0, 1.0, 1.0, 1.0, &acc) == -12, "one pixel down is -12");
+    acc = 0;
+    CHECK(abs(UD(200.0, 114.0, 1.0, 1.0, 0.25, &acc) - 258) <= 4, "Shift: the same drag is a quarter, about 258 ticks");
+    acc = 0;
+    CHECK(abs(UD(200.0, 200.0 - 20.0, 1.0, 1.0, 4.0, &acc) - 960) <= 4, "Ctrl: four times: 20 px are 960 ticks");
+    acc = 0;
+    CHECK(abs(UD(200.0, 200.0 - 170.0, 2.0, 2.0, 1.0, &acc) - 1020) <= 12, "a 200 percent screen (2 pixels a unit): 170 pixels are the same 85 units, 1020 ticks");
+    // the size does not depend on the size of the steps (mouse speed): the same distance in 1 and in 17 pixel steps
+    acc = 0;
+    int a1 = UD(300.0, 214.0, 1.0, 1.0, 1.0, &acc);
+    acc = 0;
+    double last = 300, y = 214;
+    int a2 = arc_input_take(&acc, arc_input_ud_ticks(&last, y, 1.0, 1.0));
+    CHECK(a1 == a2 && a1 == 1032, "86 px in one jump or in 86 steps: the same (%d, %d)", a1, a2);
+    // out of the window: y below 0 and far below the bottom still count (the drag is captured); nothing jumps when the pointer comes back
+    acc = 0;
+    last = 20;
+    double t = 0;
+    t += arc_input_ud_ticks(&last, -30, 1.0, 1.0);  // above the window: 50 pixels up
+    t += arc_input_ud_ticks(&last, -400, 1.0, 1.0); // far above
+    t += arc_input_ud_ticks(&last, 600, 1.0, 1.0);  // the other way, below the window
+    CHECK(fabs(t - ((20 - (-30)) + (-30 - -400) + (-400 - 600)) * 12.0) < 1e-6 && last == 600, "outside the window the pointer is followed (%g ticks)", t);
+    // no motion, no turn; a motion sideways is nothing (only y is looked at)
+    last = 100;
+    CHECK(arc_input_ud_ticks(&last, 100, 1.0, 1.0) == 0, "no move, no ticks");
+    // a pointer that goes up then down by the same amount is back where it was
+    acc = 0;
+    last = 100;
+    int s2 = arc_input_take(&acc, arc_input_ud_ticks(&last, 60, 1.0, 1.0)) + arc_input_take(&acc, arc_input_ud_ticks(&last, 100, 1.0, 1.0));
+    CHECK(s2 == 0, "up 40 and down 40 is nothing");
+    // a unit of 0 (no geometry yet) does not divide by zero
+    last = 10;
+    CHECK(isfinite(arc_input_ud_ticks(&last, 0, 0, 1.0)), "a unit of 0 is taken as 1");
 
     if (fails) {
         printf("arc_input_test: %d FAILED\n", fails);

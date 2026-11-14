@@ -20,7 +20,7 @@ local function is_knob(id) return id:sub(1, 1) ~= "k" end
 
 --- the rows of the page, in order (DELETE only for one of his own presets)
 function m.rows()
-  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "ACTIONS", "WATCH", "ON CLASH", "ARC KEYS", "MIDI ACTIONS", "SAVE AS"}
+  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "ACTIONS", "WATCH", "ON CLASH", "ARC KEYS", "ARC DRAG", "MIDI ACTIONS", "SAVE AS"}
   local p = S.preset_by_name(S.state.preset)
   if p ~= nil and not p.builtin then r[#r + 1] = "DELETE" end
   return r
@@ -165,6 +165,7 @@ local function row_text(row, clash)
   elseif row == "ACTIONS" then return S.count_actions() .. " OF " .. #S.ACTION_IDS
   elseif row == "MIDI ACTIONS" then return S.state.actions_on and "ON" or "OFF"
   elseif row == "ARC KEYS" then return S.state.arc_keys and "ON" or "OFF"
+  elseif row == "ARC DRAG" then return S.state.arc_drag == "updown" and "UP/DOWN" or "CIRCLE"
   elseif row == "SAVE AS" then return "NAME..."
   elseif row == "DELETE" then local p = S.preset_by_name(S.state.preset) return p and ("* " .. p.name) or ""
   else return ctl_text(row:lower(), clash) end
@@ -383,6 +384,8 @@ local function key_rows(n)
     S.set_clash(S.state.on_clash == "params" and "both" or "params")
   elseif row == "ARC KEYS" then
     S.set_arc_keys(not S.state.arc_keys)
+  elseif row == "ARC DRAG" then
+    S.set_arc_drag(S.state.arc_drag == "updown" and "circle" or "updown")
   elseif row == "MIDI ACTIONS" then
     mm.set_actions(not S.state.actions_on)
   elseif row == "ACTIONS" then
@@ -665,6 +668,8 @@ local function enc_raw(n, delta)
       S.set_clash(delta > 0 and "both" or "params")
     elseif row == "ARC KEYS" then
       S.set_arc_keys(delta > 0)
+    elseif row == "ARC DRAG" then
+      S.set_arc_drag(delta > 0 and "updown" or "circle")
     elseif row == "MIDI ACTIONS" then
       mm.set_actions(delta > 0)
     end

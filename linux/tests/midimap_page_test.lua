@@ -89,7 +89,7 @@ fresh()
 page.redraw()
 eq(texts()[1], "MIDI MAP", "the title")
 local ro = page.rows()
-eq(table.concat(ro, ","), "PRESET,LEARN,E1,E2,E3,K1,K2,K3,A1,A2,A3,A4,ACTIONS,WATCH,ON CLASH,ARC KEYS,MIDI ACTIONS,SAVE AS", "the rows of the page")
+eq(table.concat(ro, ","), "PRESET,LEARN,E1,E2,E3,K1,K2,K3,A1,A2,A3,A4,ACTIONS,WATCH,ON CLASH,ARC KEYS,ARC DRAG,MIDI ACTIONS,SAVE AS", "the rows of the page")
 check(drawn("PRESET") and drawn("LEARN") and drawn("E1") and drawn("E2"), "the first rows are drawn")
 check(drawn("-----"), "an unmapped control shows -----")
 eq(page.pos, 1, "the selection starts on PRESET")
@@ -228,15 +228,15 @@ pmap.clear()
 -- ---- SAVE AS and DELETE
 fresh()
 S.select_preset("PUSH 2"); S.set("e1", "num", 20); mm.changed()
-page.pos = 18; check(page.rows()[18] == "SAVE AS", "SAVE AS"); press(3); check(entry ~= nil, "K3 opens the name entry")
+page.pos = 19; check(page.rows()[19] == "SAVE AS", "SAVE AS"); press(3); check(entry ~= nil, "K3 opens the name entry")
 entry.cb("My Push"); eq(S.state.preset, "My Push", "the preset is saved and in use"); check(S.preset_by_name("My Push") ~= nil, "it is in the list")
-check(page.rows()[19] == "DELETE", "DELETE appears for one of his own presets")
-page.pos = 19; press(3); eq(page.mode, "confirm", "K3 asks once"); check(drawn("DELETE My Push"), "naming the preset"); press(2); eq(page.mode, "rows", "K2 says no"); check(S.preset_by_name("My Push") ~= nil, "nothing deleted")
-press(3); press(3); check(S.preset_by_name("My Push") == nil, "K3 then K3 deletes it"); check(#page.rows() == 18, "and DELETE is gone")
+check(page.rows()[20] == "DELETE", "DELETE appears for one of his own presets")
+page.pos = 20; press(3); eq(page.mode, "confirm", "K3 asks once"); check(drawn("DELETE My Push"), "naming the preset"); press(2); eq(page.mode, "rows", "K2 says no"); check(S.preset_by_name("My Push") ~= nil, "nothing deleted")
+press(3); press(3); check(S.preset_by_name("My Push") == nil, "K3 then K3 deletes it"); check(#page.rows() == 19, "and DELETE is gone")
 -- the same name asks first
-S.save_preset("My Push"); page.pos = 18; press(3); entry.cb("my push"); eq(page.mode, "confirm", "an existing name asks before overwriting"); press(3); eq(page.mode, "rows", "and K3 overwrites")
+S.save_preset("My Push"); page.pos = 19; press(3); entry.cb("my push"); eq(page.mode, "confirm", "an existing name asks before overwriting"); press(3); eq(page.mode, "rows", "and K3 overwrites")
 -- a bad name
-page.pos = 18; press(3); entry.cb("a/b"); check(#page.rows() >= 18, "a bad name is refused"); check(page.msg ~= nil, "with a message")
+page.pos = 19; press(3); entry.cb("a/b"); check(#page.rows() >= 19, "a bad name is refused"); check(page.msg ~= nil, "with a message")
 
 -- ---- an error in a handler leaves the page whole
 fresh()
@@ -288,6 +288,12 @@ fresh()
 page.pos = 16; page.redraw(); check(page.rows()[16] == "ARC KEYS", "row 16 is ARC KEYS"); check(drawn("ON"), "ON by default")
 turn(3, -1); eq(S.state.arc_keys, false, "E3 down turns it off"); check(drawn("OFF"), "shown"); turn(3, 1); eq(S.state.arc_keys, true, "E3 up turns it on")
 press(3); eq(S.state.arc_keys, false, "K3 toggles"); press(3)
+-- ARC DRAG: how a left drag turns a ring of the arc window. the default is the platform's (the tests run as Linux: round the ring); K3 toggles, E3 up is UP/DOWN, down is CIRCLE; it is saved and sent to the window
+fresh()
+check(page.rows()[17] == "ARC DRAG", "row 17 is ARC DRAG"); eq(S.state.arc_drag, "circle", "round the ring by default on Linux")
+page.pos = 17; page.redraw(); check(drawn("ARC DRAG") and drawn("CIRCLE"), "CIRCLE shown")
+turn(3, 1); eq(S.state.arc_drag, "updown", "E3 up is up and down"); check(drawn("UP/DOWN"), "shown"); turn(3, -1); eq(S.state.arc_drag, "circle", "E3 down is round the ring")
+press(3); eq(S.state.arc_drag, "updown", "K3 toggles"); press(3); eq(S.state.arc_drag, "circle", "and back")
 -- a typed CC that another control uses: the question
 fresh()
 S.set("e2", "num", 71)
@@ -350,10 +356,10 @@ local function afresh() fresh(); S.clear_all_actions(); S.set_actions_on(true); 
 
 afresh()
 local ar = page.rows()
-eq(ar[13], "ACTIONS", "row 13 is ACTIONS"); eq(ar[17], "MIDI ACTIONS", "row 17 is the master switch"); eq(ar[18], "SAVE AS", "SAVE AS follows")
+eq(ar[13], "ACTIONS", "row 13 is ACTIONS"); eq(ar[18], "MIDI ACTIONS", "row 18 is the master switch"); eq(ar[19], "SAVE AS", "SAVE AS follows")
 page.pos = 13; page.redraw(); check(drawn("ACTIONS") and drawn("0 OF 14"), "the ACTIONS row says none is set")
 S.assign_action("mix", "note", 36); page.redraw(); check(drawn("1 OF 14"), "and counts the ones set")
-page.pos = 17; page.redraw(); check(drawn("MIDI ACTIONS") and drawn("ON"), "the master row shows ON")
+page.pos = 18; page.redraw(); check(drawn("MIDI ACTIONS") and drawn("ON"), "the master row shows ON")
 -- the master row: K3 toggles, E3 right is ON, left is OFF, release and delta 0 do nothing
 press(3); eq(S.state.actions_on, false, "K3 on the master row turns it off"); check(drawn("OFF"), "and it shows OFF"); eq(menu_pushed[#menu_pushed], false, "the window menu is told")
 local n0 = #menu_pushed; page.key(3, 0); eq(S.state.actions_on, false, "a key release never acts"); turn(3, 0); eq(S.state.actions_on, false, "delta 0 never acts")
@@ -439,7 +445,7 @@ press(2)
 -- an error in a handler is visible
 local real = mm.set_actions
 mm.set_actions = function() error("boom") end
-page.mode = "rows"; page.pos = 17; press(3); check(drawn("ERROR"), "an error in a handler shows on the screen"); eq(page.mode, "rows", "and the page is whole")
+page.mode = "rows"; page.pos = 18; press(3); check(drawn("ERROR"), "an error in a handler shows on the screen"); eq(page.mode, "rows", "and the page is whole")
 mm.set_actions = real
 -- the page joins the menu back
 page.deinit(); eq(mm.walk_index(), nil, "leaving ends a walk"); page.init()

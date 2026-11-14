@@ -307,6 +307,21 @@ if os.environ.get("VERDANDI_PROBE") == "arc":
             result("arc-mapped", s[3] == 100, "ring 4: a mapped turn of 100 ticks arrived as %d" % s[3])
         else:
             result("arc-wheel", False, "no result line: " + repr(tail))
+        # the drag up and down (ARC DRAG, Windows 0.10.5), through the functions the mouse events call, with real numbers: ring 1 up 86 points = one lap (1032 ticks, 12 a point), ring 2 down 86 = -1032, ring 3 up 86 with Shift = 258,
+        # ring 4 up 20 with Ctrl = 960 (four times), ring 1 again up 200 points, which ends 110 points above the window: the drag goes on there until the release (3432 in all on ring 1). the program logs the state of the drag and of the capture
+        ok, tail = run("ARCP.sum = {0, 0, 0, 0} _norns.arc_test(5, 1, 86) _norns.arc_test(5, 2, -86) _norns.arc_test(6, 3, 86) _norns.arc_test(7, 4, 20) _norns.arc_test(5, 1, 200) print('VT_UD sent')\n", "VT_UD sent", 20)
+        result("arc-ud-sent", ok and "VT_UD sent" in tail, "five drags up and down were sent to the window: " + tail.strip()[-30:])
+        time.sleep(4)
+        ok, tail = run("print('VT_UDRES ' .. table.concat(ARCP.sum, ','))\n", "VT_UDRES", 20)
+        m = re.search(r"VT_UDRES (-?\d+),(-?\d+),(-?\d+),(-?\d+)", tail)
+        if m:
+            u = [int(m.group(i)) for i in range(1, 5)]
+            result("arc-ud-up", abs(u[0] - 3432) <= 24 and u[0] > 0, "ring 1: 86 points up (1032) and 200 points up, leaving the window (2400) arrived as %d (3432 expected, clockwise)" % u[0])
+            result("arc-ud-down", abs(u[1] + 1032) <= 12, "ring 2: 86 points down arrived as %d (-1032 expected, counter-clockwise)" % u[1])
+            result("arc-ud-shift", abs(u[2] - 258) <= 6, "ring 3: 86 points up with Shift arrived as %d (258 expected, a quarter)" % u[2])
+            result("arc-ud-ctrl", abs(u[3] - 960) <= 12, "ring 4: 20 points up with Ctrl arrived as %d (960 expected, four times)" % u[3])
+        else:
+            result("arc-ud-up", False, "no result line: " + repr(tail))
         # the picture with the LEDs the script drew
         ok, tail = run("print('VT_SHOT1 ' .. tostring(_norns.arc_test(4, 1, 1)))\n", "VT_SHOT1", 10)
         result("arc-shot-lit", ok and "VT_SHOT1 true" in tail, "the arc window was saved with the script's LEDs (arc_window_1.png)")

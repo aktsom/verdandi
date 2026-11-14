@@ -408,6 +408,7 @@ static int _arc_turn(lua_State *l);
 static int _arc_test(lua_State *l);
 #endif
 static int _arc_keys_config(lua_State *l);
+static int _arc_drag_config(lua_State *l);
 static int _arc_keys_block(lua_State *l);
 static int _midimap_show(lua_State *l);
 static int _window_action(lua_State *l);
@@ -818,6 +819,7 @@ void w_init(void) {
     lua_register_norns("arc_test", &_arc_test);
 #endif
     lua_register_norns("arc_keys_config", &_arc_keys_config);
+    lua_register_norns("arc_drag_config", &_arc_drag_config);
     lua_register_norns("arc_keys_block", &_arc_keys_block);
     lua_register_norns("midimap_show", &_midimap_show);
     lua_register_norns("window_action", &_window_action);
@@ -4406,6 +4408,16 @@ int _arc_test(lua_State *l) {
  */
 int _arc_keys_config(lua_State *l) {
     sdl_bridge_arc_keys_ramp((int)luaL_checkinteger(l, 1));
+    return 0;
+}
+
+/***
+ * Linux and Windows desktop: how a left-button drag turns a ring of the arc window (MIDI MAP > ARC DRAG)
+ * @function arc_drag_config
+ * @tparam integer updown 1 up and down (up is clockwise), 0 round the ring
+ */
+int _arc_drag_config(lua_State *l) {
+    sdl_bridge_arc_drag_config((int)luaL_checkinteger(l, 1));
     return 0;
 }
 

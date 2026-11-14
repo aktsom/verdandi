@@ -1018,7 +1018,7 @@ do
       -- a preset name whose first letter is, or is not, one of the arc keys; the digits 5 and 6 as a first character too
       for _, first in ipairs({"B", "T", "H", "N", "Y", "G", "A", "M", "5", "6"}) do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 18)
+        open_midimap(w, 19)
         tap(w, "RIGHT")
         is(w.textentry.active, "SAVE AS opens the entry " .. combo)
         tap(w, first); tap(w, "A")
@@ -1057,7 +1057,7 @@ do
         end
         local function ev(w, status, d1, d2) w.mm.event(w.devs[1], {status, d1, d2}) end
         local openers = {
-          preset = function(w) open_midimap(w, 18); tap(w, "RIGHT") end,
+          preset = function(w) open_midimap(w, 19); tap(w, "RIGHT") end,
           number = function(w) open_midimap(w, 9); tap(w, "RIGHT"); w.pages.MIDIMAP.dpos = 2; tap(w, "RIGHT") end,
           hex = function(w) open_entry(w) end,
           tape = function(w) _menu.set_page("TAPE"); w.pages.TAPE.mode = w.pages.TAPE.constants.TAPE_MODE_REC; tap(w, "RIGHT") end,
@@ -1176,7 +1176,7 @@ do
       -- the menu moves on under an open entry (a window button, a page key, a mapped K1): the entry is closed, the handlers are the page's, the tape name entry opens
       for _, how in ipairs({"page", "mode"}) do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 18)
+        open_midimap(w, 19)
         tap(w, "RIGHT")
         is(w.textentry.active, "the entry is open before the menu moves " .. combo)
         if how == "page" then _menu.set_page("TAPE") else _menu.set_mode(false); _menu.set_mode(true); _menu.set_page("TAPE") end
@@ -1187,7 +1187,7 @@ do
       -- an entry left active by something that did not tell textentry (the hook is off): the next entry recovers and says so in one line
       do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 18)
+        open_midimap(w, 19)
         tap(w, "RIGHT")
         local hook = w.textentry.menu_changed
         w.textentry.menu_changed = nil
@@ -1201,7 +1201,7 @@ do
       -- a second entry while one really is open: refused, and the log says why, once
       do
         local w = setup(arc_open, arc_keys)
-        open_midimap(w, 18)
+        open_midimap(w, 19)
         tap(w, "RIGHT")
         tap(w, "A")
         printed = {}
@@ -1219,9 +1219,9 @@ do
           open_midimap(w, 9); tap(w, "RIGHT"); w.pages.MIDIMAP.dpos = 2; tap(w, "RIGHT"); tap(w, "7"); tap(w, round == 2 and "ESC" or "ENTER")
           is(not w.textentry.active, "the number entry closed (round " .. round .. ") " .. combo)
           tap(w, "ESC"); tap(w, "ESC") -- out of the view and the page
-          open_midimap(w, 18); tap(w, "RIGHT"); tap(w, "C"); tap(w, round == 3 and "ESC" or "ENTER")
+          open_midimap(w, 19); tap(w, "RIGHT"); tap(w, "C"); tap(w, round == 3 and "ESC" or "ENTER")
           is(not w.textentry.active, "the preset entry closed (round " .. round .. ") " .. combo)
-          open_midimap(w, 18); tap(w, "RIGHT"); tap(w, "ENTER") -- an empty name: refused
+          open_midimap(w, 19); tap(w, "RIGHT"); tap(w, "ENTER") -- an empty name: refused
           is(not w.textentry.active, "an empty name closed the entry (round " .. round .. ") " .. combo)
           tape_entry_opens(w, "after MIDI MAP entries (round " .. round .. ") " .. combo)
         end

@@ -611,3 +611,11 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 4. A MIDI controller mapped to A1 (MIDI MAP, learn by clicking the ring): turning it moves the same ring as the wheel, once; with the arc closed one toast says so.
 5. A real arc plugged in next to the virtual one (if you have one): both appear, a mapped encoder only moves the virtual one.
 6. Keys 5 6 T Y G H B N in the arc window and (arc open, a script running) in the norns window.
+
+## Windows 0.10.5 (the arc's up and down drag, no trail)
+1. SYSTEM > MIDI MAP, row **ARC DRAG** (after ARC KEYS): it says UP/DOWN on a first start. Open the arc window (F8). Hold the left button on a ring and move the mouse up: the ring turns clockwise; down: counter-clockwise. About a third of the window's height (a bit under 90 pixels) is one lap of the ring; Shift is four times finer, Ctrl four times faster (press Ctrl after the button; Ctrl before it is the push button).
+2. Keep the button down and move the pointer far out of the ring, out of the window and to the edge of the screen: the ring goes on turning with the pointer's height until you let go; after the release nothing turns. The window itself never moves while you drag.
+3. K3 or E3 on ARC DRAG: CIRCLE: dragging round a ring turns it as in 0.10.4. Close and start norns again: the choice is still there.
+4. Wheel over a ring, right button (or Ctrl + left click) pressed and let go, keys 5 6 T Y G H B N, a mapped encoder: as before.
+5. The trail: map an encoder to A1 and turn it fast (as fast as you can) for a few seconds, then stop: the ring stops with your hand (it was seconds of trail before). Also try a large window and 125/150 percent scaling.
+
