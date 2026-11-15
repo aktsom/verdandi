@@ -1777,6 +1777,8 @@ static int arc_test(int what, int n, int value) {
         return 1;
     case 2: { // drag: value degrees clockwise round ring n, in steps of 3 degrees, from the top
         double start = -M_PI / 2, step = (value < 0 ? -3.0 : 3.0) * M_PI / 180;
+        int was_ud = arc_drag_updown;
+        arc_drag_updown = 0; // this case is the drag round the ring: the way is forced for the run (on Windows the saved default is up and down; the setting is put back below)
         arc_test_point(n, start, 40, &x, &y);
         b.type = SDL_MOUSEBUTTONDOWN;
         b.button = SDL_BUTTON_LEFT;
@@ -1793,6 +1795,7 @@ static int arc_test(int what, int n, int value) {
         }
         b.type = SDL_MOUSEBUTTONUP;
         arc_button(&b);
+        arc_drag_updown = was_ud;
         return 1;
     }
     case 3: // ring press (the right button): value 1 down, 0 up
