@@ -205,6 +205,7 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 - CI found and fixed one thing: the existing 0.10.4 round-the-ring hook ran with the new Windows default (up and down) and read -480 instead of 64; it now forces the circle way for its run (same numbers, nothing loosened). The five new drag checks passed on Windows at their first run.
 - Tests: C (`arc_input_test.c`), Lua (settings, layer, page), real program on Linux with real mouse events (not Shift: see phase-m14.md) (`window:arc drag ...`, `window:arc window after fast mapped turns ...`: both pass here), Windows CI hooks written (`_norns.arc_test` 5, 6, 7) and **not yet run on Windows**. The row numbers of the MIDI MAP rows after ARC KEYS moved by one in the page test.
 - The explanation of GAIN, ONE TURN and ACCEL is in `phase-m14.md` section 3: ACCEL LOW and HIGH are the same for an encoder that sends 1 per click (the difference only shows for messages worth 2 or more); a clearer difference is proposed there, not built (needs the owner's say).
+- **Windows CI (commit 340f8c0): 67 passed, 0 failed. The drag checks passed in the real norns.exe; `windows-latest` now points to 0.10.5 / 340f8c0.**
 - Not tested: a real mouse on Windows, the capture at the screen edge, scaling, a real encoder (HARDWARE-CHECKLIST.md "Windows 0.10.5").
 
 ## Windows 0.10.4: the virtual arc (docs/port/phase-m13.md)
