@@ -323,6 +323,7 @@ static int _system_action(lua_State *l);
 static int _system_glob(lua_State *l);
 #ifdef NORNS_WINDOWS
 static int _listdir(lua_State *l);
+static int _path_is_dir(lua_State *l);
 static int _ext_list(lua_State *l);
 static int _ext_add(lua_State *l);
 static int _ext_remove(lua_State *l);
@@ -589,6 +590,7 @@ void w_init(void) {
     lua_register_norns("system_glob", &_system_glob);
 #ifdef NORNS_WINDOWS
     lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
+    lua_register_norns("path_is_dir", &_path_is_dir); // util.file_exists is true for a folder, as on Linux (fopen refuses a folder on Windows)
     lua_register_norns("ext_list", &_ext_list);     // M8: extra sample folders (links in dust/audio), docs/port/phase-m8.md
     lua_register_norns("ext_add", &_ext_add);
     lua_register_norns("ext_remove", &_ext_remove);
@@ -3822,6 +3824,7 @@ int _system_glob(lua_State *l) {
 
 #ifdef NORNS_WINDOWS
 extern "C" int norns_win_listdir(const char *dir, void (*cb)(const char *name, int isdir, void *ud), void *ud);
+extern "C" int norns_win_is_dir(const char *path);
 
 struct listdir_state {
     std::vector<std::string> dirs, files;
@@ -3834,6 +3837,17 @@ static void listdir_add(const char *name, int isdir, void *ud) {
     } else {
         st->files.push_back(name);
     }
+}
+
+/***
+ * true when the name is a folder (a trailing slash is fine)
+ * @function path_is_dir
+ * @tparam string path
+ */
+int _path_is_dir(lua_State *l) {
+    lua_check_num_args(1);
+    lua_pushboolean(l, norns_win_is_dir(luaL_checkstring(l, 1)) != 0);
+    return 1;
 }
 
 /***

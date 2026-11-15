@@ -1,0 +1,86 @@
+diff --git a/cmd/server.go b/cmd/server.go
+index f5102e5..f054b51 100644
+--- a/cmd/server.go
++++ b/cmd/server.go
+@@ -851,9 +851,11 @@ func (s *server) deleteProjectHandler(ctx *gin.Context) {
+ 	}
+ 
+ 	if err := os.RemoveAll(p.Root); err != nil {
++		log.Printf("remove: %s FAILED: %v", which, err) // Verdandi: removals are in the log too
+ 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+ 		return
+ 	}
++	log.Printf("remove: %s removed (%s)", which, p.Root)
+ 
+ 	ctx.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("removed %s", which)})
+ }
+diff --git a/pkg/dust/project.go b/pkg/dust/project.go
+index 01724a0..f3fa333 100644
+--- a/pkg/dust/project.go
++++ b/pkg/dust/project.go
+@@ -1,6 +1,7 @@
+ package dust
+ 
+ import (
++	"log"
+ 	"archive/zip"
+ 	"encoding/json"
+ 	"fmt"
+@@ -206,8 +207,57 @@ func InferProjectNameFromURL(u *url.URL) string {
+ 	return name
+ }
+ 
++// Verdandi: what an install does is written to the log (maiden.log): the start, the end with the time, the error text when it fails, and which git submodules came with the script
++// (a script that bundles a library as a submodule says something is missing when the folder is empty)
++func submoduleReport(projectPath string) string {
++	data, err := ioutil.ReadFile(filepath.Join(projectPath, ".gitmodules"))
++	if err != nil {
++		return ""
++	}
++	out := ""
++	for _, line := range strings.Split(string(data), "\n") {
++		line = strings.TrimSpace(line)
++		if !strings.HasPrefix(line, "path") {
++			continue
++		}
++		parts := strings.SplitN(line, "=", 2)
++		if len(parts) != 2 {
++			continue
++		}
++		sub := strings.TrimSpace(parts[1])
++		files := 0
++		filepath.Walk(filepath.Join(projectPath, sub), func(p string, info os.FileInfo, err error) error {
++			if err == nil && info.IsDir() && info.Name() == ".git" {
++				return filepath.SkipDir
++			}
++			if err == nil && !info.IsDir() {
++				files++
++			}
++			return nil
++		})
++		if files == 0 {
++			out += fmt.Sprintf("; submodule %s is EMPTY (it was not fetched: the script may say something is missing)", sub)
++		} else {
++			out += fmt.Sprintf("; submodule %s: %d files", sub, files)
++		}
++	}
++	return out
++}
++
+ // Install installs the project at url if a project with the given name does not already exist in root
+ func Install(root, name, srcURL string, entry *catalog.Entry) error {
++	start := time.Now()
++	log.Printf("install: %s from %s into %s", name, srcURL, filepath.Join(root, name))
++	err := install(root, name, srcURL, entry)
++	if err != nil {
++		log.Printf("install: %s FAILED after %v: %v", name, time.Since(start).Round(time.Millisecond), err)
++		return err
++	}
++	log.Printf("install: %s done in %v%s", name, time.Since(start).Round(time.Millisecond), submoduleReport(filepath.Join(root, name)))
++	return nil
++}
++
++func install(root, name, srcURL string, entry *catalog.Entry) error {
+ 	path := filepath.Join(root, name)
+ 	if _, err := os.Stat(path); !os.IsNotExist(err) {
+ 		return fmt.Errorf("project %s already exists in %s", name, root)

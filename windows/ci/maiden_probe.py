@@ -342,6 +342,74 @@ if os.environ.get("VERDANDI_PROBE") == "arc":
         result("arc-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=cc2 (M15, docs/port/phase-m15.md): the owner's route to cheat codes 2, in the real program. maiden installs cheat_codes_2 from the community catalog (the real list, the real repository, with the git submodule
+# lib/nb that the script checks for) and nb by its address; util.file_exists is asked about those folders; cheat codes 2 is loaded with the OLD util.file_exists (io.open only: the owner's failure: its own "something is missing"
+# script is loaded inside the load and the next include fails) and then with the real one (it loads). no network (the catalog does not arrive): 'PROBE cc2-network SKIP', nothing else is asked.
+if os.environ.get("VERDANDI_PROBE") == "cc2":
+    import urllib.parse
+    def run(line, want, seconds=40):
+        return repl(5555, line, want, seconds)
+    def post(path, timeout=240, method="POST"):
+        req = urllib.request.Request("http://127.0.0.1:%d%s" % (PORT, path), method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.status, r.read().decode("utf-8", "replace")[:300]
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8", "replace")[:300]
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("cc2-up", up, "norns answers")
+        # the catalog: maiden fetches it when it starts
+        have = False
+        for _ in range(45):
+            try:
+                st, body = get("/api/v1/catalog/community")
+                if st == 200 and b"cheat_codes_2" in body: have = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        if not have:
+            lines.append("PROBE cc2-network SKIP the community catalog did not arrive (no network?): nothing asked")
+            with open(OUT, "w", encoding="utf-8") as f: f.write("\n".join(lines) + "\n")
+            sys.exit(0)
+        result("cc2-catalog", True, "the community catalog has cheat_codes_2")
+        code = os.path.join(HOME, "dust", "code")
+        st, body = post("/api/v1/catalog/community/install/cheat_codes_2")
+        result("cc2-install", st in (200, 201), "maiden installed cheat_codes_2 from the catalog: %s %s" % (st, body.replace("\n", " ")[:120]))
+        nbfile = os.path.join(code, "cheat_codes_2", "lib", "nb", "lib", "nb.lua")
+        result("cc2-submodule", os.path.isfile(nbfile) and os.path.isfile(os.path.join(code, "cheat_codes_2", "lib", "cc_pattern_time.lua")),
+               "the git submodule lib/nb came with the script: %s; lib/cc_pattern_time.lua is there" % (nbfile if os.path.isfile(nbfile) else "lib/nb/lib/nb.lua is NOT there"))
+        st, body = post("/api/v1/project/install?url=" + urllib.parse.quote("https://github.com/sixolet/nb", safe=""))
+        result("cc2-nb-install", st in (200, 201) and os.path.isfile(os.path.join(code, "nb", "lib", "player.lua")), "maiden installed nb by its address: %s %s" % (st, body.replace("\n", " ")[:100]))
+        # util.file_exists for folders, the way scripts ask
+        ok, tail = run("print('VT_FE ' .. tostring(util.file_exists(_path.code .. 'cheat_codes_2/lib/nb/lib/')) .. ' ' .. tostring(util.file_exists(_path.code .. 'nb')) .. ' ' .. tostring(util.file_exists(_path.code .. 'cheat_codes_2/lib/cc_pattern_time.lua')) .. ' ' .. tostring(util.file_exists(_path.code .. 'no_such_folder/')))\n", "VT_FE", 20)
+        result("cc2-file-exists", ok and "VT_FE true true true false" in tail, "util.file_exists: lib/nb/lib/ (a folder with a slash), the folder nb, a file, a missing folder: " + tail.strip()[-60:])
+        # the owner's failure: the check with io.open only (the old util.file_exists)
+        ok, tail = run("do local fe = util.file_exists util.file_exists = function(n) local f = io.open(n, 'r') if f ~= nil then f:close() return true end return false end norns.script.load('code/cheat_codes_2/cheat_codes_2.lua') util.file_exists = fe end print('VT_OLD ' .. tostring(norns.state.shortname))\n", "VT_OLD", 60)
+        result("cc2-old-way-ran", ok, "cheat codes 2 was loaded with the old util.file_exists: " + tail.strip()[-60:])
+        time.sleep(3)
+        # and with the real one
+        ok, tail = run("norns.script.load('code/cheat_codes_2/cheat_codes_2.lua') print('VT_NEW ' .. tostring(norns.state.shortname) .. ' ' .. tostring(nb ~= nil) .. ' ' .. tostring(type(redraw)))\n", "VT_NEW", 90)
+        result("cc2-load", ok and "VT_NEW cheat_codes_2 true function" in tail, "cheat codes 2 loaded: " + tail.strip()[-80:])
+        time.sleep(8)
+        ok, tail = run("print('VT_STILL ' .. tostring(norns.state.shortname))\n", "VT_STILL", 20)
+        result("cc2-stays", ok and "VT_STILL cheat_codes_2" in tail, "the script is still the loaded script a few seconds later: " + tail.strip()[-40:])
+        # remove it again through maiden (the removal is in maiden.log)
+        st, body = post("/api/v1/project/cheat_codes_2", method="DELETE")
+        result("cc2-remove", st == 200, "maiden removed cheat_codes_2: %s" % st)
+    except SystemExit:
+        raise
+    except Exception as e:
+        result("cc2-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):

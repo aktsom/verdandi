@@ -619,3 +619,8 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 4. Wheel over a ring, right button (or Ctrl + left click) pressed and let go, keys 5 6 T Y G H B N, a mapped encoder: as before.
 5. The trail: map an encoder to A1 and turn it fast (as fast as you can) for a few seconds, then stop: the ring stops with your hand (it was seconds of trail before). Also try a large window and 125/150 percent scaling.
 
+## Windows 0.10.6 (cheat codes 2)
+1. Check the folder `dust\code\cheat_codes_2\lib\nb\lib` exists and holds nb.lua and player.lua. If `lib\nb` is empty, the script was installed without its git submodule (a zip, or an old copy): delete the folder `cheat_codes_2` and install it again from maiden's catalog (not from a zip).
+2. Start Verdandi 0.10.6, SELECT or maiden: load cheat_codes_2. It loads (the grid and arc are optional); no "SCRIPT ERROR: load fail".
+3. `logs\maiden.log`: after an install from maiden's project manager there are lines `install: cheat_codes_2 from ... done in ... ms; submodule lib/nb: N files`.
+

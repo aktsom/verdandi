@@ -659,6 +659,49 @@ chk_arc() {
     if [ "$(grep -a -c 'arc test: updown drag ring.*drag held and capture asked until the release: yes, after the release: capture off drag off' "$out/logs/norns.log" 2> /dev/null)" = 5 ]; then echo "found: five drags up and down held the capture until the release and let it go after it"; else echo "NOT FOUND: five 'updown drag ... capture off drag off' lines in norns.log"; grep -a 'arc test: updown drag' "$out/logs/norns.log" 2> /dev/null | cut -c1-260; bad=1; fi
     return "$bad"
 }
+# M15: cheat codes 2 on the owner's route (windows/ci/maiden_probe.py, VERDANDI_PROBE=cc2, docs/port/phase-m15.md): maiden installs cheat_codes_2 (with its git submodule lib/nb) and nb, util.file_exists is true for folders,
+# the old check (io.open only) reproduces the owner's failure (the script's own fail_state-nb screen is loaded inside the load, then "MISSING INCLUDE: lib/cc_pattern_time"), the real one loads the script,
+# and maiden.log says what the install did. needs the network (the catalog and GitHub): without it the check says SKIP
+run_cc2_probe() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local H="$WORK/user home cc2" out="$M0_OUT/cc2"
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    VERDANDI_PROBE=cc2 "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 420 "$APP/Verdandi$EXE" --headless --exit-after=300 --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=300 --home="$(native "$H")"
+    fi
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe //IM maiden.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    return 0
+}
+chk_cc2() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local bad=0 out="$M0_OUT/cc2" p L="$M0_OUT/cc2/logs/norns.log" M="$M0_OUT/cc2/logs/maiden.log"
+    cat "$out/probe.txt" 2> /dev/null
+    if grep -a -q "PROBE cc2-network SKIP" "$out/probe.txt" 2> /dev/null; then echo "SKIP: no network on the runner: the cheat codes 2 check was not made"; return 0; fi
+    for p in cc2-up cc2-catalog cc2-install cc2-submodule cc2-nb-install cc2-file-exists cc2-old-way-ran cc2-load cc2-stays cc2-remove; do
+        has "$out/probe.txt" "PROBE $p ok" "the cheat codes 2 check '$p'" || bad=1
+    done
+    # the reproduction: with the old check the script's own screen is loaded inside the load and the next include fails (the owner's log, in the owner's order: the load, the nested fail_state load, MISSING INCLUDE,
+    # "load fail" with cheat_codes_2.lua:84); after it, with the real check, the includes run through to the script's own copy of nb
+    grep -a -n -E "script load: .*cheat_codes_2.lua|script load: .*fail_state-nb.lua|MISSING INCLUDE: lib/cc_pattern_time|load fail" "$L" | head -6 | sed 's/^/    /'
+    local missing_at nb_at
+    missing_at="$(grep -a -n 'MISSING INCLUDE: lib/cc_pattern_time' "$L" | tail -1 | cut -d: -f1)"
+    nb_at="$(grep -a -n 'including .*cheat_codes_2/lib/nb/lib/nb.lua' "$L" | head -1 | cut -d: -f1)"
+    if [ -n "$missing_at" ] && grep -a -q 'script load: .*cheat_codes_2/lib/fail_state-nb.lua' "$L"; then echo "found: the old check reproduces the owner's failure (fail_state-nb.lua loaded inside the load, then MISSING INCLUDE: lib/cc_pattern_time)"; else echo "NOT FOUND: the reproduction with the old util.file_exists (fail_state-nb.lua, then MISSING INCLUDE: lib/cc_pattern_time)"; bad=1; fi
+    if [ -n "$nb_at" ] && [ -n "$missing_at" ] && [ "$nb_at" -gt "$missing_at" ]; then echo "found: afterwards, with the real util.file_exists, the script went on to include its own lib/nb/lib/nb.lua (no MISSING INCLUDE after the old run)"; else echo "NOT FOUND: including .../cheat_codes_2/lib/nb/lib/nb.lua after the old run in norns.log (missing at line '$missing_at', nb at '$nb_at')"; bad=1; fi
+    # maiden.log: what the install did, and what the removal did
+    grep -a -E "install:|remove:" "$M" 2> /dev/null | head -8 | sed 's/^/    /'
+    if grep -a -q 'install: cheat_codes_2 from https://github.com/dndrks/cheat_codes_2 into' "$M" && grep -a -q 'install: cheat_codes_2 done in .*submodule lib/nb: [1-9][0-9]* files' "$M"; then echo "found: maiden.log says the install started, finished, and that the submodule lib/nb came with it"; else echo "NOT FOUND: the install lines of cheat_codes_2 in maiden.log"; bad=1; fi
+    grep -a -q 'install: nb done in' "$M" && echo "found: maiden.log has the install of nb" || { echo "NOT FOUND: 'install: nb done' in maiden.log"; bad=1; }
+    grep -a -q 'remove: cheat_codes_2 removed' "$M" && echo "found: maiden.log has the removal" || { echo "NOT FOUND: 'remove: cheat_codes_2 removed' in maiden.log"; bad=1; }
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -820,6 +863,8 @@ m0_run m11-check-menu-pages chk_menu_pages
 m0_run m12-check-audio-shot chk_audio_shot
 m0_run m13-run-arc-probe run_arc_probe
 m0_run m13-check-arc chk_arc
+m0_run m15-run-cc2-probe run_cc2_probe
+m0_run m15-check-cc2 chk_cc2
 m0_run m10-run-twins-engine run_twins_engine
 m0_run m10-check-twins-engine chk_twins_engine
 m0_run m10-check-longpath chk_longpath

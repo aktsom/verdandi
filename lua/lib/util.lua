@@ -43,6 +43,10 @@ util.file_exists = function(name)
   if f~=nil then
     io.close(f)
     return true
+  elseif _norns ~= nil and _norns.path_is_dir ~= nil then
+    -- Windows (Verdandi): fopen refuses to open a folder, where a norns (Linux) opens it, so on a norns this is true for a folder too and scripts rely on it
+    -- (util.file_exists(_path.code.."nb"), cheat codes 2: util.file_exists(_path.code.."cheat_codes_2/lib/nb/lib/")). the native check asks the system whether the name is a folder
+    return _norns.path_is_dir(name)
   else
     return false
   end

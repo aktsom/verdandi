@@ -146,6 +146,17 @@ int norns_win_listdir(const char *dir_utf8, void (*cb)(const char *name, int isd
     return 0;
 }
 
+/* is this name a folder? (_norns.path_is_dir, util.file_exists). fopen on a folder fails on Windows, where it succeeds on Linux, so a script's "does this folder exist" through io.open was always false here.
+ * a trailing slash or backslash is fine; the name is UTF-8 */
+int norns_win_is_dir(const char *path_utf8) {
+    wchar_t w[MAX_PATH * 2];
+    if (MultiByteToWideChar(CP_UTF8, 0, path_utf8, -1, w, MAX_PATH * 2) <= 0) {
+        return 0;
+    }
+    DWORD a = GetFileAttributesW(w);
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
 /* sleep until an absolute CLOCK_MONOTONIC time (nanoseconds), on a high resolution waitable timer (Windows 10 1803 and later; otherwise a 1 ms timer resolution and a normal timer).
  * used by the metros: matron/src/metro.cc. one timer per thread. */
 void norns_win_sleep_until_ns(int64_t target) {
