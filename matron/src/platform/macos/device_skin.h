@@ -14,6 +14,13 @@
 
 #pragma once
 
+// the label of the KEYS slot of the button row: the virtual keyboard is not built on Windows, its button is PIN (always on top; docs/port/phase-m16.md)
+#ifdef NORNS_WINDOWS
+#define KEYS_LABEL "PIN"
+#else
+#define KEYS_LABEL "KEYS"
+#endif
+
 #include <cairo.h>
 #ifdef NORNS_LINUX_DESKTOP
 #include "../linux/toast_fit.h"

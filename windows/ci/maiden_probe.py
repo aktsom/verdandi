@@ -410,6 +410,92 @@ if os.environ.get("VERDANDI_PROBE") == "cc2":
         result("cc2-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=pin (M16): the PIN button (always on top) in the real program, with real windows (the program runs WITHOUT --headless, with VERDANDI_TEST_HOOKS=1). the main window, the arc window and the detached screen window are opened, PIN is pressed the way the button
+# is (the action "pin": button_action), and after every step the program writes one line "pin report N: ..." to norns.log with what SDL and Windows (WS_EX_TOPMOST) say about each window. then the MIDI action: learned from a note of a port, a note from the learned
+# port toggles it, a note from another port does not. results are 'PROBE pin-... ok|FAIL' lines
+if os.environ.get("VERDANDI_PROBE") == "pin":
+    import re
+    LOG = os.path.join(HOME, "logs", "norns.log")
+    def run(line, want, seconds=30):
+        return repl(5555, line, want, seconds)
+    def report(tok):
+        ok, tail = run("print('VT_PIN ' .. tostring(_norns.pin_report(%d)))\n" % tok, "VT_PIN", 15)
+        end = time.time() + 20
+        while time.time() < end:
+            try:
+                with open(LOG, "r", encoding="utf-8", errors="replace") as f:
+                    for l in f.read().splitlines()[::-1]:
+                        m = re.search(r"pin report %d: (.*)" % tok, l)
+                        if m:
+                            d = {}
+                            for part in m.group(1).split():
+                                k, v = part.split("=", 1)
+                                d[k] = v
+                            return d, m.group(1)
+            except OSError:
+                pass
+            time.sleep(0.5)
+        return None, "no line 'pin report %d' in norns.log" % tok
+    def expect(name, tok, state, wins, what):
+        d, raw = report(tok)
+        if d is None:
+            result(name, False, raw); return
+        good = d.get("state") == str(state) and d.get("lit") == str(state)
+        bad = []
+        for w in ("main", "grid", "arc", "keys", "screen"):
+            want = wins.get(w, "-")
+            got = d.get(w, "?")
+            if want == "-":
+                if got != "-": good = False; bad.append("%s should be closed" % w)
+            else:
+                # SDL's flag / Windows's own topmost style: both must say what is wanted
+                if got != "%s/%s" % (want, want): good = False; bad.append("%s is %s, wanted %s/%s" % (w, got, want, want))
+        result(name, good, "%s: %s%s" % (what, raw, (" (" + "; ".join(bad) + ")") if bad else ""))
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("pin-up", up, "norns answers")
+        time.sleep(3)
+        expect("pin-start-off", 1, 0, {"main": 0}, "at the start it is off and only the main window is open")
+        run("print('VT_A ' .. tostring(_norns.window_action('arc')) .. ' ' .. tostring(_norns.window_action('detach')))\n", "VT_A", 20)
+        time.sleep(4)
+        expect("pin-windows-open", 2, 0, {"main": 0, "arc": 0, "screen": 0}, "the arc and the detached screen are open, still off")
+        run("print('VT_P ' .. tostring(_norns.window_action('pin')))\n", "VT_P", 20); time.sleep(2)
+        expect("pin-on", 3, 1, {"main": 1, "arc": 1, "screen": 1}, "PIN on: all three windows are on top, the button is lit")
+        run("print('VT_C ' .. tostring(_norns.window_action('arc')))\n", "VT_C", 20); time.sleep(3)
+        expect("pin-arc-closed", 4, 1, {"main": 1, "screen": 1}, "the arc window closed: the others stay on top")
+        run("print('VT_O ' .. tostring(_norns.window_action('arc')))\n", "VT_O", 20); time.sleep(3)
+        expect("pin-arc-reopened", 5, 1, {"main": 1, "arc": 1, "screen": 1}, "the arc opened again while it is on: on top at once")
+        run("print('VT_D ' .. tostring(_norns.window_action('detach')))\n", "VT_D", 20); time.sleep(3)
+        run("print('VT_D2 ' .. tostring(_norns.window_action('detach')))\n", "VT_D2", 20); time.sleep(3)
+        expect("pin-screen-reopened", 6, 1, {"main": 1, "arc": 1, "screen": 1}, "the screen window closed and opened again: on top at once")
+        run("print('VT_P2 ' .. tostring(_norns.window_action('pin')))\n", "VT_P2", 20); time.sleep(2)
+        expect("pin-off", 7, 0, {"main": 0, "arc": 0, "screen": 0}, "PIN off: all three windows are normal again, the button is not lit")
+        # the MIDI action: learned from a note, the port stored
+        line = ("_norns.midi.add(97, 'PIN PROBE PORT', 'p97') _norns.midi.add(98, 'PIN OTHER PORT', 'p98') local mm = norns.midimap local S = require 'core/midimap_settings' "
+                "mm.start_listen_action('pin') _norns.midi.event(97, {0x90, 62, 100}) _norns.midi.event(97, {0x80, 62, 0}) "
+                "print('VT_L ' .. tostring(S.state.actions.pin.type) .. ' ' .. tostring(S.state.actions.pin.num) .. ' ' .. tostring(S.state.actions.pin.dev)) mm.cancel()\n")
+        ok, tail = run(line, "VT_L", 20)
+        result("pin-midi-learn", ok and "VT_L note 62 PIN PROBE PORT" in tail, "learned from a note: " + tail.strip()[-60:])
+        time.sleep(1)
+        run("_norns.midi.event(98, {0x90, 62, 100}) _norns.midi.event(98, {0x80, 62, 0}) print('VT_X other')\n", "VT_X", 20); time.sleep(2)
+        expect("pin-midi-other-port", 8, 0, {"main": 0, "arc": 0, "screen": 0}, "the same note from another port does nothing")
+        run("_norns.midi.event(97, {0x90, 62, 100}) _norns.midi.event(97, {0x80, 62, 0}) print('VT_M1 on')\n", "VT_M1", 20); time.sleep(2)
+        expect("pin-midi-on", 9, 1, {"main": 1, "arc": 1, "screen": 1}, "a note from the learned port turns PIN on: the windows and the button follow")
+        time.sleep(1)
+        run("_norns.midi.event(97, {0x90, 62, 100}) _norns.midi.event(97, {0x80, 62, 0}) print('VT_M2 off')\n", "VT_M2", 20); time.sleep(2)
+        expect("pin-midi-off", 10, 0, {"main": 0, "arc": 0, "screen": 0}, "the second note turns it off again")
+        run("_norns.midi.remove(97) _norns.midi.remove(98) print('VT_R done')\n", "VT_R", 20)
+    except Exception as e:
+        result("pin-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):

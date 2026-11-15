@@ -52,7 +52,7 @@ static const struct {
     const char *label;
 } buttons[] = {
     {36, "MIX"},        {112, "TAPE"},      {188, "HOME"},     {264, "PARAMS"},     // SKIN_PAGE1..4
-    {359.3333, "MIC"},  {435.3333, "GRID"}, {511.3333, "ARC"}, {587.3333, "KEYS"},  // SKIN_MIC..KEYS
+    {359.3333, "MIC"},  {435.3333, "GRID"}, {511.3333, "ARC"}, {587.3333, KEYS_LABEL},  // SKIN_MIC..KEYS
     {682.6667, "MAIDEN"}, {758.6667, "MANUAL"},                                     // SKIN_MAIDEN, MANUAL
     {854, "MUTE"},                                                                  // SKIN_MUTE
 };

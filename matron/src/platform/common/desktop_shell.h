@@ -114,6 +114,9 @@ extern void shell_set_screen_out(int on); // main thread: the screen is in its o
 extern void shell_set_buttons_shown(int on); // main thread: the tick of "Show the page buttons"
 extern int shell_get_buttons_shown(void);
 extern void shell_set_muted(int on); // main thread: the tick of "Mute output"
+#ifdef NORNS_WINDOWS
+extern void shell_set_pin(int on); // main thread: the tick of "Always on top (PIN)" in the menu
+#endif
 extern void shell_set_midi_actions(int on); // any thread: lua says what midimap.conf holds (the tick of "MIDI actions enabled")
 extern int shell_get_midi_actions(void);
 extern void shell_hid_keyboard_event(uint16_t usage, int value);

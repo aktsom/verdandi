@@ -28,7 +28,9 @@ M.ARC_IDS = {"a1", "a2", "a3", "a4"} -- the four encoders of the virtual arc (do
 M.ALL_IDS = {"e1", "e2", "e3", "k1", "k2", "k3", "a1", "a2", "a3", "a4"}
 M.ACCELS = {"off", "low", "high"}
 -- the actions (docs/port/midi-actions-plan.md): the buttons of the box and a few utility actions, in the order of the list on the page. there is no quit, no menu navigation, no typing
-M.ACTION_IDS = {"mix", "tape", "home", "params", "input", "grid", "arc", "keys", "maiden", "manual", "mute", "detach", "fullscreen", "screenshot"}
+-- on Windows the virtual keyboard is not built and its button, key and action are PIN (always on top, docs/port/phase-m16.md): the action is called "pin" there and a file that has the old "keys" lines is read as "pin"
+local WINDOWS = os.getenv("NORNS_PLATFORM") == "windows"
+M.ACTION_IDS = {"mix", "tape", "home", "params", "input", "grid", "arc", WINDOWS and "pin" or "keys", "maiden", "manual", "mute", "detach", "fullscreen", "screenshot"}
 M.ACTION_KINDS = {"none", "note", "ccbutton", "step"}
 M.REL_MODES = {"rel2c", "relsm", "relob"}
 M.MODES = {"abs", "rel2c", "relsm", "relob"}
@@ -287,6 +289,7 @@ function M.load()
     local id, field = k:match("^([eka]%d)%.(%w+)$")
     if id and M.state.ctl[id] == nil then id = nil end -- a5 and the like are unknown keys
     local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
+    if WINDOWS and aid == "keys" then aid = "pin" end
     if aid and M.state.actions[aid] == nil then aid = nil end -- an action that does not exist (there is no quit): an unknown key
     if k == "preset" then
       if v ~= "" then st.preset = v else M.log("preset= is empty, using NONE") end
@@ -573,6 +576,7 @@ local function read_preset_file(path, file)
     local id, field = k:match("^([eka]%d)%.(%w+)$")
     if id and not in_list(M.ALL_IDS, id) then id = nil end
     local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
+    if WINDOWS and aid == "keys" then aid = "pin" end
     if aid and not in_list(M.ACTION_IDS, aid) then aid = nil end
     if aid and in_list({"type", "num", "mode", "dir", "threshold"}, afield) then
       afields[aid] = afields[aid] or {}

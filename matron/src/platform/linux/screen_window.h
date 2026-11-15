@@ -26,6 +26,7 @@ extern void screen_window_init(void);
 extern bool screen_window_wanted_at_start(void); // the file says detached
 extern bool screen_window_is_open(void);
 extern Uint32 screen_window_id(void);
+extern SDL_Window *screen_window_sdl(void); // the detached screen window, NULL when it is not open
 
 // opens the window near main (placement, display); decorate gives it the icon. false if SDL could not make it
 extern bool screen_window_open(SDL_Window *main, void (*decorate)(SDL_Window *));

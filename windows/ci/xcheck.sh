@@ -18,6 +18,10 @@ done
 rm -rf "$SHADOW/SDL2"; mkdir -p "$SHADOW/SDL2"
 for f in /usr/include/SDL2/*; do ln -sf "$f" "$SHADOW/SDL2/$(basename "$f")"; done
 for cfg in /usr/include/x86_64-linux-gnu/SDL2/_real_SDL_config.h /usr/include/x86_64-linux-gnu/SDL2/SDL_config.h; do [ -f "$cfg" ] && cp "$cfg" "$SHADOW/SDL2/SDL_config.h" && break; done
+# SDL_syswm.h of the Linux headers names the X11 types (the real Windows SDL has no X11): two stand-in headers, only for this compile check
+mkdir -p "$SHADOW/X11"
+printf 'typedef struct _XDisplay Display;\ntypedef unsigned long Window;\ntypedef unsigned long Atom;\ntypedef union _XEvent { long pad[24]; } XEvent;\n' > "$SHADOW/X11/Xlib.h"
+printf '/* stand-in */\n' > "$SHADOW/X11/Xatom.h"
 ln -sfn /usr/include/lua5.3/lua.h "$SHADOW/lua.h"; ln -sfn /usr/include/lua5.3/lualib.h "$SHADOW/lualib.h"; ln -sfn /usr/include/lua5.3/lauxlib.h "$SHADOW/lauxlib.h"
 ln -sfn /usr/include/lua5.3/luaconf.h "$SHADOW/luaconf.h"; ln -sfn /usr/include/lua5.3/lua.hpp "$SHADOW/lua.hpp"
 ln -sfn /usr/include/glib-2.0/glib.h "$SHADOW/glib.h" 2> /dev/null || true
@@ -30,7 +34,7 @@ MON="${LIBMONOME_INC:-build/package/cache/libmonome/public}"
 INC="-include $REPO/matron/src/platform/windows/compat_win.h -I matron/src -iquote matron/src/hardware -iquote matron/src/device -I matron/src/platform/windows -I matron/src/platform/windows/include -I matron/src/platform/windows/jack_null/include -I matron/src/platform/macos/include -I norns -I crone -I crone/src -I crone/faust \
  -I crone/softcut/softcut-lib/include -I third-party/concurrentqueue -I third-party/readerwriterqueue -I third-party/lua-cjson -I third-party/link/extensions/abl_link/include -I third-party/link/include -I third-party/link/modules/asio-standalone/asio/include -I $MON \
  -isystem $SHADOW -isystem $SHADOW/SDL2 -isystem $SHADOW/cairo -isystem $SHADOW/freetype2"
-DEFS=(-DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONOME=1 -DHAVE_NNG=1 -DHAVE_LUA_CJSON=1 -DHAVE_ABLETON_LINK=1 -DLINK_PLATFORM_WINDOWS=1 -D_WIN32_WINNT=0x0601 -DVERSION_MAJOR=0 -DVERSION_MINOR=0 -DVERSION_PATCH=0 '-DVERSION_HASH="xcheck"')
+DEFS=(-DSDL_VIDEO_DRIVER_WINDOWS=1 -DNORNS_DESKTOP=1 -DNORNS_LINUX_DESKTOP=1 -DNORNS_WINDOWS=1 -DHAVE_LIBMONOME=1 -DHAVE_NNG=1 -DHAVE_LUA_CJSON=1 -DHAVE_ABLETON_LINK=1 -DLINK_PLATFORM_WINDOWS=1 -D_WIN32_WINNT=0x0601 -DVERSION_MAJOR=0 -DVERSION_MINOR=0 -DVERSION_PATCH=0 '-DVERSION_HASH="xcheck"')
 # shellcheck disable=SC2206
 DEFS+=(${XC_DEFS:-})
 files="${XC_FILES:-}"

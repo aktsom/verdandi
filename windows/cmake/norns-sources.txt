@@ -117,3 +117,5 @@ matron/src/platform/windows/grid/grid_win.cc
 matron/src/platform/windows/grid/serialosc_win.cc
 # --- M13: the virtual arc (a named pipe that libmonome opens; docs/port/phase-m13.md)
 matron/src/platform/windows/vgrid_device_win.c
+# --- M16: the PIN button (always on top): what Windows says about a window, for the CI check
+matron/src/platform/windows/pin_native_win.c

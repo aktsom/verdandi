@@ -702,6 +702,37 @@ chk_cc2() {
     grep -a -q 'remove: cheat_codes_2 removed' "$M" && echo "found: maiden.log has the removal" || { echo "NOT FOUND: 'remove: cheat_codes_2 removed' in maiden.log"; bad=1; }
     return "$bad"
 }
+# M16: the PIN button (always on top) in the real program with REAL windows (no --headless: the runner has a desktop), windows/ci/maiden_probe.py VERDANDI_PROBE=pin. the program runs with VERDANDI_TEST_HOOKS=1 and writes "pin report N: ..." lines to norns.log:
+# for every window the flag SDL has and the topmost style Windows has. main, arc and detached screen window, on, off, a window closed and opened again, and the MIDI action learned from a note
+run_pin_probe() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local H="$WORK/user home pin" out="$M0_OUT/pin"
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    VERDANDI_PROBE=pin "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    export VERDANDI_TEST_HOOKS=1
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 260 "$APP/Verdandi$EXE" --null-audio --exit-after=180 --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --null-audio --exit-after=180 --home="$(native "$H")"
+    fi
+    unset VERDANDI_TEST_HOOKS
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    return 0
+}
+chk_pin() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local bad=0 out="$M0_OUT/pin" p
+    cat "$out/probe.txt" 2> /dev/null
+    grep -a "pin report" "$out/logs/norns.log" 2> /dev/null | head -20
+    for p in pin-up pin-start-off pin-windows-open pin-on pin-arc-closed pin-arc-reopened pin-screen-reopened pin-off pin-midi-learn pin-midi-other-port pin-midi-on pin-midi-off; do
+        has "$out/probe.txt" "PROBE $p ok" "the PIN check '$p'" || bad=1
+    done
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -863,6 +894,8 @@ m0_run m11-check-menu-pages chk_menu_pages
 m0_run m12-check-audio-shot chk_audio_shot
 m0_run m13-run-arc-probe run_arc_probe
 m0_run m13-check-arc chk_arc
+m0_run m16-run-pin-probe run_pin_probe
+m0_run m16-check-pin chk_pin
 m0_run m15-run-cc2-probe run_cc2_probe
 m0_run m15-check-cc2 chk_cc2
 m0_run m10-run-twins-engine run_twins_engine

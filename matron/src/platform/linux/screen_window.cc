@@ -85,6 +85,10 @@ bool screen_window_is_open(void) {
     return win != NULL;
 }
 
+SDL_Window *screen_window_sdl(void) {
+    return win;
+}
+
 Uint32 screen_window_id(void) {
     return win != NULL ? SDL_GetWindowID(win) : 0;
 }

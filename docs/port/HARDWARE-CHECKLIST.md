@@ -624,3 +624,10 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 2. Start Verdandi 0.10.6, SELECT or maiden: load cheat_codes_2. It loads (the grid and arc are optional); no "SCRIPT ERROR: load fail".
 3. `logs\maiden.log`: after an install from maiden's project manager there are lines `install: cheat_codes_2 from ... done in ... ms; submodule lib/nb: N files`.
 
+
+## Windows 0.10.7 (PIN, always on top)
+1. Click PIN (where KEYS was): the button lights, a toast says ALWAYS ON TOP: ON. Click a browser or a DAW: Verdandi stays in front. Click PIN again: it goes behind other windows normally.
+2. With the arc window and the detached screen open: all three stay in front together. Close the arc and open it again while PIN is on: it is in front at once. Detach the screen again: same.
+3. Quit and start Verdandi: PIN is off.
+4. MIDI MAP > ACTIONS > PIN: learn a pad. The pad turns PIN on and off and the button follows; a click on the button and the pad stay in step.
+5. Over your usual tools (DAW, browser, mixer): is anything you need hidden behind Verdandi in a way you cannot fix with the button, F7, the pad or Alt+Tab? A full-screen program? A second screen with another scaling?

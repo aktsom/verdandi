@@ -125,6 +125,13 @@ void shell_set_muted(int on) {
     muted = on ? 1 : 0;
 }
 
+#ifdef NORNS_WINDOWS
+static int pin_on = 0;
+void shell_set_pin(int on) {
+    pin_on = on ? 1 : 0;
+}
+#endif
+
 void shell_set_midi_actions(int on) {
     midi_actions = on != 0;
 }
@@ -208,6 +215,8 @@ static void menu_build(void) {
     add_item(SHELL_MENU_ARC, "Virtual arc", "F8", 0);
 #ifndef NORNS_WINDOWS
     add_item(SHELL_MENU_KEYS, "Virtual keyboard", "F7", 0);
+#else
+    add_item(SHELL_MENU_KEYS, "Always on top (PIN)", "F7", pin_on);
 #endif
     add_item(SHELL_MENU_SCREEN, "Screen in its own window", "F9", screen_out);
     add_separator();

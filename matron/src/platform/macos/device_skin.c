@@ -46,7 +46,7 @@ static const double bezel_pad = 14;
 // pages MIX TAPE HOME PARAMS, then MIC GRID ARC KEYS, MAIDEN MANUAL, MUTE: three group gaps of 25.33 fill the row between x 36 and x 924
 static const button_t buttons[] = {
     {36, "MIX"},       {112, "TAPE"},     {188, "HOME"},     {264, "PARAMS"}, // SKIN_PAGE1..4
-    {359.3333, "MIC"}, {435.3333, "GRID"}, {511.3333, "ARC"}, {587.3333, "KEYS"}, // SKIN_MIC..KEYS
+    {359.3333, "MIC"}, {435.3333, "GRID"}, {511.3333, "ARC"}, {587.3333, KEYS_LABEL}, // SKIN_MIC..KEYS
     {682.6667, "MAIDEN"}, {758.6667, "MANUAL"},                                  // SKIN_MAIDEN, MANUAL
     {854, "MUTE"},                                                               // SKIN_MUTE
 };
@@ -75,7 +75,7 @@ static const button_t buttons[] = {
     {398, "MIC"},
     {474, "GRID"},
     {550, "ARC"},
-    {626, "KEYS"}, // SKIN_MIC..KEYS
+    {626, KEYS_LABEL}, // SKIN_MIC..KEYS
     {719, "MAIDEN"},
     {795, "MANUAL"}, // SKIN_MAIDEN, MANUAL
 };

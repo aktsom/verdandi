@@ -407,6 +407,7 @@ static int _midimap_arm(lua_State *l);
 static int _arc_turn(lua_State *l);
 #ifdef NORNS_WINDOWS
 static int _arc_test(lua_State *l);
+static int _pin_report(lua_State *l);
 #endif
 static int _arc_keys_config(lua_State *l);
 static int _arc_drag_config(lua_State *l);
@@ -819,6 +820,7 @@ void w_init(void) {
     lua_register_norns("arc_turn", &_arc_turn);
 #ifdef NORNS_WINDOWS
     lua_register_norns("arc_test", &_arc_test);
+    lua_register_norns("pin_report", &_pin_report);
 #endif
     lua_register_norns("arc_keys_config", &_arc_keys_config);
     lua_register_norns("arc_drag_config", &_arc_drag_config);
@@ -4411,6 +4413,19 @@ int _arc_turn(lua_State *l) {
  */
 int _arc_test(lua_State *l) {
     lua_pushboolean(l, sdl_bridge_arc_test((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2) - 1, (int)luaL_checkinteger(l, 3)) != 0);
+    return 1;
+}
+#endif
+
+#ifdef NORNS_WINDOWS
+/***
+ * Windows CI only (needs VERDANDI_TEST_HOOKS=1): log one line, "pin report <n>: ...", with the always-on-top state of every Verdandi window (norns.log)
+ * @function pin_report
+ * @tparam integer n a number to find the line again
+ * @treturn boolean true if the hooks are on
+ */
+int _pin_report(lua_State *l) {
+    lua_pushboolean(l, sdl_bridge_pin_report((int)luaL_checkinteger(l, 1)) != 0);
     return 1;
 }
 #endif

@@ -110,6 +110,10 @@
 #include "sdl_bridge.h"
 #include "varc_skin.h"
 #include "platform/linux/arc_input.h"
+#ifdef NORNS_WINDOWS
+#include "platform/common/pin_state.h"
+extern "C" int pin_native_topmost(SDL_Window *w);
+#endif
 #include "vgrid_device.h"
 #include "vgrid_skin.h"
 #include "vkeys_skin.h"
@@ -569,6 +573,10 @@ static void ws_changed(SDL_Window *w, Uint8 e, int d1, int d2) {
 }
 #endif
 
+#ifdef NORNS_WINDOWS
+static void pin_set_window(SDL_Window *w); // the PIN button (below): a window that opens gets the state at once
+#endif
+
 static void bridge_do(bridge_req_t *req) {
     switch (req->op) {
     case BRIDGE_CREATE_WINDOW:
@@ -592,6 +600,9 @@ static void bridge_do(bridge_req_t *req) {
             ws_restore(req->window);
 #endif
             set_icon(req->window);
+#ifdef NORNS_WINDOWS
+            pin_set_window(req->window);
+#endif
             the_window = req->window;
             // drops from apps other than the Finder
             shell_adopt_windows();
@@ -969,6 +980,9 @@ static SDL_Window *pane_open(pane_t *p, const char *title, int uw, int uh) {
     if (p->window != NULL) {
         SDL_SetWindowMinimumSize(p->window, uw / 3, uh / 3);
         set_icon(p->window);
+#ifdef NORNS_WINDOWS
+        pin_set_window(p->window);
+#endif
         shell_adopt_windows();
     }
     return p->window;
@@ -998,6 +1012,69 @@ static void pane_pixels(const pane_t *p, int x, int y, double *px, double *py) {
 static pane_t grid_pane = {};
 static pane_t arc_pane = {};
 static pane_t keys_pane = {};
+
+#ifdef NORNS_WINDOWS
+//--- PIN: "always on top" for every Verdandi window (the KEYS button's place on Windows; docs/port/phase-m16.md). starts off at every start, never saved
+static pin_state_t pin = {0};
+
+static void pin_set_window(SDL_Window *w) {
+    if (w != NULL) {
+        SDL_SetWindowAlwaysOnTop(w, pin_for_new_window(&pin) ? SDL_TRUE : SDL_FALSE);
+    }
+}
+
+static void pin_set_cb(void *w, int on, void *ctx) {
+    (void)ctx;
+    SDL_SetWindowAlwaysOnTop((SDL_Window *)w, on ? SDL_TRUE : SDL_FALSE);
+}
+
+static void pin_windows(void *out[5]) {
+    out[0] = the_window;
+    out[1] = grid_pane.window;
+    out[2] = arc_pane.window;
+    out[3] = keys_pane.window;
+    out[4] = screen_window_sdl();
+}
+
+static void toggle_pin(void) {
+    pin_toggle(&pin);
+    void *w[5];
+    pin_windows(w);
+    pin_apply(&pin, w, 5, pin_set_cb, NULL);
+    skin.keys_open = pin_get(&pin); // the button of this slot is lit while it is on, like the other toggle buttons
+    shell_set_pin(pin_get(&pin));
+    show_toast(pin_get(&pin) ? "ALWAYS ON TOP: ON" : "ALWAYS ON TOP: OFF", 2000);
+    redraw(true);
+}
+
+// CI (VERDANDI_TEST_HOOKS=1): one line in norns.log with what SDL and Windows say about every window
+static void pin_report(int token) {
+    void *w[5];
+    pin_windows(w);
+    static const char *const names[5] = {"main", "grid", "arc", "keys", "screen"};
+    char line[320];
+    int n = snprintf(line, sizeof line, "pin report %d: state=%d lit=%d", token, pin_get(&pin), skin.keys_open);
+    for (int i = 0; i < 5 && n < (int)sizeof line - 40; i++) {
+        if (w[i] == NULL) {
+            n += snprintf(line + n, sizeof line - n, " %s=-", names[i]);
+        } else {
+            int flag = (SDL_GetWindowFlags((SDL_Window *)w[i]) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+            n += snprintf(line + n, sizeof line - n, " %s=%d/%d", names[i], flag, pin_native_topmost((SDL_Window *)w[i]));
+        }
+    }
+    fprintf(stderr, "%s\n", line);
+    fflush(stderr);
+}
+
+int sdl_bridge_pin_report(int token) {
+    const char *e = getenv("VERDANDI_TEST_HOOKS");
+    if (e == NULL || strcmp(e, "1") != 0) {
+        return 0;
+    }
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_PIN_REPORT, token, 0);
+    return 1;
+}
+#endif
 
 //--- window layout
 
@@ -2022,6 +2099,10 @@ static void keys_control(int c) {
 }
 
 static void toggle_keys(void) {
+#ifdef NORNS_WINDOWS
+    toggle_pin(); // the virtual keyboard is not built on Windows: its button, F7 and the MIDI action are PIN
+    return;
+#endif
     if (keys_is_open()) {
         keys_release_all(VKEYS_HELD_MOUSE | VKEYS_HELD_LATCH | VKEYS_HELD_TYPED);
         keys_backend_close();
@@ -2623,6 +2704,14 @@ static void gif_toggle(void) {
 
 #ifdef NORNS_LINUX_DESKTOP
 // the screen in its own window and back (F9, the menu item, the placeholder, the window's close button); main thread
+// the screen window gets the icon and the PIN state when it opens
+static void decorate_screen_window(SDL_Window *w) {
+    set_icon(w);
+#ifdef NORNS_WINDOWS
+    pin_set_window(w);
+#endif
+}
+
 static void screen_toggle(void) {
     if (skin.screen_out) {
         screen_window_close();
@@ -2634,7 +2723,7 @@ static void screen_toggle(void) {
     if (the_window == NULL) {
         return;
     }
-    if (!screen_window_open(the_window, set_icon)) {
+    if (!screen_window_open(the_window, decorate_screen_window)) {
         show_toast("the screen window could not be opened");
         return;
     }
@@ -3433,6 +3522,10 @@ static void handle_show(int kind, int n, int value) {
         return;
     }
 #ifdef NORNS_WINDOWS
+    if (kind == SDL_BRIDGE_SHOW_PIN_REPORT) {
+        pin_report(n);
+        return;
+    }
     if (kind == SDL_BRIDGE_SHOW_ARC_TEST) {
         arc_test(n / 16, n % 16, value);
         return;
