@@ -211,7 +211,7 @@ Full note: `docs/port/phase-m3.md` section 8. Normal/auto was clean (41 ms u0 x0
 ## Windows 0.10.6: cheat codes 2 did not load (docs/port/phase-m15.md)
 - Cause: cc2 tests for the folder `cheat_codes_2/lib/nb/lib/` (its own nb submodule) with `util.file_exists`, which is `io.open`; `fopen` of a folder fails on Windows and works on Linux. Fixed in Verdandi: native `_norns.path_is_dir`, `util.file_exists` uses it. The include error after the nested fail_state load is the same on hardware.
 - maiden has no dependency handling (and none is needed: nb is a submodule that maiden's git install fetches); installs and removals are now written to `logs/maiden.log` (`linux/patches/maiden-install-log.patch`).
-- Tests: Lua (`file_exists_dir_test.lua`), and in the real program on Windows CI `m15-check-cc2` (not yet run on Windows at the time of writing).
+- Tests: Lua (`file_exists_dir_test.lua`, `file_exists_virtual_home_test.lua`) and in the real program on Windows CI `m15-check-cc2`. **Windows CI ab12294: 69 passed, 0 failed; `windows-latest` is 0.10.6 / ab12294.** The first CI run (2852989) reproduced the owner's log with the old check and showed that the fix still missed the `/home/we` path translation; fixed in ab12294.
 
 ## Windows 0.10.4: the virtual arc (docs/port/phase-m13.md)
 - The virtual arc of the Linux port now opens on Windows (ARC button, F8, right-click menu "Virtual arc", MIDI action ARC): the window, look and controls are the shared Linux code; the device is a named pipe that libmonome opens (`vgrid_device_win.c`, `windows/libmonome/pipe-device.patch`). MIDI-mapped arc encoders (A1 to A4) and the wheel/drag/keys move the same ring through one path. The virtual grid and keyboard stay off (a toast says so).
