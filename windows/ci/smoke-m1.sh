@@ -721,13 +721,15 @@ run_pin_probe() {
     wait "$probe_pid" 2> /dev/null
     if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
     cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    cp "$H/pin_report.log" "$out/" 2> /dev/null || true
     return 0
 }
 chk_pin() {
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
     local bad=0 out="$M0_OUT/pin" p
     cat "$out/probe.txt" 2> /dev/null
-    grep -a "pin report" "$out/logs/norns.log" 2> /dev/null | head -20
+    cat "$out/pin_report.log" 2> /dev/null | head -20
+    echo "--- norns.log (tail):"; tail -n 12 "$out/logs/norns.log" 2> /dev/null
     for p in pin-up pin-start-off pin-windows-open pin-on pin-arc-closed pin-arc-reopened pin-screen-reopened pin-off pin-midi-learn pin-midi-other-port pin-midi-on pin-midi-off; do
         has "$out/probe.txt" "PROBE $p ok" "the PIN check '$p'" || bad=1
     done

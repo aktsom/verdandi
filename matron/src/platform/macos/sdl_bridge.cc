@@ -1064,6 +1064,16 @@ static void pin_report(int token) {
     }
     fprintf(stderr, "%s\n", line);
     fflush(stderr);
+    // also in a file of its own: a run with real windows does not always keep stderr in norns.log (the CI reads this file)
+    const char *home = getenv("HOME");
+    if (home != NULL) {
+        std::string path = std::string(home) + "/pin_report.log";
+        FILE *f = fopen(path.c_str(), "a");
+        if (f != NULL) {
+            fprintf(f, "%s\n", line);
+            fclose(f);
+        }
+    }
 }
 
 int sdl_bridge_pin_report(int token) {

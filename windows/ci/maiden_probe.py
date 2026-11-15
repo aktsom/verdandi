@@ -420,22 +420,27 @@ if os.environ.get("VERDANDI_PROBE") == "pin":
         return repl(5555, line, want, seconds)
     def report(tok):
         ok, tail = run("print('VT_PIN ' .. tostring(_norns.pin_report(%d)))\n" % tok, "VT_PIN", 15)
-        end = time.time() + 20
+        asked = tail.strip()[-40:] if isinstance(tail, str) else repr(tail)
+        end = time.time() + 12
+        seen = ""
         while time.time() < end:
-            try:
-                with open(LOG, "r", encoding="utf-8", errors="replace") as f:
-                    for l in f.read().splitlines()[::-1]:
-                        m = re.search(r"pin report %d: (.*)" % tok, l)
-                        if m:
-                            d = {}
-                            for part in m.group(1).split():
-                                k, v = part.split("=", 1)
-                                d[k] = v
-                            return d, m.group(1)
-            except OSError:
-                pass
+            for path in (os.path.join(HOME, "pin_report.log"), LOG):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="replace") as f:
+                        text = f.read()
+                except OSError:
+                    continue
+                seen += "%s:%d " % (os.path.basename(path), len(text))
+                for l in text.splitlines()[::-1]:
+                    m = re.search(r"pin report %d: (.*)" % tok, l)
+                    if m:
+                        d = {}
+                        for part in m.group(1).split():
+                            k, v = part.split("=", 1)
+                            d[k] = v
+                        return d, m.group(1)
             time.sleep(0.5)
-        return None, "no line 'pin report %d' in norns.log" % tok
+        return None, "no line 'pin report %d' (the call said: %s; files seen: %s; home %s)" % (tok, asked, seen[:80] or "none", HOME)
     def expect(name, tok, state, wins, what):
         d, raw = report(tok)
         if d is None:
