@@ -38,7 +38,7 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ACTION_FLASH 11 // n = the control that was flashed: its press ends (internal)
 #endif
 #ifdef NORNS_WINDOWS
-#define SDL_BRIDGE_SHOW_PIN_REPORT 14 // CI only: n = a number to find the line again
+#define SDL_BRIDGE_SHOW_PIN_REPORT 15 // CI only: n = a number to find the line again
 #define SDL_BRIDGE_SHOW_ARC_TEST 13 // CI only: n = what * 16 + ring, value (see arc_test in sdl_bridge.cc)
 #endif
 #define SDL_BRIDGE_SHOW_ENC_DRAW 12 // (internal) the timer of the throttled knob redraw (platform/common/redraw_throttle.h)
