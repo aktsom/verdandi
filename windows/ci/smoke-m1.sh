@@ -735,6 +735,84 @@ chk_pin() {
     done
     return "$bad"
 }
+# M17: grids and arcs off at every quit (windows/ci/maiden_probe.py VERDANDI_PROBE=quitgrid, windows/ci/grid_log_check.py): two fake grids (a 128 and a 256) and the virtual arc are lit by a script or by a metro with no script (a mod), norns is ended in one
+# way per run: the SLEEP row, the Quit event (menu and window close), the launcher's own stop, a restart, and a busy port; the devices record every message they get. the last message of each must be an "all off", and the end must come in time.
+# (the console close of the launcher and a kill from the Task Manager cannot be driven here: they are said in docs/port/phase-m17.md)
+run_quit_grid() { # mode exit-after overall-timeout
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local mode="$1" after="$2" tmo="$3" H="$WORK/user home qg $1" out="$M0_OUT/quitgrid/$1"
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    mkdir -p "$H/dust/code/gridprobe"
+    cp "$HERE/gridprobe.lua" "$H/dust/code/gridprobe/gridprobe.lua"
+    VERDANDI_PROBE=quitgrid VERDANDI_QUIT_MODE="$mode" "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    export VERDANDI_TEST_HOOKS=1
+    case "$mode" in *-old) export VERDANDI_TEST_NO_FREEZE=1 ;; esac
+    local t0 t1
+    t0=$(date +%s)
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 "$tmo" "$APP/Verdandi$EXE" --headless --null-audio --exit-after="$after" --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --headless --null-audio --exit-after="$after" --home="$(native "$H")"
+    fi
+    t1=$(date +%s)
+    unset VERDANDI_TEST_HOOKS VERDANDI_TEST_NO_FREEZE
+    echo "$t1" > "$out/launcher-ended.txt"
+    echo "the launcher ran $((t1 - t0)) s"
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    cp "$H"/fakedev-*.log "$out/" 2> /dev/null || true
+    cp "$out/probe.txt.request" "$out/request.txt" 2> /dev/null || true
+    return 0
+}
+chk_quit_grid() { # mode
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local mode="$1" bad=0 out="$M0_OUT/quitgrid/$1" p f
+    echo "=== quit path: $mode"
+    if [ "$mode" = sleepmod-old ]; then
+        # not a test of the program: the same run with the freeze left out (the program as it was). it shows what the freeze prevents; it never fails the job
+        echo "INFO: the old way (VERDANDI_TEST_NO_FREEZE=1): is a grid lit again after the all-off?"
+        for f in fakedev-grid-1 fakedev-grid-2 fakedev-arc-3; do
+            "$PYTHON" "$(native "$HERE/grid_log_check.py")" "$(native "$out/$f.log")" || echo "INFO: the old way left $f lit (this is the failure the freeze prevents)"
+        done
+        return 0
+    fi
+    cat "$out/probe.txt" 2> /dev/null
+    for p in qg-up qg-fake-grids qg-devices qg-request; do
+        has "$out/probe.txt" "PROBE $p ok" "the quit probe '$p' ($mode)" || bad=1
+    done
+    case "$mode" in
+        sleep | launcher | restart) has "$out/probe.txt" "PROBE qg-script ok" "the script was drawing ($mode)" || bad=1 ;;
+        *) has "$out/probe.txt" "PROBE qg-mod ok" "a metro was drawing with no script ($mode)" || bad=1 ;;
+    esac
+    [ "$mode" = stall ] && { has "$out/probe.txt" "PROBE qg-stall ok" "the second grid was busy" || bad=1; }
+    "$PYTHON" "$(native "$HERE/grid_log_check.py")" "$(native "$out/fakedev-grid-1.log")" || bad=1
+    if [ "$mode" = stall ]; then
+        "$PYTHON" "$(native "$HERE/grid_log_check.py")" "$(native "$out/fakedev-grid-2.log")" --dead || bad=1
+    else
+        "$PYTHON" "$(native "$HERE/grid_log_check.py")" "$(native "$out/fakedev-grid-2.log")" || bad=1
+        "$PYTHON" "$(native "$HERE/grid_log_check.py")" "$(native "$out/fakedev-arc-3.log")" || bad=1
+    fi
+    # the end came in time after the request (the launcher's own stop has no request: the time is --exit-after)
+    if [ "$mode" != launcher ] && [ -f "$out/request.txt" ]; then
+        local req end
+        req=$("$PYTHON" -c "import sys;print(int(float(open(sys.argv[1]).read().split()[0])))" "$(native "$out/request.txt")")
+        end=$(cat "$out/launcher-ended.txt")
+        if [ "$mode" = restart ]; then
+            echo "note: after a restart the launcher starts again; the run was cut at its time limit"
+        elif [ $((end - req)) -le 25 ]; then
+            echo "found: the program ended $((end - req)) s after the request"
+        else
+            echo "NOT FOUND: the program ended within 25 s of the request ($((end - req)) s)"; bad=1
+        fi
+    fi
+    for f in "$out"/logs/norns.log; do
+        grep -a -E "grids: [0-9]+ of [0-9]+ did not answer|the launcher asks norns.exe to end|asking norns.exe to end|matron shutdown|system_action: shutdown" "$f" 2> /dev/null | head -8
+    done
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -898,6 +976,20 @@ m0_run m13-run-arc-probe run_arc_probe
 m0_run m13-check-arc chk_arc
 m0_run m16-run-pin-probe run_pin_probe
 m0_run m16-check-pin chk_pin
+m0_run m17-run-quit-sleep run_quit_grid sleep 400 300
+m0_run m17-check-quit-sleep chk_quit_grid sleep
+m0_run m17-run-quit-sleepmod run_quit_grid sleepmod 400 300
+m0_run m17-check-quit-sleepmod chk_quit_grid sleepmod
+m0_run m17-run-quit-old run_quit_grid sleepmod-old 400 300
+m0_run m17-check-quit-old chk_quit_grid sleepmod-old
+m0_run m17-run-quit-event run_quit_grid event 400 300
+m0_run m17-check-quit-event chk_quit_grid event
+m0_run m17-run-quit-launcher run_quit_grid launcher 130 300
+m0_run m17-check-quit-launcher chk_quit_grid launcher
+m0_run m17-run-quit-restart run_quit_grid restart 110 200
+m0_run m17-check-quit-restart chk_quit_grid restart
+m0_run m17-run-quit-stall run_quit_grid stall 400 300
+m0_run m17-check-quit-stall chk_quit_grid stall
 m0_run m15-run-cc2-probe run_cc2_probe
 m0_run m15-check-cc2 chk_cc2
 m0_run m10-run-twins-engine run_twins_engine

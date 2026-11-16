@@ -140,8 +140,34 @@ static void leds_off_on_signals(void) {
     sigaction(SIGINT, &sa, NULL);
 }
 #else
-// Windows: no POSIX signals; the console control handler and the window close end the process, and no grids are open in M1
-static void leds_off_on_signals(void) {}
+// Windows: no POSIX signals. the launcher (Verdandi.exe) asks norns.exe to end through a named event when it is closed (its window, Ctrl+C, a log off or a shutdown) or when it has to stop norns.exe (a restart that was not answered):
+// a thread here waits for it, switches the LEDs of every grid and arc off (bounded) and ends the process the way every other quit does. docs/port/phase-m17.md
+#include <windows.h>
+static DWORD WINAPI quit_event_thread(LPVOID arg) {
+    HANDLE ev = (HANDLE)arg;
+    WaitForSingleObject(ev, INFINITE);
+    fprintf(stderr, "the launcher asks norns.exe to end: grids and arcs off first\n");
+    fflush(stderr);
+    dev_list_monome_all_off(800);
+    verdandi_win_exit(0);
+    return 0;
+}
+
+static void leds_off_on_signals(void) {
+    const char *name = getenv("VERDANDI_QUIT_EVENT");
+    if (name == NULL || name[0] == '\0') {
+        return;
+    }
+    HANDLE ev = OpenEventA(SYNCHRONIZE, FALSE, name);
+    if (ev == NULL) {
+        fprintf(stderr, "quit event %s could not be opened (error %lu): the launcher's close is then not answered with the LEDs off\n", name, (unsigned long)GetLastError());
+        return;
+    }
+    HANDLE th = CreateThread(NULL, 0, quit_event_thread, ev, 0, NULL);
+    if (th != NULL) {
+        CloseHandle(th);
+    }
+}
 #endif
 #endif
 

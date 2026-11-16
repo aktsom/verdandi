@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -28,6 +29,7 @@ struct dev_monome {
     int quads;
     int quad_xoff[4];
     int quad_yoff[4];
+    pthread_mutex_t io; // one writer at a time to the LEDs of this device (a script's refresh and the quit's "all off")
 };
 
 // set a single grid led
@@ -42,6 +44,10 @@ extern void dev_monome_set_quad(struct dev_monome *md, uint8_t quad, uint8_t *da
 extern void dev_monome_refresh(struct dev_monome *md);
 extern int dev_monome_grid_rows(struct dev_monome *md);
 extern int dev_monome_grid_cols(struct dev_monome *md);
+// desktop: norns is ending. from now on the LED calls of Lua (set, all, refresh, intensity) change nothing, so that a script or a mod that goes on drawing cannot light a grid again after the "all off" (docs/port/phase-m17.md)
+extern void dev_monome_freeze(void);
+// every LED of this device off and really written out (on Windows the port's buffers are flushed); bypasses the freeze. 1 if it was sent
+extern int dev_monome_leds_off(struct dev_monome *md);
 // intensity
 extern void dev_monome_intensity(struct dev_monome *md, uint8_t i);
 

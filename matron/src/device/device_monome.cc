@@ -14,6 +14,22 @@
 #include "device.h"
 #include "device_monome.h"
 #ifdef NORNS_WINDOWS
+extern "C" int monome_platform_flush(monome_t *monome); // windows/libmonome/flush.patch
+#endif
+
+// set when norns is ending (desktop): Lua can no longer light anything
+static volatile int g_frozen = 0;
+extern "C" void dev_monome_freeze(void) {
+#ifdef NORNS_WINDOWS
+    // CI only: the program as it was before this phase (nothing is frozen), to show in the CI what the freeze prevents
+    const char *hooks = getenv("VERDANDI_TEST_HOOKS"), *old = getenv("VERDANDI_TEST_NO_FREEZE");
+    if (hooks != NULL && old != NULL && strcmp(hooks, "1") == 0 && strcmp(old, "1") == 0) {
+        return;
+    }
+#endif
+    g_frozen = 1;
+}
+#ifdef NORNS_WINDOWS
 #include "platform/windows/grid/grid_reader.h"
 #endif
 
@@ -56,6 +72,7 @@ int dev_monome_init(void *self) {
 
     memset(md->data, 0, sizeof(md->data));
     memset(md->dirty, 0, sizeof(md->dirty));
+    pthread_mutex_init(&md->io, NULL);
 
     md->rows = monome_get_rows(md->m);
     md->cols = monome_get_cols(md->m);
@@ -133,6 +150,9 @@ void dev_monome_tilt_disable(struct dev_monome *md, uint8_t sensor) {
 
 // set a given LED value
 void dev_monome_grid_set_led(struct dev_monome *md, uint8_t x, uint8_t y, int8_t val, bool rel) {
+    if (g_frozen) {
+        return;
+    }
     uint8_t q = dev_monome_quad_idx(md, x, y);
     if (rel) {
         md->data[q][dev_monome_quad_offset(x, y)] =
@@ -144,6 +164,9 @@ void dev_monome_grid_set_led(struct dev_monome *md, uint8_t x, uint8_t y, int8_t
 
 // set a given LED value
 void dev_monome_arc_set_led(struct dev_monome *md, uint8_t n, uint8_t x, int8_t val, bool rel) {
+    if (g_frozen) {
+        return;
+    }
     if (rel)
         md->data[n & 3][x & 63] = clamp_range(md->data[n & 3][x & 63] + val, 0, 15);
     else
@@ -152,7 +175,15 @@ void dev_monome_arc_set_led(struct dev_monome *md, uint8_t n, uint8_t x, int8_t 
 }
 
 // set all LEDs to value
+static void all_led_raw(struct dev_monome *md, int8_t val, bool rel);
 void dev_monome_all_led(struct dev_monome *md, int8_t val, bool rel) {
+    if (g_frozen) {
+        return;
+    }
+    all_led_raw(md, val, rel);
+}
+
+static void all_led_raw(struct dev_monome *md, int8_t val, bool rel) {
     if (rel) {
         for (uint8_t q = 0; q < md->quads; q++) {
             for (uint8_t i = 0; i < 64; i++) {
@@ -170,8 +201,8 @@ void dev_monome_all_led(struct dev_monome *md, int8_t val, bool rel) {
     }
 }
 
-// transmit all dirty quads
-void dev_monome_refresh(struct dev_monome *md) {
+// transmit all dirty quads (the caller holds md->io)
+static void refresh_raw(struct dev_monome *md) {
     if (md->m == NULL) {
         return;
     }
@@ -188,8 +219,39 @@ void dev_monome_refresh(struct dev_monome *md) {
     }
 }
 
+void dev_monome_refresh(struct dev_monome *md) {
+    if (md->m == NULL) {
+        return;
+    }
+    pthread_mutex_lock(&md->io);
+    if (!g_frozen) {
+        refresh_raw(md);
+    }
+    pthread_mutex_unlock(&md->io);
+}
+
+int dev_monome_leds_off(struct dev_monome *md) {
+    if (md->m == NULL) {
+        return 0;
+    }
+    pthread_mutex_lock(&md->io);
+    all_led_raw(md, 0, false);
+    refresh_raw(md);
+    if (md->type == DEVICE_MONOME_TYPE_GRID) {
+        monome_led_all(md->m, 0); // a grid without levels takes this one
+    }
+#ifdef NORNS_WINDOWS
+    monome_platform_flush(md->m); // really out of the computer before the port is closed or the process ends
+#endif
+    pthread_mutex_unlock(&md->io);
+    return 1;
+}
+
 // intensity
 void dev_monome_intensity(struct dev_monome *md, uint8_t i) {
+    if (g_frozen) {
+        return;
+    }
     if (i > 15)
         i = 15;
     if (md->type == DEVICE_MONOME_TYPE_ARC)

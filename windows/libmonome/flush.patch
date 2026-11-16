@@ -1,0 +1,20 @@
+--- d/src/platform/windows.c	2026-11-16 13:27:45.466056358 +0000
++++ e/src/platform/windows.c	2026-11-16 13:27:45.486757132 +0000
+@@ -318,6 +318,17 @@
+  * it sets this hook; its answer is used when it gives one, else the code below runs as before */
+ char *(*monome_platform_serial_hook)(const char *path) = NULL;
+ 
++/* Verdandi: the bytes written so far are really out of the computer (the program is about to end or close the port). a serial port: FlushFileBuffers waits until the driver has sent its output buffer.
++ * a pipe is not flushed: that would wait for the program on the other side to read it. 0 = done, 1 = the driver said no */
++int monome_platform_flush(monome_t *monome) {
++	HANDLE hres = (HANDLE) _get_osfhandle(monome->fd);
++
++	if (m_is_pipe_handle(hres))
++		return 0;
++
++	return FlushFileBuffers(hres) ? 0 : 1;
++}
++
+ char *monome_platform_get_dev_serial(const char *path) {
+ 	HDEVINFO hdevinfo;
+ 	SP_DEVINFO_DATA devinfo;

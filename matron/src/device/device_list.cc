@@ -342,16 +342,16 @@ void dev_list_remove(device_t type, const char *node) {
 #include <pthread.h>
 #include <time.h>
 
+// one grid or arc: its LEDs off and out. the job is heap memory that the thread owns after a time-out (the caller has gone on)
+struct monome_off_job {
+    struct dev_monome *md;
+    volatile int done;
+};
+
 static void *monome_off_thread(void *arg) {
-    struct dev_monome *md = (struct dev_monome *)arg;
-    if (md->m == NULL) {
-        return NULL;
-    }
-    dev_monome_all_led(md, 0, false);
-    dev_monome_refresh(md);
-    if (md->type == DEVICE_MONOME_TYPE_GRID) {
-        monome_led_all(md->m, 0); // a grid without levels takes this one
-    }
+    struct monome_off_job *job = (struct monome_off_job *)arg;
+    dev_monome_leds_off(job->md);
+    job->done = 1;
     return NULL;
 }
 
@@ -447,28 +447,84 @@ bool dev_list_has_monome(struct dev_monome *md) {
     return found;
 }
 
-void dev_list_monome_all_off(int timeout_ms) {
-    pthread_t th[16];
-    int n = 0;
-    struct timespec dl;
-    clock_gettime(CLOCK_REALTIME, &dl);
-    dl.tv_sec += timeout_ms / 1000;
-    dl.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
-    if (dl.tv_nsec >= 1000000000L) {
-        dl.tv_sec++;
-        dl.tv_nsec -= 1000000000L;
+#ifdef NORNS_WINDOWS
+// CI only (VERDANDI_TEST_HOOKS=1, platform/windows/vgrid_device_win.c): a grid whose port is busy. a thread takes the device's write lock and writes until the port does not take any more (the fake grid has stopped reading): it
+// never lets go, so the "all off" of that grid waits for ever and only the time-out of the quit gets past it
+static void *wedge_thread(void *arg) {
+    struct dev_monome *md = (struct dev_monome *)arg;
+    pthread_mutex_lock(&md->io);
+    for (;;) {
+        monome_led_all(md->m, 15);
     }
+    return NULL;
+}
+
+extern "C" int dev_list_test_wedge(const char *path) {
+    int found = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dq.head; dn != NULL; dn = dn->next) {
+        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MONOME && dn->d->base.path != NULL && strcmp(dn->d->base.path, path) == 0 && dn->d->monome.m != NULL) {
+            pthread_t th;
+            if (pthread_create(&th, NULL, wedge_thread, &dn->d->monome) == 0) {
+                pthread_detach(th);
+                found = 1;
+            }
+            break;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return found;
+}
+#endif
+
+void dev_list_monome_all_off(int timeout_ms) {
+    // first: from now on no script and no mod can light anything again (a metro that keeps drawing would undo the "all off" a moment later)
+    dev_monome_freeze();
+    struct monome_off_job *jobs[16];
+    int n = 0;
+    // (a crash report can come here while the list is locked: then the list is read without the lock, as before)
+    bool locked = pthread_mutex_trylock(&lock) == 0;
     for (struct dev_node *dn = dq.head; dn != NULL && n < 16; dn = dn->next) {
         if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MONOME && dn->d->monome.m != NULL) {
-            if (pthread_create(&th[n], NULL, monome_off_thread, &dn->d->monome) == 0) {
-                n++;
+            struct monome_off_job *job = (struct monome_off_job *)calloc(1, sizeof *job);
+            pthread_t th;
+            if (job != NULL) {
+                job->md = &dn->d->monome;
+                if (pthread_create(&th, NULL, monome_off_thread, job) == 0) {
+                    pthread_detach(th); // never joined: a join has no time-out on Windows, and a device that does not answer must not hold the quit
+                    jobs[n++] = job;
+                } else {
+                    free(job);
+                }
             }
         }
     }
-    for (int i = 0; i < n; i++) {
-        if (pthread_timedjoin_np(th[i], NULL, &dl) != 0) {
-            pthread_detach(th[i]); // a device that does not answer: go on without it
-        }
+    if (locked) {
+        pthread_mutex_unlock(&lock);
     }
+    // each device has its own thread; wait for all of them, at most timeout_ms in total
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (;;) {
+        int pending = 0;
+        for (int i = 0; i < n; i++) {
+            if (!jobs[i]->done) {
+                pending++;
+            }
+        }
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long ms = (long)(now.tv_sec - t0.tv_sec) * 1000 + (now.tv_nsec - t0.tv_nsec) / 1000000L;
+        if (pending == 0) {
+            break;
+        }
+        if (ms >= timeout_ms) {
+            fprintf(stderr, "grids: %d of %d did not answer within %d ms: leaving them as they are\n", pending, n, timeout_ms);
+            break;
+        }
+        struct timespec nap = {0, 5 * 1000000L};
+        nanosleep(&nap, NULL);
+    }
+    // (a job that finished is not freed here: a late thread may still write its flag; a few bytes at the end of a process)
 }
 #endif

@@ -502,6 +502,71 @@ if os.environ.get("VERDANDI_PROBE") == "pin":
         result("pin-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=quitgrid (M17): two fake grids (a 128 and a 256) and the virtual arc are lit by a script (or by a metro of a "mod" with no script), then norns is ended in the way VERDANDI_QUIT_MODE says: sleep (the SLEEP row: norns.shutdown),
+# sleepmod (SLEEP with no script, a metro draws: a mod), event (what the right-click menu's Quit and the window's close button post), launcher (the launcher stops norns.exe at the end of --exit-after: nothing is done here), restart (_norns.restart), stall (a grid whose port is busy, then SLEEP).
+# the devices record every message they get (<home>/fakedev-*.log); windows/ci/grid_log_check.py reads them after the end. results: 'PROBE qg-... ok|FAIL'
+if os.environ.get("VERDANDI_PROBE") == "quitgrid":
+    mode = os.environ.get("VERDANDI_QUIT_MODE", "sleep").split("-")[0] # ("sleepmod-old" is sleepmod with the freeze left out: windows/ci/smoke-m1.sh)
+    def run(line, want, seconds=30):
+        return repl(5555, line, want, seconds)
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("qg-up", up, "norns answers (%s)" % mode)
+        time.sleep(3)
+        ok, tail = run("print('VT_G ' .. _norns.fake_grid(16, 8, 'fake 128') .. ' ' .. _norns.fake_grid(16, 16, 'fake 256'))\n", "VT_G", 20)
+        result("qg-fake-grids", ok and "VT_G 1 2" in tail, "two fake grids were added: " + tail.strip()[-30:])
+        ok, tail = run("print('VT_A ' .. tostring(_norns.window_action('arc')))\n", "VT_A", 20)
+        found = False
+        for _ in range(25):
+            ok, tail = run("local g, a = 0, 0 for _ in pairs(grid.devices) do g = g + 1 end for _ in pairs(arc.devices) do a = a + 1 end print('VT_DEV ' .. g .. ' ' .. a)\n", "VT_DEV", 8)
+            if ok and "VT_DEV 2 1" in tail:
+                found = True; break
+            time.sleep(1)
+        result("qg-devices", found, "norns lists two grids and the arc: " + tail.strip()[-30:])
+        if mode in ("sleep", "launcher", "restart"):
+            ok, tail = run("norns.script.load('/home/we/dust/code/gridprobe/gridprobe.lua') print('VT_LOAD sent')\n", "VT_LOAD", 20)
+            ready = False
+            for _ in range(30):
+                ok, tail = run("print('VT_READY ' .. tostring(GP and GP.ready) .. ' ' .. tostring(GP and GP.frames))\n", "VT_READY", 8)
+                if ok and "VT_READY true" in tail:
+                    ready = True; break
+                time.sleep(1)
+            result("qg-script", ready, "the script draws on both grids and the arc: " + tail.strip()[-30:])
+        else:
+            # no script: a metro that nothing clears keeps drawing, as a mod does (sidvagn on the second grid). stall: the first grid only (the busy one must not block the drawing)
+            targets = "{grid.connect(1)}" if mode == "stall" else "{grid.connect(1), grid.connect(2)}"
+            line = ("norns.script.clear() local gs = %s MODFRAMES = 0 MODM = metro.init(function() for _, g in ipairs(gs) do g:all(15) g:refresh() end MODFRAMES = MODFRAMES + 1 end, 1 / 30, -1) MODM:start() "
+                    "print('VT_MOD started')\n") % targets
+            ok, tail = run(line, "VT_MOD", 20)
+            result("qg-mod", ok, "a metro draws with no script loaded: " + tail.strip()[-30:])
+        time.sleep(4)
+        if mode == "stall":
+            ok, tail = run("print('VT_STALL ' .. tostring(_norns.fake_grid_stall(2, true)))\n", "VT_STALL", 20)
+            result("qg-stall", ok and "VT_STALL true" in tail, "the second grid stopped reading and its port is busy: " + tail.strip()[-20:])
+            time.sleep(2)
+        with open(OUT + ".request", "w") as f:
+            f.write("%f\n" % time.time())
+        try:  # (norns ends while it answers: the connection may break)
+            if mode in ("sleep", "sleepmod", "stall"):
+                run("norns.shutdown() print('VT_END sleep')\n", "VT_END", 10)
+            elif mode == "event":
+                run("print('VT_END ' .. tostring(_norns.test_quit()))\n", "VT_END", 10)
+            elif mode == "restart":
+                run("_norns.restart() print('VT_END restart')\n", "VT_END", 10)
+        except Exception:
+            pass
+        result("qg-request", True, "the end was asked for the way '%s' says (the launcher's own stop: nothing is sent)" % mode)
+    except Exception as e:
+        result("qg-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):

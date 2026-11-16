@@ -408,6 +408,9 @@ static int _arc_turn(lua_State *l);
 #ifdef NORNS_WINDOWS
 static int _arc_test(lua_State *l);
 static int _pin_report(lua_State *l);
+static int _fake_grid(lua_State *l);
+static int _fake_grid_stall(lua_State *l);
+static int _test_quit(lua_State *l);
 #endif
 static int _arc_keys_config(lua_State *l);
 static int _arc_drag_config(lua_State *l);
@@ -821,6 +824,9 @@ void w_init(void) {
 #ifdef NORNS_WINDOWS
     lua_register_norns("arc_test", &_arc_test);
     lua_register_norns("pin_report", &_pin_report);
+    lua_register_norns("fake_grid", &_fake_grid);
+    lua_register_norns("fake_grid_stall", &_fake_grid_stall);
+    lua_register_norns("test_quit", &_test_quit);
 #endif
     lua_register_norns("arc_keys_config", &_arc_keys_config);
     lua_register_norns("arc_drag_config", &_arc_drag_config);
@@ -4426,6 +4432,49 @@ int _arc_test(lua_State *l) {
  */
 int _pin_report(lua_State *l) {
     lua_pushboolean(l, sdl_bridge_pin_report((int)luaL_checkinteger(l, 1)) != 0);
+    return 1;
+}
+#endif
+
+#ifdef NORNS_WINDOWS
+extern "C" int vgrid_win_fake_grid(int cols, int rows, const char *name);
+extern "C" int vgrid_win_fake_stall(int index, int on);
+static bool test_hooks_on(void) {
+    const char *e = getenv("VERDANDI_TEST_HOOKS");
+    return e != NULL && strcmp(e, "1") == 0;
+}
+
+/***
+ * Windows CI only (needs VERDANDI_TEST_HOOKS=1): a fake grid that is listed like a real one and records what it is sent (<home>/fakedev-grid-N.log)
+ * @function fake_grid
+ * @tparam integer cols 16 (a 128 or a 256)
+ * @tparam integer rows 8 or 16
+ * @tparam string name
+ * @treturn integer the index of the fake grid (1 to 4), or 0
+ */
+int _fake_grid(lua_State *l) {
+    lua_pushinteger(l, test_hooks_on() ? vgrid_win_fake_grid((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2), luaL_checkstring(l, 3)) : 0);
+    return 1;
+}
+
+/***
+ * Windows CI only: a fake grid stops reading (a grid that does not answer) or goes on
+ * @function fake_grid_stall
+ */
+int _fake_grid_stall(lua_State *l) {
+    lua_pushboolean(l, test_hooks_on() && vgrid_win_fake_stall((int)luaL_checkinteger(l, 1), lua_toboolean(l, 2)) != 0);
+    return 1;
+}
+
+/***
+ * Windows CI only: what the right-click menu's Quit and the window's close button do (the event they post)
+ * @function test_quit
+ */
+int _test_quit(lua_State *l) {
+    if (test_hooks_on()) {
+        event_post(event_data_new(EVENT_QUIT));
+    }
+    lua_pushboolean(l, test_hooks_on());
     return 1;
 }
 #endif

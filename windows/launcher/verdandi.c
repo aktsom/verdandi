@@ -815,6 +815,30 @@ static void request_norns_restart(void) {
     if (f) fclose(f);
 }
 
+/* the quit request: a named event that norns.exe waits on (VERDANDI_QUIT_EVENT, it reaches norns.exe through ws-wrapper.exe). when it is set norns.exe switches the LEDs of every grid and arc off, writes them out and ends by itself.
+ * every way this launcher has to stop norns.exe (the end of --exit-after, a restart request norns did not answer, a close of a console) asks first and ends the program only when it does not answer: TerminateProcess skips every cleanup */
+static HANDLE g_quit_event = NULL;
+static HANDLE g_norns_now = NULL; /* the program of this round (what the launcher waits for), for the console handler */
+
+/* 1 when the program ended within ms after the request */
+static int ask_norns_to_end(HANDLE pn, DWORD ms) {
+    if (!g_quit_event || !pn) {
+        return 0;
+    }
+    say(L"asking norns.exe to end (grids and arcs off first, at most %lu ms)", (unsigned long)ms);
+    SetEvent(g_quit_event);
+    return WaitForSingleObject(pn, ms) == WAIT_OBJECT_0;
+}
+
+/* a console that closes, Ctrl+C, a log off or a shutdown (only when the launcher has a console: it is started from one) */
+static BOOL WINAPI console_ctrl(DWORD type) {
+    if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT || type == CTRL_CLOSE_EVENT || type == CTRL_LOGOFF_EVENT || type == CTRL_SHUTDOWN_EVENT) {
+        ask_norns_to_end(g_norns_now, 3500);
+        return type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT;
+    }
+    return FALSE;
+}
+
 static int g_server_restarts = 0;       /* automatic restarts after a server stop, in a row */
 static ULONGLONG g_server_stop_tick = 0; /* when the last one was */
 
@@ -1310,6 +1334,18 @@ int wmain(int argc, wchar_t **argv) {
         _snwprintf(rn, 16, L"%d", round);
         set_env(L"VERDANDI_ROUND", rn); /* the number of this start (1, 2, ...): the start/restart cycle test of the CI uses it (lua/core/test_cycles.lua) */
     }
+    if (!g_quit_event) {
+        wchar_t qn[64];
+        _snwprintf(qn, 64, L"Local\\VerdandiQuit-%lu", (unsigned long)GetCurrentProcessId());
+        g_quit_event = CreateEventW(NULL, TRUE, FALSE, qn);
+        if (g_quit_event) {
+            set_env(L"VERDANDI_QUIT_EVENT", qn);
+        }
+        SetConsoleCtrlHandler(console_ctrl, TRUE);
+    }
+    if (g_quit_event) {
+        ResetEvent(g_quit_event);
+    }
     g_job = CreateJobObjectW(NULL, NULL);
     if (g_job) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
@@ -1344,6 +1380,7 @@ int wmain(int argc, wchar_t **argv) {
         tell_user(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
         return 6;
     }
+    g_norns_now = pn;
     say(L"norns.exe started");
 
     /* then sclang, from inside its own folder with relative ASCII arguments. norns.exe has had a moment to start crone */
@@ -1410,8 +1447,10 @@ int wmain(int argc, wchar_t **argv) {
                 /* norns takes the request within a few seconds and ends with exit code 42; if it does not, it is ended here */
                 if (WaitForSingleObject(pn, 20000) == WAIT_TIMEOUT) {
                     say(L"norns.exe did not answer the restart request within 20 s: ending it");
-                    TerminateProcess(pn, 0);
-                    WaitForSingleObject(pn, 5000);
+                    if (!ask_norns_to_end(pn, 4000)) {
+                        TerminateProcess(pn, 0);
+                        WaitForSingleObject(pn, 5000);
+                    }
                     forced_restart = 1;
                 }
                 w = WAIT_OBJECT_0;
@@ -1425,8 +1464,11 @@ int wmain(int argc, wchar_t **argv) {
     }
     if (w == WAIT_TIMEOUT) {
         say(L"--exit-after=%d: stopping norns.exe", exit_after);
-        TerminateProcess(pn, 0);
-        WaitForSingleObject(pn, 5000);
+        if (!ask_norns_to_end(pn, 4000)) {
+            say(L"norns.exe did not end within 4 s: ending it");
+            TerminateProcess(pn, 0);
+            WaitForSingleObject(pn, 5000);
+        }
     }
     GetExitCodeProcess(pn, &code);
     say(L"norns.exe ended with exit code 0x%08lx", (unsigned long)code);

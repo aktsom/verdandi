@@ -631,3 +631,14 @@ Get the zip: Actions > the run **windows-m1** > Artifacts > **m1-zip** (the prog
 3. Quit and start Verdandi: PIN is off.
 4. MIDI MAP > ACTIONS > PIN: learn a pad. The pad turns PIN on and off and the button follows; a click on the button and the pad stay in step.
 5. Over your usual tools (DAW, browser, mixer): is anything you need hidden behind Verdandi in a way you cannot fix with the button, F7, the pad or Alt+Tab? A full-screen program? A second screen with another scaling?
+
+## Windows 0.10.8 (grids and arcs dark at quit)
+Your two grids (128 and 256) plugged in; the mod sidvagn on (draws on the second grid) unless a step says otherwise.
+1. With a script loaded that lights both grids: SYSTEM > SLEEP (K3). Both grids go dark and stay dark.
+2. The same with no script loaded (sidvagn drawing alone).
+3. Right-click menu > Quit; then the window's close button.
+4. Close the window with the arc window open and a script that draws on the arc: the ring goes dark too.
+5. SYSTEM > RESTART: both go dark, come back lit when the script has loaded again.
+6. Pull the USB cable of one grid, then quit: Verdandi ends within a few seconds and the other grid is dark.
+7. Switch scripts a few times (HOME > SELECT): the grids go dark for the switch (like a norns) and the new script lights them; sidvagn's grid is lit again within a moment. Say if you see a longer dark time than a blink.
+8. Leave serialosc running (it holds the grid) and quit: say what the grid does.

@@ -92,6 +92,10 @@ build_libmonome() {
     if ! grep -q m_is_pipe_name "$src/src/platform/windows.c"; then
         patch -p1 -d "$src" < "$REPO/windows/libmonome/pipe-device.patch" || return 1
     fi
+    # M17: the program can say that what it wrote is really out of the computer before it ends (windows/libmonome/flush.patch); applied once
+    if ! grep -q monome_platform_flush "$src/src/platform/windows.c"; then
+        patch -p1 -d "$src" < "$REPO/windows/libmonome/flush.patch" || return 1
+    fi
     # upstream builds with -Wall -Werror for GCC; MinGW may warn where Linux does not. first as it is, then (and said in the log) without -Werror, so that the warnings are listed and the build goes on
     if ! { cmake -S "$src" -B "$d" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" && cmake --build "$d"; }; then
         echo "libmonome: the strict build (-Werror) failed, trying again without -Werror"
