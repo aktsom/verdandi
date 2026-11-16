@@ -338,6 +338,54 @@ chk_failing() {
     grep -a -q "in two folders of yours" "$FAIL_HOME/logs/norns.log" 2> /dev/null && echo "found: norns.log has the note for the norns screen" || { echo "NOT FOUND: the launch note in norns.log"; bad=1; }
     return "$bad"
 }
+# M18: the duplicate-class guard must not read "Routine {" inside an engine's methods as a class. three small engine files shaped like the engines of glut, mangl and orgn (a class line and Routine lines in their methods) are in dust/code as the owner has them:
+# no finding, no note, nothing moved, and the real sclang starts without a duplicate. then the same engine class in a second script folder IS a duplicate: found, named with both folders, nothing moved, and sclang itself says so (windows/launcher/dup_heal.h)
+write_engine_fixtures() { # home
+    local H="$1"
+    mkdir -p "$H/dust/code/glut" "$H/dust/code/mangl/lib" "$H/dust/code/orgn/lib"
+    printf 'Engine_Glut : CroneEngine {\n\tvar seek_tasks;\n\talloc {\n\t\tseek_tasks = Array.fill(7, { arg i;\n\t\t\tRoutine {}\n\t\t});\n\t}\n\tfree { seek_tasks.do({ arg t; t.stop; }); }\n}\n' > "$H/dust/code/glut/Engine_Glut.sc"
+    printf 'Engine_MGlut : CroneEngine {\n\tvar seek_tasks;\n\talloc {\n\t\tseek_tasks = Array.fill(7, { arg i;\n\t\t\tRoutine {}\n\t\t});\n\t}\n\tfree { }\n}\n' > "$H/dust/code/mangl/lib/Engine_MGlut.sc"
+    printf 'Engine_Orgn : CroneEngine {\n    alloc {\n        this.addCommand(\\noteTrig, "iffff", { arg msg;\n            Routine {\n                0.01.yield;\n            }.play;\n        });\n        this.addCommand(\\noteOff, "i", { arg msg;\n            Routine {\n                msg[1].yield;\n            }.play;\n        });\n    }\n    free { }\n}\n' > "$H/dust/code/orgn/lib/Engine_Orgn.sc"
+}
+run_engine_guard() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local mode out H
+    for mode in ok dup; do
+        H="$WORK/user home engines $mode"; out="$M0_OUT/engine-guard-$mode"
+        rm -rf "$H" "$out"; mkdir -p "$out"
+        seed_home "$H"
+        write_engine_fixtures "$H"
+        if [ "$mode" = dup ]; then
+            mkdir -p "$H/dust/code/orgn2/lib"
+            cp "$H/dust/code/orgn/lib/Engine_Orgn.sc" "$H/dust/code/orgn2/lib/Engine_Orgn.sc"
+        fi
+        if command -v timeout > /dev/null 2>&1; then
+            timeout -k 10 150 "$APP/Verdandi$EXE" --headless --null-audio --exit-after=60 --home="$(native "$H")"
+        else
+            "$APP/Verdandi$EXE" --headless --null-audio --exit-after=60 --home="$(native "$H")"
+        fi
+        if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+        cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    done
+    return 0
+}
+chk_engine_guard() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    local bad=0 L="$M0_OUT/engine-guard-ok/logs" D="$M0_OUT/engine-guard-dup/logs"
+    echo "--- glut, mangl and orgn engines as the owner has them:"
+    grep -a -E "duplicate" "$L/launcher.log" 2> /dev/null | head -3
+    if grep -a -q "duplicate" "$L/launcher.log" 2> /dev/null; then echo "NOT FOUND (must be absent): a duplicate finding for engines that only use Routine"; bad=1; else echo "found: no duplicate finding in launcher.log for the three engines"; fi
+    if grep -a -q "in two folders of yours" "$L/norns.log" 2> /dev/null; then echo "NOT FOUND (must be absent): the note on the norns screen"; bad=1; else echo "found: no note for the norns screen"; fi
+    if grep -a -q -E "duplicate Class found|Library has not been compiled" "$L/sclang.log" 2> /dev/null; then echo "NOT FOUND (must be absent): sclang reports a duplicate or a failed compile"; bad=1; else echo "found: the real sclang starts with the three engines, no duplicate"; fi
+    echo "--- the same engine class in a second script folder:"
+    grep -a "NOTHING was moved" "$D/launcher.log" 2> /dev/null | head -2
+    grep -a "NOTHING was moved" "$D/launcher.log" 2> /dev/null | grep -a "(1: Engine_Orgn)" | grep -a "code/orgn/lib/Engine_Orgn.sc" | grep -a -q "code/orgn2/lib/Engine_Orgn.sc" && echo "found: the real duplicate is found and both files are named" || { echo "NOT FOUND: the 'NOTHING was moved' line for Engine_Orgn with both files"; bad=1; }
+    grep -a -q "duplicate Class found: 'Engine_Orgn'" "$D/sclang.log" 2> /dev/null && echo "found: sclang itself reports that duplicate (the test is real)" || { echo "NOT FOUND: sclang did not report the duplicate"; bad=1; }
+    grep -a "in two folders of yours" "$D/norns.log" 2> /dev/null | head -1
+    grep -a "in two folders of yours (" "$D/norns.log" 2> /dev/null | grep -a "dust/code/orgn2" | grep -a -q "dust/code/orgn" && echo "found: the note on the norns screen names both folders" || { echo "NOT FOUND: the note with both script folders"; bad=1; }
+    grep -a -c "Routine" "$D/launcher.log" 2> /dev/null | grep -q "^0$" && echo "found: no 'Routine' anywhere in the finding" || { echo "NOT FOUND (must be absent): Routine in the finding"; bad=1; }
+    return "$bad"
+}
 # M7 round 5: the folder of screenshots and GIFs (the Pictures known folder, letters outside ASCII): the real Windows API on the runner (windows/ci/win_paths_probe.c)
 run_win_paths() {
     local exe="$WORK/win_paths_probe.exe" gcc_bin
@@ -1010,6 +1058,8 @@ m0_run m8-check-extfolders run_extfolders
 m0_run m8-check-picker run_picker
 m0_run m7-run-failing run_failing
 m0_run m7-check-failing chk_failing
+m0_run m18-run-engine-guard run_engine_guard
+m0_run m18-check-engine-guard chk_engine_guard
 m0_run m2-run-cycles run_cycles
 m0_run m2-check-cycles chk_cycles
 m0_run m1-check-keyboard chk_keyboard

@@ -10,6 +10,50 @@
 #include <unistd.h>
 #include "dup_heal.h"
 
+/* the old reading of a class file, to show what it got wrong */
+/* THE GUARD AS IT WAS before 0.10.9 (verbatim, renamed): the class names a text defines: at the start of a line (blanks before it allowed) a capital word followed by ':' or '{' or '[' ; comments are cut first. names go to out (max); returns how many */
+static int legacy_class_names(const char *text, char names[][80], int max) {
+    size_t n = strlen(text);
+    char *t = (char *)malloc(n + 1);
+    if (!t) return 0;
+    size_t j = 0;
+    for (size_t i = 0; i < n;) {
+        if (text[i] == '/' && i + 1 < n && text[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < n && !(text[i] == '*' && text[i + 1] == '/')) { if (text[i] == '\n') t[j++] = '\n'; i++; }
+            i = i + 2 <= n ? i + 2 : n;
+        } else if (text[i] == '/' && i + 1 < n && text[i + 1] == '/') {
+            while (i < n && text[i] != '\n') i++;
+        } else {
+            t[j++] = text[i++];
+        }
+    }
+    t[j] = 0;
+    int count = 0;
+    char *line = t;
+    while (line && *line) {
+        char *nl = strchr(line, '\n');
+        char *p = line;
+        while (*p == ' ' || *p == '\t' || *p == '\r') p++;
+        if (*p >= 'A' && *p <= 'Z') {
+            char *q = p;
+            while ((*q >= 'A' && *q <= 'Z') || (*q >= 'a' && *q <= 'z') || (*q >= '0' && *q <= '9') || *q == '_') q++;
+            size_t len = (size_t)(q - p);
+            char *r = q;
+            while (*r == ' ' || *r == '\t') r++;
+            if (len > 0 && len < 80 && (*r == ':' || *r == '{' || *r == '[') && count < max) {
+                int seen = 0;
+                for (int k = 0; k < count; k++) if (strlen(names[k]) == len && strncmp(names[k], p, len) == 0) { seen = 1; break; }
+                if (!seen) { memcpy(names[count], p, len); names[count][len] = 0; count++; }
+            }
+        }
+        line = nl ? nl + 1 : NULL;
+    }
+    free(t);
+    return count;
+}
+
+
 static char logbuf[16000], mfbuf[8000];
 static int fails;
 #define CHECK(c, what) do { if (!(c)) { fails++; printf("FAIL %s\n", what); } } while (0)
@@ -161,6 +205,73 @@ int main(int argc, char **argv) {
     logbuf[0] = 0;
     r = dh_run(&ops, roots, 4, dis);
     CHECK(r.moved_units == 0 && r.unresolved_pairs == 1 && strstr(r.note, "plug-in files"), "6: two plug-in files of the owner: reported, not moved");
+
+    { char cmd[8300]; snprintf(cmd, sizeof cmd, "rm -rf '%s/FoldC' '%s/Yours' '%s/Mine'", usr, ext, usr); (void)!system(cmd); }
+
+    /* 7. the owner's report (0.10.9): the engines of glut, mangl and orgn each have "Routine {" lines inside their methods. Routine is a SuperCollider class they USE, not one they define.
+     * (the three real files, cut down to their class line and the Routine lines; sclang 3.13 compiles the real ones together without a word: checked by hand, see docs/port/phase-m18.md) */
+    {
+        static const char *glut = "// glut\nEngine_Glut : CroneEngine {\n\tvar seek_tasks;\n\talloc {\n\t\tseek_tasks = Array.fill(7, { arg i;\n\t\t\tRoutine {}\n\t\t});\n\t}\n\tfree { seek_tasks.do({ arg t; t.stop; }); }\n}\n";
+        static const char *mglut = "Engine_MGlut : CroneEngine {\n\talloc {\n\t\tseek_tasks = Array.fill(7, { arg i;\n\t\t\tRoutine {}\n\t\t});\n\t}\n}\n";
+        static const char *orgn = "Engine_Orgn : CroneEngine {\n    alloc {\n        this.addCommand(\\noteTrig, \"iffff\", { arg msg;\n            Routine {\n                this.addVoice(msg[1]);\n                0.01.yield;\n            }.play;\n        });\n        this.addCommand(\\noteOff, \"i\", { arg msg;\n            Routine {\n                msg[1].yield;\n            }.play;\n        });\n    }\n}\n";
+        char (*nm)[80] = malloc(80 * 50);
+        int n = legacy_class_names(glut, nm, 50), has = 0;
+        for (int i = 0; i < n; i++) if (!strcmp(nm[i], "Routine")) has = 1;
+        CHECK(has, "7: the OLD reading finds a class Routine in the glut engine (the false report)");
+        n = legacy_class_names(orgn, nm, 50); has = 0;
+        for (int i = 0; i < n; i++) if (!strcmp(nm[i], "Routine")) has = 1;
+        CHECK(has, "7: ... and in the orgn engine");
+        n = dh_class_names(glut, nm, 50);
+        CHECK(n == 1 && !strcmp(nm[0], "Engine_Glut"), "7: the new reading finds only Engine_Glut in the glut engine");
+        n = dh_class_names(mglut, nm, 50);
+        CHECK(n == 1 && !strcmp(nm[0], "Engine_MGlut"), "7: ... only Engine_MGlut");
+        n = dh_class_names(orgn, nm, 50);
+        CHECK(n == 1 && !strcmp(nm[0], "Engine_Orgn"), "7: ... only Engine_Orgn");
+        free(nm);
+        /* the three scripts as the owner has them: nothing is reported, nothing moved */
+        p(a, dust, "code/glut/Engine_Glut.sc"); wr(a, glut);
+        p(a, dust, "code/mangl/lib/Engine_MGlut.sc"); wr(a, mglut);
+        p(a, dust, "code/orgn/lib/Engine_Orgn.sc"); wr(a, orgn);
+        logbuf[0] = 0;
+        r = dh_run(&ops, roots, 4, dis);
+        CHECK(r.moved_units == 0 && r.unresolved_pairs == 0 && r.note[0] == 0 && logbuf[0] == 0, "7: glut, mangl and orgn together: no finding, no note, nothing moved");
+        p(a, dust, "code/glut/Engine_Glut.sc"); CHECK(p_exists(a), "7: the files are where they were");
+        /* and the false class used to make a shipped pack move the owner's script file: an extension that carries PACK-ID.txt and a script that only USES Routine */
+        p(a, ext, "SomePack/PACK-ID.txt"); wr(a, "x\n");
+        p(a, ext, "SomePack/Classes/Dummy.sc"); wr(a, "Dummy : Object { run { ^Routine { 1.yield } } }\n");
+        logbuf[0] = 0;
+        r = dh_run(&ops, roots, 4, dis);
+        CHECK(r.moved_units == 0 && logbuf[0] == 0, "7: a shipped pack that uses Routine does not make the owner's engine move");
+        { char cmd[4200]; snprintf(cmd, sizeof cmd, "rm -rf '%s/SomePack'", ext); (void)!system(cmd); }
+
+        /* 8. a REAL duplicate between two folders of the owner is still found, also when the files use Routine, and the screen note says what to do */
+        p(a, dust, "code/orgn2/lib/Engine_Orgn.sc"); wr(a, orgn);
+        logbuf[0] = 0;
+        r = dh_run(&ops, roots, 4, dis);
+        CHECK(r.moved_units == 0 && r.unresolved_pairs == 1, "8: the same engine class in two script folders is a duplicate: reported, not moved");
+        CHECK(strstr(logbuf, "(1: Engine_Orgn)") && strstr(logbuf, "code/orgn/lib/Engine_Orgn.sc") && strstr(logbuf, "code/orgn2/lib/Engine_Orgn.sc") && strstr(logbuf, "NOTHING was moved") && !strstr(logbuf, "Routine"), "8: the line names the class and both files, and no Routine");
+        CHECK(strstr(r.note, "Engine_Orgn") && strstr(r.note, "in two folders of yours (") && strstr(r.note, "dust/code/orgn2") && (strstr(r.note, "dust/code/orgn and") || strstr(r.note, "and dust/code/orgn)")) && strstr(r.note, "move one by hand"), "8: the screen note names the class and BOTH script folders and says what to do");
+        p(a, dust, "code/orgn2/lib/Engine_Orgn.sc"); unlink(a);
+    }
+
+    /* 9. the reading of a class file, case by case */
+    {
+        char (*nm)[80] = malloc(80 * 50);
+        int n;
+        n = dh_class_names("// Foo { }\n/* Bar { /* Nested { } */ still comment { } */\nReal : Object { classvar x = \"Fake { }\"; *new { ^Routine { 1 } } m { var c = $}; ^'Sym {' } }\n", nm, 50);
+        CHECK(n == 1 && !strcmp(nm[0], "Real"), "9: comments (nested too), strings, symbols and $} hide nothing and show nothing");
+        n = dh_class_names("+ Routine { foo { } }\n+Array { bar { } }\n+  Object {\n}\n", nm, 50);
+        CHECK(n == 0, "9: a class extension (+ Name {) is not a definition");
+        n = dh_class_names("Spec[a b] : Object {\n}\nOther\n{\n Inner { }\n}\nOneLine {} Two : OneLine {}\n", nm, 50);
+        CHECK(n == 4 && !strcmp(nm[0], "Spec") && !strcmp(nm[1], "Other") && !strcmp(nm[2], "OneLine") && !strcmp(nm[3], "Two"), "9: a class with slots, the brace on the next line, two on one line; a name inside a body is not one");
+        n = dh_class_names("Child : Parent {\n}\n", nm, 50);
+        CHECK(n == 1 && !strcmp(nm[0], "Child"), "9: the superclass is not a definition");
+        n = dh_class_names("Unclosed { m { Routine { \n", nm, 50);
+        CHECK(n == 1 && !strcmp(nm[0], "Unclosed"), "9: a damaged file does not crash or find more");
+        n = dh_class_names("", nm, 50);
+        CHECK(n == 0, "9: an empty file");
+        free(nm);
+    }
 
     { char cmd[4200]; snprintf(cmd, sizeof cmd, "rm -rf '%s'", base); (void)!system(cmd); }
     if (fails) { printf("%d FAILED\n", fails); return 1; }

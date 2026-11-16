@@ -66,43 +66,88 @@ static inline int dh_skip_dir(const char *name) {
            dh_ieq(name, "windows") || dh_ieq(name, "iphone");
 }
 
-/* the class names a text defines: at the start of a line (blanks before it allowed) a capital word followed by ':' or '{' or '[' ; comments are cut first. names go to out (max); returns how many */
-static inline int dh_class_names(const char *text, char names[][80], int max) {
+/* the text of a class file as sclang reads the code: comments (line comments and block comments, which nest), the inside of "strings" and 'symbols' and $x characters are blanked (newlines stay), so that nothing in them looks like code. a malloc'ed copy */
+static inline char *dh_strip_sc(const char *text) {
     size_t n = strlen(text);
     char *t = (char *)malloc(n + 1);
-    if (!t) return 0;
-    size_t j = 0;
-    for (size_t i = 0; i < n;) {
-        if (text[i] == '/' && i + 1 < n && text[i + 1] == '*') {
+    if (!t) return NULL;
+    size_t j = 0, i = 0;
+    while (i < n) {
+        char c = text[i];
+        if (c == '/' && i + 1 < n && text[i + 1] == '*') {
+            int depth = 1;
             i += 2;
-            while (i + 1 < n && !(text[i] == '*' && text[i + 1] == '/')) { if (text[i] == '\n') t[j++] = '\n'; i++; }
-            i = i + 2 <= n ? i + 2 : n;
-        } else if (text[i] == '/' && i + 1 < n && text[i + 1] == '/') {
+            while (i < n && depth > 0) {
+                if (text[i] == '/' && i + 1 < n && text[i + 1] == '*') { depth++; i += 2; }
+                else if (text[i] == '*' && i + 1 < n && text[i + 1] == '/') { depth--; i += 2; }
+                else { if (text[i] == '\n') t[j++] = '\n'; i++; }
+            }
+            t[j++] = ' ';
+        } else if (c == '/' && i + 1 < n && text[i + 1] == '/') {
             while (i < n && text[i] != '\n') i++;
+        } else if (c == '"' || c == '\'') {
+            char q = c;
+            t[j++] = q;
+            i++;
+            while (i < n && text[i] != q) {
+                if (text[i] == '\\' && i + 1 < n) i++;
+                if (text[i] == '\n') t[j++] = '\n';
+                i++;
+            }
+            if (i < n) i++;
+            t[j++] = q;
+        } else if (c == '$' && i + 1 < n) {
+            /* a character: $a $} $" $\n (the next character is the character) */
+            i += (text[i + 1] == '\\' && i + 2 < n) ? 3 : 2;
+            t[j++] = ' ';
         } else {
-            t[j++] = text[i++];
+            t[j++] = c;
+            i++;
         }
     }
     t[j] = 0;
-    int count = 0;
-    char *line = t;
-    while (line && *line) {
-        char *nl = strchr(line, '\n');
-        char *p = line;
-        while (*p == ' ' || *p == '\t' || *p == '\r') p++;
-        if (*p >= 'A' && *p <= 'Z') {
-            char *q = p;
-            while ((*q >= 'A' && *q <= 'Z') || (*q >= 'a' && *q <= 'z') || (*q >= '0' && *q <= '9') || *q == '_') q++;
+    return t;
+}
+
+static inline int dh_word_char(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; }
+static inline const char *dh_skip_space(const char *p) { while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++; return p; }
+
+/* the class names a text DEFINES, the way sclang reads a class file: a class definition stands outside every { } (a class body, a method, a function) and is
+ *     ClassName { ... }      ClassName : Superclass { ... }      ClassName[slots] : Superclass { ... }
+ * a "+ ClassName { ... }" is an extension of a class that is defined elsewhere, not a definition. nothing inside a comment, a string or a symbol counts, and nothing inside a body: a line "Routine {" in a method (norns engines
+ * make Routine { ... } all the time) is the SuperCollider class Routine used as code, not a class defined here. names go to out (max); returns how many */
+static inline int dh_class_names(const char *text, char names[][80], int max) {
+    char *t = dh_strip_sc(text);
+    if (!t) return 0;
+    int count = 0, depth = 0;
+    for (const char *p = t; *p;) {
+        if (*p == '{') { depth++; p++; continue; }
+        if (*p == '}') { if (depth > 0) depth--; p++; continue; }
+        if (depth == 0 && *p >= 'A' && *p <= 'Z' && (p == t || (!dh_word_char(p[-1]) && p[-1] != '\\' && p[-1] != '.'))) {
+            const char *q = p;
+            while (dh_word_char(*q)) q++;
             size_t len = (size_t)(q - p);
-            char *r = q;
-            while (*r == ' ' || *r == '\t') r++;
-            if (len > 0 && len < 80 && (*r == ':' || *r == '{' || *r == '[') && count < max) {
+            /* the character before the name, blanks skipped back: a '+' makes it an extension */
+            const char *b = p;
+            while (b > t && (b[-1] == ' ' || b[-1] == '\t' || b[-1] == '\r' || b[-1] == '\n')) b--;
+            int extension = b > t && b[-1] == '+';
+            const char *r = dh_skip_space(q);
+            if (*r == '[') { while (*r && *r != ']') r++; if (*r == ']') r++; r = dh_skip_space(r); }
+            if (*r == ':') {
+                r = dh_skip_space(r + 1);
+                while (dh_word_char(*r)) r++;
+                r = dh_skip_space(r);
+            }
+            if (!extension && *r == '{' && len > 0 && len < 80 && count < max) {
                 int seen = 0;
                 for (int k = 0; k < count; k++) if (strlen(names[k]) == len && strncmp(names[k], p, len) == 0) { seen = 1; break; }
                 if (!seen) { memcpy(names[count], p, len); names[count][len] = 0; count++; }
             }
+            /* past the superclass too (it is a name, not a definition), when this was a definition */
+            p = (!extension && *r == '{') ? r : q;
+            continue;
         }
-        line = nl ? nl + 1 : NULL;
+        p++;
     }
     free(t);
     return count;
@@ -205,6 +250,25 @@ static inline void dh_add_issue(dh_issue **v, int *n, int *cap, int a, int b, co
     snprintf(it->names, sizeof it->names, "%s", name);
 }
 
+/* a short name of a folder or file for the norns screen: from "dust/" on for a script (the script's folder, not the file), from "extensions" on for an extension, else the last two parts */
+static inline void dh_short_path(const char *path, char *out, size_t n) {
+    const char *p = NULL;
+    const char *marks[] = {"/dust/code/", "/dust/", "/extensions/", "/Extensions/"};
+    for (int i = 0; i < 4 && !p; i++) { const char *f = strstr(path, marks[i]); if (f) p = f + 1; }
+    if (!p) {
+        const char *last = strrchr(path, '/');
+        const char *prev = last;
+        if (last) { for (prev = last - 1; prev > path && *prev != '/'; prev--) {} if (*prev == '/') prev++; }
+        p = last ? prev : path;
+    }
+    snprintf(out, n, "%s", p);
+    /* a script's file -> its script folder: dust/code/<script>[/lib/...]: keep three parts */
+    if (strncmp(out, "dust/code/", 10) == 0) {
+        const char *slash = strchr(out + 10, '/');
+        if (slash) out[slash - out] = 0;
+    }
+}
+
 static inline void dh_unit_text(const dh_file *f, char *out, size_t n) {
     if (f->unit_len) snprintf(out, n, "%.*s", f->unit_len, f->path);
     else snprintf(out, n, "%s", f->path);
@@ -231,7 +295,12 @@ static inline void dh_resolve(dh_scan *s, dh_issue *v, int n, const char *what, 
             snprintf(line, sizeof line, "duplicate %s (%d: %s%s) are defined in both %s and %s: neither is a pack Verdandi ships (or one is the program's own): NOTHING was moved. move one of the two folders out of the way by hand (never delete), or SuperCollider will not start", what, it->count, it->names, it->count > 8 ? ", ..." : "", ta, tb);
             s->ops->log(line);
             res->unresolved_pairs++;
-            if (res->note[0] == 0) snprintf(res->note, sizeof res->note, "SuperCollider: duplicate %s (%.150s) in two folders of yours: move one by hand, see launcher.log", what, it->names);
+            if (res->note[0] == 0) {
+                char sa[200], sb[200];
+                dh_short_path(ta, sa, sizeof sa);
+                dh_short_path(tb, sb, sizeof sb);
+                snprintf(res->note, sizeof res->note, "SuperCollider: duplicate %s (%.100s) in two folders of yours (%.100s and %.100s): move one by hand, see launcher.log", what, it->names, sa, sb);
+            }
             continue;
         }
         const dh_file *keep = &s->files[d == 1 ? it->a : it->b], *mv = &s->files[d == 1 ? it->b : it->a];

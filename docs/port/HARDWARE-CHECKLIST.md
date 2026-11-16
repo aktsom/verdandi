@@ -642,3 +642,7 @@ Your two grids (128 and 256) plugged in; the mod sidvagn on (draws on the second
 6. Pull the USB cable of one grid, then quit: Verdandi ends within a few seconds and the other grid is dark.
 7. Switch scripts a few times (HOME > SELECT): the grids go dark for the switch (like a norns) and the new script lights them; sidvagn's grid is lit again within a moment. Say if you see a longer dark time than a blink.
 8. Leave serialosc running (it holds the grid) and quit: say what the grid does.
+
+## Windows 0.10.9 (no false "duplicate classes (Routine)")
+1. With glut, mangl and orgn installed: start Verdandi. The main window has no "SuperCollider: duplicate classes" note; `logs\launcher.log` has no "duplicate classes" line. The engines make sound as before.
+2. (Optional, to see that a real duplicate is still reported) copy `dust\code\orgn` to `dust\code\orgn2` and restart: the window says `duplicate classes (Engine_Orgn) in two folders of yours (dust/code/orgn2 and dust/code/orgn)`; sclang itself refuses to start until you move one of the two folders out. Remove `orgn2` again.
