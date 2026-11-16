@@ -20,7 +20,7 @@ Two more findings in the same code:
 
 Why "sometimes a script is loaded, sometimes not" does not matter: with a script or with a mod, something draws after the "all off".
 
-I have **not** seen the owner's grids; the race is a conclusion from the code and is shown by the CI run that leaves the new freeze out (below).
+I have **not** seen the owner's grids. The race was shown in CI: a mod that redraws every 2 ms and a run with the freeze left out ended with all three fake devices lit again after the "all off"; with the freeze, all ended dark (the plain 30 frames a second mod did not show it in one run: the window is a few milliseconds).
 
 ## 2. What changed
 
