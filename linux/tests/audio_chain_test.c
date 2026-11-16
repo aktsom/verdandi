@@ -783,6 +783,18 @@ static void scenario_grow(const char *sc) {
     g_guest_delay_ms = 0;
     sleep_ms_f(decay ? 9000 : 4500);
     printf("%s: underruns during the busy start %llu, hold-back then %u (grew %u x), at the end %u\n", sc, u1, lag_busy, verdandi_bridge_host_raises(), verdandi_bridge_host_lag());
+    {
+        /* M19: every underrun is a record the logging thread turns into a line (norns.log: "audio: UNDERRUN u<n> at <time>: ..."): the records have the numbers that line prints */
+        verdandi_bridge_event ev[16];
+        unsigned long long cur = 0, lost = 0, prev_u = 0;
+        int n = verdandi_bridge_host_events(&cur, ev, 16, &lost), sane = n > 0;
+        for (int i = 0; i < n; i++) {
+            sane = sane && ev[i].underruns > prev_u && ev[i].tick_us > 0 && ev[i].lag >= 1 && ev[i].attached == 1 && ev[i].call > 0 && ev[i].guest_blocks > 0;
+            prev_u = ev[i].underruns;
+        }
+        CHECK(n > 0 || lost > 0, "%s: the underruns left records for the log (%d)", sc, n);
+        CHECK(sane, "%s: each record has the counter (rising), a time, the hold-back, scsynth attached and its block count", sc);
+    }
     if (!decay) {
         CHECK(u1 > 20, "%s: the busy start really made blocks late (%llu underruns)", sc, u1);
         CHECK(verdandi_bridge_host_lag() == 4 && verdandi_bridge_host_raises() == 0, "%s: but the hold-back stayed at 4: the first seconds after scsynth attached do not make it grow (%u, grew %u x)", sc, verdandi_bridge_host_lag(), verdandi_bridge_host_raises());

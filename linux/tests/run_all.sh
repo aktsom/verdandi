@@ -122,6 +122,7 @@ run "windows:JACK-compatible null backend (ring buffer, unique names, ports, phy
 if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/wine/wine64 ]; then
     run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
     run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
+    run "windows:ASIO probe against a stub ASIO driver under Wine (nothing registered, a working driver with its channels and buffer sizes, a driver that refuses with its own message, a class that cannot be made, a missing driver file)" linux/tests/asio_probe_test.sh
     run "windows:update-and-run.cmd under Wine with stand-ins for curl, tar and the questions (a newer build unpacked into its own folder, old builds kept or removed on request, the data folder never touched, plain messages when the download fails)" linux/tests/update_and_run_test.sh
 else
     echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
@@ -182,6 +183,9 @@ audio_chain_ok() {
         "$T/audio_chain_test" exit > /dev/null 2>&1
         [ $? -eq 42 ] || return 1
     done
+    # M19: a busy scsynth makes underruns and every one of them is a line in the log with the counter, the time, the reason and the settings
+    "$T/audio_chain_test" grow_start 2> "$T/chain-grow.err" > /dev/null || return 1
+    grep -a -q "audio: UNDERRUN u[0-9]* at [0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9]*: the engine's block was not ready (bridge call [0-9]*): .*hold-back [0-9]* blocks of 128 frames.*card buffer .* frames" "$T/chain-grow.err" || { echo "no UNDERRUN line in the log"; head -5 "$T/chain-grow.err"; return 1; }
     return 0
 }
 run "windows:audio chain with a fake sound card (card -> crone stand-in -> bridge -> scsynth stand-in -> card; device busy, missing or at another rate falls back with a note; audio.conf values; device list; M3: ASIO driver busy falls back to WASAPI with the plain words, input MIC / OFF / SYS with channel mapping, separate input stream, loopback, no feedback at start, measured round trip)" audio_chain_ok
@@ -201,6 +205,7 @@ run "windows:the PortAudio backend on Linux (list, an unknown device is refused 
 gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
 "$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"
 run "windows:SYSTEM > AUDIO: one short list (DRIVER OUTPUT [OUT CH] INPUT [IN CH] BUFFER TEST), every change applied live without a restart (reverted with one plain line when it fails), the status line, TEST results in plain words, bright text, nothing wider than the screen with the real font, the marquee" env FONT_WIDTHS="$T/font_widths_liquid.txt" lua5.3 linux/tests/audio_page_windows_test.lua
+run "windows:AUDIO page and ASIO (the ASIO build without a usable driver says why on the DRIVER row and the status line, the normal build says nothing; a driver's buffer sizes in frames and ms and its channels)" env NORNS_PLATFORM=linux lua5.3 linux/tests/audio_asio_page_test.lua
 run "windows: mod scan finds mods by folder listing (accents, blanks), enabled and found again after restart; glob unchanged without listing" lua5.3 linux/tests/mods_scan_windows_test.lua
 run "engine that fails to build (fake Autumn: Class Decimator not found, Message ar not understood in Engine_Autumn:alloc): load stopped within a tick, plain line and screen text, next script loads" env NORNS_PLATFORM=linux lua5.3 linux/tests/engine_fail_test.lua
 run "windows: class check reads the unquoted form, uses the extensions folder, one plain line for all missing classes" env NORNS_PLATFORM=linux lua5.3 linux/tests/sc_class_check_test.lua

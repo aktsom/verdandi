@@ -54,9 +54,25 @@ typedef struct {
     float from_sc[VB_RING][2 * VB_MAXFRAMES];
 } vb_shared;
 
+/* one underrun of the bridge, as the host saw it (host only, plain memory): what the log line says. written by the card's callback, read by a thread that logs */
+#define VB_EVENTS 64u
+typedef struct {
+    uint64_t call;         /* the exchange (block) number */
+    uint64_t tick_us;      /* a monotonic clock, microseconds (vb_now_us) */
+    uint64_t guest_blocks; /* blocks scsynth had made so far */
+    uint64_t drops;        /* blocks dropped so far */
+    uint64_t underruns;    /* the counter after this one */
+    uint32_t pending;      /* our blocks that scsynth had not taken yet (0: it was waiting for work, so it was late waking; more: it was busy or not running) */
+    uint32_t answers;      /* answers of scsynth waiting that the hold-back would not release yet */
+    uint32_t lag;          /* the hold-back, in blocks */
+    uint32_t attached;     /* scsynth's driver attached */
+} vb_event;
+
 typedef struct {
     vb_shared *sh;
     int host;
+    vb_event ev[VB_EVENTS]; /* host only */
+    volatile uint64_t ev_w; /* host only: events written */
     volatile unsigned lag;   /* host only: how many blocks of scsynth's answers are held back (>= the number of engine blocks that run in one callback of the card, so that a burst of blocks finds its answers) */
     int primed;              /* host only: the held-back blocks are there */
     uint64_t calls, last_underrun_call; /* host only: exchanges so far, and the call of the last underrun (a second underrun soon after raises the hold-back by itself) */
@@ -81,6 +97,20 @@ static inline uint64_t vb_load(volatile uint64_t *p) { return __atomic_load_n(p,
 static inline void vb_store(volatile uint64_t *p, uint64_t v) { __atomic_store_n(p, v, __ATOMIC_RELEASE); }
 static inline uint64_t vb_add(volatile uint64_t *p, uint64_t v) { return __atomic_add_fetch(p, v, __ATOMIC_ACQ_REL); }
 #endif
+
+static inline uint64_t vb_now_us(void) {
+#ifdef _WIN32
+    static LARGE_INTEGER f;
+    LARGE_INTEGER c;
+    if (!f.QuadPart) QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (uint64_t)((double)c.QuadPart * 1e6 / (double)f.QuadPart);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+#endif
+}
 
 /* ---- the operating system part: a named shared memory and a named event (Windows); a POSIX shared memory with polling (everything else: the tests on Linux) ---- */
 #ifdef _WIN32
@@ -208,7 +238,20 @@ static inline void vb_host_exchange(vb_t *b, const float *to_l, const float *to_
         if (from_l) memset(from_l, 0, n * sizeof(float));
         if (from_r) memset(from_r, 0, n * sizeof(float));
         if (b->primed && vb_load(&s->guest_attached) && vb_load(&s->guest_blocks) > 0) {
-            vb_add(&s->host_underruns, 1);
+            uint64_t under = vb_add(&s->host_underruns, 1);
+            {
+                vb_event *e = &b->ev[b->ev_w % VB_EVENTS];
+                e->call = b->calls;
+                e->tick_us = vb_now_us();
+                e->guest_blocks = vb_load(&s->guest_blocks);
+                e->drops = vb_load(&s->host_drops);
+                e->underruns = under;
+                e->pending = (uint32_t)(vb_load(&s->to_w) - vb_load(&s->to_r));
+                e->answers = (uint32_t)(fw - fr);
+                e->lag = lag;
+                e->attached = (uint32_t)vb_load(&s->guest_attached);
+                vb_store(&b->ev_w, b->ev_w + 1);
+            }
             b->primed = 0;
             /* two underruns within about half a second (4000 blocks of 128 frames): the hold-back is too small for the way this card calls back (bursts nobody announced, a scsynth that wakes late).
              * one more block is held back, up to 6 (the ring holds 8). it stays: a smaller hold-back would only bring the clicks back */

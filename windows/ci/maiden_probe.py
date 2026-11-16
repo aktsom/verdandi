@@ -570,6 +570,61 @@ if os.environ.get("VERDANDI_PROBE") == "quitgrid":
         result("qg-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=asio (M19): what the program and the AUDIO page say about ASIO, with the CI's stub ASIO driver registered (windows/ci/asio_stub.c) or not. VERDANDI_ASIO_MODE says which case it is: ok, busy, nostart, none. results 'PROBE asio-... ok|FAIL'
+if os.environ.get("VERDANDI_PROBE") == "asio":
+    amode = os.environ.get("VERDANDI_ASIO_MODE", "ok")
+    def run(line, want, seconds=30):
+        return repl(5555, line, want, seconds)
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("asio-up", up, "norns answers (%s)" % amode)
+        time.sleep(8)
+        line = ("local i = _norns.audio_info() local d = _norns.audio_devices():gsub('\\n', ' ~ '):gsub('\\t', ' ') "
+                "print('VT_INFO ' .. tostring(i.mode) .. '|' .. tostring(i.host_api) .. '|' .. tostring(i.device) .. '|' .. tostring(i.asio_flavour) .. '|' .. tostring(i.asio_registered) .. '|' .. tostring(i.asio_usable) .. '|' .. tostring(i.card_frames) .. '|' .. tostring(i.asio_note)) "
+                "print('VT_DEVS ' .. d) print('VT_APIS ' .. tostring(i.host_apis))\n")
+        ok, tail = run(line, "VT_APIS", 30)
+        info = ""
+        devs = ""
+        for l in tail.splitlines():
+            if l.startswith("VT_INFO "): info = l[8:]
+            if l.startswith("VT_DEVS "): devs = l[8:]
+        f = info.split("|")
+        f += [""] * (8 - len(f))
+        mode_, api, device, flavour, registered, usable, card_frames, note = f[0], f[1], f[2], f[3], f[4], f[5], f[6], "|".join(f[7:])
+        result("asio-info", ok and bool(info), "mode=%s host_api=%s device=%s flavour=%s registered=%s usable=%s card_frames=%s note=%s" % (mode_, api, device, flavour, registered, usable, card_frames, note[:160]))
+        # the page, as the owner sees it
+        page = ("local p = _menu.m['AUDIO'] p.init() local st = p.status_text() p.pos = 1 p.redraw() local h = table.concat(p.help_lines(), ' ') "
+                "p.cfg.driver = 'asio' p.cfg.output = 'asio:Verdandi Test ASIO' local bt = p.value_text('BUFFER') p.deinit() "
+                "print('VT_PAGE status=[' .. tostring(st) .. '] help=[' .. h .. '] buffer=[' .. tostring(bt) .. ']')\n")
+        ok, tail = run(page, "VT_PAGE", 30)
+        result("asio-page", ok, tail.strip()[-300:])
+        flav = flavour == "true"
+        if amode == "ok":
+            result("asio-listed", "ASIO" in f[1] or "ASIO" in (tail + info), "device opened through ASIO: host_api=%s" % api)
+            result("asio-running", mode_ == "device" and api.startswith("ASIO") and usable == "1" and card_frames.isdigit() and int(card_frames) > 0, "the stub driver runs the engine: mode=%s host_api=%s card callbacks of %s frames" % (mode_, api, card_frames))
+            result("asio-devices", "asio:Verdandi Test ASIO" in devs and "64,2048,256,-1" in devs and " 4 4 ASIO" in devs, "the device list has the driver with 4 in, 4 out and its buffer sizes: " + devs[-200:])
+            result("asio-buffer-text", "auto  256  5.3 ms" in tail, "the BUFFER row shows the driver's preferred size in frames and ms")
+        elif amode == "busy":
+            result("asio-busy-said", flav and usable == "0" and registered == "1" and "refused to start" in note, "a driver that refuses to start is named with its own message: " + note[:200])
+            result("asio-busy-page", "ASIO" in tail and "will not start" in tail, "the AUDIO page says the driver will not start")
+        elif amode == "none":
+            result("asio-none-said", flav and registered == "0" and "no ASIO driver is installed" in note, "no driver registered: " + note[:200])
+            result("asio-none-page", "ASIO" in tail and "no driver installed" in tail, "the AUDIO page says no driver is installed")
+        elif amode == "normal":
+            result("asio-normal", (not flav) and "normal build" in note and "ASIO" not in tail.split("help=[")[-1], "the normal build says it has no ASIO and the AUDIO page does not mention it: flavour=%s note=%s" % (flavour, note[:120]))
+        elif amode == "nostart":
+            result("asio-nostart", flav and registered == "1", "the driver is there and starts for the probe; opening it failed at the start: mode=%s host_api=%s" % (mode_, api))
+    except Exception as e:
+        result("asio-error", False, "%s" % e)
+    sys.exit(0)
+
 # 1. maiden is up
 up = False
 for _ in range(150):

@@ -23,12 +23,23 @@ local function read_devices()
     local f = {}
     for v in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = v end
     if f[1] and f[1] ~= "" then
-      table.insert(m.devs, {uid = f[1], name = (f[2] or f[1]):gsub(" %(default%)$", ""), ins = tonumber(f[3]) or 0, outs = tonumber(f[4]) or 0, api = f[5] or "WASAPI", loopback = f[8] == "1"})
+      local bmin, bmax, bpref, bgran = (f[9] or ""):match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
+      local buffers = bmin and {min = tonumber(bmin), max = tonumber(bmax), pref = tonumber(bpref), gran = tonumber(bgran)} or nil -- ASIO: what the driver reports, in frames
+      table.insert(m.devs, {uid = f[1], name = (f[2] or f[1]):gsub(" %(default%)$", ""), ins = tonumber(f[3]) or 0, outs = tonumber(f[4]) or 0, api = f[5] or "WASAPI", loopback = f[8] == "1", buffers = buffers})
     end
   end
   m.hosts = {"WASAPI"}
   local info = _norns.audio_info()
   if info and (info.host_apis or ""):find("ASIO", 1, true) then table.insert(m.hosts, "ASIO") end
+  -- the ASIO build without a usable ASIO: the page says so (the reason is the one in norns.log)
+  m.asio_problem, m.asio_short = nil, nil
+  if info and info.asio_flavour and not (info.host_apis or ""):find("ASIO", 1, true) then
+    m.asio_problem = (info.asio_note and info.asio_note ~= "") and info.asio_note or "no ASIO driver can be used (see logs/norns.log, lines starting asio:)"
+    -- the same in a line that fits the info area (the whole sentence goes round on the status line)
+    if (info.asio_registered or 0) == 0 then m.asio_short = "no driver installed on this PC"
+    elseif (info.asio_usable or 0) == 0 then m.asio_short = "driver will not start: in use?"
+    else m.asio_short = "not listed: see norns.log" end
+  end
 end
 
 local function has_asio() return m.hosts[2] == "ASIO" end
@@ -65,7 +76,8 @@ end
 -- ---- the lists ----
 local function drivers()
   local l = {{id = "normal", name = "normal"}, {id = "exclusive", name = "exclusive"}}
-  if has_asio() then table.insert(l, {id = "asio", name = "low latency"}) end
+  if has_asio() then table.insert(l, {id = "asio", name = "low latency"})
+  elseif m.asio_problem then table.insert(l, {id = "noasio", name = "low latency: none"}) end -- (shown so that its absence is not silent; it cannot be chosen)
   return l
 end
 
@@ -134,8 +146,33 @@ local function rows()
 end
 
 local function buffer_text(b)
-  if b == 0 then return "auto" end
+  if b == 0 then
+    local o = m.cfg.driver == "asio" and cur_out() or nil
+    if o and o.buffers and o.buffers.pref > 0 then return string.format("auto  %d  %.1f ms", o.buffers.pref, o.buffers.pref / (m.cfg.rate or 48000) * 1000) end
+    return "auto"
+  end
   return string.format("%d  %.1f ms", b, b / (m.cfg.rate or 48000) * 1000)
+end
+
+-- the buffer sizes to choose from: the usual ones, or (an ASIO driver) the ones the driver reports: powers of two between its smallest and largest, or its steps, or only its own size
+local function buffer_list()
+  local o = m.cfg.driver == "asio" and cur_out() or nil
+  local bf = o and o.buffers
+  if not bf or bf.max <= 0 then return BUFFERS end
+  local sizes, seen = {}, {}
+  local function add(v) if v >= bf.min and v <= bf.max and not seen[v] then seen[v] = true; sizes[#sizes + 1] = v end end
+  if bf.gran == 0 or bf.min == bf.max then add(bf.pref)
+  elseif bf.gran == -1 then
+    add(bf.min); local v = 1; while v < bf.min do v = v * 2 end
+    while v <= bf.max do add(v); v = v * 2 end
+    add(bf.pref); add(bf.max)
+  else
+    add(bf.min); add(bf.pref); add(bf.max)
+    for _, f in ipairs({0.25, 0.5, 2, 4}) do local v = math.floor(bf.pref * f / bf.gran + 0.5) * bf.gran; add(v) end
+  end
+  table.sort(sizes)
+  table.insert(sizes, 1, 0) -- auto: the driver's preferred size
+  return sizes
 end
 
 local function say(text, secs)
@@ -159,6 +196,14 @@ m.help_text = function(row)
   if row == "INPUT" then
     local inf = _norns.audio_info()
     if inf and inf.sys_available == false then h = "sound in; none = off. SYS: needs WASAPI loopback (not available)" end
+  elseif row == "DRIVER" and m.asio_problem then
+    h = "ASIO: " .. (m.asio_short or m.asio_problem)
+  elseif row == "OUT CH" and m.cfg.driver == "asio" then
+    h = string.format("which two of the driver's %d outputs", cur_out().outs or 2)
+  elseif row == "IN CH" and m.cfg.driver == "asio" then
+    h = string.format("which of the driver's %d inputs: a pair, or one on both sides", cur_in().ins or 2)
+  elseif row == "BUFFER" and m.cfg.driver == "asio" then
+    h = "the driver's own sizes in frames and ms; auto = its preferred one. its control panel may fix it"
   end
   if m.pending and m.pending(row) then h = "* chosen: K3 applies. " .. h end
   return h
@@ -349,7 +394,8 @@ m.init = function()
   from_running()
   m.pos, m.top, m.tick, m.test, m.testing, m.selftesting, m.busy = 1, 1, 0, nil, false, false, false
   m.status, m.applied_row = nil, nil
-  if util.file_exists(FAILED) then say("failed: back to default", 40) end
+  if util.file_exists(FAILED) then say("failed: back to default", 40)
+  elseif m.asio_problem then say("ASIO: " .. m.asio_problem, 60) end
   -- the menu's own timer (as the other pages use it), not a script metro: a script change must not be able to take it away
   _menu.timer.time = 0.25
   _menu.timer.count = -1
@@ -414,7 +460,9 @@ m.enc = function(n, delta)
     if row == "DRIVER" then
       local l = drivers()
       local i = step(l, index_where(l, function(d) return d.id == c.driver end), delta)
-      if l[i].id ~= c.driver then
+      if l[i].id == "noasio" then
+        say("ASIO: " .. (m.asio_problem or "none"), 60) -- nothing to choose: the reason, a line at a time
+      elseif l[i].id ~= c.driver then
         c.driver, c.output, c.input, c.out_first, c.in_l, c.in_r, c.buffer = l[i].id, "", "", 1, 1, 2, 0
         if c.driver == "asio" then local o = outputs()[1]; c.output = o and o.uid or "" end
         changed()
@@ -440,8 +488,9 @@ m.enc = function(n, delta)
       local i = step(l, index_where(l, function(p) return p.l == c.in_l and p.r == c.in_r end), delta)
       if l[i].l ~= c.in_l or l[i].r ~= c.in_r then c.in_l, c.in_r = l[i].l, l[i].r; changed() end
     elseif row == "BUFFER" then
-      local i = step(BUFFERS, index_where(BUFFERS, function(b) return b == c.buffer end), delta)
-      if BUFFERS[i] ~= c.buffer then c.buffer = BUFFERS[i]; changed() end
+      local bl = buffer_list()
+      local i = step(bl, index_where(bl, function(b) return b == c.buffer end), delta)
+      if bl[i] ~= c.buffer then c.buffer = bl[i]; changed() end
     end
   end
   _menu.redraw()

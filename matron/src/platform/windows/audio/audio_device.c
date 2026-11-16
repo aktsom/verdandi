@@ -331,6 +331,112 @@ void vaud_selftest_start(void) {
     st_active = 1;
 }
 
+static vaud_config CUR; /* what runs now (defined again below: a tentative definition) */
+
+/* ---- every underrun leaves a line in norns.log (M19). the card's callback must not log, lock or allocate: it only writes a record into a small ring; the watch thread (every 250 ms) turns the records into lines.
+ * "u" on the AUDIO page counts the bridge's underruns (scsynth had no block ready when the card needed one: the engine's sound is silent for that block); "x" counts the card's glitches: the host API said the
+ * output ran dry or the input overflowed, and the engine's own output fifo being short when the card wanted frames. each of them is one record here */
+typedef struct {
+    unsigned long long us; /* a monotonic clock (verdandi_bridge_now_us) */
+    unsigned kind;         /* 1 the host API flagged it, 2 the engine's output was short */
+    unsigned flags;        /* the host API's flags (PortAudio: 1 input underflow, 2 input overflow, 4 output underflow, 8 output overflow, 16 priming) */
+    unsigned have, need;   /* kind 2: frames the engine fifo had, frames the card wanted */
+    double gap_ms, expect_ms; /* the time since the callback before, and what it should have been */
+    unsigned long long xr; /* the counter after this one */
+} card_event;
+#define CEV 64u
+static card_event cev[CEV];
+static atomic_ullong cev_w;
+static unsigned long long last_cb_us;
+static double last_gap_ms, last_expect_ms;
+
+static void cev_put(unsigned kind, unsigned flags, unsigned have, unsigned need) {
+    unsigned long long w = atomic_load(&cev_w);
+    card_event *e = &cev[w % CEV];
+    e->us = verdandi_bridge_now_us();
+    e->kind = kind;
+    e->flags = flags;
+    e->have = have;
+    e->need = need;
+    e->gap_ms = last_gap_ms;
+    e->expect_ms = last_expect_ms;
+    e->xr = S.card_xruns;
+    atomic_store(&cev_w, w + 1);
+}
+
+static void wall_text(unsigned long long ev_us, char *out, size_t n) {
+    struct timespec rt;
+    clock_gettime(CLOCK_REALTIME, &rt);
+    long long ago_us = (long long)verdandi_bridge_now_us() - (long long)ev_us;
+    long long ms = (long long)rt.tv_sec * 1000 + rt.tv_nsec / 1000000 - ago_us / 1000;
+    time_t sec = (time_t)(ms / 1000);
+    struct tm *tmv = localtime(&sec);
+    if (tmv) snprintf(out, n, "%02d:%02d:%02d.%03d", tmv->tm_hour, tmv->tm_min, tmv->tm_sec, (int)(ms % 1000));
+    else snprintf(out, n, "?");
+}
+
+static unsigned long long bev_cursor, cev_cursor;
+static void drain_events(void) {
+    static time_t window_start;
+    static int shown, suppressed;
+    time_t now = time(NULL);
+    if (now != window_start) {
+        if (suppressed > 0) {
+            fprintf(stderr, "audio: %d more underruns or glitches in that second are not listed one by one (the counters on the AUDIO page count all of them)\n", suppressed);
+        }
+        window_start = now;
+        shown = suppressed = 0;
+    }
+    char when[32];
+    /* the bridge: scsynth had no block ready */
+    verdandi_bridge_event be[16];
+    unsigned long long lost = 0;
+    int n;
+    while ((n = verdandi_bridge_host_events(&bev_cursor, be, 16, &lost)) > 0 || lost > 0) {
+        if (lost > 0) {
+            fprintf(stderr, "audio: %llu underruns of the bridge were not kept in the list (more than 64 in 250 ms)\n", lost);
+            lost = 0;
+        }
+        for (int i = 0; i < n; i++) {
+            if (shown >= 20) {
+                suppressed++;
+                continue;
+            }
+            shown++;
+            wall_text(be[i].tick_us, when, sizeof when);
+            const char *why = !be[i].attached ? "scsynth is not attached to the bridge" : (be[i].pending > 1 ? "scsynth is behind: it still had our earlier blocks to take" : (be[i].pending == 1 ? "scsynth had our latest block and was still computing or just woke" : "scsynth was idle, waiting for a block: it woke late"));
+            fprintf(stderr, "audio: UNDERRUN u%llu at %s: the engine's block was not ready (bridge call %llu): %s; our blocks not taken: %u, answers waiting: %u, hold-back %u blocks of %u frames, drops so far %llu, "
+                            "scsynth has made %llu blocks; card buffer %u frames (%s), %s; last card callback %.1f ms after the one before (expected %.1f)\n",
+                    be[i].underruns, when, be[i].call, why, be[i].pending, be[i].answers, be[i].lag, S.frames, be[i].drops, be[i].guest_blocks, S.card_frames, CUR.buffer ? "asked" : "auto", S.opened.host_api[0] ? S.opened.host_api : "?",
+                    last_gap_ms, last_expect_ms);
+        }
+        if (n == 0) break;
+    }
+    /* the card: a glitch the host API flagged, or the engine's output was short for the card */
+    unsigned long long w = atomic_load(&cev_w);
+    if (w - cev_cursor > CEV) {
+        fprintf(stderr, "audio: %llu card glitches were not kept in the list (more than 64 in 250 ms)\n", w - cev_cursor - CEV);
+        cev_cursor = w - CEV;
+    }
+    for (; cev_cursor < w; cev_cursor++) {
+        const card_event *e = &cev[cev_cursor % CEV];
+        if (shown >= 20) {
+            suppressed++;
+            continue;
+        }
+        shown++;
+        wall_text(e->us, when, sizeof when);
+        if (e->kind == 1) {
+            fprintf(stderr, "audio: CARD GLITCH x%llu at %s: the host API (%s) flagged %s%s%s%s; this callback came %.1f ms after the one before (expected %.1f); card buffer %u frames (%s)\n", e->xr, when,
+                    S.opened.host_api[0] ? S.opened.host_api : "?", (e->flags & 4) ? "an output underflow (the card ran out of sound) " : "", (e->flags & 2) ? "an input overflow " : "", (e->flags & 1) ? "an input underflow " : "",
+                    e->flags & ~7u ? "and other flags " : "", e->gap_ms, e->expect_ms, S.card_frames, CUR.buffer ? "asked" : "auto");
+        } else {
+            fprintf(stderr, "audio: CARD GLITCH x%llu at %s: the engine's output had %u of the %u frames the card wanted (the engine was late); this callback came %.1f ms after the one before (expected %.1f); engine block %u frames, card buffer %u frames\n",
+                    e->xr, when, e->have, e->need, e->gap_ms, e->expect_ms, S.frames, S.card_frames);
+        }
+    }
+}
+
 static pthread_t watch_thread;
 static volatile int watch_running;
 static void *watch_run(void *arg);
@@ -338,6 +444,12 @@ static atomic_ullong cb_count; /* callbacks of the card since the start: the wat
 
 static void card_callback(const float *in, float *out, unsigned frames, void *user) {
     atomic_fetch_add(&cb_count, 1);
+    {
+        unsigned long long now = verdandi_bridge_now_us();
+        last_gap_ms = last_cb_us ? (double)(now - last_cb_us) / 1000.0 : 0.0;
+        last_expect_ms = 1000.0 * frames / (S.rate ? S.rate : 48000);
+        last_cb_us = now;
+    }
     if (st_active) {
         selftest_tick();
     }
@@ -426,6 +538,7 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
     }
     if (fo.n < frames) {
         S.card_xruns += 1; /* the engine did not deliver in time: silence for the missing part (counted as a glitch) */
+        cev_put(2, 0, (unsigned)fo.n, frames);
     }
     for (unsigned i = 0; i < frames; i++) {
         float l = 0.f, r = 0.f;
@@ -461,7 +574,11 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
     }
 }
 
-void vaud_card_xrun(unsigned n) { S.card_xruns += n; }
+void vaud_card_xrun(unsigned n) { S.card_xruns += n; cev_put(1, 0, 0, 0); }
+void vaud_card_xrun_flags(unsigned n, unsigned long flags) {
+    S.card_xruns += n;
+    cev_put(1, (unsigned)flags, 0, 0);
+}
 
 void vaud_measure_start(void) {
     S.measured_ms = -1;
@@ -491,8 +608,10 @@ int vaud_list_text(const vaud_backend *be, char *out, size_t n) {
     size_t len = 0;
     out[0] = 0;
     for (int i = 0; i < count && len + 600 < n; i++) {
-        len += (size_t)snprintf(out + len, n - len, "%s\t%s%s\t%d\t%d\t%s\t%.1f\t%.1f\t%d\n", dev[i].uid, dev[i].name, dev[i].is_default ? " (default)" : "", dev[i].in_channels,
-                                dev[i].out_channels, dev[i].api, dev[i].low_out_ms, dev[i].low_in_ms, dev[i].loopback);
+        char bufs[80] = "";
+        if (dev[i].buf_max > 0) snprintf(bufs, sizeof bufs, "%ld,%ld,%ld,%ld", dev[i].buf_min, dev[i].buf_max, dev[i].buf_pref, dev[i].buf_gran);
+        len += (size_t)snprintf(out + len, n - len, "%s\t%s%s\t%d\t%d\t%s\t%.1f\t%.1f\t%d\t%s\n", dev[i].uid, dev[i].name, dev[i].is_default ? " (default)" : "", dev[i].in_channels,
+                                dev[i].out_channels, dev[i].api, dev[i].low_out_ms, dev[i].low_in_ms, dev[i].loopback, bufs);
     }
     return count;
 }
@@ -657,6 +776,34 @@ static int activate(const vaud_opened *res, const vaud_config *cfg, char *err, s
     return 0;
 }
 
+/* activate, and when an ASIO driver opened but would not START (ASIOStart failed: another program took the card between the open and the start, a driver in a bad state): close it completely, say so in one line
+ * and open the same hardware through WASAPI instead. never leaves the card half open: activate() closes the stream when the start fails */
+static int activate_or_twin(const vaud_backend *be, vaud_opened *res, vaud_config *cfg, char *note, size_t noten, char *err, size_t errn) {
+    if (activate(res, cfg, err, errn) == 0) {
+        return 0;
+    }
+    if (strncmp(cfg->output, "asio:", 5) != 0) {
+        return -1;
+    }
+    char twin[192], twin_in[192];
+    wasapi_twin(be, cfg->output, 0, twin, sizeof twin);
+    wasapi_twin(be, cfg->input, 1, twin_in, sizeof twin_in);
+    fprintf(stderr, "audio: ASIO driver '%s' opened but would not start (%s): closed again; trying WASAPI%s%s\n", shown(cfg->output), err, twin[0] ? " on " : "", twin[0] ? shown(twin) : "");
+    vaud_config c2 = *cfg;
+    snprintf(c2.output, sizeof c2.output, "%s", twin);
+    snprintf(c2.input, sizeof c2.input, "%s", twin_in);
+    c2.out_first = 1;
+    c2.buffer = 0;
+    c2.exclusive = 0;
+    vaud_error e = open_chain(be, &c2, 0, res, note, noten, err, errn);
+    if (e == VAUD_OK && activate(res, &c2, err, errn) == 0) {
+        note_add(note, noten, "ASIO driver '%.50s' would not start (another program has it?). Using WASAPI%s%.50s instead", shown(cfg->output), twin[0] ? " on " : "", twin[0] ? shown(twin) : "");
+        *cfg = c2;
+        return 0;
+    }
+    return -1;
+}
+
 static void log_device(const vaud_opened *res, const vaud_config *cfg) {
     if (res->device_rate > 0) {
         fprintf(stderr, "audio: the device itself runs at %.0f Hz (its Windows setting / clock)%s\n", res->device_rate, (unsigned)res->device_rate == S.rate ? "" : (res->exclusive ? " - DIFFERENT from norns" : ": the Windows mixer converts to norns's rate"));
@@ -726,7 +873,7 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
             S.rate = res.rate ? res.rate : cfg.rate;
             S.frames = cfg.period;
             verdandi_jack_null_configure(S.rate, S.frames);
-            if (activate(&res, &cfg, err, sizeof err) == 0) {
+            if (activate_or_twin(be, &res, &cfg, S.note, sizeof S.note, err, sizeof err) == 0) {
                 log_device(&res, &cfg);
                 if (res.in_note[0]) {
                     note_add(S.note, sizeof S.note, "%s%s", S.note[0] ? ". " : "", res.in_note);
@@ -805,7 +952,7 @@ static int apply_unlocked(const vaud_config *want, char *msg, size_t n) {
     } else if (e != VAUD_OK) {
         snprintf(why, sizeof why, "'%.60s' %s", cfg.output[0] ? shown(cfg.output) : "the default device", error_words(e));
     }
-    if (e == VAUD_OK && activate(&res, &cfg, err, sizeof err) == 0) {
+    if (e == VAUD_OK && activate_or_twin(BE, &res, &cfg, note, sizeof note, err, sizeof err) == 0) {
         S.note[0] = 0;
         note_add(S.note, sizeof S.note, "%s", note);
         if (res.in_note[0]) {
@@ -863,7 +1010,7 @@ static void recover(const char *why_stopped) {
         S.clock_rate = res.rate;
         e = VAUD_CLOCK;
     }
-    if (e == VAUD_OK && activate(&res, &cfg, err, sizeof err) == 0) {
+    if (e == VAUD_OK && activate_or_twin(BE, &res, &cfg, note, sizeof note, err, sizeof err) == 0) {
         S.note[0] = 0;
         note_add(S.note, sizeof S.note, "the sound card was reopened (%s)%s%s", why_stopped, note[0] ? ". " : "", note);
         fprintf(stderr, "audio: %s\n", S.note);
@@ -886,6 +1033,7 @@ static void *watch_run(void *arg) {
     while (watch_running) {
         struct timespec ts = {0, 250 * 1000000L};
         nanosleep(&ts, NULL);
+        drain_events();
         if (S.mode == VAUD_MODE_DEVICE) {
             unsigned long long now = atomic_load(&cb_count);
             if (now == last) {

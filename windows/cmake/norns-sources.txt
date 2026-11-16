@@ -100,6 +100,7 @@ matron/src/platform/windows/jack_null/jack_null.c
 matron/src/platform/windows/audio/audio_device.c
 matron/src/platform/windows/audio/audio_bridge_host.c
 matron/src/platform/windows/audio/audio_backend_pa.c
+matron/src/platform/windows/audio/audio_asio_probe.c
 matron/src/platform/windows/audio/audio_win.c
 matron/src/platform/windows/audio/wasapi_loopback.cc
 matron/src/platform/windows/audio/exit_win.c

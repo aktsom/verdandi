@@ -36,6 +36,10 @@ typedef struct PaAsioStreamInfo {
 #define HAVE_PA_ASIO_H 1
 
 #include "audio_device.h"
+#ifdef _WIN32
+#include <windows.h>
+#include "audio_asio_probe.h"
+#endif
 
 #define MAXF 2048
 
@@ -50,6 +54,80 @@ static int in_l_sel, in_r_sel;     /* 0 based indexes into the input frame (WASA
 static int sin_ch, sin_l, sin_r;   /* the separate input stream */
 static float inmix[2 * MAXF];
 
+/* ---- ASIO: what is installed and what each driver says (M19, audio_asio_probe.c). PortAudio drops a driver that does not answer and the whole ASIO host API when none does, without a word: this is how the log and the
+ * AUDIO page can say why. the probe runs when PortAudio starts, and only when this PortAudio is the ASIO build (its DLL exports PaAsio_GetAvailableBufferSizes) */
+#ifdef _WIN32
+static va_driver asio_drv[VA_MAX];
+static int asio_n, asio_usable, asio_flavour;
+static char asio_note[480];
+
+static void asio_log(const char *line) { fprintf(stderr, "%s\n", line); }
+
+static void asio_scan(void) {
+    HMODULE pa = GetModuleHandleA("libportaudio-2.dll");
+    char path[MAX_PATH] = "(not found)";
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    unsigned long long size = 0;
+    if (pa && GetModuleFileNameA(pa, path, sizeof path) && GetFileAttributesExA(path, GetFileExInfoStandard, &fa)) size = ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow;
+    asio_flavour = pa && GetProcAddress(pa, "PaAsio_GetAvailableBufferSizes") != NULL;
+    asio_n = asio_usable = 0;
+    asio_note[0] = 0;
+    fprintf(stderr, "audio: PortAudio is %s (%llu bytes); the ASIO host API is %s this file\n", path, size, asio_flavour ? "built into" : "NOT in");
+    if (!asio_flavour) {
+        snprintf(asio_note, sizeof asio_note, "this is the normal build: its PortAudio has no ASIO (the ASIO zip has it)");
+        return;
+    }
+    /* the full report once; when the AUDIO page asks PortAudio to look again, the drivers are probed quietly and only a change is said */
+    static int scanned;
+    static char last_sum[300];
+    DWORD t0 = GetTickCount();
+    asio_n = va_probe(asio_drv, VA_MAX, scanned ? NULL : asio_log);
+    char sum[300];
+    va_summary(asio_drv, asio_n, sum, sizeof sum, &asio_usable);
+    if (!scanned || strcmp(sum, last_sum)) {
+        if (scanned) {
+            for (int i = 0; i < asio_n; i++) fprintf(stderr, "asio: driver '%s': %s\n", asio_drv[i].name, asio_drv[i].status == VA_OK ? "usable now" : asio_drv[i].detail);
+        }
+        fprintf(stderr, "audio: ASIO: %s (looked at in %lu ms)\n", sum, (unsigned long)(GetTickCount() - t0));
+    }
+    snprintf(last_sum, sizeof last_sum, "%s", sum);
+    scanned = 1;
+    int listed = Pa_HostApiTypeIdToHostApiIndex(paASIO) >= 0;
+    if (listed) {
+        snprintf(asio_note, sizeof asio_note, "%s", sum);
+    } else if (asio_n == 0) {
+        snprintf(asio_note, sizeof asio_note, "no ASIO driver is installed on this PC: install the ASIO driver of your interface");
+    } else if (asio_usable == 0) {
+        snprintf(asio_note, sizeof asio_note, "%d ASIO driver%s found but none starts: %.140s", asio_n, asio_n == 1 ? "" : "s", asio_drv[0].detail);
+    } else {
+        snprintf(asio_note, sizeof asio_note, "ASIO driver '%.60s' starts for Verdandi, but PortAudio did not list it (see norns.log)", asio_drv[0].name);
+    }
+    if (!listed) fprintf(stderr, "audio: no ASIO host API: %s\n", asio_note);
+}
+
+void vaud_backend_pa_asio_status(char *note, size_t n, int *flavour, int *registered, int *usable) {
+    snprintf(note, n, "%s", asio_note);
+    if (flavour) *flavour = asio_flavour;
+    if (registered) *registered = asio_n;
+    if (usable) *usable = asio_usable;
+}
+
+/* the facts the probe found about a driver whose PortAudio name is `name` */
+static const va_driver *asio_facts(const char *name) {
+    for (int i = 0; i < asio_n; i++) {
+        if (asio_drv[i].status == VA_OK && !_stricmp(asio_drv[i].name, name)) return &asio_drv[i];
+    }
+    return NULL;
+}
+#else
+void vaud_backend_pa_asio_status(char *note, size_t n, int *flavour, int *registered, int *usable) {
+    snprintf(note, n, "%s", "");
+    if (flavour) *flavour = 0;
+    if (registered) *registered = 0;
+    if (usable) *usable = 0;
+}
+#endif
+
 static int pa_up(char *err, size_t errn) {
     if (!pa_ready) {
         PaError e = Pa_Initialize();
@@ -58,6 +136,9 @@ static int pa_up(char *err, size_t errn) {
             return -1;
         }
         pa_ready = 1;
+#ifdef _WIN32
+        asio_scan();
+#endif
     }
     return 0;
 }
@@ -135,6 +216,14 @@ static int pa_list(vaud_device *out, int max) {
             out[n].default_rate = di->defaultSampleRate;
             out[n].low_out_ms = di->defaultLowOutputLatency * 1000.0;
             out[n].low_in_ms = di->defaultLowInputLatency * 1000.0;
+#ifdef _WIN32
+            if (!strcmp(ap[k].label, "ASIO")) {
+                const va_driver *f = asio_facts(di->name);
+                if (f) {
+                    out[n].buf_min = f->buf_min, out[n].buf_max = f->buf_max, out[n].buf_pref = f->buf_pref, out[n].buf_gran = f->buf_gran;
+                }
+            }
+#endif
             n++;
         }
     }
@@ -224,7 +313,7 @@ static void exclusive_report(const PaDeviceInfo *odi, const PaStreamParameters *
 static int main_cb(const void *in, void *out, unsigned long frames, const PaStreamCallbackTimeInfo *ti, PaStreamCallbackFlags fl, void *user) {
     (void)ti, (void)user;
     if (fl & (paOutputUnderflow | paInputOverflow)) {
-        vaud_card_xrun(1);
+        vaud_card_xrun_flags(1, fl);
     }
     if (frames > MAXF) {
         memset(out, 0, frames * (size_t)out_ch * sizeof(float));
@@ -601,7 +690,11 @@ static void pa_describe(char *out, size_t n) {
         len += (size_t)snprintf(out + len, n - len, " %s(%d)", Pa_GetHostApiInfo(i)->name, Pa_GetHostApiInfo(i)->deviceCount);
     }
     if (Pa_HostApiTypeIdToHostApiIndex(paASIO) < 0 && len + 40 < n) {
+#ifdef _WIN32
+        snprintf(out + len, n - len, " [no ASIO host API: %s]", asio_note[0] ? asio_note : "not known");
+#else
         snprintf(out + len, n - len, " [no ASIO host API: this PortAudio has none, or no ASIO driver is installed]");
+#endif
     }
 }
 

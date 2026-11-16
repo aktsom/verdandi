@@ -96,6 +96,7 @@ int verdandi_audio_apply(const char *conf_text, char *msg, size_t n) {
 
 void verdandi_audio_info(verdandi_audio_info_t *out) {
     memset(out, 0, sizeof *out);
+    vaud_backend_pa_asio_status(out->asio_note, sizeof out->asio_note, &out->asio_flavour, &out->asio_registered, &out->asio_usable);
     const vaud_state *s = vaud_get_state();
     int dev = s->mode == VAUD_MODE_DEVICE;
     out->mode = dev ? "device" : (s->mode == VAUD_MODE_FALLBACK ? "fallback" : "null");

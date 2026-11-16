@@ -194,6 +194,26 @@ void verdandi_bridge_host_stop(void) {
     H.up = 0;
 }
 
+int verdandi_bridge_host_events(unsigned long long *cursor, verdandi_bridge_event *out, int max, unsigned long long *lost) {
+    if (lost) *lost = 0;
+    if (!H.up) return 0;
+    unsigned long long w = vb_load(&H.b.ev_w), r = *cursor;
+    if (w - r > VB_EVENTS) {
+        if (lost) *lost = w - r - VB_EVENTS;
+        r = w - VB_EVENTS;
+    }
+    int n = 0;
+    for (; r < w && n < max; r++, n++) {
+        const vb_event *e = &H.b.ev[r % VB_EVENTS];
+        out[n].call = e->call; out[n].tick_us = e->tick_us; out[n].guest_blocks = e->guest_blocks; out[n].drops = e->drops; out[n].underruns = e->underruns;
+        out[n].pending = e->pending; out[n].answers = e->answers; out[n].lag = e->lag; out[n].attached = e->attached;
+    }
+    *cursor = r;
+    return n;
+}
+
+unsigned long long verdandi_bridge_now_us(void) { return vb_now_us(); }
+
 void verdandi_bridge_host_stats(unsigned long long *to_sc, unsigned long long *from_sc, unsigned long long *underruns, unsigned long long *drops, int *attached) {
     unsigned long long a = 0, b = 0, u = 0, d = 0;
     int att = 0;

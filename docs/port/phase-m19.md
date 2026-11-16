@@ -1,0 +1,58 @@
+# Phase M19 (Windows 0.10.10): ASIO that says why it is missing, ASIO you can choose, and every underrun in the log
+
+The owner's PC: Ableton on the RME Fireface UC through its ASIO driver, Verdandi in the normal build on WASAPI shared (48 kHz, engine block 128, buffer auto): short clicks at random times, more with a heavy Ableton project, `u` on the AUDIO page rising while Verdandi sat idle (5, 11, 26, 27, then 31, 36 while Ableton played). The ASIO build's log says `host APIs: MME WASAPI DirectSound WDM-KS [no ASIO host API: ...]` and the DRIVER row offers only "normal" and "exclusive".
+
+## 1. Why the ASIO build lists no ASIO host API (what is established, what is not)
+
+What I could establish from the code (PortAudio 19.7.0's own source, `pa_asio.cpp`, read on the way):
+- **PortAudio opens every registered ASIO driver when it starts** (`Pa_Initialize`): it makes the driver, calls its `init`, asks for channels and buffer sizes. A driver that does not answer is **skipped without a word**; if every driver is skipped, or none is registered, the whole ASIO host API is left out of the list. That is exactly the line the log gave: the same words for "no driver is registered", "a driver is registered but refused to start" and "this PortAudio has no ASIO at all".
+- The DLL in the ASIO zip is the ASIO build: the CI checks that its file contains the ASIO host API, and the log line `host APIs: ... WDM-KS(0)` does not decide it (the normal and the ASIO build print the same list when no driver starts). **I cannot tell from the owner's log which of the three it was.**
+- The most likely cause on the owner's PC, to be confirmed by the new log: **Ableton had the RME driver open**. A driver that cannot be shared refuses a second program's `init`, PortAudio skips it, no driver is left, the host API disappears. The Fireface UC's driver: RME documents a multi-client ASIO mode for several of its interfaces; **whether it exists for this interface and driver version, and what it does to the buffer size both programs use, I do not know and cannot test without the card.**
+- Not the cause as far as the code shows: the registry view (PortAudio reads the 64-bit `HKLM\SOFTWARE\ASIO`; the program is 64-bit; a 32-bit-only driver would be invisible, and the new log says so), COM (PortAudio initialises COM as a single-threaded apartment on every thread that touches a driver).
+
+What changed so that the log and the page say exactly what happens (`audio_asio_probe.c`, run once when PortAudio starts, only in the ASIO build):
+- the file of PortAudio that was loaded (path, size) and whether the ASIO host API is built into it (`audio: PortAudio is C:\...\libportaudio-2.dll (N bytes); the ASIO host API is built into this file` / `is NOT in this file`);
+- both registry views, every driver by its registry name, its class id, the driver file (is it there, is it 64-bit), and what happens when it is made and started the way an audio program does it, on a thread with a time limit of 10 s: loaded and started (with the driver's own name, version, inputs, outputs, buffer sizes, rate), or not, with the reason: no class registered for a 64-bit program, file missing, 32-bit file, COM could not make it (error code), the driver's own `init` refused (**with the driver's own error message**), no answer in 10 s;
+- `audio: ASIO: N drivers found, none can be used: <name>: <reason>` and, when PortAudio has no ASIO host API, `audio: no ASIO host API: <why in plain words>` (no driver installed / a driver that does not start / the driver starts for us but PortAudio did not list it).
+- the AUDIO page: in the ASIO build without a usable driver the DRIVER row's help says `ASIO: no driver installed on this PC` or `ASIO: driver will not start: in use?`, the whole sentence goes round on the status line when the page opens (and when E3 steps onto the greyed entry "low latency: none", which cannot be chosen). The normal build says nothing about ASIO.
+
+## 2. ASIO that can be chosen
+
+When PortAudio lists the host API the DRIVER row already offered "low latency" (ASIO): OUTPUT lists the drivers by name, OUT CH the pairs of the driver's outputs, IN CH the pairs and single channels of its inputs (the same driver: ASIO is one device), and the help lines say how many the driver has. New: the BUFFER row offers **the driver's own sizes** (powers of two between its smallest and largest, or its steps, or only its preferred size) in frames and ms (`256  5.3 ms`), and "auto" shows the driver's preferred size (`auto  256  5.3 ms`). The sizes come from the probe (the driver's `getBufferSize`), so the page does not wake the driver again. The size that is really in force is the driver's (its control panel may fix it, and with two programs on one driver the first one sets it): the page says so.
+
+## 3. The driver is in use (Ableton has it)
+
+- If the driver refuses at start: no ASIO host API, the page says so, the program runs on WASAPI as before.
+- If it was chosen and then cannot be opened (busy, failing): the existing chain falls back to **the same hardware through WASAPI** with the note "ASIO driver ... is busy: another program has it ... Using WASAPI on ... instead" (one line in the log and on the AUDIO page), and nothing stays open.
+- New: a driver that opens but **will not start** (ASIOStart fails: another program took the card in between, a driver in a bad state) used to end in null audio. It is now closed completely and the WASAPI twin is tried, with its own one line (`ASIO driver '...' opened but would not start (...): closed again; trying WASAPI on ...`). `activate()` closes the stream when the start fails: the card is never left half open.
+- What RME's driver does with two ASIO programs: **unknown here.** From RME's manuals as far as I know them (not checked for this model): several RME interfaces have a "multi-client" ASIO option in the Settings dialog; when it is off the second program gets an error. Whether the Fireface UC has it, and whether Ableton and Verdandi may then use different pairs, only the owner's PC can show.
+
+## 4. Underruns
+
+What the counters count (code read):
+- `u` = **bridge underruns**: the card's callback needed the engine's block (scsynth's answer) and scsynth had not delivered it. The engine's sound is silent for that block (a click on engine sounds; softcut, tape and the monitor are in the card callback and are not affected). It is counted only after scsynth has answered once.
+- `x` = **card glitches**: the host API flagged an output underflow or an input overflow in a callback, **or** the engine's output fifo had fewer frames than the card wanted (silence for the rest).
+- So `u` rising while Verdandi is idle means scsynth is late waking or computing for a block now and then; it says nothing about the card or about Ableton directly. Ableton's load can cause it indirectly: when the machine's scheduling is busy a thread that must wake every few milliseconds wakes late.
+
+New in the log (`audio: UNDERRUN u<n> at <time>: ...` and `audio: CARD GLITCH x<n> at <time>: ...`): the clock time of the event, the counter, whether scsynth was **waiting for a block** (it woke late), **still computing** or **behind** (our earlier blocks not taken yet), how many of our blocks it had not taken, how many answers were queued, the hold-back, drops so far, how many blocks scsynth has made, the engine block, the card buffer and host API, and how late the card's own callback was (time since the one before against what it should be). The audio thread only writes a small record (no log, no lock, no allocation); a thread looks every 250 ms and writes the lines, at most 20 a second (the rest is counted and said). A test with a late fake scsynth shows the lines.
+
+What Verdandi's threads and the bridge do under load (read, not measured on the owner's PC):
+- The card callback runs the engine blocks (crone's mixer and softcut) inside the host API's audio thread: WASAPI shared: registered with MMCSS "Pro Audio"; ASIO: the driver's own thread. It holds one lock (`jack_null`'s) while a block runs; the only other threads that take it are crone's setup calls and the bridge's connect thread (twelve short locks a second): not a long wait. No file, network or log call in the callback. The process is at the above-normal class.
+- scsynth: its bridge thread is `THREAD_PRIORITY_TIME_CRITICAL` and MMCSS "Pro Audio", and its process is raised to the HIGH class once it has attached (said once in norns.log).
+- The bridge waits on an event with a 20 ms limit, takes one block, computes it (the whole engine for that block) and answers; the card side holds back `lag` blocks (default about 4 blocks of 128 = 10.7 ms under a 10 ms Windows period) and raises it by itself after two underruns close together. **A scsynth thread that wakes more than about 10 ms late (or a block that takes that long) is an underrun**: possible when the machine is busy with another program's real-time work and interrupts. This is the one thing the log lines will show (how late, and whether scsynth was idle or busy).
+- Why a larger card buffer did not help (the owner's test): the buffer 512 changes the card's side; the hold-back for scsynth is set by the host period (WASAPI shared: 10 ms) and the engine block, not by it. A larger **hold-back** or a larger **engine block** would help the bridge; that costs latency the owner does not want, and I did not change it without data. The new log lines are the data.
+
+## 5. Tests
+
+- Wine (`linux/tests/asio_probe_test.sh`, in `run_all.sh` when mingw and Wine are there): the probe against a stub ASIO driver (`windows/ci/asio_stub.c`: a real in-process COM driver written for the test): nothing registered, a working driver (name, channels, buffer sizes), a driver that refuses with its own message, a class that cannot be made, a driver file that is not there.
+- Lua `linux/tests/audio_asio_page_test.lua`: the ASIO build without a driver / with a driver that does not start (the DRIVER help, the status line, the entry that cannot be chosen), the normal build says nothing, an ASIO driver's buffer sizes in frames and ms and its channel counts.
+- C `audio_chain_test.c grow_start`: a busy scsynth leaves records for every underrun and `run_all.sh` greps the `audio: UNDERRUN u<n> at hh:mm:ss.mmm` line in the log.
+- Windows CI (`m19-*`, `smoke-m1.sh`): the real `norns.exe` with the stub ASIO driver registered in the registry (the way an installer does): the ASIO case (PortAudio lists the driver, the engine runs on its callbacks, the page offers its buffer sizes), a driver that refuses to start, a driver that opens but will not start, no driver at all, and the normal build. 
+- **Only the owner's PC can show:** the real RME driver, whether Ableton has it, what its multi-client mode does, the real underruns and what the new lines say about them.
+
+## 6. If ASIO does not work out
+
+1. Read `logs\norns.log` lines starting `asio:` and `audio:` (the first start) and send them: they name the driver, the error and the reason.
+2. Close Ableton's audio (or switch its driver to something else) and start Verdandi again: if ASIO then appears, the driver cannot be shared. RME's multi-client setting (Settings dialog) is the thing to look for.
+3. If it cannot be shared: use Verdandi on its own pair through ASIO and give Ableton the others only if the driver can do that; or route Verdandi through TotalMix Loopback as in `docs/port/phase-m3.md` (c).
+4. The click problem in the normal path: the new `UNDERRUN` lines show what late means (idle or busy, how late); then the options are a larger hold-back (more delay for engine sounds), a larger engine block, or WASAPI exclusive mode (the card is Verdandi's alone, so no Ableton on it).

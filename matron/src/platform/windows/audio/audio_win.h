@@ -41,6 +41,9 @@ typedef struct {
     char sys_note[320];
     unsigned long long to_sc, from_sc, underruns, drops, card_xruns;
     int scsynth_attached;
+    int asio_flavour;                     /* this PortAudio is the ASIO build (its DLL has the ASIO host API) */
+    int asio_registered, asio_usable;     /* ASIO drivers registered on this PC, and how many of them start */
+    char asio_note[480];                  /* "" or why ASIO cannot be offered / what is there, in plain words */
 } verdandi_audio_info_t;
 void verdandi_audio_info(verdandi_audio_info_t *out);
 /* MIC / OFF / SYS as _norns.mic_input and _norns.app_input call it. returns 0 = ok, 1 = that one cannot (see sys_note / in_note) */

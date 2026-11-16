@@ -646,3 +646,10 @@ Your two grids (128 and 256) plugged in; the mod sidvagn on (draws on the second
 ## Windows 0.10.9 (no false "duplicate classes (Routine)")
 1. With glut, mangl and orgn installed: start Verdandi. The main window has no "SuperCollider: duplicate classes" note; `logs\launcher.log` has no "duplicate classes" line. The engines make sound as before.
 2. (Optional, to see that a real duplicate is still reported) copy `dust\code\orgn` to `dust\code\orgn2` and restart: the window says `duplicate classes (Engine_Orgn) in two folders of yours (dust/code/orgn2 and dust/code/orgn)`; sclang itself refuses to start until you move one of the two folders out. Remove `orgn2` again.
+
+## Windows 0.10.10 (ASIO and underruns) — save your Ableton project first
+1. Start the ASIO zip with Ableton CLOSED. Open `logs\norns.log`: lines starting `asio:` name your RME driver, its inputs and outputs and its buffer sizes, or say why not. AUDIO > DRIVER now has "low latency" if the driver starts.
+2. Choose low latency, OUTPUT the RME driver, OUT CH the pair you want, BUFFER a size (frames and ms are shown), K3. Listen: clean? Note the line `audio: device 'ASIO Fireface USB' (ASIO ...)`.
+3. Start Ableton on the same driver while Verdandi runs. What happens (to Verdandi, to Ableton)? The log says it. Close Verdandi first if Ableton complains.
+4. Start Ableton FIRST, then Verdandi (ASIO zip): the log says what the driver answered. Does Verdandi fall back to the normal path with one plain line? Does the AUDIO page say ASIO is not available and why?
+5. Normal build, Ableton playing a heavy project: when you hear a click, look at `logs\norns.log`: lines `audio: UNDERRUN u... at hh:mm:ss.mmm` say how late and what scsynth was doing. Send me ten of them and the time of one click you heard.

@@ -20,6 +20,15 @@ unsigned verdandi_bridge_host_raises(void);
 /* counters: blocks handed to scsynth, blocks taken from it, underruns, drops, scsynth attached */
 void verdandi_bridge_host_stats(unsigned long long *to_sc, unsigned long long *from_sc, unsigned long long *underruns, unsigned long long *drops, int *attached);
 
+/* the underruns since the last call, one record each (the card's callback writes them, a logging thread reads them; 64 are kept: if more came since, `lost` says how many were not kept) */
+typedef struct {
+    unsigned long long call, tick_us, guest_blocks, drops, underruns;
+    unsigned pending, answers, lag, attached;
+} verdandi_bridge_event;
+int verdandi_bridge_host_events(unsigned long long *cursor, verdandi_bridge_event *out, int max, unsigned long long *lost);
+/* a monotonic clock in microseconds, the one the events use */
+unsigned long long verdandi_bridge_now_us(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -861,6 +861,85 @@ chk_quit_grid() { # mode
     done
     return "$bad"
 }
+# M19: ASIO. a STUB ASIO driver (windows/ci/asio_stub.c, a real in-process COM driver written for the test) is registered the way a driver's installer does, and the real norns.exe is started with audio.conf asking for it:
+#   ok       the driver loads, PortAudio lists it, the engine runs on its callbacks, the AUDIO page offers its buffer sizes and channels, the log says what the probe found
+#   busy     the driver refuses to start ("in use by another program"): the log names it and its message, there is no ASIO host API, the AUDIO page says so, the program goes on
+#   nostart  the driver opens but will not run (ASIOStart fails): closed again, said in one line, the program goes on
+#   none     no driver registered at all: the log and the AUDIO page say so
+# the normal build (no ASIO in its PortAudio) is run once as well: it says so and its AUDIO page does not mention ASIO. what only the owner's PC can show: the real RME driver
+build_asio_stub() {
+    local gcc_bin
+    gcc_bin=$(command -v gcc 2> /dev/null || command -v x86_64-w64-mingw32-gcc 2> /dev/null)
+    [ -n "$gcc_bin" ] || { echo "NOT FOUND: a C compiler for the stub ASIO driver"; return 1; }
+    "$gcc_bin" -std=gnu11 -Wall -shared -o "$(native "$WORK/asio_stub.dll")" "$(native "$HERE/asio_stub.c")" -Wl,--kill-at -lole32 -luuid || { echo "the stub ASIO driver did not compile"; return 1; }
+}
+run_asio_case() { # mode
+    local mode="$1" H="$WORK/user home asio $1" out="$M0_OUT/asio/$1" stubenv=""
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    printf 'output=asio:Verdandi Test ASIO\nbuffer=0\n' > "$H/audio.conf"
+    case "$mode" in busy | nostart) stubenv="$mode" ;; esac
+    VERDANDI_PROBE=asio VERDANDI_ASIO_MODE="$mode" "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    export VERDANDI_STUB_ASIO="$stubenv"
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 200 "$APP/Verdandi$EXE" --headless --exit-after=85 --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=85 --home="$(native "$H")"
+    fi
+    unset VERDANDI_STUB_ASIO
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+}
+run_asio() {
+    if [ "${EXPECT_ASIO:-}" != 1 ]; then
+        # the normal build: the same probe, no stub (its PortAudio has no ASIO)
+        run_asio_case normal
+        return 0
+    fi
+    build_asio_stub || return 1
+    run_asio_case none
+    local dll
+    dll="$(native "$WORK/asio_stub.dll")"
+    if ! bash "$HERE/register_asio_stub.sh" install "$dll"; then echo "NOT FOUND: the stub driver could not be registered (administrator rights?)"; return 1; fi
+    run_asio_case ok
+    run_asio_case busy
+    run_asio_case nostart
+    bash "$HERE/register_asio_stub.sh" remove
+    return 0
+}
+chk_asio_case() { # mode: what the log and the probe found
+    local mode="$1" bad=0 out="$M0_OUT/asio/$1" L p
+    L="$out/logs/norns.log"
+    if [ ! -d "$out" ]; then echo "skipped: the case '$mode' is not run in this job"; return 0; fi
+    echo "=== ASIO case: $mode"
+    cat "$out/probe.txt" 2> /dev/null
+    grep -a -E "audio: PortAudio is|asio:|audio: ASIO|no ASIO host API|opened but would not start|audio: device '|UNDERRUN" "$L" 2> /dev/null | cut -c1-330 | head -14
+    case "$mode" in
+        normal)
+            has "$out/probe.txt" "PROBE asio-normal ok" "the normal build says it has no ASIO and its page does not mention it" || bad=1
+            has "$L" "ASIO host API is NOT in this file" "the log says this PortAudio has no ASIO" || bad=1 ;;
+        none)
+            has "$L" "ASIO host API is built into this file" "the ASIO build's PortAudio has the ASIO host API" || bad=1
+            has "$L" "no ASIO driver is registered on this PC" "the log says no driver is registered" || bad=1
+            has "$L" "no ASIO host API: no ASIO driver is installed" "the log says why there is no ASIO host API" || bad=1
+            has "$out/probe.txt" "PROBE asio-none-said ok" "the program knows: no driver" || bad=1
+            has "$out/probe.txt" "PROBE asio-none-page ok" "the AUDIO page says no driver is installed" || bad=1 ;;
+        ok)
+            has "$L" "driver 'Verdandi Test ASIO' \(64-bit registry.*loads and starts.*4 inputs, 4 outputs, buffer 64 to 2048 frames \(preferred 256, powers of two\)" "the log names the driver, its channels and buffer sizes" || bad=1
+            has "$L" "audio: device 'Verdandi Test ASIO' \(ASIO" "the engine runs through the ASIO driver" || bad=1
+            for p in asio-info asio-page asio-listed asio-running asio-devices asio-buffer-text; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done ;;
+        busy)
+            has "$L" "NOT usable: the driver refused to start: \"Verdandi Test ASIO: the device is in use by another program\"" "the log names the driver and its own message" || bad=1
+            has "$L" "no ASIO host API: 1 ASIO driver found but none starts" "the log says why there is no ASIO host API" || bad=1
+            for p in asio-busy-said asio-busy-page; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done ;;
+        nostart)
+            has "$L" "ASIO driver '[^']*Verdandi Test ASIO' opened but would not start" "an ASIO driver that opens but will not start is closed again and said in one line" || bad=1
+            has "$out/probe.txt" "PROBE asio-nostart ok" "the program went on (the engine runs on its own clock or WASAPI)" || bad=1 ;;
+    esac
+    return "$bad"
+}
 chk_heal() {
     local H="$IN_HOME"
     grep -a -E "plug-in heal|plug-in pack" "$H/logs/launcher.log" 2> /dev/null | head
@@ -1024,6 +1103,12 @@ m0_run m13-run-arc-probe run_arc_probe
 m0_run m13-check-arc chk_arc
 m0_run m16-run-pin-probe run_pin_probe
 m0_run m16-check-pin chk_pin
+m0_run m19-run-asio run_asio
+m0_run m19-check-asio-normal chk_asio_case normal
+m0_run m19-check-asio-none chk_asio_case none
+m0_run m19-check-asio-ok chk_asio_case ok
+m0_run m19-check-asio-busy chk_asio_case busy
+m0_run m19-check-asio-nostart chk_asio_case nostart
 m0_run m17-run-quit-sleep run_quit_grid sleep 400 300
 m0_run m17-check-quit-sleep chk_quit_grid sleep
 m0_run m17-run-quit-sleepmod run_quit_grid sleepmod 400 300

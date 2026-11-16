@@ -25,6 +25,7 @@ typedef struct {
     double default_rate;
     double low_out_ms; /* the driver's low latency for output and input, as PortAudio reports it */
     double low_in_ms;
+    long buf_min, buf_max, buf_pref, buf_gran; /* ASIO: the buffer sizes the driver reports, in frames (gran -1: powers of two, 0: only the preferred size); all 0 = not known */
 } vaud_device;
 
 typedef enum { VAUD_OK = 0, VAUD_NOT_FOUND, VAUD_BUSY, VAUD_BAD_RATE, VAUD_FAILED, VAUD_CLOCK } vaud_error; /* VAUD_CLOCK: the card is there but another program set its clock to another rate than norns's (vaud_state.clock_rate) */
@@ -156,6 +157,10 @@ void vaud_selftest_start(void);
 
 /* the backend tells the card's glitches (PortAudio's output underflow / input overflow flags): n blocks */
 void vaud_card_xrun(unsigned n);
+/* ASIO as the PortAudio backend found it (audio_asio_probe.c): note = why ASIO is missing or what is there, flavour = this PortAudio has the ASIO host API built in, registered / usable = drivers on the PC */
+void vaud_backend_pa_asio_status(char *note, size_t n, int *flavour, int *registered, int *usable);
+/* the same with the host API's flags (PortAudio: 1 input underflow, 2 input overflow, 4 output underflow, 8 output overflow, 16 priming output): they go into the log line */
+void vaud_card_xrun_flags(unsigned n, unsigned long flags);
 /* for the backends' own threads: blocks of the separate input stream (mic) and of the loopback stream (sys), interleaved stereo */
 void vaud_push_mic(const float *interleaved, unsigned frames);
 void vaud_push_sys(const float *interleaved, unsigned frames);

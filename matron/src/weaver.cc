@@ -4015,6 +4015,11 @@ int _audio_info(lua_State *l) {
     SET_S("in_device", a.in_device);
     SET_S("host_api", a.host_api);
     SET_S("host_apis", a.host_apis);
+    SET_S("asio_note", a.asio_note);
+    SET_I("asio_registered", a.asio_registered);
+    SET_I("asio_usable", a.asio_usable);
+    lua_pushboolean(l, a.asio_flavour);
+    lua_setfield(l, -2, "asio_flavour");
     SET_S("input", a.input);
     SET_I("rate", a.rate);
     SET_I("frames", a.frames);
