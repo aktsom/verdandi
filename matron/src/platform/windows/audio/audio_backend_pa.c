@@ -38,6 +38,7 @@ typedef struct PaAsioStreamInfo {
 #include "audio_device.h"
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
 #include "audio_asio_probe.h"
 #endif
 
@@ -64,8 +65,31 @@ static char asio_note[480];
 static void asio_log(const char *line) { fprintf(stderr, "%s\n", line); }
 
 static void asio_scan(void) {
-    HMODULE pa = GetModuleHandleA("libportaudio-2.dll");
-    char path[MAX_PATH] = "(not found)";
+    /* which file is PortAudio? the module whose name says so. when none does, PortAudio is not a DLL at all: it is linked into norns.exe, and a DLL in the zip (the ASIO build's) is not what runs. the list of the
+     * modules that are loaded is in the log then */
+    HMODULE pa = NULL, mods[512];
+    DWORD need = 0;
+    if (EnumProcessModules(GetCurrentProcess(), mods, sizeof mods, &need)) {
+        for (DWORD i = 0; i < need / sizeof(HMODULE) && i < 512; i++) {
+            char nm[MAX_PATH];
+            if (GetModuleFileNameA(mods[i], nm, sizeof nm)) {
+                for (char *c = nm; *c; c++) if (*c >= 'A' && *c <= 'Z') *c = (char)(*c + 32);
+                if (strstr(nm, "portaudio")) pa = mods[i];
+            }
+        }
+    }
+    if (!pa) {
+        char list[900] = "";
+        for (DWORD i = 0; i < need / sizeof(HMODULE) && i < 512 && strlen(list) < 800; i++) {
+            char nm[MAX_PATH];
+            if (GetModuleFileNameA(mods[i], nm, sizeof nm)) {
+                const char *base = strrchr(nm, '\\');
+                snprintf(list + strlen(list), sizeof list - strlen(list), "%s%s", list[0] ? " " : "", base ? base + 1 : nm);
+            }
+        }
+        fprintf(stderr, "audio: no loaded file is called portaudio: PortAudio is linked into norns.exe itself, so the ASIO zip's PortAudio DLL is NOT the one that runs. loaded: %s\n", list);
+    }
+    char path[MAX_PATH] = "(no PortAudio DLL is loaded)";
     WIN32_FILE_ATTRIBUTE_DATA fa;
     unsigned long long size = 0;
     if (pa && GetModuleFileNameA(pa, path, sizeof path) && GetFileAttributesExA(path, GetFileExInfoStandard, &fa)) size = ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow;

@@ -30,7 +30,9 @@ pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 pkg_check_modules(FREETYPE2 REQUIRED IMPORTED_TARGET freetype2)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 # M2: the sound card (WASAPI host API of PortAudio)
-pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
+pkg_check_modules(PORTAUDIO REQUIRED portaudio-2.0)
+# M19: PortAudio MUST be the DLL (libportaudio-2.dll next to norns.exe), never linked in: the ASIO zip is the same norns.exe with another DLL of that name. the import library is named, so that the linker cannot take the static one
+find_library(PORTAUDIO_IMPORT NAMES libportaudio.dll.a portaudio.dll.a HINTS ${PORTAUDIO_LIBRARY_DIRS} REQUIRED)
 # nng: MSYS2 ships a CMake package, not a pkg-config file (first M1 run: "Package nng not found"); header and library are searched directly
 find_path(NNG_INC nng/nng.h REQUIRED)
 find_library(NNG_LIB NAMES nng libnng REQUIRED)
@@ -107,8 +109,9 @@ set_source_files_properties(${REPO}/matron/src/platform/macos/sdl_bridge.cc PROP
 target_compile_options(norns PRIVATE -Wno-unused-parameter)
 target_link_libraries(norns PRIVATE
   lua-cjson ${MONOME_LIB}
-  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 PkgConfig::PORTAUDIO ${NNG_LIB}
+  PkgConfig::LUA53 PkgConfig::LIBLO PkgConfig::CAIRO PkgConfig::SNDFILE PkgConfig::FREETYPE2 PkgConfig::SDL2 ${PORTAUDIO_IMPORT} ${NNG_LIB}
   ws2_32 mswsock iphlpapi advapi32 setupapi cfgmgr32 winmm ole32 shell32 dbghelp psapi pthread m)
+target_include_directories(norns PRIVATE ${PORTAUDIO_INCLUDE_DIRS})
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
 # M6: ws-wrapper.exe puts a program's standard input and output on a websocket (maiden's norns and sclang consoles); see windows/ws-wrapper/ws_wrapper_win.c

@@ -50,6 +50,15 @@ collect() {
     done < <(ldd "$BLD/norns.exe" | awk '/=> \// { print $3 }' | grep -i -E '^/(ucrt64|mingw64|usr)/' | sort -u)
     echo "copied $n DLLs:"
     find "$OUT" -maxdepth 1 -name '*.dll' | sort
+    # M19: PortAudio must be a DLL that norns.exe imports (the ASIO zip is the same norns.exe with another libportaudio-2.dll): if it were linked in, the ASIO zip's DLL would never run
+    echo "the DLLs norns.exe imports:"
+    objdump -p "$BLD/norns.exe" | grep -i "DLL Name" | sort -u
+    if objdump -p "$BLD/norns.exe" | grep -i -q "DLL Name: libportaudio"; then
+        echo "found: norns.exe imports libportaudio-2.dll (the ASIO build's DLL can take its place)"
+    else
+        echo "NOT FOUND: norns.exe does not import a PortAudio DLL: it is linked in. the ASIO zip's DLL would not run"
+        return 1
+    fi
     find "$OUT" -maxdepth 1 -type f -size +1k | wc -l
 }
 
