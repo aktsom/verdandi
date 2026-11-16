@@ -88,7 +88,14 @@ assemble() {
     # the ASIO build: its PortAudio takes the place of the MSYS2 one (the same file name, the loader goes by it), the licence text of the SDK, the notices and the sources
     if [ "$FLAVOR" = asio ]; then
         [ -f "$ASIO_DIR/libportaudio-2.dll" ] || { echo "no libportaudio-2.dll in $ASIO_DIR"; return 1; }
-        cp "$ASIO_DIR/libportaudio-2.dll" "$APP/libportaudio-2.dll" || return 1
+        # the loader goes by the name norns.exe IMPORTS. it is libportaudio.dll in the UCRT64 toolchain, not libportaudio-2.dll (the M3 build put the ASIO DLL under the second name, next to the real one, and it never ran: the owner's ASIO
+        # build found no ASIO, M19). the name is read from norns.exe itself, and the DLL that is in the zip under it is replaced
+        pa_name=$(grep -a -o -i -E "[a-z0-9_+.-]*portaudio[a-z0-9_.+-]*\.dll" "$APP/norns.exe" | head -n 1)
+        [ -n "$pa_name" ] || { echo "NOT FOUND: norns.exe imports no PortAudio DLL"; return 1; }
+        echo "norns.exe imports $pa_name: the ASIO build of PortAudio is put there"
+        [ -f "$APP/$pa_name" ] || echo "NOTE: the zip had no $pa_name before"
+        cp "$ASIO_DIR/libportaudio-2.dll" "$APP/$pa_name" || return 1
+        echo "$pa_name" > "$APP/PORTAUDIO-DLL.txt"
         mkdir -p "$APP/licenses" "$APP/source"
         cp "$ASIO_DIR/source/ASIO-SDK-LICENSE.txt" "$APP/licenses/ASIO-SDK-LICENSE.txt" || return 1
         cp "$ASIO_DIR/source/portaudio-source.zip" "$ASIO_DIR/source/asio-sdk-source.zip" "$ASIO_DIR/PA-ASIO-BUILD.txt" "$APP/source/" || return 1
