@@ -1081,6 +1081,9 @@ int sdl_bridge_pin_report(int token) {
     if (e == NULL || strcmp(e, "1") != 0) {
         return 0;
     }
+    if (the_window == NULL || show_event_type == (Uint32)-1) {
+        return 0; // no window system: nothing to report
+    }
     sdl_bridge_show_control(SDL_BRIDGE_SHOW_PIN_REPORT, token, 0);
     return 1;
 }

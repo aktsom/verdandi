@@ -729,7 +729,7 @@ chk_pin() {
     local bad=0 out="$M0_OUT/pin" p
     cat "$out/probe.txt" 2> /dev/null
     cat "$out/pin_report.log" 2> /dev/null | head -20
-    echo "--- norns.log (tail):"; tail -n 12 "$out/logs/norns.log" 2> /dev/null
+    echo "--- norns.log (first 40 lines, then lines about windows):"; head -n 40 "$out/logs/norns.log" 2> /dev/null; grep -a -i -E "sdl|window|video|display|modal" "$out/logs/norns.log" 2> /dev/null | head -20
     for p in pin-up pin-start-off pin-windows-open pin-on pin-arc-closed pin-arc-reopened pin-screen-reopened pin-off pin-midi-learn pin-midi-other-port pin-midi-on pin-midi-off; do
         has "$out/probe.txt" "PROBE $p ok" "the PIN check '$p'" || bad=1
     done
