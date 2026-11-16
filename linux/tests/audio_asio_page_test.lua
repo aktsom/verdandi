@@ -125,6 +125,10 @@ page.key(3, 1) page.key(3, 0)
 setup(base_devs, {asio_flavour = true, asio_registered = 1, asio_usable = 0, asio_note = "1 ASIO driver found but none starts: the driver refused to start: \"device in use\" (usually another program has the card)", host_apis = "WASAPI"})
 check(help_of(1):find("will not start", 1, true) ~= nil, "a driver that does not start: the help says so (" .. help_of(1) .. ")")
 
+-- 3b. this PortAudio keeps an empty ASIO host API when no driver starts: the page must still say so (the CI saw exactly that)
+setup(base_devs, {asio_flavour = true, asio_registered = 1, asio_usable = 0, asio_note = "1 ASIO driver found, none can be used: refused", host_apis = "WASAPI ASIO"})
+check(help_of(1):find("will not start", 1, true) ~= nil, "an empty ASIO host API with no usable driver: the DRIVER help still says it (" .. help_of(1) .. ")")
+
 -- 4. a working driver: its buffer sizes and channels
 local devs4 = {base_devs[1], "asio:ASIO Fireface USB\tASIO Fireface USB\t8\t18\tASIO\t6\t6\t0\t64,2048,256,-1"}
 setup(devs4, {asio_flavour = true, asio_registered = 1, asio_usable = 1, asio_note = "1 ASIO driver usable", host_apis = "WASAPI ASIO"})

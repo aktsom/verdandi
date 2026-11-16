@@ -33,7 +33,8 @@ local function read_devices()
   if info and (info.host_apis or ""):find("ASIO", 1, true) then table.insert(m.hosts, "ASIO") end
   -- the ASIO build without a usable ASIO: the page says so (the reason is the one in norns.log)
   m.asio_problem, m.asio_short = nil, nil
-  if info and info.asio_flavour and not (info.host_apis or ""):find("ASIO", 1, true) then
+  -- (this PortAudio keeps an ASIO host API even when no driver started: "usable 0" is the test, not the missing word)
+  if info and info.asio_flavour and ((info.asio_usable or 0) == 0 or not (info.host_apis or ""):find("ASIO", 1, true)) then
     m.asio_problem = (info.asio_note and info.asio_note ~= "") and info.asio_note or "no ASIO driver can be used (see logs/norns.log, lines starting asio:)"
     -- the same in a line that fits the info area (the whole sentence goes round on the status line)
     if (info.asio_registered or 0) == 0 then m.asio_short = "no driver installed on this PC"
@@ -42,7 +43,7 @@ local function read_devices()
   end
 end
 
-local function has_asio() return m.hosts[2] == "ASIO" end
+local function has_asio() return m.hosts[2] == "ASIO" and not m.asio_problem end
 
 -- ---- the settings: what runs (info.config), or the file ----
 local function parse(text)

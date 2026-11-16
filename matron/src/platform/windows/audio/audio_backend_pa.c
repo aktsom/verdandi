@@ -116,7 +116,9 @@ static void asio_scan(void) {
     }
     snprintf(last_sum, sizeof last_sum, "%s", sum);
     scanned = 1;
-    int listed = Pa_HostApiTypeIdToHostApiIndex(paASIO) >= 0;
+    /* PortAudio of this build keeps an ASIO host API even when no driver started (with no devices in it): "listed" means there is a device to use */
+    PaHostApiIndex ai = Pa_HostApiTypeIdToHostApiIndex(paASIO);
+    int listed = ai >= 0 && Pa_GetHostApiInfo(ai) && Pa_GetHostApiInfo(ai)->deviceCount > 0;
     if (listed) {
         snprintf(asio_note, sizeof asio_note, "%s", sum);
     } else if (asio_n == 0) {

@@ -610,7 +610,7 @@ if os.environ.get("VERDANDI_PROBE") == "asio":
             result("asio-listed", "ASIO" in f[1] or "ASIO" in (tail + info), "device opened through ASIO: host_api=%s" % api)
             result("asio-running", mode_ == "device" and api.startswith("ASIO") and usable == "1" and card_frames.isdigit() and int(card_frames) > 0, "the stub driver runs the engine: mode=%s host_api=%s card callbacks of %s frames" % (mode_, api, card_frames))
             result("asio-devices", "asio:Verdandi Test ASIO" in devs and "64,2048,256,-1" in devs and " 4 4 ASIO" in devs, "the device list has the driver with 4 in, 4 out and its buffer sizes: " + devs[-200:])
-            result("asio-buffer-text", "auto  256  5.3 ms" in tail, "the BUFFER row shows the driver's preferred size in frames and ms")
+            result("asio-buffer-text", ("auto  256  5.3 ms" in tail) or ("auto  256  5.8 ms" in tail), "the BUFFER row shows the driver's preferred size in frames and ms (5.3 ms at 48000 Hz, 5.8 at 44100: the stub takes both)")
         elif amode == "busy":
             result("asio-busy-said", flav and usable == "0" and registered == "1" and "refused to start" in note, "a driver that refuses to start is named with its own message: " + note[:200])
             result("asio-busy-page", "ASIO" in tail and "will not start" in tail, "the AUDIO page says the driver will not start")
