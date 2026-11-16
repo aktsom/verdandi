@@ -503,7 +503,7 @@ if os.environ.get("VERDANDI_PROBE") == "pin":
     sys.exit(0)
 
 # VERDANDI_PROBE=quitgrid (M17): two fake grids (a 128 and a 256) and the virtual arc are lit by a script (or by a metro of a "mod" with no script), then norns is ended in the way VERDANDI_QUIT_MODE says: sleep (the SLEEP row: norns.shutdown),
-# sleepmod (SLEEP with no script, a metro draws: a mod), event (what the right-click menu's Quit and the window's close button post), launcher (the launcher stops norns.exe at the end of --exit-after: nothing is done here), restart (_norns.restart), stall (a grid whose port is busy, then SLEEP).
+# sleepmod (SLEEP with no script, a metro draws: a mod; sleepmodfast: it draws every 2 ms), event (what the right-click menu's Quit and the window's close button post), launcher (the launcher stops norns.exe at the end of --exit-after: nothing is done here), restart (_norns.restart), stall (a grid whose port is busy, then SLEEP).
 # the devices record every message they get (<home>/fakedev-*.log); windows/ci/grid_log_check.py reads them after the end. results: 'PROBE qg-... ok|FAIL'
 if os.environ.get("VERDANDI_PROBE") == "quitgrid":
     mode = os.environ.get("VERDANDI_QUIT_MODE", "sleep").split("-")[0] # ("sleepmod-old" is sleepmod with the freeze left out: windows/ci/smoke-m1.sh)
@@ -542,8 +542,11 @@ if os.environ.get("VERDANDI_PROBE") == "quitgrid":
         else:
             # no script: a metro that nothing clears keeps drawing, as a mod does (sidvagn on the second grid). stall: the first grid only (the busy one must not block the drawing)
             targets = "{grid.connect(1)}" if mode == "stall" else "{grid.connect(1), grid.connect(2)}"
-            line = ("norns.script.clear() local gs = %s MODFRAMES = 0 MODM = metro.init(function() for _, g in ipairs(gs) do g:all(15) g:refresh() end MODFRAMES = MODFRAMES + 1 end, 1 / 30, -1) MODM:start() "
-                    "print('VT_MOD started')\n") % targets
+            arc_draw = "" if mode == "stall" else "ARC = arc.connect() ARC:all(15) ARC:refresh() "
+            # "fast" draws every 2 ms: a redraw is then certain to come between the all-off and the end of the process, if nothing stops it (the plain mod draws 30 times a second)
+            every = "0.002" if (mode.endswith("fast") or "-old" in os.environ.get("VERDANDI_QUIT_MODE", "")) else "1 / 30"
+            line = ("norns.script.clear() local gs = %s MODFRAMES = 0 MODM = metro.init(function() for _, g in ipairs(gs) do g:all(15) g:refresh() end %sMODFRAMES = MODFRAMES + 1 end, %s, -1) MODM:start() "
+                    "print('VT_MOD started')\n") % (targets, arc_draw, every)
             ok, tail = run(line, "VT_MOD", 20)
             result("qg-mod", ok, "a metro draws with no script loaded: " + tail.strip()[-30:])
         time.sleep(4)
@@ -554,7 +557,7 @@ if os.environ.get("VERDANDI_PROBE") == "quitgrid":
         with open(OUT + ".request", "w") as f:
             f.write("%f\n" % time.time())
         try:  # (norns ends while it answers: the connection may break)
-            if mode in ("sleep", "sleepmod", "stall"):
+            if mode in ("sleep", "sleepmod", "sleepmodfast", "stall"):
                 run("norns.shutdown() print('VT_END sleep')\n", "VT_END", 10)
             elif mode == "event":
                 run("print('VT_END ' .. tostring(_norns.test_quit()))\n", "VT_END", 10)

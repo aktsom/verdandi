@@ -771,7 +771,7 @@ chk_quit_grid() { # mode
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
     local mode="$1" bad=0 out="$M0_OUT/quitgrid/$1" p f
     echo "=== quit path: $mode"
-    if [ "$mode" = sleepmod-old ]; then
+    if [ "$mode" = sleepmodfast-old ]; then
         # not a test of the program: the same run with the freeze left out (the program as it was). it shows what the freeze prevents; it never fails the job
         echo "INFO: the old way (VERDANDI_TEST_NO_FREEZE=1): is a grid lit again after the all-off?"
         for f in fakedev-grid-1 fakedev-grid-2 fakedev-arc-3; do
@@ -980,8 +980,10 @@ m0_run m17-run-quit-sleep run_quit_grid sleep 400 300
 m0_run m17-check-quit-sleep chk_quit_grid sleep
 m0_run m17-run-quit-sleepmod run_quit_grid sleepmod 400 300
 m0_run m17-check-quit-sleepmod chk_quit_grid sleepmod
-m0_run m17-run-quit-old run_quit_grid sleepmod-old 400 300
-m0_run m17-check-quit-old chk_quit_grid sleepmod-old
+m0_run m17-run-quit-fast run_quit_grid sleepmodfast 400 300
+m0_run m17-check-quit-fast chk_quit_grid sleepmodfast
+m0_run m17-run-quit-old run_quit_grid sleepmodfast-old 400 300
+m0_run m17-check-quit-old chk_quit_grid sleepmodfast-old
 m0_run m17-run-quit-event run_quit_grid event 400 300
 m0_run m17-check-quit-event chk_quit_grid event
 m0_run m17-run-quit-launcher run_quit_grid launcher 130 300
