@@ -34,6 +34,7 @@ jobs:
       - name: The tests of this shard
         env:
           SHARD: ${{ matrix.shard }}
+          LIBMONOME_INC: /usr/local/include
           KEEP_LOGS: ${{ runner.temp }}/test-logs
         run: |
           set -o pipefail

@@ -32,7 +32,7 @@ chmod +x "$T/gh"
 mkdir -p "$T/zip" "$T/status"
 SHA="4c8206661c6a97eacdd2b66a1c506aa43fd0d943"
 VERSION="$(head -n 1 windows/VERSION | tr -d '\r ')"
-head -c 2000000 /dev/zero > "$T/zip/Verdandi-windows-$VERSION-4c82066.zip"
+head -c 2000000 /dev/zero > "$T/zip/Verdandi-windows-latest.zip" # (M22: the build makes the zip with its STATIC name; the publish step makes the copy with the version)
 echo PASS > "$T/status/m1-run.status"; echo PASS > "$T/status/m1-check-lua.status"; echo "SKIP no python" > "$T/status/m1-check-screen.status"
 
 run() { LATEST_EXISTS="${LATEST_EXISTS:-}" GH="$T/gh" GH_LOG="$T/gh.log" GITHUB_SHA="$SHA" GITHUB_REPOSITORY="owner/repo" GITHUB_RUN_ID=77 ZIP_DIR="$T/zip" STATUS_DIR="$T/status" KEEP=20 COMMIT_MESSAGE="Windows: a test commit message" \
@@ -91,7 +91,7 @@ ck "a blocking red check still holds windows-latest back" "! grep -q 'windows-la
 rm -f "$T/status/m1-check-keyboard.status" "$T/status/m2-check-cycles.status"
 
 echo "== the ASIO build is part of the run"
-mkdir -p "$T/asiozip"; head -c 2500000 /dev/zero > "$T/asiozip/Verdandi-windows-asio-$VERSION-4c82066.zip"
+mkdir -p "$T/asiozip"; head -c 2500000 /dev/zero > "$T/asiozip/Verdandi-windows-asio-latest.zip"
 : > "$T/gh.log"; ASIO_ZIP_DIR="$T/asiozip" LATEST_EXISTS=1 run
 ck "the per-commit release has both zips" "grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-$VERSION-4c82066.zip' && grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-asio-$VERSION-4c82066.zip'"
 ck "windows-latest gets the ASIO zip, its fixed name and its SHA-256 too" "grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip ' && grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip.sha256'"
