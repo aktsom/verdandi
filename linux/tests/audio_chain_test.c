@@ -429,10 +429,10 @@ static void scenario_config(void) {
     CHECK(!strcmp(c.output, "wasapi:Fake Speakers"), "a file with Windows line ends is read (%s)", c.output);
     vaud_config_load(&c, "/nonexistent");
     CHECK(c.output[0] == 0 && c.rate == 48000 && c.period == 128, "no audio.conf: the defaults");
-    char text[1024];
+    char text[8192];
     int n = vaud_list_text(&FAKE, text, sizeof text);
-    CHECK(n == 7 && strstr(text, "wasapi:Fake Speakers\tFake Speakers (default)\t0\t2\tWASAPI\t21.0\t0.0\t0\n") && strstr(text, "asio:Fake ASIO\tFake ASIO\t8\t8\tASIO\t6.0\t6.0\t0\n") &&
-              strstr(text, "wasapi:Fake Speakers [Loopback]\tFake Speakers [Loopback]\t2\t0\tWASAPI\t0.0\t12.0\t1\n"), "device list text (8 fields, host API, latencies, loopback): %s", text);
+    CHECK(n == 7 && strstr(text, "wasapi:Fake Speakers\tFake Speakers (default)\t0\t2\tWASAPI\t21.0\t0.0\t0\t\t\t\n") && strstr(text, "asio:Fake ASIO\tFake ASIO\t8\t8\tASIO\t6.0\t6.0\t0\t\t\t\n") &&
+              strstr(text, "wasapi:Fake Speakers [Loopback]\tFake Speakers [Loopback]\t2\t0\tWASAPI\t0.0\t12.0\t1\t\t\t\n"), "device list text (host API, latencies, loopback, buffer sizes and channel names columns empty without ASIO facts): %s", text);
     f = fopen(path, "w");
     fputs("output=asio:Fake ASIO\ninput=asio:Fake ASIO\nrate=44100\nblock=128\nout_first=3\nin_l=5\nin_r=6\n", f);
     fclose(f);

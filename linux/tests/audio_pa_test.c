@@ -21,6 +21,8 @@ void verdandi_bridge_host_set_lag(unsigned n) { (void)n; }
 unsigned verdandi_bridge_host_lag(void) { return 0; }
 void verdandi_bridge_host_tune(unsigned a, unsigned b) { (void)a, (void)b; }
 unsigned verdandi_bridge_host_raises(void) { return 0; }
+unsigned long long verdandi_bridge_now_us(void) { return 0; }
+int verdandi_bridge_host_events(unsigned long long *cursor, void *out, int max, unsigned long long *lost) { (void)cursor, (void)out, (void)max; if (lost) *lost = 0; return 0; }
 void verdandi_bridge_host_stats(unsigned long long *a, unsigned long long *b, unsigned long long *c, unsigned long long *d, int *e) { (void)a, (void)b, (void)c, (void)d, (void)e; }
 
 static int fails;

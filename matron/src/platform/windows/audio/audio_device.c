@@ -656,7 +656,7 @@ int vaud_list_text(const vaud_backend *be, char *out, size_t n) {
     int count = be->list(dev, 96);
     size_t len = 0;
     out[0] = 0;
-    for (int i = 0; i < count && len + 2600 < n; i++) {
+    for (int i = 0; i < count && len + 700 < n; i++) {
         char bufs[80] = "", onames[1100] = "", inames[1100] = "";
         if (dev[i].buf_max > 0) snprintf(bufs, sizeof bufs, "%ld,%ld,%ld,%ld", dev[i].buf_min, dev[i].buf_max, dev[i].buf_pref, dev[i].buf_gran);
         /* the channel names, joined with "|" (columns 10 and 11): "Analog 1|Analog 2|...|SPDIF L|SPDIF R" */
@@ -666,6 +666,7 @@ int vaud_list_text(const vaud_backend *be, char *out, size_t n) {
         for (int k = 0; dev[i].in_names && k < dev[i].n_in_names && strlen(inames) + 30 < sizeof inames; k++) {
             snprintf(inames + strlen(inames), sizeof inames - strlen(inames), "%s%s", k ? "|" : "", dev[i].in_names[k]);
         }
+        if (len + 700 + strlen(onames) + strlen(inames) >= n) break; /* (does not fit: the rest is left out, as before) */
         len += (size_t)snprintf(out + len, n - len, "%s\t%s%s\t%d\t%d\t%s\t%.1f\t%.1f\t%d\t%s\t%s\t%s\n", dev[i].uid, dev[i].name, dev[i].is_default ? " (default)" : "", dev[i].in_channels,
                                 dev[i].out_channels, dev[i].api, dev[i].low_out_ms, dev[i].low_in_ms, dev[i].loopback, bufs, onames, inames);
     }
@@ -1071,6 +1072,10 @@ static void recover(const char *why_stopped) {
     vaud_error e = open_chain(BE, &cfg, 0, &res, note, sizeof note, err, sizeof err);
     if (e == VAUD_OK && res.rate && res.rate != S.rate) {
         BE->close();
+        S.clock_rate = res.rate;
+        e = VAUD_CLOCK;
+    } else if (e == VAUD_BAD_RATE && res.rate && res.rate != S.rate && !strncmp(cfg.output, "asio:", 5)) {
+        /* an ASIO card whose clock another program set to another rate: not changed by us; tried again every 3 s (and the page says why) */
         S.clock_rate = res.rate;
         e = VAUD_CLOCK;
     }
