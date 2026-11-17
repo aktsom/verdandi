@@ -301,7 +301,7 @@ chk_plugins_server() {
 # the stale maiden of another folder was stopped, ours served, and nothing is left when the program ended
 chk_maiden_stale() {
     local L="$IN_HOME/logs/launcher.log" bad=0
-    if [ ! -d "$WORK/stale maiden folder/app" ] && [ ! -f "$WORK/stale maiden folder/maiden.exe" ]; then echo "no stale maiden was prepared (no maiden in the zip): skipped"; return 0; fi
+    if [ ! -d "$WORK/stale maiden folder/app" ] && [ ! -f "$WORK/stale maiden folder/maiden.exe" ]; then echo "no stale maiden was prepared (no maiden in the zip): skipped"; return 77; fi
     grep -a -E "maiden:" "$L" | head -5
     grep -a -q "maiden: a maiden.exe (process .*holds port .*stopping it" "$L" && echo "found: the launcher stopped the maiden.exe of another folder" || { echo "NOT FOUND: 'a maiden.exe ... holds port ... stopping it' in launcher.log"; bad=1; }
     grep -a -q "maiden started: http://127.0.0.1" "$L" && echo "found: the launcher started its own maiden" || { echo "NOT FOUND: maiden started"; bad=1; }
@@ -348,7 +348,7 @@ write_engine_fixtures() { # home
     printf 'Engine_Orgn : CroneEngine {\n    alloc {\n        this.addCommand(\\noteTrig, "iffff", { arg msg;\n            Routine {\n                0.01.yield;\n            }.play;\n        });\n        this.addCommand(\\noteOff, "i", { arg msg;\n            Routine {\n                msg[1].yield;\n            }.play;\n        });\n    }\n    free { }\n}\n' > "$H/dust/code/orgn/lib/Engine_Orgn.sc"
 }
 run_engine_guard() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local mode out H
     for mode in ok dup; do
         H="$WORK/user home engines $mode"; out="$M0_OUT/engine-guard-$mode"
@@ -370,7 +370,7 @@ run_engine_guard() {
     return 0
 }
 chk_engine_guard() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 L="$M0_OUT/engine-guard-ok/logs" D="$M0_OUT/engine-guard-dup/logs"
     echo "--- glut, mangl and orgn engines as the owner has them:"
     grep -a -E "duplicate" "$L/launcher.log" 2> /dev/null | head -3
@@ -526,7 +526,7 @@ ST
     return 0
 }
 run_twins_engine() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     : > "$TW_RESULTS"
     twins_scenario all
     # what the owner's PC may have that the first run has not: other server rates and sample formats (44.1 and 96 kHz, 24 bit, a long sample), and the sample as a file with a long name under an [ext] link
@@ -544,7 +544,7 @@ run_twins_engine() {
     return 0
 }
 chk_twins_engine() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     cat "$TW_RESULTS" 2> /dev/null
     local bad=0 sc
     for sc in all rate44 rate96 extlong; do
@@ -556,7 +556,7 @@ chk_twins_engine() {
 KILL_HOME="$WORK/user home kill"
 SKILL_HOME="$WORK/user home sclang kill"
 run_server_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/server-kill"
     rm -rf "$KILL_HOME" "$out"; mkdir -p "$out"
     seed_home "$KILL_HOME"
@@ -574,7 +574,7 @@ run_server_kill() {
     return 0
 }
 chk_server_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/server-kill" bad=0 want
     echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
     echo "--- launcher.log (the lines about the server):"; grep -a -i "scsynth\|round\|restart" "$KILL_HOME/logs/launcher.log" 2> /dev/null | head -40
@@ -584,7 +584,7 @@ chk_server_kill() {
     return "$bad"
 }
 run_sclang_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/sclang-kill"
     rm -rf "$SKILL_HOME" "$out"; mkdir -p "$out"
     seed_home "$SKILL_HOME"
@@ -602,7 +602,7 @@ run_sclang_kill() {
     return 0
 }
 chk_sclang_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/sclang-kill" bad=0 want
     echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
     echo "--- launcher.log (the lines about the server):"; grep -a -i "sclang\|round\|restart" "$SKILL_HOME/logs/launcher.log" 2> /dev/null | head -40
@@ -614,7 +614,7 @@ chk_sclang_kill() {
 # M21: a second copy of Verdandi must not touch the logs of the running one (it used to rotate launcher.log before it found out it was the second copy)
 TWO_HOME="$WORK/user home two copies"
 run_two_copies() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/two-copies"
     rm -rf "$TWO_HOME" "$out"; mkdir -p "$out" "$TWO_HOME/logs"
     seed_home "$TWO_HOME"
@@ -637,7 +637,7 @@ run_two_copies() {
     return 0
 }
 chk_two_copies() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/two-copies" L="$M0_OUT/two-copies/logs" bad=0
     cat "$out/second.code" 2> /dev/null
     echo "--- the logs, before and after the second copy:"; cat "$out/before.txt" "$out/after.txt" 2> /dev/null
@@ -670,13 +670,13 @@ run_tape_case() { # mode
     cp "$H/dust/audio/tape/m21.wav" "$out/m21.wav" 2> /dev/null || true
 }
 run_tape() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local m
     for m in restart quit shutdown launcher; do run_tape_case "$m"; done
     return 0
 }
 chk_tape() { # mode
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local mode="$1" out="$M0_OUT/tape/$1" bad=0
     echo "=== tape, ended by: $mode"
     cat "$out/probe.txt" 2> /dev/null
@@ -687,7 +687,7 @@ chk_tape() { # mode
 }
 # M10: a long file name under an [ext] link (the probe of the scenario 'all' made it): matron's audio.file_info and crone's Tape Reader open it; the log has no 'cannot open sndfile'
 chk_longpath() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local bad=0 t="$M0_OUT/twins-all"
     has "$t/probe.txt" "PROBE twins-ext-add ok" "a folder with a long name was linked as [ext]" || bad=1
     has "$t/probe.txt" "PROBE twins-longpath-info ok" "audio.file_info opens a file whose whole path is over 260 characters, under an [ext] link" || bad=1
@@ -703,7 +703,7 @@ chk_menu_pages() {
 # M11: a fast turning of the drawn encoder knobs, measured in the real window code (headless: SDL's dummy video driver, so a draw is cheaper than on a screen): the throttled way (the program as shipped) and the old
 # way (VERDANDI_ENC_THROTTLE=0: one draw per turn). the line "enc display: ..." of norns.log says how long a turn waited in the queue and how long after the first turn the last draw was
 run_enc_burst() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local mode H out
     for mode in throttled oldway; do
         H="$WORK/user home burst $mode"; out="$M0_OUT/enc-burst-$mode"
@@ -727,7 +727,7 @@ run_enc_burst() {
     return 0
 }
 chk_enc_burst() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local bad=0 mode line
     for mode in throttled oldway; do
         echo "--- $mode: $(cat "$M0_OUT/enc-burst-$mode/probe.txt" 2> /dev/null | tr '\n' ' ')"
@@ -766,7 +766,7 @@ chk_audio_shot() {
 # M13: the virtual arc in the real program (windows/ci/maiden_probe.py, VERDANDI_PROBE=arc; the program runs with VERDANDI_TEST_HOOKS=1): the arc window opens like the ARC button opens it, a picture of it with the LEDs off, a small script
 # (windows/ci/arcprobe.lua) draws on the rings and counts the deltas and keys, a wheel notch, a drag, a ring press and mapped turns are sent through the functions the mouse events call, a picture with the LEDs lit, the window is closed and opened again
 run_arc_probe() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home arc" out="$M0_OUT/arc"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -788,7 +788,7 @@ run_arc_probe() {
     return 0
 }
 chk_arc() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/arc" f p
     cat "$out/probe.txt" 2> /dev/null
     for p in arc-up arc-open arc-device arc-shot-dark arc-script arc-input-sent arc-wheel arc-drag arc-press arc-mapped arc-ud-sent arc-ud-up arc-ud-down arc-ud-shift arc-ud-ctrl arc-shot-lit arc-close arc-reopen; do
@@ -814,7 +814,7 @@ chk_arc() {
 # the old check (io.open only) reproduces the owner's failure (the script's own fail_state-nb screen is loaded inside the load, then "MISSING INCLUDE: lib/cc_pattern_time"), the real one loads the script,
 # and maiden.log says what the install did. needs the network (the catalog and GitHub): without it the check says SKIP
 run_cc2_probe() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home cc2" out="$M0_OUT/cc2"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -831,10 +831,10 @@ run_cc2_probe() {
     return 0
 }
 chk_cc2() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/cc2" p L="$M0_OUT/cc2/logs/norns.log" M="$M0_OUT/cc2/logs/maiden.log"
     cat "$out/probe.txt" 2> /dev/null
-    if grep -a -q "PROBE cc2-network SKIP" "$out/probe.txt" 2> /dev/null; then echo "SKIP: no network on the runner: the cheat codes 2 check was not made"; return 0; fi
+    if grep -a -q "PROBE cc2-network SKIP" "$out/probe.txt" 2> /dev/null; then echo "SKIP: no network on the runner: the cheat codes 2 check was not made"; return 77; fi
     for p in cc2-up cc2-catalog cc2-install cc2-submodule cc2-nb-install cc2-file-exists cc2-old-way-ran cc2-load cc2-stays cc2-remove; do
         has "$out/probe.txt" "PROBE $p ok" "the cheat codes 2 check '$p'" || bad=1
     done
@@ -856,7 +856,7 @@ chk_cc2() {
 # M16: the PIN button (always on top) in the real program with REAL windows (no --headless: the runner has a desktop), windows/ci/maiden_probe.py VERDANDI_PROBE=pin. the program runs with VERDANDI_TEST_HOOKS=1 and writes "pin report N: ..." lines to norns.log:
 # for every window the flag SDL has and the topmost style Windows has. main, arc and detached screen window, on, off, a window closed and opened again, and the MIDI action learned from a note
 run_pin_probe() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home pin" out="$M0_OUT/pin"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -876,7 +876,7 @@ run_pin_probe() {
     return 0
 }
 chk_pin() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/pin" p
     cat "$out/probe.txt" 2> /dev/null
     cat "$out/pin_report.log" 2> /dev/null | head -20
@@ -890,7 +890,7 @@ chk_pin() {
 # way per run: the SLEEP row, the Quit event (menu and window close), the launcher's own stop, a restart, and a busy port; the devices record every message they get. the last message of each must be an "all off", and the end must come in time.
 # (the console close of the launcher and a kill from the Task Manager cannot be driven here: they are said in docs/port/phase-m17.md)
 run_quit_grid() { # mode exit-after overall-timeout
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local mode="$1" after="$2" tmo="$3" H="$WORK/user home qg $1" out="$M0_OUT/quitgrid/$1"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -919,7 +919,7 @@ run_quit_grid() { # mode exit-after overall-timeout
     return 0
 }
 chk_quit_grid() { # mode
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 0; }
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local mode="$1" bad=0 out="$M0_OUT/quitgrid/$1" p f
     echo "=== quit path: $mode"
     if [ "$mode" = sleepmodfast-old ]; then
@@ -1034,7 +1034,7 @@ nolog() { # file pattern what: the pattern must NOT be in the file
 chk_asio_case() { # mode: what the log and the probe found
     local mode="$1" bad=0 out="$M0_OUT/asio/$1" L p
     L="$out/logs/norns.log"
-    if [ ! -d "$out" ]; then echo "skipped: the case '$mode' is not run in this job"; return 0; fi
+    if [ ! -d "$out" ]; then echo "skipped: the case '$mode' is not run in this job"; return 77; fi
     echo "=== ASIO case: $mode"
     cat "$out/probe.txt" 2> /dev/null
     grep -a -E "audio: PortAudio is|asio:|audio: ASIO|no ASIO host API|opened but would not start|audio: device '|UNDERRUN" "$L" 2> /dev/null | cut -c1-330 | head -14
@@ -1211,8 +1211,69 @@ collect() {
 
 export VERDANDI_SERVER_WATCH_LOG_ONLY=1 # the checks of the older milestones look at a start as it is (a stop of the server is only logged); only the server-kill run (M10) wants the automatic restart
 m0_init
+# M22 item 2: another program holds the console ports 5555 and 5556 (a stand-in listener, python). the real program must start and run to its planned end, its script must run (norns, SuperCollider and the audio chain
+# work), the log must name the program that holds the ports, and norns's console must answer a websocket handshake on the port it got instead
+PORT_HOME="$WORK/user home ports"
+run_busy_ports() {
+    rm -rf "$PORT_HOME"
+    seed_home "$PORT_HOME"
+    "$PYTHON" -c "
+import socket, time, sys
+ss = []
+for p in (5555, 5556):
+    s = socket.socket(); s.bind(('127.0.0.1', p)); s.listen(4); ss.append(s)
+print('stand-in listener holds 5555 and 5556'); sys.stdout.flush()
+time.sleep(170)" > "$WORK/busy-ports-listener.out" 2>&1 &
+    local lp=$!
+    sleep 3
+    cat "$WORK/busy-ports-listener.out"
+    (
+        sleep 40
+        for port in $(grep -a -o "uses port [0-9]* instead" "$PORT_HOME/logs/launcher.log" 2> /dev/null | grep -o "[0-9]*"); do
+            "$PYTHON" -c "
+import socket, sys
+s = socket.create_connection(('127.0.0.1', $port), 5)
+s.sendall(b'GET / HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\\r\\nSec-WebSocket-Version: 13\\r\\n\\r\\n')
+d = s.recv(200)
+print('console on port $port answered:', d.split(b'\\r\\n')[0].decode())" >> "$WORK/busy-ports-handshake.out" 2>&1
+        done
+    ) &
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 150 "$APP/Verdandi$EXE" --headless --exit-after=75 --home="$(native "$PORT_HOME")"
+    else
+        "$APP/Verdandi$EXE" --headless --exit-after=75 --home="$(native "$PORT_HOME")"
+    fi
+    echo "launcher exit code $?" > "$WORK/busy-ports-rc.out"
+    cat "$WORK/busy-ports-rc.out"
+    kill "$lp" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$PORT_HOME/logs" "$M0_OUT/m22-busy-ports-logs" 2> /dev/null || true
+    return 0
+}
+chk_busy_ports() {
+    local L="$PORT_HOME/logs/launcher.log" bad=0
+    grep -a "console:" "$L" | head -3
+    grep -a -q "console: port 5555 is used by .*(process [0-9]*): the norns console in maiden uses port [0-9]* instead" "$L" && echo "found: the log names the program that holds 5555" || { echo "NOT FOUND: the line for 5555"; bad=1; }
+    grep -a -q "console: port 5556 is used by .*(process [0-9]*): the sclang console in maiden uses port [0-9]* instead" "$L" && echo "found: the log names the program that holds 5556" || { echo "NOT FOUND: the line for 5556"; bad=1; }
+    grep -a -q "norns.exe started" "$L" && grep -a -q "sclang.exe started" "$L" && echo "found: norns.exe and sclang.exe started" || { echo "NOT FOUND: started"; bad=1; }
+    grep -a -q -- "--exit-after=75: stopping norns.exe" "$L" && echo "found: Verdandi ran to its planned end" || { echo "NOT FOUND: it ended early"; bad=1; }
+    grep -a -q "norns.exe ended unexpectedly\|Verdandi ended with an error" "$L" && { echo "FOUND (must be absent): an early end"; bad=1; }
+    grep -a -q "VERDANDI_SMOKE_OK" "$PORT_HOME/logs/norns.log" && echo "found: the script ran and drew (norns, SuperCollider, audio chain work)" || { echo "NOT FOUND: VERDANDI_SMOKE_OK"; bad=1; }
+    cat "$WORK/busy-ports-handshake.out" 2> /dev/null
+    [ "$(grep -c "answered: HTTP/1.1 101" "$WORK/busy-ports-handshake.out" 2> /dev/null)" -ge 2 ] && echo "found: both consoles answer a websocket handshake on their new ports" || { echo "NOT FOUND: two 101 answers"; bad=1; }
+    return "$bad"
+}
 m0_run m1-unpack unpack || exit 0
+# M22: the download and the folder inside it have fixed names (no version): the same Defender exclusion serves every build
+chk_static_names() {
+    local want_zip="Verdandi-windows-latest.zip" want_dir="Verdandi"
+    [ "${EXPECT_ASIO:-}" = 1 ] && want_zip="Verdandi-windows-asio-latest.zip" want_dir="Verdandi-asio"
+    "$PYTHON" "$(native "$HERE/check-static-names.py")" "$(native "$ZIP")" "$want_zip" "$want_dir" || return 1
+    has "$APP/VERSION.txt" "^Verdandi for Windows, version [0-9][0-9.]*, build [0-9a-f]*" "VERSION.txt names the version and the build" || return 1
+    [ "$(basename "$APP")" = "$want_dir" ] && echo "found: the folder after unpacking is called $want_dir" || { echo "NOT FOUND: the unpacked folder is $(basename "$APP"), wanted $want_dir"; return 1; }
+}
 set_app
+m0_run m22-static-names chk_static_names
 m0_run m1-seed seed
 m0_run m1-run run_program
 collect > /dev/null 2>&1
@@ -1286,6 +1347,8 @@ m0_run m10-run-server-kill run_server_kill
 m0_run m10-check-server-kill chk_server_kill
 m0_run m21-run-sclang-kill run_sclang_kill
 m0_run m21-check-sclang-kill chk_sclang_kill
+m0_run m22-run-busy-ports run_busy_ports
+m0_run m22-check-busy-ports chk_busy_ports
 m0_run m21-run-two-copies run_two_copies
 m0_run m21-check-two-copies chk_two_copies
 m0_run m21-run-tape run_tape

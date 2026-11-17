@@ -1,0 +1,3 @@
+# linux/tests/known-failures.txt (M22): tests that fail and are known to. one per line: the test's name as run_all.sh prints it, up to its first " (", then " | " and the reason.
+# a test on this list that fails does NOT fail the run (it prints KNOWN); a test that is NOT on the list and fails does; a test on the list that PASSES prints a notice: take it off the list.
+# lines that start with # are comments. nothing here is hidden: the run prints every known failure with its reason, and the job summary lists them.

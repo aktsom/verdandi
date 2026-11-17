@@ -26,7 +26,11 @@ m0_run() {
     "$@" 2>&1 | tee "$M0_OUT/logs/$name.log"
     rc=${PIPESTATUS[0]}
     echo "::endgroup::"
-    if [ "$rc" -eq 0 ]; then
+    if [ "$rc" -eq 77 ]; then
+        # a step that did not run here (the same program is measured in the other job, no network, ...): SKIP with its first line as the reason, never PASS (M22). the job goes on and the step does not count as failed
+        m0_status "$name" SKIP "$(head -n 1 "$M0_OUT/logs/$name.log" 2> /dev/null | cut -c1-200)"
+        return 0
+    elif [ "$rc" -eq 0 ]; then
         m0_status "$name" PASS
     else
         m0_status "$name" FAIL "exit $rc"

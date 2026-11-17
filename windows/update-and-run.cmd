@@ -1,11 +1,13 @@
 @echo off
-rem update-and-run.cmd: get the newest Verdandi build, unpack it next to the old ones, start it.
+rem update-and-run.cmd: get the newest Verdandi build, put it in the SAME folder name as before (M22: static names, so that a Windows Defender exclusion keeps working), start it.
 rem no administrator rights, no installation. Uses only what Windows 10 and 11 have: curl.exe, tar.exe, certutil. If curl.exe or tar.exe is missing it starts update-and-run.ps1 (PowerShell) instead.
 rem
 rem what it does, in order:
 rem   1. reads which build this folder is (BUILD.txt) and which build is the newest (BUILD.txt of the GitHub release "windows-latest", a few bytes)
-rem   2. if the newest is not here yet: downloads the zip, checks its size and its SHA-256 when the release has one, unpacks it into a NEW folder  Verdandi-<version>-<hash>  next to this one
-rem   3. closes a running Verdandi after asking, offers to remove the older unpacked builds (default: no), starts the new Verdandi.exe
+rem   2. if the newest is not here yet: downloads the zip, checks its size and its SHA-256 when the release has one, unpacks it, and replaces the folder  Verdandi  (ASIO: Verdandi-asio)  next to this one's parent folder by it;
+rem      the folder it replaces is kept next to it as  Verdandi.previous  (older builds with the version in their folder name are offered for removal as before)
+rem   3. closes a running Verdandi after asking, offers to remove the older builds (default: no), starts the new Verdandi.exe
+rem   this script copies itself to the temp folder first and runs from there, because the folder it was started from is replaced
 rem   your files (scripts, audio, settings, logs) are in %USERPROFILE%\Verdandi and are never touched: only folders that hold Verdandi.exe and norns.exe can be removed.
 rem
 rem options (the first letter is enough):  /NOSTART  do not start Verdandi at the end     /KEEP  do not offer to remove older builds     /YES  close a running Verdandi without asking
@@ -22,7 +24,20 @@ shift
 goto :args
 :argsdone
 
-set "HERE=%~dp0"
+if defined VERDANDI_UPDATE_RELAUNCHED goto :relaunched
+set "TMPRUN=%TEMP%\verdandi-update-run"
+rd /s /q "!TMPRUN!" >nul 2>nul
+mkdir "!TMPRUN!" >nul 2>nul
+copy /y "%~f0" "!TMPRUN!\update-and-run.cmd" >nul
+set "VERDANDI_UPDATE_RELAUNCHED=1"
+set "VERDANDI_UPDATE_HERE=%~dp0"
+call "!TMPRUN!\update-and-run.cmd" %*
+set "RELAUNCH_RC=!errorlevel!"
+endlocal & exit /b %RELAUNCH_RC%
+:relaunched
+set "HERE=%VERDANDI_UPDATE_HERE%"
+rem the folder this was started from is replaced: no process may have it as its current folder (Windows cannot rename it then)
+cd /d "%TEMP%"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
 for %%I in ("%HERE%\..") do set "PARENT=%%~fI"
 set "TAG=windows-latest"
@@ -94,8 +109,12 @@ if defined CHK goto :bad_latest
 set "CHK=!LHASH!"
 for %%c in (0 1 2 3 4 5 6 7 8 9 a b c d e f) do if defined CHK call set "CHK=%%CHK:%%c=%%"
 if defined CHK goto :bad_latest
-set "NEWNAME=!NAMEPFX!-!LVER!-!LHASH!"
+set "NEWNAME=!NAMEPFX!"
 echo  The newest build is:     !LVER! !LHASH!
+rem the folder that holds the newest build has a fixed name, without a version: Verdandi (the ASIO build: Verdandi-asio)
+set "STATICDIR=%PARENT%\!NEWNAME!"
+set "STATICBUILD="
+if exist "%STATICDIR%\BUILD.txt" for /f "usebackq tokens=1,2" %%a in ("%STATICDIR%\BUILD.txt") do if not defined STATICBUILD set "STATICBUILD=%%a %%b"
 
 if /i "!LATEST!"=="!CURRENT!" (
   echo.
@@ -103,10 +122,10 @@ if /i "!LATEST!"=="!CURRENT!" (
   set "TARGET=%HERE%"
   goto :got_target
 )
-if exist "%PARENT%\!NEWNAME!\Verdandi.exe" (
+if /i "!STATICBUILD!"=="!LATEST!" if exist "!STATICDIR!\Verdandi.exe" (
   echo.
-  echo  The newest build is already unpacked: %PARENT%\!NEWNAME!
-  set "TARGET=%PARENT%\!NEWNAME!"
+  echo  The newest build is already in: !STATICDIR!
+  set "TARGET=!STATICDIR!"
   goto :got_target
 )
 
@@ -141,7 +160,7 @@ if exist "%WORK%\new.sha256" (
   )
 )
 
-rem ---- unpack into a folder of its own (first into a temporary folder on the same drive, then renamed: a half unpacked build never has the final name)
+rem ---- unpack (first into a temporary folder on the same drive, then renamed: a half unpacked build never has the final name)
 echo  Unpacking ...
 set "TMPUNPACK=%PARENT%\.verdandi-unpack"
 if exist "%TMPUNPACK%" rd /s /q "%TMPUNPACK%" >nul 2>nul
@@ -152,48 +171,73 @@ set "UNPACKED="
 for /f "delims=" %%D in ('dir /b /ad "%TMPUNPACK%\Verdandi*" 2^>nul') do if not defined UNPACKED set "UNPACKED=%TMPUNPACK%\%%D"
 if not defined UNPACKED goto :unpack_failed
 if not exist "!UNPACKED!\Verdandi.exe" goto :unpack_failed
-move "!UNPACKED!" "%PARENT%\!NEWNAME!" >nul
-if errorlevel 1 goto :unpack_failed
+rem the folder it goes to is replaced: a running Verdandi must be closed first
+call :close_running
+if /i not "!ANSWER!"=="Y" (
+  rd /s /q "%TMPUNPACK%" >nul 2>nul
+  echo  Not closed. Nothing was changed.
+  goto :end
+)
+if exist "!STATICDIR!" (
+  rem the build that is there is kept as Verdandi.previous (one, the one before it is removed): the same folder name is free for the new build, and the path of the folder, which an exclusion is made for, stays the same
+  if exist "!STATICDIR!.previous" rd /s /q "!STATICDIR!.previous" >nul 2>nul
+  if exist "!STATICDIR!.previous" goto :swap_failed
+  move "!STATICDIR!" "!STATICDIR!.previous" >nul
+  if errorlevel 1 goto :swap_failed
+)
+move "!UNPACKED!" "!STATICDIR!" >nul
+if errorlevel 1 (
+  if exist "!STATICDIR!.previous" if not exist "!STATICDIR!" move "!STATICDIR!.previous" "!STATICDIR!" >nul
+  goto :swap_failed
+)
 rd /s /q "%TMPUNPACK%" >nul 2>nul
-set "TARGET=%PARENT%\!NEWNAME!"
-echo  Unpacked: !TARGET!
+set "TARGET=!STATICDIR!"
+echo  Put in place: !TARGET!
+if exist "!STATICDIR!.previous" echo  The build that was there before is kept as !STATICDIR!.previous ^(delete it when you do not need it^).
 goto :got_target
 
 :got_target
 rem ---- a running Verdandi would be brought to the front instead of the new one starting
-tasklist /FI "IMAGENAME eq Verdandi.exe" 2>nul | find /i "Verdandi.exe" >nul
-if not errorlevel 1 (
-  echo.
-  echo  Verdandi is running now. The new build can only start when it is closed ^(its data is saved when it ends^).
-  if defined YES (
-    set "ANSWER=Y"
-  ) else (
-    %CHOICE% /C YN /M " Close Verdandi now"
-    if errorlevel 2 (set "ANSWER=N") else (set "ANSWER=Y")
-  )
-  if /i "!ANSWER!"=="Y" (
-    taskkill /F /IM Verdandi.exe /IM norns.exe /IM sclang.exe /IM scsynth.exe >nul 2>nul
-    ping -n 3 127.0.0.1 >nul
-  ) else (
-    echo  Not closed. The new build is unpacked in !TARGET!; start it from there when you have closed Verdandi.
-    goto :end
-  )
+call :close_running
+if /i not "!ANSWER!"=="Y" (
+  echo  Not closed. The new build is in !TARGET!; start it from there when you have closed Verdandi.
+  goto :end
 )
 
 rem ---- older builds
 if defined KEEP goto :start_it
 set "OLDLIST="
 set "OLDCOUNT=0"
-for /f "delims=" %%D in ('dir /b /ad "%PARENT%\Verdandi*" 2^>nul') do call :consider "%PARENT%\%%D"
+rem (dir takes * and ? only: the old folders with a version in their names are Verdandi-0*, Verdandi-1* ... Verdandi-9*; and the previous build Verdandi.previous)
+for /f "delims=" %%D in ('dir /b /ad "%PARENT%\!NAMEPFX!-0*" "%PARENT%\!NAMEPFX!-1*" "%PARENT%\!NAMEPFX!-2*" "%PARENT%\!NAMEPFX!-3*" "%PARENT%\!NAMEPFX!-4*" "%PARENT%\!NAMEPFX!-5*" "%PARENT%\!NAMEPFX!-6*" "%PARENT%\!NAMEPFX!-7*" "%PARENT%\!NAMEPFX!-8*" "%PARENT%\!NAMEPFX!-9*" "%PARENT%\!NAMEPFX!.previou*" 2^>nul') do call :consider "%PARENT%\%%D"
 if "%OLDCOUNT%"=="0" goto :start_it
 echo.
 echo  Older unpacked builds next to it ^(your files in %DATA% are not touched^):
 for %%P in (%OLDLIST%) do echo    %%~P
-echo  The folder this script was started from ^(%HERE%^) is not removed by it; delete it yourself later if you want.
+echo  Your files in %DATA% are never part of this.
 %CHOICE% /C YN /D N /T 60 /M " Remove these older builds (no after 60 seconds)"
 if errorlevel 2 goto :start_it
 for %%P in (%OLDLIST%) do call :remove_one "%%~P"
 goto :start_it
+
+rem asks to close a running Verdandi (/YES: without asking); ANSWER=Y when nothing runs or it was closed
+:close_running
+set "ANSWER=Y"
+tasklist /FI "IMAGENAME eq Verdandi.exe" 2>nul | find /i "Verdandi.exe" >nul
+if errorlevel 1 exit /b 0
+echo.
+echo  Verdandi is running now. The new build can only be used when it is closed ^(its data is saved when it ends^).
+if defined YES (
+  set "ANSWER=Y"
+) else (
+  %CHOICE% /C YN /M " Close Verdandi now"
+  if errorlevel 2 (set "ANSWER=N") else (set "ANSWER=Y")
+)
+if /i "!ANSWER!"=="Y" (
+  taskkill /F /IM Verdandi.exe /IM norns.exe /IM sclang.exe /IM scsynth.exe >nul 2>nul
+  ping -n 3 127.0.0.1 >nul
+)
+exit /b 0
 
 rem a folder that holds Verdandi.exe and norns.exe and is not the new build, not the data folder and not this one
 :consider
@@ -247,6 +291,12 @@ goto :offer_current
 :bad_latest
 echo.
 echo  The newest build's BUILD.txt is not in the expected form ^("!LATEST!"^). Nothing was changed.
+goto :offer_current
+
+:swap_failed
+echo.
+echo  The new build could not be put in place ^(is a file of the old build open, or is the drive write-protected?^). The old build is as it was. Close Verdandi and try again.
+if exist "%TMPUNPACK%" rd /s /q "%TMPUNPACK%" >nul 2>nul
 goto :offer_current
 
 :unpack_failed

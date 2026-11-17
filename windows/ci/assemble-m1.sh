@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # windows/ci/assemble-m1.sh (M1): the runnable folder and its zip. bash (Git Bash on the runner, or Linux for a dry run with fake inputs).
 #   NORNS_BIN   folder with Verdandi.exe, norns.exe and the DLLs (build-norns.sh output)   SC_ZIP   sc-win64.zip of build-sc.sh   OUT   result folder (default ./m1-stage)
-# result: $OUT/Verdandi-<version>-<short hash>/ (the program folder as the user gets it: the zip has this one folder, so that every build unpacks into a folder of its own and an old build is never
-# overwritten or mistaken for the new one) and $OUT/Verdandi-windows-<version>-<short hash>.zip; $OUT/ZIPNAME holds the file name, $OUT/BUILD.txt a copy of the zip's BUILD.txt.
+# result (M22: STATIC names, so that the same excluded folder in Windows Defender serves every build): $OUT/Verdandi/ (the program folder as the user gets it: the zip has this one folder, named without a version)
+# and $OUT/Verdandi-windows-latest.zip; a copy of the same file with the version in its name, $OUT/Verdandi-windows-<version>-<short hash>.zip, is made too (older builds can be fetched). $OUT/ZIPNAME holds the static
+# file name, $OUT/VZIPNAME the versioned one, $OUT/BUILD.txt a copy of the zip's BUILD.txt. the version and the commit are in BUILD.txt and VERSION.txt inside the folder, in the log and on the home page.
 #   FLAVOR  "" (default: WASAPI only, no ASIO code in the zip) or "asio": the zip that has the ASIO build of PortAudio (ASIO_DIR: the output of build-portaudio-asio.sh: libportaudio-2.dll, source/, PA-ASIO-BUILD.txt) and the
-#           GPLv3 notices and sources that go with it (docs/port/asio-licence.md). its names: Verdandi-asio-<version>-<hash>/ and Verdandi-windows-asio-<version>-<hash>.zip
+#           GPLv3 notices and sources that go with it (docs/port/asio-licence.md). its names: Verdandi-asio/ and Verdandi-windows-asio-latest.zip (and the versioned copy Verdandi-windows-asio-<version>-<hash>.zip)
 #   VERDANDI_VERSION  (default: the first line of windows/VERSION)   VERDANDI_HASH (default: the first 7 characters of git rev-parse HEAD)   VERDANDI_REPO (owner/name, for update-and-run; default $GITHUB_REPOSITORY)
 # shellcheck disable=SC2329
 set -u
@@ -21,9 +22,9 @@ HASH="${VERDANDI_HASH:-$(git -C "$REPO" rev-parse HEAD 2> /dev/null | cut -c1-7)
 BUILD="$VERSION $HASH"
 FLAVOR="${FLAVOR:-}"
 case "$FLAVOR" in
-    "") APPNAME="Verdandi-$VERSION-$HASH"; ZIPNAME="Verdandi-windows-$VERSION-$HASH.zip" ;;
+    "") APPNAME="Verdandi"; ZIPNAME="Verdandi-windows-latest.zip"; VZIPNAME="Verdandi-windows-$VERSION-$HASH.zip" ;;
     asio)
-        APPNAME="Verdandi-asio-$VERSION-$HASH"; ZIPNAME="Verdandi-windows-asio-$VERSION-$HASH.zip"
+        APPNAME="Verdandi-asio"; ZIPNAME="Verdandi-windows-asio-latest.zip"; VZIPNAME="Verdandi-windows-asio-$VERSION-$HASH.zip"
         ASIO_DIR="${ASIO_DIR:?ASIO_DIR is not set (FLAVOR=asio)}"
         ;;
     *) echo "FLAVOR must be empty or asio"; exit 1 ;;
@@ -111,6 +112,13 @@ assemble() {
         echo "commit: $(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)"
         echo "message: $(git -C "$REPO" log -1 --format=%s 2> /dev/null || echo unknown)"
     } > "$APP/BUILD.txt"
+    # the same in words for a person (M22: the folder and the zip have no version in their names any more): this file is in the zip next to Verdandi.exe
+    {
+        echo "Verdandi for Windows, version $VERSION, build $HASH${FLAVOR:+ ($FLAVOR flavour: with ASIO)}"
+        echo "commit: $(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)"
+        echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "The folder and the zip keep the same names for every build on purpose: an exclusion you made in Windows Defender for this folder keeps working. This file and BUILD.txt tell which build it is."
+    } > "$APP/VERSION.txt"
     # the updater: update-and-run.cmd (curl.exe and tar.exe of Windows 10/11) and update-and-run.ps1 (PowerShell); UPDATE-SOURCE.txt says where the releases are
     cp "$REPO/windows/update-and-run.cmd" "$REPO/windows/update-and-run.ps1" "$APP/" || return 1
     echo "${VERDANDI_REPO:-${GITHUB_REPOSITORY:-}}" > "$APP/UPDATE-SOURCE.txt"
@@ -173,7 +181,10 @@ assemble() {
 
 package() {
     echo "$ZIPNAME" > "$OUT/ZIPNAME"
-    zip_dir "$OUT" "$APPNAME" "$OUT/$ZIPNAME" && find "$OUT" -maxdepth 1 -name "$ZIPNAME" -size +1k
+    echo "$VZIPNAME" > "$OUT/VZIPNAME"
+    zip_dir "$OUT" "$APPNAME" "$OUT/$ZIPNAME" && find "$OUT" -maxdepth 1 -name "$ZIPNAME" -size +1k || return 1
+    # the same bytes under the name with the version: kept in the release as an extra, so that an older build can be fetched
+    cp "$OUT/$ZIPNAME" "$OUT/$VZIPNAME"
 }
 
 m0_init

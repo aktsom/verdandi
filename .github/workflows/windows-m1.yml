@@ -232,7 +232,7 @@ jobs:
         if: always()
         with:
           name: m1-zip
-          path: m1-stage/Verdandi-windows-*.zip
+          path: m1-stage/Verdandi-windows-latest.zip
           retention-days: 30
           if-no-files-found: warn
 
@@ -346,7 +346,7 @@ jobs:
         if: ${{ steps.gate.outcome == 'success' }}
         with:
           name: m3-asio-zip
-          path: m1-stage/Verdandi-windows-asio-*.zip
+          path: m1-stage/Verdandi-windows-asio-latest.zip
           retention-days: 30
           if-no-files-found: error
 

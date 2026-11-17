@@ -16,21 +16,23 @@ ZIP_DIR="${ZIP_DIR:?ZIP_DIR is not set}"
 VERSION="$(head -n 1 "$REPO_DIR/windows/VERSION" | tr -d '\r ')"
 SHORT="$(printf '%s' "$SHA" | cut -c1-7)"
 NAME="Verdandi-windows-$VERSION-$SHORT.zip"
-[ -f "$ZIP_DIR/$NAME" ] || { echo "the zip $NAME is not in $ZIP_DIR (found: $(ls "$ZIP_DIR" 2> /dev/null | tr '\n' ' '))"; exit 1; }
+# M22: the zips are built with the STATIC names (Verdandi-windows-latest.zip, Verdandi-windows-asio-latest.zip; the folder inside has a fixed name too); the copy with the version in its name is made here
+STATIC="Verdandi-windows-latest.zip"
+[ -f "$ZIP_DIR/$STATIC" ] || { echo "the zip $STATIC is not in $ZIP_DIR (found: $(ls "$ZIP_DIR" 2> /dev/null | tr '\n' ' '))"; exit 1; }
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/$REPO/actions/runs/${GITHUB_RUN_ID:-0}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-cp "$ZIP_DIR/$NAME" "$WORK/$NAME"
-cp "$ZIP_DIR/$NAME" "$WORK/Verdandi-windows-latest.zip"
+cp "$ZIP_DIR/$STATIC" "$WORK/$NAME"
+cp "$ZIP_DIR/$STATIC" "$WORK/Verdandi-windows-latest.zip"
 # the ASIO build (optional)
 ASIO_NAME="Verdandi-windows-asio-$VERSION-$SHORT.zip"
 HAVE_ASIO=0
 EXTRA=()
-if [ -n "${ASIO_ZIP_DIR:-}" ] && [ -f "$ASIO_ZIP_DIR/$ASIO_NAME" ]; then
+if [ -n "${ASIO_ZIP_DIR:-}" ] && [ -f "$ASIO_ZIP_DIR/Verdandi-windows-asio-latest.zip" ]; then
     HAVE_ASIO=1
-    cp "$ASIO_ZIP_DIR/$ASIO_NAME" "$WORK/$ASIO_NAME"
-    cp "$ASIO_ZIP_DIR/$ASIO_NAME" "$WORK/Verdandi-windows-asio-latest.zip"
+    cp "$ASIO_ZIP_DIR/Verdandi-windows-asio-latest.zip" "$WORK/$ASIO_NAME"
+    cp "$ASIO_ZIP_DIR/Verdandi-windows-asio-latest.zip" "$WORK/Verdandi-windows-asio-latest.zip"
     (cd "$WORK" && printf '%s  Verdandi-windows-asio-latest.zip\n' "$(sha256sum "$ASIO_NAME" | cut -d' ' -f1)" > Verdandi-windows-asio-latest.zip.sha256)
     EXTRA=("$WORK/$ASIO_NAME")
     echo "the ASIO build is part of this release: $ASIO_NAME"

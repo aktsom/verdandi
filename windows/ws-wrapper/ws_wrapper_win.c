@@ -24,6 +24,7 @@ static nng_listener listener_ws;
 static nng_socket sock_ws;
 static const char *allowed_origins = NULL;
 static volatile LONG stopping;
+static volatile LONG ws_ok; /* 1 when the websocket is open. M22: a port that cannot be had never ends the program: it runs on, its output goes to the log, there is no console */
 
 static bool origin_allowed(const char *origin) {
     size_t n = strlen(origin);
@@ -56,31 +57,30 @@ static void check_origin(nng_pipe pipe, nng_pipe_ev ev, void *arg) {
     nng_strfree(origin);
 }
 
-static void fatal(const char *func, int rv) {
-    fprintf(stderr, "ws-wrapper: %s: %s\n", func, nng_strerror(rv));
-    exit(1);
-}
-
-static void bind_sock(const char *url) {
+static int bind_sock(const char *url) {
     int rv;
-    if ((rv = nng_bus0_open(&sock_ws)) != 0) fatal("nng_bus0_open", rv);
-    if ((rv = nng_listener_create(&listener_ws, sock_ws, url)) != 0) fatal("nng_listener_create", rv);
-    if ((rv = nng_listener_set_bool(listener_ws, NNG_OPT_WS_SEND_TEXT, true)) != 0) fatal("WS_SEND_TEXT", rv);
-    if ((rv = nng_listener_set_bool(listener_ws, NNG_OPT_WS_RECV_TEXT, true)) != 0) fatal("WS_RECV_TEXT", rv);
+    if ((rv = nng_bus0_open(&sock_ws)) != 0) { fprintf(stderr, "ws-wrapper: nng_bus0_open: %s\n", nng_strerror(rv)); return 0; }
+    if ((rv = nng_listener_create(&listener_ws, sock_ws, url)) != 0) { fprintf(stderr, "ws-wrapper: nng_listener_create: %s\n", nng_strerror(rv)); return 0; }
+    if ((rv = nng_listener_set_bool(listener_ws, NNG_OPT_WS_SEND_TEXT, true)) != 0) { fprintf(stderr, "ws-wrapper: WS_SEND_TEXT: %s\n", nng_strerror(rv)); return 0; }
+    if ((rv = nng_listener_set_bool(listener_ws, NNG_OPT_WS_RECV_TEXT, true)) != 0) { fprintf(stderr, "ws-wrapper: WS_RECV_TEXT: %s\n", nng_strerror(rv)); return 0; }
     allowed_origins = getenv("WS_WRAPPER_ALLOWED_ORIGINS");
     if (allowed_origins != NULL && allowed_origins[0] != '\0') {
-        if ((rv = nng_pipe_notify(sock_ws, NNG_PIPE_EV_ADD_PRE, check_origin, NULL)) != 0) fatal("nng_pipe_notify", rv);
+        if ((rv = nng_pipe_notify(sock_ws, NNG_PIPE_EV_ADD_PRE, check_origin, NULL)) != 0) { fprintf(stderr, "ws-wrapper: nng_pipe_notify: %s\n", nng_strerror(rv)); return 0; }
         printf("ws-wrapper: accepting browser connections from: %s\n", allowed_origins);
     } else {
         allowed_origins = NULL;
     }
-    /* a port still held by the previous run (a restart): try again for ten seconds */
+    /* a port still held by the previous run (a restart): try again for ten seconds. when it stays taken the program is NOT ended (M22: that made the launcher think norns had ended and stop everything): no console */
     for (int attempt = 1; (rv = nng_listener_start(listener_ws, 0)) != 0; attempt++) {
-        if (attempt >= 20) fatal("nng_listener_start", rv);
+        if (attempt >= 20) {
+            fprintf(stderr, "ws-wrapper: %s cannot be opened (%s): the program runs on without its console\n", url, nng_strerror(rv));
+            return 0;
+        }
         fprintf(stderr, "ws-wrapper: nng_listener_start: %s (attempt %d/20, again in 500 ms)\n", nng_strerror(rv), attempt);
         Sleep(500);
     }
     printf("ws-wrapper: %s is open\n", url);
+    return 1;
 }
 
 static void *loop_rx(void *p) {
@@ -115,7 +115,7 @@ static void *loop_tx(void *p) {
         if (out != INVALID_HANDLE_VALUE && out != NULL) {
             WriteFile(out, buf, n, &w, NULL);
         }
-        nng_send(sock_ws, buf, n, 0);
+        if (ws_ok) nng_send(sock_ws, buf, n, 0);
     }
     return NULL;
 }
@@ -186,10 +186,10 @@ int wmain(int argc, wchar_t **argv) {
     CloseHandle(child_out_w);
 
     nng_ws_register();
-    bind_sock(url);
+    InterlockedExchange(&ws_ok, bind_sock(url));
     pthread_t tx, rx;
-    pthread_create(&tx, NULL, loop_tx, NULL);
-    pthread_create(&rx, NULL, loop_rx, NULL);
+    pthread_create(&tx, NULL, loop_tx, NULL); /* (also without a websocket: the child's output is drained to the log, else its pipe fills and it would block) */
+    if (ws_ok) pthread_create(&rx, NULL, loop_rx, NULL);
 
     WaitForSingleObject(child_proc, INFINITE);
     DWORD code = 0;

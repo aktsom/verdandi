@@ -31,6 +31,7 @@
 #include "plugin_heal.h"
 #include "pack_refresh.h"
 #include "maiden_port.h"
+#include "console_port.h"
 #include "dup_heal.h"
 #include "sc_fail.h"
 #include "server_watch.h"
@@ -359,6 +360,7 @@ static HANDLE start_child(const wchar_t *exe, const wchar_t *args, const wchar_t
     return pi.hProcess;
 }
 
+static int g_copy_over = 0; /* 1: copy_tree replaces files that are there (the patched copy of maiden's page) */
 /* copy a folder tree (the seeded scripts); existing files are left alone */
 static void copy_tree(const wchar_t *from, const wchar_t *to) {
     wchar_t pat[MAX_PATH * 2];
@@ -379,7 +381,7 @@ static void copy_tree(const wchar_t *from, const wchar_t *to) {
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             copy_tree(a, b);
         } else {
-            CopyFileW(a, b, TRUE);
+            CopyFileW(a, b, !g_copy_over);
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
@@ -879,6 +881,48 @@ static void process_name_of(DWORD pid, wchar_t *out, size_t n) {
     CloseHandle(snap);
 }
 
+/* M22 (docs/port/phase-m22.md): the console websockets of maiden. the default ports are 5555 (norns) and 5556 (sclang). when another program holds one, the launcher takes a free port instead and maiden's page is
+ * told (a patched copy of repl-endpoints.json, start_maiden); with no free port that console is off (port 0: the program is started without the wrapper). a busy port never stops norns, SuperCollider or the audio. */
+static int g_norns_ws = 5555, g_sclang_ws = 5556;
+
+static int cp_free_cb(int port, void *ctx) { DWORD pid; (void)ctx; return !port_in_use_tcp((unsigned short)port) && !tcp_listener_of((unsigned short)port, &pid); }
+
+/* the file name (UTF-8) of the program that holds a port, and its process id (0 when unknown) */
+static void port_holder(int port, char *name8, size_t n, unsigned long *pid_out) {
+    DWORD pid = 0;
+    wchar_t nm[MAX_PATH];
+    nm[0] = 0;
+    name8[0] = 0;
+    *pid_out = 0;
+    if (tcp_listener_of((unsigned short)port, &pid)) {
+        process_name_of(pid, nm, MAX_PATH);
+        *pid_out = (unsigned long)pid;
+    }
+    WideCharToMultiByte(CP_UTF8, 0, nm, -1, name8, (int)n, NULL, NULL);
+}
+
+static void console_ports_prepare(void) {
+    char name8[MAX_PATH], why[300], note[900];
+    unsigned long pid;
+    wchar_t w16[300];
+    int def[2] = {5555, 5556}, got[2] = {5555, 5556};
+    const char *what[2] = {"norns", "sclang"};
+    note[0] = 0;
+    for (int i = 0; i < 2; i++) {
+        got[i] = cp_choose(def[i], i ? got[0] : 0, cp_free_cb, NULL);
+        if (got[i] == def[i]) continue;
+        port_holder(def[i], name8, sizeof name8, &pid);
+        cp_why(why, sizeof why, what[i], def[i], got[i], name8, pid);
+        MultiByteToWideChar(CP_UTF8, 0, why, -1, w16, 300);
+        say(L"console: %ls", w16);
+        if (note[0]) strncat(note, " ", sizeof note - strlen(note) - 1);
+        strncat(note, why, sizeof note - strlen(note) - 1);
+    }
+    g_norns_ws = got[0];
+    g_sclang_ws = got[1];
+    if (note[0]) write_note(note);
+}
+
 static int g_maiden_ok = 0; /* maiden is part of this build and its port is ours (set per round by maiden_prepare) */
 static HANDLE g_maiden_proc = NULL;
 
@@ -964,7 +1008,27 @@ static HANDLE start_maiden(const wchar_t *logs) {
     fwd(g_home, homef, MAX_PATH * 2);
     fwd(g_app, appf, MAX_PATH * 2);
     _snwprintf(dustf, MAX_PATH * 2, L"%ls/dust", homef);
-    _snwprintf(args, MAX_PATH * 6, L"server --host 127.0.0.1 --port %d --app app\\build --data \"%ls\" --doc \"%ls/doc\" --config maiden.yaml", g_maiden_port, dustf, appf);
+    wchar_t appdir[MAX_PATH * 2];
+    wcscpy(appdir, L"app\\build");
+    if (g_norns_ws != 5555 || g_sclang_ws != 5556) {
+        /* a console port had to move: maiden's page reads its console ports from repl-endpoints.json, so it is served from a copy (<home>\.maiden-app) with the ports in use; a console that is off keeps its default */
+        wchar_t from[MAX_PATH * 2], ep[MAX_PATH * 2];
+        join(from, MAX_PATH * 2, dir, L"app\\build");
+        join(appdir, MAX_PATH * 2, g_home, L".maiden-app");
+        g_copy_over = 1;
+        copy_tree(from, appdir);
+        g_copy_over = 0;
+        join(ep, MAX_PATH * 2, appdir, L"repl-endpoints.json");
+        FILE *ef = _wfopen(ep, L"wb");
+        if (ef) {
+            fprintf(ef, "{\n    \"norns\": \"ws://maiden_app_location:%d\",\n    \"supercollider\": \"ws://maiden_app_location:%d\"\n}\n", g_norns_ws ? g_norns_ws : 5555, g_sclang_ws ? g_sclang_ws : 5556);
+            fclose(ef);
+        }
+        say(L"maiden: the console ports are norns %d, sclang %d (page served from %ls)", g_norns_ws, g_sclang_ws, appdir);
+    }
+    wchar_t appq[MAX_PATH * 2 + 4];
+    _snwprintf(appq, MAX_PATH * 2 + 4, L"\"%ls\"", appdir);
+    _snwprintf(args, MAX_PATH * 6, L"server --host 127.0.0.1 --port %d --app %ls --data \"%ls\" --doc \"%ls/doc\" --config maiden.yaml", g_maiden_port, appq, dustf, appf);
     DWORD err = 0;
     rotate(logs, L"maiden");
     HANDLE p = start_child(exe, args, dir, logs, L"maiden", &err);
@@ -1407,13 +1471,14 @@ int wmain(int argc, wchar_t **argv) {
         }
         prepare_extensions(); /* M7 round 4: every start, not only the first: a script copies things between two starts */
         maiden_prepare();
+        console_ports_prepare();
         {
             wchar_t sp[MAX_PATH * 2];
             join(sp, MAX_PATH * 2, logs, L"sclang.log");
             sclang_log_from = file_size_of(sp);
         }
     }
-    pn = start_program(norns, L"", g_app, logs, L"norns", 5555, NULL, &err);
+    pn = start_program(norns, L"", g_app, logs, L"norns", g_norns_ws, NULL, &err);
     if (!pn) {
         tell_user(L"Verdandi", MB_ICONERROR, L"Windows could not start norns.exe (error %lu).\n\nAn antivirus program may have blocked it: allow the Verdandi folder and start again.", (unsigned long)err);
         return 6;
@@ -1429,7 +1494,7 @@ int wmain(int argc, wchar_t **argv) {
             say(L"norns.exe has not made its audio bridge within 30 s: starting sclang anyway (scsynth then runs on its own clock until the bridge appears)");
         }
         if (WaitForSingleObject(pn, 0) == WAIT_TIMEOUT) {
-            ps = start_program(sclang, L"-D -l sclang_conf.yaml", scconf, logs, L"sclang", 5556, L"-l sclang_conf.yaml -i maiden", &err);
+            ps = start_program(sclang, L"-D -l sclang_conf.yaml", scconf, logs, L"sclang", g_sclang_ws, L"-l sclang_conf.yaml -i maiden", &err);
             /* the working folder is the SuperCollider config folder, so the configuration file is named by a plain relative name */
             if (!ps) {
                 tell_user(L"Verdandi", MB_ICONWARNING, L"Windows could not start sclang.exe (error %lu). Verdandi goes on without engines.", (unsigned long)err);

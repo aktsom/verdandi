@@ -6,6 +6,7 @@ local function check(ok, what) if not ok then fails = fails + 1; print("FAIL " .
 local function slurp(p) local h = assert(io.open(p)); local c = h:read("a"); h:close(); return c end
 
 norns = {none = function() end}
+_norns = _norns or {} -- (lua/core/menu/system.lua asks _norns.ext_list when it loads)
 local getenv = os.getenv
 local function system_with(platform)
   os.getenv = function(k) if k == "NORNS_PLATFORM" then return platform end return getenv(k) end

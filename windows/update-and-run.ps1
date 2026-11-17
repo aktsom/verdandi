@@ -1,9 +1,10 @@
 <#
-update-and-run.ps1: get the newest Verdandi build, unpack it next to the old ones, start it. The PowerShell variant of update-and-run.cmd (the same steps; the cmd one is used when curl.exe and tar.exe exist).
+update-and-run.ps1: get the newest Verdandi build, put it in the SAME folder name as before (M22: static names, so that a Windows Defender exclusion keeps working), start it. The PowerShell variant of update-and-run.cmd (the same steps; the cmd one is used when curl.exe and tar.exe exist).
 No administrator rights, no installation. Windows PowerShell 5.1 (Windows 10 and 11) is enough.
   1. reads which build this folder is (BUILD.txt) and which build is the newest (BUILD.txt of the GitHub release "windows-latest")
-  2. if the newest is not here yet: downloads the zip, checks its size and its SHA-256 when the release has one, unpacks it into a NEW folder Verdandi-<version>-<hash> next to this one
-  3. closes a running Verdandi after asking, offers to remove the older unpacked builds (default: no), starts the new Verdandi.exe
+  2. if the newest is not here yet: downloads the zip, checks its size and its SHA-256 when the release has one, unpacks it and puts it in the folder Verdandi (ASIO: Verdandi-asio) next to this folder's parent;
+     the folder it replaces is kept beside it as Verdandi.previous
+  3. closes a running Verdandi after asking, offers to remove older builds (default: no), starts the new Verdandi.exe
 Your files are in %USERPROFILE%\Verdandi and are never touched: only folders that hold Verdandi.exe and norns.exe can be removed.
 Options: -NoStart (do not start at the end)  -KeepOld (do not offer to remove older builds)  -Yes (close a running Verdandi without asking)
 For tests: $env:VERDANDI_UPDATE_BASE (a folder or an address of the release files instead of GitHub), $env:VERDANDI_UPDATE_SOURCE (owner/repository)
@@ -24,6 +25,7 @@ function Finish([int]$code) { if ($code -ne 0 -and -not $NoStart) { Read-Host 'P
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $parent = Split-Path -Parent $here
+Set-Location -LiteralPath $env:TEMP   # (the folder this runs from is replaced: no current folder inside it, or Windows cannot rename it)
 $data = if ($env:VERDANDI_HOME) { $env:VERDANDI_HOME } else { Join-Path $env:USERPROFILE 'Verdandi' }
 $tag = 'windows-latest'
 # the ASIO build (FLAVOR.txt in its folder) updates to the ASIO build: its own zip and folder name
@@ -107,18 +109,35 @@ if (-not $m.Success) {
     Say " The newest build's BUILD.txt is not in the expected form (`"$latest`"). Nothing was changed."
     Offer-Current 2
 }
-$newName = "$namePrefix-$($m.Groups[1].Value)-$($m.Groups[2].Value)"
+$newName = $namePrefix   # (a fixed name, without a version)
+$staticDir = Join-Path $parent $newName
+$staticBuild = ''
+if (Test-Path (Join-Path $staticDir 'BUILD.txt')) { $staticBuild = (Get-Content (Join-Path $staticDir 'BUILD.txt') -TotalCount 1).Trim() }
 Say " The newest build is:     $latest"
+
+# a running Verdandi would be brought to the front instead of the new one starting; the folder it runs from cannot be replaced
+function Close-Running([string]$when) {
+    $running = Get-Process -Name Verdandi -ErrorAction SilentlyContinue
+    if (-not $running) { return $true }
+    Say ''
+    Say " Verdandi is running now. The new build can only be used when it is closed (its data is saved when it ends)."
+    if ($Yes -or (Ask ' Close Verdandi now?' $true)) {
+        Get-Process -Name Verdandi, norns, sclang, scsynth -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        return $true
+    }
+    return $false
+}
 
 $target = $null
 if ($latest -eq $current) {
     Say ''
     Say ' You already have the newest build.'
     $target = $here
-} elseif (Test-Path (Join-Path (Join-Path $parent $newName) 'Verdandi.exe')) {
+} elseif ($staticBuild -eq $latest -and (Test-Path (Join-Path $staticDir 'Verdandi.exe'))) {
     Say ''
-    Say " The newest build is already unpacked: $(Join-Path $parent $newName)"
-    $target = Join-Path $parent $newName
+    Say " The newest build is already in: $staticDir"
+    $target = $staticDir
 } else {
     Say ''
     Say ' Downloading the newest build (about 20 MB; this can take a minute) ...'
@@ -149,7 +168,19 @@ if ($latest -eq $current) {
         Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
         $unpacked = Get-ChildItem $tmp -Directory -Filter 'Verdandi*' | Select-Object -First 1
         if (-not $unpacked -or -not (Test-Path (Join-Path $unpacked.FullName 'Verdandi.exe'))) { throw 'the zip has no Verdandi folder with Verdandi.exe' }
-        Move-Item -LiteralPath $unpacked.FullName -Destination (Join-Path $parent $newName)
+        if (-not (Close-Running 'swap')) {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+            Say ' Not closed. Nothing was changed.'
+            Finish 0
+        }
+        # the folder that is there is kept as Verdandi.previous (one: the one before it is removed); the new build gets the same folder name, so the path an exclusion was made for stays the same
+        if (Test-Path -LiteralPath $staticDir) {
+            $prev = "$staticDir.previous"
+            if (Test-Path -LiteralPath $prev) { Remove-Item -LiteralPath $prev -Recurse -Force }
+            Move-Item -LiteralPath $staticDir -Destination $prev
+        }
+        try { Move-Item -LiteralPath $unpacked.FullName -Destination $staticDir }
+        catch { if ((Test-Path -LiteralPath "$staticDir.previous") -and -not (Test-Path -LiteralPath $staticDir)) { Move-Item -LiteralPath "$staticDir.previous" -Destination $staticDir }; throw }
         Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     } catch {
         Say ''
@@ -157,29 +188,21 @@ if ($latest -eq $current) {
         if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
         Offer-Current 2
     }
-    $target = Join-Path $parent $newName
-    Say " Unpacked: $target"
+    $target = $staticDir
+    Say " Put in place: $target"
+    if (Test-Path -LiteralPath "$staticDir.previous") { Say " The build that was there before is kept as $staticDir.previous (delete it when you do not need it)." }
 }
 
-# a running Verdandi would be brought to the front instead of the new one starting
-$running = Get-Process -Name Verdandi -ErrorAction SilentlyContinue
-if ($running) {
-    Say ''
-    Say ' Verdandi is running now. The new build can only start when it is closed (its data is saved when it ends).'
-    if ($Yes -or (Ask ' Close Verdandi now?' $true)) {
-        Get-Process -Name Verdandi, norns, sclang, scsynth -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-    } else {
-        Say " Not closed. The new build is unpacked in $target; start it from there when you have closed Verdandi."
-        Finish 0
-    }
+if (-not (Close-Running 'start')) {
+    Say " Not closed. The new build is in $target; start it from there when you have closed Verdandi."
+    Finish 0
 }
 
 # older builds: folders next to the new one that hold Verdandi.exe and norns.exe (never the data folder, never the new build)
 if (-not $KeepOld) {
     Set-Location $parent
-    $old = @(Get-ChildItem $parent -Directory -Filter 'Verdandi*' -ErrorAction SilentlyContinue | Where-Object {
-        $_.FullName -ne $target -and $_.FullName -ne $data -and
+    $old = @(Get-ChildItem $parent -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "$namePrefix-[0-9]*" -or $_.Name -eq "$namePrefix.previous" } | Where-Object {
+        $_.FullName -ne $target -and $_.FullName -ne $data -and $_.FullName -ne $here -and
         (Test-Path (Join-Path $_.FullName 'Verdandi.exe')) -and (Test-Path (Join-Path $_.FullName 'norns.exe')) })
     if ($old.Count -gt 0) {
         Say ''

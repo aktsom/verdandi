@@ -81,14 +81,14 @@ echo
 echo "## Get it and start it"
 echo
 if [ "${HAVE_ASIO:-0}" = 1 ]; then
-    echo "Two zips: **Verdandi-windows-$VERSION-$SHORT.zip** (WASAPI only, the default, no ASIO code in it) and **Verdandi-windows-asio-$VERSION-$SHORT.zip** (the same program with PortAudio built with ASIO; it carries the GPLv3 notices and the sources of the ASIO part, see \`ASIO-NOTICE.txt\` in it and docs/port/asio-licence.md). Start with the default one."
+    echo "Two zips, with the same names for every build: **Verdandi-windows-latest.zip** (WASAPI only, the default, no ASIO code in it) and **Verdandi-windows-asio-latest.zip** (the same program with PortAudio built with ASIO; it carries the GPLv3 notices and the sources of the ASIO part, see \`ASIO-NOTICE.txt\` in it and docs/port/asio-licence.md). Start with the default one. The same files with the version in their names (**Verdandi-windows-$VERSION-$SHORT.zip**, **Verdandi-windows-asio-$VERSION-$SHORT.zip**) are kept as extras, so that an older build can be fetched."
     echo
 else
-    echo "This release has only the WASAPI zip (the ASIO build was not made, or did not pass its checks, in this run)."
+    echo "This release has only the WASAPI zip (the ASIO build was not made, or did not pass its checks, in this run). Its name is the same for every build: **Verdandi-windows-latest.zip**; **Verdandi-windows-$VERSION-$SHORT.zip** is the same file with the version in its name."
     echo
 fi
-echo "1. Download **Verdandi-windows-$VERSION-$SHORT.zip** below. Right-click it, Properties, tick *Unblock*, OK. Extract it into a folder of your own (it contains one folder, \`Verdandi-$VERSION-$SHORT\`, so builds never overwrite each other)."
-echo "2. Double-click \`Verdandi.exe\` in that folder. Next time double-click \`update-and-run.cmd\` there: it fetches the newest build, unpacks it next to this one and starts it. Your files stay in \`%USERPROFILE%\\Verdandi\`."
+echo "1. Download **Verdandi-windows-latest.zip** below. Right-click it, Properties, tick *Unblock*, OK. Extract it into a folder of your own (Windows: Extract All puts it in a folder called \`Verdandi-windows-latest\`; the zip contains one folder, \`Verdandi\` (the ASIO zip: \`Verdandi-asio\`), with no version in its name: the folder is the same for every build, so a Windows Defender exclusion for it keeps working). Which build it is: \`VERSION.txt\` and \`BUILD.txt\` in that folder, the log, the home page."
+echo "2. Double-click \`Verdandi.exe\` in that folder. To update: close Verdandi, delete the old folder (your files are in \`%USERPROFILE%\\Verdandi\` and stay), extract the new zip into the same place. Or double-click \`update-and-run.cmd\`: it fetches the newest build and puts it in the same folder, keeping the old one next to it as \`Verdandi.previous\` until you delete it."
 if [ -n "$REPO" ]; then
     echo "3. The newest build is always at https://github.com/$REPO/releases/tag/windows-latest"
 fi

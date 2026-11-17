@@ -22,15 +22,53 @@ WAF="$(find_waf)"
 
 FAILED=()
 KNOWN=()
+# M22: the run can be cut into SHARDS that a CI workflow runs side by side (SHARD=lua|native|windows-0|windows-1|heavy; empty = everything), a test that cannot run says SKIP (exit code 77, or "SKIP" as the first
+# line of its output) and is counted as skipped, never as passed, and the tests on linux/tests/known-failures.txt may fail without failing the run (a test that is not on the list and fails does; a test on the
+# list that passes says so). docs/port/phase-m22.md
+SHARD="${SHARD:-}"
+KNOWN_FILE="${KNOWN_FAILURES:-$REPO/linux/tests/known-failures.txt}"
+SKIPPED=(); NOWPASS=(); KNOWNFAIL=(); PASSED=0
+shard_of() { # test name -> shard
+    case "${1%%[: ]*}" in
+        windows) printf 'windows-%s' "$(( $(printf '%s' "$1" | cksum | cut -d' ' -f1) % 2 ))" ;;
+        lua | box | screen | input | manual | branding | scan-fkeys | metro | devices | udev | linux | script | shims | launcher | tidy | shell | engine*) echo lua ;;
+        c | grid | midi | clock | serialosc | audio) echo native ;;
+        *) echo heavy ;;
+    esac
+}
+skip() { # "name (reason)": a test that was not run here, counted as skipped
+    wanted "$1" || return 0
+    skip "$1"
+    SKIPPED+=("$1")
+}
+wanted() { [ -z "$SHARD" ] || [ "$(shard_of "$1")" = "$SHARD" ]; }
+test_key() { printf '%s' "${1%% (*}"; } # the name up to its first " (": what the known-failures list names
+is_known_failure() { [ -f "$KNOWN_FILE" ] && grep -v '^#' "$KNOWN_FILE" | cut -d'|' -f1 | sed 's/ *$//' | grep -qxF -- "$(test_key "$1")"; }
 logfile() { # name -> a safe, short file name in $T (a name may hold slashes, > and quotes, and be long)
     printf '%s/%s-%s.log' "$T" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_' | cut -c1-60)" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
 }
 run() { # name, command...
-    local name="$1" log
+    local name="$1" log rc first
     shift
+    wanted "$name" || return 0
     log="$(logfile "$name")"
-    if "$@" > "$log" 2>&1; then
-        echo "PASS  $name"
+    "$@" > "$log" 2>&1
+    rc=$?
+    first="$(grep -v '^[[:space:]]*$' "$log" | head -n 1)"
+    if [ "$rc" -eq 77 ] || { [ "$rc" -eq 0 ] && [ "${first#SKIP}" != "$first" ]; }; then
+        skip "$name  [${first:-skipped}]"
+        SKIPPED+=("$name")
+    elif [ "$rc" -eq 0 ]; then
+        if is_known_failure "$name"; then
+            echo "PASS  $name  [it is on linux/tests/known-failures.txt and passes now: take it off the list]"
+            NOWPASS+=("$name")
+        else
+            echo "PASS  $name"
+        fi
+        PASSED=$((PASSED + 1))
+    elif is_known_failure "$name"; then
+        echo "KNOWN $name  [on linux/tests/known-failures.txt: $(grep -v '^#' "$KNOWN_FILE" | grep -F -- "$(test_key "$name")" | head -n 1 | cut -d'|' -f2 | sed 's/^ *//')]"
+        KNOWNFAIL+=("$name")
     else
         echo "FAIL  $name (log: tail below)"
         tail -5 "$log" | sed 's/^/        /'
@@ -63,7 +101,7 @@ NB_DIR=""
 if timeout 60 git clone -q --depth 1 https://github.com/sixolet/nb.git "$T/nb" 2> /dev/null; then
     NB_DIR="$T/nb"
 else
-    echo "SKIP  the real nb library could not be fetched (no network?): its checks are not run"
+    skip "the real nb library could not be fetched (no network?): its checks are not run"
 fi
 VH2="$(mktemp -d)"
 run "lua:virtual_home chunk names (script and library folders from debug.getinfo)" env HOME="$VH2" NB_DIR="$NB_DIR" lua5.3 linux/tests/virtual_chunkname_test.lua lua/core/virtual_home.lua
@@ -98,7 +136,7 @@ cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" && run "c:dust
 # the same as an ordinary user: root can read every file, so the failed-copy case only runs here
 chmod 755 "$T" && setpriv --reuid=65534 --regid=65534 --clear-groups true 2> /dev/null &&
     run "c:dust_import (as nobody)" setpriv --reuid=65534 --regid=65534 --clear-groups "$T/dit"
-echo "SKIP  c:gif (links ImageIO), objc: drop_test app_input_test"
+skip "c:gif (links ImageIO), objc: drop_test app_input_test"
 
 run "waf:unit tests" "$WAF" test
 
@@ -110,7 +148,7 @@ if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
     run "maiden:install a script, plug-in check" linux/tests/maiden_install_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:button (opens maiden, or a note when not running)" linux/tests/maiden_button_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
 else
-    echo "SKIP  maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
+    skip "maiden:server, origin checks (maiden is not built: linux/maiden-build.sh)"
 fi
 jack_null_ok() {
     gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration -I matron/src/platform/windows/jack_null/include linux/tests/jack_null_test.c \
@@ -121,12 +159,13 @@ run "windows:JACK-compatible null backend (ring buffer, unique names, ports, phy
 # the Windows port (docs/port/phase-m1.md): needs the mingw-w64 cross compiler and Wine (apt: g++-mingw-w64-x86-64 wine64); said out loud when they are not there
 if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/wine/wine64 ]; then
     run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
+    run "windows:M22 busy console ports 5555/5556: the launcher takes free ports, says which program holds them, keeps norns and sclang running (Wine)" linux/tests/console_ports_wine_test.sh
     run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
     run "windows:ASIO probe against a stub ASIO driver under Wine (nothing registered, a working driver with its channels and buffer sizes, a driver that refuses with its own message, a class that cannot be made, a missing driver file)" linux/tests/asio_probe_test.sh
     run "windows:ASIO backend against a stub ASIO driver under Wine (open, close and open again from any thread, other pair, other buffer, the card clock is never changed, channel names, buffer sizes; SKIP without an ASIO build of PortAudio for mingw)" linux/tests/asio_backend_test.sh
     run "windows:update-and-run.cmd under Wine with stand-ins for curl, tar and the questions (a newer build unpacked into its own folder, old builds kept or removed on request, the data folder never touched, plain messages when the download fails)" linux/tests/update_and_run_test.sh
 else
-    echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
+    skip "windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
 fi
 run "windows:start/restart cycle test hook (VERDANDI_TEST_CYCLES: a restart after each start-up until the start number is reached, then a shutdown; inactive without the variable)" lua5.3 linux/tests/test_cycles_test.lua
 run "windows:the cycle test check passes a good run and fails the real failing run with the log of the failing round in the report" bash linux/tests/cycle_check_test.sh
@@ -163,7 +202,7 @@ g++ -std=gnu++14 -D_GNU_SOURCE -DNORNS_LINUX_DESKTOP -I matron/src -I matron/src
     $(pkg-config --cflags lua5.3 libevdev alsa 2>/dev/null) -I/usr/include/libevdev-1.0 linux/tests/midi_replug_test.cc matron/src/device/device_list.cc matron/src/device/device.cc matron/src/device/device_midi.cc \
     -Wl,--wrap=access -o "$T/midi_replug_test" $(pkg-config --libs lua5.3 libevdev) -lpthread -ldl 2> "$T/midi_replug_build.log" \
     && run "c:midi unplug and replug (device monitor, list, read threads with a fake udev and ALSA; no remove, late remove, not ready, busy, duplicates, the virtual MIDI card skipped and released; 30 random sequences)" "$T/midi_replug_test" 30 1 \
-    || { echo "FAIL  c:midi unplug and replug does not build"; tail -5 "$T/midi_replug_build.log"; FAILED+=("midi replug build"); }
+    || run "c:midi unplug and replug does not build" bash -c 'tail -5 "$0"; exit 1' "$T/midi_replug_build.log"
 run "linux:crash report (signal, thread name, backtrace in the log and crash-report.txt; the default action and the core dump kept)" linux/tests/crash_report_test.sh
 cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -o "$T/ulk" -lm 2> "$T/ulk.err" || cat "$T/ulk.err"
 python3 docs/port/ui-previews/ui_tint.py dump > "$T/ui-dump.txt"
@@ -261,6 +300,7 @@ run "windows:M7 a failing initClass of an extension no longer stops sclang's sta
 run "windows:M7 round 3: /home/we in sclang on Windows (a script-like engine scans a /home/we path; NORNS_HOME with a drive, backslashes and a blank; same code as the Linux file)" linux/tests/sc_virtual_home_win_test.sh
 run "windows:M7 round 4: the launcher's duplicate-class guard with the real sclang (the 0.8.2 failure reproduced: duplicate Class found, Library has not been compiled; healed; sclang starts)" linux/tests/dup_heal_sclang_test.sh
 run "windows:the MAIDEN button note when the launcher did not start maiden (port held by another program)" lua5.3 linux/tests/maiden_note_test.lua
+run "windows:M22 console port choice (free ports, the other console's port, no free port) and the plain line" bash -c 'cc -std=gnu11 -Wall linux/tests/console_port_test.c -o "$0" && "$0"' "$T/console_port_test"
 # ---- M6: maiden, serialosc, plug-ins (docs/port/phase-m6.md)
 m6_ok() {
     g++ -std=c++17 -Wall -I matron/src linux/tests/serialosc_core_test.cpp -o "$T/serialosc_core_test" || return 1
@@ -449,7 +489,7 @@ if cc -std=gnu11 "$REPO/linux/tests/jack_midi_clock_test.c" -o "$T/jack_midi_clo
     }
     run "clock:midi clock, start, SPP, stop, continue and notes through JACK MIDI" jackmidi_ok
 else
-    echo "SKIP  clock:jack midi (no jack headers)"
+    skip "clock:jack midi (no jack headers)"
 fi
 
 # the virtual MIDI device sends through JACK MIDI (the port Verdandi:midi_out): a listening client gets every message a script sends to it (notes, cc, program change, pitch bend, pressure,
@@ -485,7 +525,7 @@ if cc -std=gnu11 "$REPO/linux/tests/jack_midi_out_test.c" -o "$T/jack_midi_out_t
     }
     run "midi:the virtual MIDI device sends through JACK MIDI (Verdandi:midi_out: notes, cc, program change, pitch bend, pressure, sysex, transport, clock spacing; silence when nothing is sent)" jackmidiout_ok
 else
-    echo "SKIP  midi:jack midi out (no jack headers)"
+    skip "midi:jack midi out (no jack headers)"
 fi
 
 # Cheat Codes 2 in the real norns (needs a clone of the script with its nb submodule: CC2_DIR, or the network): a pattern recording ends without "invalid paramset index: clock_midi_out",
@@ -493,7 +533,7 @@ fi
 CCLOG="$T/cc2clock.log"
 "$REPO/linux/tests/cc2_clock_test.sh" "$CCLOG" > /dev/null 2>&1
 if [ $? -eq 2 ]; then
-    echo "SKIP  script:Cheat Codes 2 ends a pattern recording (no clone: set CC2_DIR or allow github.com)"
+    skip "script:Cheat Codes 2 ends a pattern recording (no clone: set CC2_DIR or allow github.com)"
 else
     cc2_ok() {
         local bad=0
@@ -573,7 +613,7 @@ if command -v jackd > /dev/null; then
     }
     run "audio:no physical ports: boots unconnected with a warning" audio_none_ok
 else
-    echo "SKIP  audio: no jackd"
+    skip "audio: no jackd"
 fi
 
 # metros are threads: with a lot of static TLS (a desktop with GPU drivers: simulated by LD_PRELOAD) a 16 KiB stack
@@ -669,7 +709,7 @@ if command -v pipewire > /dev/null && command -v wireplumber > /dev/null && comm
     "$REPO/linux/tests/clock_rate_test.sh" pipewire "$CLOGP" > /dev/null 2>&1
     run "clock:internal clock 2 beats per second with SYS input under PipeWire + WirePlumber" clock_rate_ok "$CLOGP"
 else
-    echo "SKIP  clock: PipeWire flavor (needs pipewire, wireplumber, pw-jack, dbus-run-session)"
+    skip "clock: PipeWire flavor (needs pipewire, wireplumber, pw-jack, dbus-run-session)"
 fi
 
 # another process on the grid's serial port (serialosc-device): the check, from process lists given as data, and against fake
@@ -806,7 +846,7 @@ if command -v jackd > /dev/null; then
         }
         run "mi-UGens:headless boot with a Raspberry Pi download next to the own pack: moved before sclang, note once, a later download noticed and moved after the CLEAN UP confirmation" mi_heal_boot_ok
     else
-        echo "SKIP  mi-UGens:heal boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and build/linux/mi_heal from linux/build.sh)"
+        skip "mi-UGens:heal boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and build/linux/mi_heal from linux/build.sh)"
     fi
 fi
 # NamAmp (docs/port/namamp.md): the seed, the cmp / cp shims, the start-up heal of any wrong-architecture plug-in, the runtime scan, the plug-in itself rendered offline, and the real princeton
@@ -863,7 +903,7 @@ if command -v jackd > /dev/null; then
         }
         run "mi-UGens:Emplaitress enabled in a headless boot finds the shipped pack, no download happens" mi_boot_ok
     else
-        echo "SKIP  mi-UGens:Emplaitress headless boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and NORNS_EMPLAITRESS=<clone of the mod>)"
+        skip "mi-UGens:Emplaitress headless boot (needs build/package/cache/mi-ugens-pack from 'linux/package.sh mi' and NORNS_EMPLAITRESS=<clone of the mod>)"
     fi
 fi
 
@@ -964,7 +1004,7 @@ if [ -e /dev/snd/seq ] && cc -std=gnu11 "$REPO/linux/tests/aseq_dump_test.c" -o 
     }
     run "midi:the virtual MIDI device sends to the ALSA sequencer port Verdandi out (notes, cc, clock, start/stop, sysex in order, silence when nothing is sent)" aseqout_ok
 else
-    echo "SKIP  midi:alsa sequencer output end to end (no /dev/snd/seq here: the owner's check is in HARDWARE-CHECKLIST.md)"
+    skip "midi:alsa sequencer output end to end (no /dev/snd/seq here: the owner's check is in HARDWARE-CHECKLIST.md)"
 fi
 
 # the JACK MIDI output under stress, on PipeWire's JACK layer (pw-jack, a private PipeWire without a sound card) and on jackd: dense notes, 2000-tick clock bursts, sysex of 100 to 20000 bytes, garbage, four senders,
@@ -989,7 +1029,7 @@ if command -v pw-jack > /dev/null && command -v pipewire > /dev/null && command 
     kill "$JK_PID" 2> /dev/null
     wait "$JK_PID" 2> /dev/null
 else
-    echo "SKIP  midi:jack midi out stress (no pipewire, pw-jack or jackd, or it does not build)"
+    skip "midi:jack midi out stress (no pipewire, pw-jack or jackd, or it does not build)"
 fi
 
 # the optional output auto-connect (midi_out_to= in audio.conf, or NORNS_MIDI_OUT_TO): Verdandi:midi_out is linked to the MIDI inputs that match a prefix, a link cut behind norns' back is made again,
@@ -1130,7 +1170,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     if [ -n "$PY" ] && command -v dbus-run-session > /dev/null; then
         menu_scenario portal
     else
-        echo "SKIP  portal mock (python3 gi and dbus-run-session not installed)"
+        skip "portal mock (python3 gi and dbus-run-session not installed)"
     fi
     # "Open the file dialog when a script loads a file": off by default (norns's own browser only), ticked in the window's menu (the dialog opens),
     # unticked (no dialog), saved in ui.conf, and after a restart the menu shows the tick and the dialog opens. a stub zenity counts the dialogs
@@ -1256,7 +1296,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     # then it drives E2 for the script, which also receives every message, and a CC key presses K2
     midimap_scenario() {
         if ! cc -std=gnu11 "$REPO/linux/tests/midimap_send.c" -o "$T/midimap_send" $(pkg-config --cflags --libs jack) 2> /dev/null; then
-            echo "SKIP  window:MIDI MAP (the JACK sender did not build)"
+            skip "window:MIDI MAP (the JACK sender did not build)"
             return
         fi
         MH="$(mktemp -d)"
@@ -1294,7 +1334,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     # norns window and the screen window, the menu item (17th, F10 and Return) ticks and unticks and is saved, and after a restart the menu and the actions follow the saved switch
     actions_scenario() {
         if [ ! -x "$T/midimap_send" ] && ! cc -std=gnu11 "$REPO/linux/tests/midimap_send.c" -o "$T/midimap_send" $(pkg-config --cflags --libs jack) 2> /dev/null; then
-            echo "SKIP  window:MIDI actions (the JACK sender did not build)"
+            skip "window:MIDI actions (the JACK sender did not build)"
             return
         fi
         AH="$(mktemp -d)"
@@ -1357,7 +1397,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     # quick script changes with the virtual grid and arc open and a mapped controller playing (docs/port/KNOWN-ISSUES.md 29): the last script starts every time, no error in the clear or the removal of devices
     rapid_scenario() {
         if [ ! -x "$T/midimap_send" ]; then
-            echo "SKIP  window:quick script changes (the JACK sender did not build)"
+            skip "window:quick script changes (the JACK sender did not build)"
             return
         fi
         RH="$(mktemp -d)"
@@ -1452,7 +1492,7 @@ PY
     # its release steps nothing, no other key and no key in the menu turns it, a click on a ring while a learn is armed picks it, a CC played through JACK MIDI is learned and turns that ring, a closed window is not turned
     arc_scenario() {
         if [ ! -x "$T/midimap_send" ]; then
-            echo "SKIP  window:arc (the JACK sender did not build)"
+            skip "window:arc (the JACK sender did not build)"
             return
         fi
         AH="$(mktemp -d)"
@@ -1795,21 +1835,22 @@ PY
     }
     mods_scenario
 else
-    echo "SKIP  window (xdotool and imagemagick not installed)"
+    skip "window (xdotool and imagemagick not installed)"
 fi
 
 # the package in a clean Ubuntu 24.04 root (heavy: debootstrap, apt, a headless boot as a normal user). needs root, debootstrap,
 # network and a built .deb (linux/package.sh all). NORNS_PACKAGE_TEST=0 skips, =1 makes a missing .deb a failure
 pkg_name="package:clean root install, boot as a normal user, metadata, privacy scan"
+pkg_cmd() { # 77 = skipped (no root, no debootstrap, no .deb); NORNS_PACKAGE_TEST=1 makes that a failure
+    "$REPO/linux/tests/package_test.sh"
+    local rc=$?
+    [ "$rc" -eq 77 ] && [ "${NORNS_PACKAGE_TEST:-auto}" = 1 ] && return 1
+    return "$rc"
+}
 if [ "${NORNS_PACKAGE_TEST:-auto}" = 0 ]; then
-    echo "SKIP  $pkg_name (NORNS_PACKAGE_TEST=0)"
+    skip "$pkg_name (NORNS_PACKAGE_TEST=0)"
 else
-    "$REPO/linux/tests/package_test.sh" > "$T/package.log" 2>&1
-    rc=$?
-    if [ $rc -eq 0 ]; then echo "PASS  $pkg_name"; grep '^PASS' "$T/package.log" | sed 's/^/        /'
-    elif [ $rc -eq 77 ] && [ "${NORNS_PACKAGE_TEST:-auto}" != 1 ]; then echo "$(grep '^SKIP' "$T/package.log" | sed 's/^SKIP package_test:/SKIP  package:clean root test -/')"
-    else echo "FAIL  $pkg_name"; grep -E '^(FAIL|SKIP|   )' "$T/package.log" | head -20 | sed 's/^/        /'; FAILED+=("package")
-    fi
+    run "$pkg_name" pkg_cmd
 fi
 # opt-in (about 10 minutes): the whole build in a fresh root, started like "sudo linux/package.sh clean-root" by an account that does not
 # exist in that root, then the install test on the result. NORNS_CLEAN_ROOT_TEST=1
@@ -1818,8 +1859,19 @@ if [ "${NORNS_CLEAN_ROOT_TEST:-0}" = 1 ]; then
         id hostbuilder >/dev/null 2>&1 || useradd -m hostbuilder
         SUDO_USER=hostbuilder linux/package.sh clean-root && linux/tests/package_test.sh build/package/clean-root/verdandi_*.deb'
 else
-    echo "SKIP  package:clean-root build end to end (opt-in, about 10 minutes: NORNS_CLEAN_ROOT_TEST=1)"
+    skip "package:clean-root build end to end (opt-in, about 10 minutes: NORNS_CLEAN_ROOT_TEST=1)"
 fi
 echo
-echo "known failures: ${#KNOWN[@]}  unexpected failures: ${#FAILED[@]}"
+echo "RESULT${SHARD:+ shard $SHARD}: passed ${PASSED}, failed ${#FAILED[@]}, known failures ${#KNOWNFAIL[@]}, skipped ${#SKIPPED[@]}, on the known-failures list but passing ${#NOWPASS[@]}"
+echo "known failures: $((${#KNOWN[@]} + ${#KNOWNFAIL[@]}))  unexpected failures: ${#FAILED[@]}"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+        echo "### linux tests${SHARD:+ (shard $SHARD)}: $PASSED passed, ${#FAILED[@]} failed, ${#KNOWNFAIL[@]} known failures, ${#SKIPPED[@]} skipped"
+        for n in "${FAILED[@]}"; do echo "- FAILED: $n"; done
+        for n in "${NOWPASS[@]}"; do echo "- passes now, take it off the known-failures list: $n"; done
+        for n in "${KNOWNFAIL[@]}"; do echo "- known failure: $n"; done
+        for n in "${SKIPPED[@]}"; do echo "- skipped: $n"; done
+    } >> "$GITHUB_STEP_SUMMARY"
+fi
+for n in "${NOWPASS[@]}"; do echo "::notice title=known failure passes now::$n is on linux/tests/known-failures.txt and passed: take it off the list"; done
 [ ${#FAILED[@]} -eq 0 ]

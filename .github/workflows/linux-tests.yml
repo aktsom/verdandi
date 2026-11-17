@@ -1,0 +1,54 @@
+name: linux-tests
+
+# M22: the unit tests of linux/tests/run_all.sh (about 300: the audio chain with a fake card, the Wine reproduction tests, the Lua pages, the C tests, the launcher with stand-ins ...) run on every push to this branch.
+# the suite is long, so it is cut into SHARDS that run side by side (SHARD=... in run_all.sh); the Windows build jobs (windows-m1.yml) are a different workflow and do not wait for this one, nor this one for them.
+# a test that cannot run here says SKIPPED (with the reason), never PASS. a test on linux/tests/known-failures.txt may fail without failing the job; a test that is NOT on the list and fails does, and a test on the
+# list that passes says so (a notice and the job summary). docs/port/phase-m22.md
+
+on:
+  push:
+    branches: [linux-port, windows-port]
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: tests (${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [lua, native, windows-0, windows-1, heavy]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Packages (the dependencies of linux/setup-deps.sh, and the cross compiler and Wine for the Windows tests)
+        run: |
+          sudo apt-get update -qq
+          sudo dpkg --add-architecture i386 || true
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake curl dpkg-dev git ninja-build pkg-config python3 zip unzip \
+            libasound2-dev libavahi-client-dev libavahi-compat-libdnssd-dev libboost-dev libcairo2-dev \
+            libevdev-dev libfftw3-dev libglib2.0-dev libgpiod-dev libjack-jackd2-dev liblo-dev \
+            liblua5.3-dev libncurses-dev libnng-dev libreadline-dev libsamplerate0-dev libsdl2-dev \
+            libsndfile1-dev libudev-dev portaudio19-dev lua5.3 xvfb xauth x11-apps x11-utils xdotool imagemagick \
+            gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix wine64 jackd2 || true
+          # whatever apt could not give (a package that moved) shows as SKIPPED tests, not as a green run: the tests check their tools
+          command -v lua5.3 && command -v x86_64-w64-mingw32-gcc-posix || true
+      - name: The tests of this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          KEEP_LOGS: ${{ runner.temp }}/test-logs
+        run: |
+          set -o pipefail
+          linux/tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/run_all.txt"
+      - name: The logs of the tests (when something failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.shard }}
+          path: ${{ runner.temp }}/test-logs
+          if-no-files-found: ignore
+          retention-days: 7

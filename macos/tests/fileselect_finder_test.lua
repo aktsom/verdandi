@@ -2,6 +2,7 @@
 -- on macOS). run from the repo root:
 --   <lua 5.3> macos/tests/fileselect_finder_test.lua
 -- the window side (_norns.choose_file ...) and the screen are faked
+package.path = "lua/?.lua;lua/core/?.lua;lua/lib/?.lua;" .. package.path -- (fileselect.lua requires core/menu/winui)
 local fails = 0
 local function check(cond, what)
   if not cond then
@@ -23,6 +24,7 @@ util = {
 }
 norns = {menu = {status = function() return false end, init = function() end}, none = function() end}
 screen = setmetatable({}, {__index = function() return function() end end})
+screen.text_extents = function(str) return #str * 5 end -- (lua/core/menu/winui.lua measures text)
 clock = {cancel = function() end, run = function() end}
 softcut = setmetatable({}, {__index = function() return function() end end})
 audio = {file_info = function() return 2, 48000, 48000 end}
