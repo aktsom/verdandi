@@ -44,6 +44,7 @@ static unsigned g_clock_owner = 0;         /* another program (an ASIO driver) s
 static int g_card_dead = 0;                /* the card stopped calling back (its clock was changed under the stream) */
 static int g_refreshes = 0;
 static int g_opens, g_closes, g_card_clock_calls, g_present_calls; /* what the device layer asked of the fake card (M21) */
+static int g_default_opens;               /* opens of the Windows default device: with the chosen device gone, every try ends with one */
 static int g_gone_all;                     /* every device is gone (the card was pulled and Windows has no other) */
 static char g_gone_uid[64];                /* this one device is gone, the others are there (Windows has another default device) */
 static double g_dev_rate = 48000;          /* the rate the fake interface runs at (the Windows setting / the card's clock) */
@@ -152,6 +153,7 @@ static vaud_error fk_open(const vaud_open_req *rq, vaud_callback cb, void *u, va
     last_req = *rq;
     const char *uid = rq->out_uid;
     g_opens++;
+    if (!uid[0]) g_default_opens++;
     if (g_gone_all || (g_gone_uid[0] && !strcmp(uid, g_gone_uid))) {
         snprintf(err, en, uid[0] ? "no output device with this name" : "Windows has no default output device");
         return VAUD_NOT_FOUND;
@@ -990,10 +992,10 @@ static void scenario_away(const char *sc) {
         g_gone_all = 1;
         g_card_dead = 1;
         CHECK(wait_for(c_fallback, 12000), "%s: the card that stops answering is noticed and, with no device at all, there is no sound", sc);
-        int r0 = g_refreshes; /* (every try looks at the devices again once: that is how tries are counted; one try opens twice, the chosen device and the default) */
+        int r0 = g_default_opens; /* (one try opens the chosen device, then the default: the opens of the default are the tries) */
         sleep_ms_f(10500);
         CHECK(c_fallback(), "%s: still no sound after 10 s (nothing to play on)", sc);
-        CHECK(g_refreshes - r0 >= 2 && g_refreshes - r0 <= 4, "%s: it is tried again every 3 s, for every reason (%d tries in 10.5 s)", sc, g_refreshes - r0);
+        CHECK(g_default_opens - r0 >= 2 && g_default_opens - r0 <= 4, "%s: it is tried again every 3 s, for every reason (%d tries in 10.5 s)", sc, g_default_opens - r0);
         CHECK(lines_with(logp, "no sound") <= 3, "%s: and it does not fill the log (%d lines about it)", sc, lines_with(logp, "no sound"));
         CHECK(strstr(vaud_get_state()->note, "tried again every 3 s") != NULL, "%s: the page says so: '%s'", sc, vaud_get_state()->note);
         g_gone_all = 0;
