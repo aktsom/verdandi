@@ -27,7 +27,7 @@ KNOWN=()
 # list that passes says so). docs/port/phase-m22.md
 SHARD="${SHARD:-}"
 KNOWN_FILE="${KNOWN_FAILURES:-$REPO/linux/tests/known-failures.txt}"
-SKIPPED=(); NOWPASS=(); KNOWNFAIL=(); PASSED=0
+SKIPPED=(); NOWPASS=(); KNOWNFAIL=(); FAILTAILS=(); PASSED=0
 shard_of() { # test name -> shard
     case "${1%%[: ]*}" in
         windows) printf 'windows-%s' "$(( $(printf '%s' "$1" | cksum | cut -d' ' -f1) % 2 ))" ;;
@@ -77,6 +77,7 @@ run() { # name, command...
         echo "FAIL  $name (log: tail below)"
         tail -5 "$log" | sed 's/^/        /'
         FAILED+=("$name")
+        FAILTAILS+=("== ${name:0:110}"$'\n'"$(tail -n 14 "$log" | cut -c1-220 | sed 's/^/    /')")
     fi
 }
 known() { # name, command...: a failure is expected and recorded
@@ -1870,6 +1871,7 @@ echo
 echo "RESULT${SHARD:+ shard $SHARD}: passed ${PASSED}, failed ${#FAILED[@]}, known failures ${#KNOWNFAIL[@]}, skipped ${#SKIPPED[@]}, on the known-failures list but passing ${#NOWPASS[@]}"
 echo "known failures: $((${#KNOWN[@]} + ${#KNOWNFAIL[@]}))  unexpected failures: ${#FAILED[@]}"
 for n in "${FAILED[@]}"; do echo "UNEXPECTED FAILURE: ${n:0:170}"; done
+[ ${#FAILTAILS[@]} -gt 0 ] && { echo "---- the last lines of each unexpected failure ----"; for n in "${FAILTAILS[@]}"; do echo "$n"; done; }
 for n in "${KNOWNFAIL[@]}"; do echo "KNOWN FAILURE: ${n:0:170}"; done
 for n in "${SKIPPED[@]}"; do echo "SKIPPED: ${n:0:170}"; done
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then

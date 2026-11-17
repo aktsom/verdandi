@@ -23,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0 # (the box:C side test compares with an old commit, c6f62ff)
       - name: "Packages for the Windows tests (cross compiler, Wine) and the documented setup, linux/setup-deps.sh"
         run: |
           sudo dpkg --add-architecture i386 || true
