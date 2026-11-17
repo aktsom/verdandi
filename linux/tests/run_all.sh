@@ -1865,6 +1865,9 @@ fi
 echo
 echo "RESULT${SHARD:+ shard $SHARD}: passed ${PASSED}, failed ${#FAILED[@]}, known failures ${#KNOWNFAIL[@]}, skipped ${#SKIPPED[@]}, on the known-failures list but passing ${#NOWPASS[@]}"
 echo "known failures: $((${#KNOWN[@]} + ${#KNOWNFAIL[@]}))  unexpected failures: ${#FAILED[@]}"
+for n in "${FAILED[@]}"; do echo "UNEXPECTED FAILURE: ${n:0:170}"; done
+for n in "${KNOWNFAIL[@]}"; do echo "KNOWN FAILURE: ${n:0:170}"; done
+for n in "${SKIPPED[@]}"; do echo "SKIPPED: ${n:0:170}"; done
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {
         echo "### linux tests${SHARD:+ (shard $SHARD)}: $PASSED passed, ${#FAILED[@]} failed, ${#KNOWNFAIL[@]} known failures, ${#SKIPPED[@]} skipped"

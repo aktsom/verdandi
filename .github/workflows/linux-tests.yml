@@ -35,6 +35,8 @@ jobs:
             liblua5.3-dev libncurses-dev libnng-dev libreadline-dev libsamplerate0-dev libsdl2-dev \
             libsndfile1-dev libudev-dev portaudio19-dev lua5.3 xvfb xauth x11-apps x11-utils xdotool imagemagick \
             gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix wine64 jackd2 || true
+          # libmonome (monome.h) for the grid tests: its own line, so that a missing package cannot spoil the rest
+          sudo apt-get install -y --no-install-recommends libmonome-dev || true
           # whatever apt could not give (a package that moved) shows as SKIPPED tests, not as a green run: the tests check their tools
           command -v lua5.3 && command -v x86_64-w64-mingw32-gcc-posix || true
       - name: The tests of this shard
