@@ -1,5 +1,5 @@
-## M22 (0.10.13), in progress
-UTF-8 manifest for every program, free console ports when 5555/5556 are held, fixed download names, unit tests as CI job: see docs/port/phase-m22.md. CI results to be filled in when the runs finish.
+## M22 (0.10.13), CI results being collected
+Windows CI (real runner) on dce1fe1: every job green (UTF-8 manifests, a copy of the program in a folder `José Ā Ж` with a user folder of the same kind, static names, busy ports on 5555/5556 in the ASIO job). The publish step got HTTP 403 creating the release tag; diagnostics were added (see docs/port/phase-m22.md). linux-tests: shards run (about 1 h 50 each), failures verified or explained in linux/tests/known-failures.txt. Details: docs/port/phase-m22.md.
 
 # STATUS
 
