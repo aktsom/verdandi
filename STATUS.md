@@ -1,3 +1,6 @@
+## M22 (0.10.13), in progress
+UTF-8 manifest for every program, free console ports when 5555/5556 are held, fixed download names, unit tests as CI job: see docs/port/phase-m22.md. CI results to be filled in when the runs finish.
+
 # STATUS
 
 Branch: `linux-port`. Resume rule: read `STATUS.md`, `PLAN.md`, `DECISIONS.md` first.
