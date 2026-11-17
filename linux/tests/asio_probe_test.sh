@@ -12,7 +12,7 @@ T="$(mktemp -d)"
 export WINEPREFIX="$T/prefix" WINEDEBUG=-all WINEARCH=win64
 fails=0
 check() { if grep -q -E "$2" "$T/out.txt"; then echo "ok   $1"; else echo "FAIL $1 (wanted: $2)"; sed 's/^/     | /' "$T/out.txt" | head -8; fails=$((fails + 1)); fi; }
-$CC -std=gnu11 -Wall -Wextra -shared -o "$T/asio_stub.dll" windows/ci/asio_stub.c -Wl,--kill-at -lole32 -luuid || exit 1
+$CC -std=gnu11 -Wall -Wextra -shared -o "$T/asio_stub.dll" windows/ci/asio_stub.c -Wl,--kill-at -lole32 -luuid -lwinmm || exit 1
 cat > "$T/main.c" << 'EOC'
 #include <stdio.h>
 #include "audio_asio_probe.h"

@@ -39,6 +39,7 @@ typedef struct PaAsioStreamInfo {
 #ifdef _WIN32
 #include <windows.h>
 #include <psapi.h>
+#include <objbase.h>
 #include "audio_asio_probe.h"
 #endif
 
@@ -203,7 +204,7 @@ static int apis(api_t *out) {
     return n;
 }
 
-static int pa_list(vaud_device *out, int max) {
+static int pa_list_w(vaud_device *out, int max) {
     char err[200];
     if (pa_up(err, sizeof err) != 0) {
         return 0;
@@ -246,6 +247,9 @@ static int pa_list(vaud_device *out, int max) {
             if (!strcmp(ap[k].label, "ASIO")) {
                 const va_driver *f = asio_facts(di->name);
                 if (f) {
+                    if (f->rate > 0) out[n].default_rate = f->rate; /* the card's clock NOW (the driver's ASIOGetSampleRate); PortAudio's own default_rate is the first rate in 44100, 48000, ... the driver CAN run at, which says nothing about what it runs at */
+                    out[n].out_names = f->n_out_names ? (const char(*)[24])f->out_names : NULL, out[n].n_out_names = f->n_out_names;
+                    out[n].in_names = f->n_in_names ? (const char(*)[24])f->in_names : NULL, out[n].n_in_names = f->n_in_names;
                     out[n].buf_min = f->buf_min, out[n].buf_max = f->buf_max, out[n].buf_pref = f->buf_pref, out[n].buf_gran = f->buf_gran;
                 }
             }
@@ -454,7 +458,7 @@ static void close_all(void) {
     }
 }
 
-static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user, vaud_opened *res, char *err, size_t errn) {
+static vaud_error pa_open_w(const vaud_open_req *rq, vaud_callback cb, void *user, vaud_opened *res, char *err, size_t errn) {
     if (pa_up(err, errn) != 0) {
         return VAUD_FAILED;
     }
@@ -468,6 +472,24 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     const PaDeviceInfo *odi = Pa_GetDeviceInfo(od);
     int is_asio = !strcmp(oapi, "ASIO");
     memset(res->in_name, 0, sizeof res->in_name);
+#ifdef _WIN32
+    if (is_asio) {
+        /* the card's clock is another program's business too (the DAW that has the card at 48000): opening at another rate would make the driver change it, under the other program. so: ask the driver which rate the
+         * card runs at NOW, and open only at that; any other rate is refused here and the caller (the start-up) follows the card, a live change keeps the engine's rate and says so */
+        va_driver f;
+        if (va_probe_one(odi->name, &f) == 0 && f.rate > 0) {
+            res->device_rate = f.rate;
+            unsigned cur = (unsigned)(f.rate + 0.5);
+            if (cur != rq->rate) {
+                int ok = cur == 44100 || cur == 48000 || cur == 88200 || cur == 96000;
+                res->rate = ok ? cur : 0;
+                snprintf(err, errn, "the card (ASIO driver '%.50s') runs at %u Hz and the engine at %u Hz. Verdandi does not change a card's clock, another program may be using it%s", odi->name, cur, rq->rate,
+                         ok ? ": set the card to the engine's rate, or restart Verdandi so that it follows the card" : " (and norns can run at 44100, 48000, 88200 or 96000 Hz only)");
+                return VAUD_BAD_RATE;
+            }
+        }
+    }
+#endif
     res->in_active = res->in_separate = 0;
     res->in_note[0] = 0;
     PaDeviceIndex id = paNoDevice;
@@ -594,7 +616,7 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     res->rate = si ? (unsigned)(si->sampleRate + 0.5) : rq->rate;
     res->frames = rq->frames;
     res->exclusive = rq->exclusive && !is_asio;
-    res->device_rate = odi->defaultSampleRate;
+    if (!is_asio || res->device_rate <= 0) res->device_rate = odi->defaultSampleRate;
 #if defined(HAVE_PA_WASAPI_H) && defined(_WIN32)
     if (!is_asio && !rq->frames) {
         /* the period Windows gave (480 frames at 48000 Hz in shared mode): that is the size of the card's callbacks */
@@ -610,7 +632,7 @@ static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user,
     return VAUD_OK;
 }
 
-static int pa_start(char *err, size_t errn) {
+static int pa_start_w(char *err, size_t errn) {
     PaError e = Pa_StartStream(stream);
     if (e != paNoError) {
         snprintf(err, errn, "%s", Pa_GetErrorText(e));
@@ -622,7 +644,7 @@ static int pa_start(char *err, size_t errn) {
     return 0;
 }
 
-static void pa_close(void) { close_all(); }
+static void pa_close_w(void) { close_all(); }
 
 #ifdef _WIN32
 /* direct WASAPI loopback (wasapi_loopback.cc): used when this PortAudio lists no loopback device */
@@ -631,7 +653,7 @@ extern void vwl_close(void);
 static int direct_sys_on;
 #endif
 
-static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen, char *err, size_t errn) {
+static int pa_open_sys_w(unsigned rate, unsigned frames, char *name, size_t namen, char *err, size_t errn) {
     if (pa_up(err, errn) != 0) {
         return -1;
     }
@@ -690,7 +712,7 @@ static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen,
     return 0;
 }
 
-static void pa_close_sys(void) {
+static void pa_close_sys_w(void) {
 #ifdef _WIN32
     if (direct_sys_on) {
         vwl_close();
@@ -704,7 +726,7 @@ static void pa_close_sys(void) {
     }
 }
 
-static void pa_describe(char *out, size_t n) {
+static void pa_describe_w(char *out, size_t n) {
     char err[200];
     out[0] = 0;
     if (pa_up(err, sizeof err) != 0) {
@@ -731,7 +753,7 @@ static void pa_describe(char *out, size_t n) {
 #endif
 /* the clock of a card that another program (an ASIO driver that is running) has set: the device takes, in its own format (exclusive mode), only the rate it runs at; a free card takes several. exactly one rate
  * taken = that is the clock. 0: not WASAPI, not known, or free */
-static double pa_card_clock(const char *uid) {
+static double pa_card_clock_w(const char *uid) {
 #ifdef HAVE_PA_WASAPI_H
     static const double rates[4] = {44100, 48000, 88200, 96000};
     if (!uid || !strncmp(uid, "asio:", 5) || pa_up_quiet() != 0) {
@@ -764,7 +786,7 @@ static double pa_card_clock(const char *uid) {
 }
 
 /* look at the devices again: the list PortAudio made at its start does not know that a card's state changed. only when no stream is open (Pa_Terminate would end it) */
-static void pa_refresh(void) {
+static void pa_refresh_w(void) {
     if (!pa_ready || stream || in_stream || sys_stream) {
         return;
     }
@@ -773,6 +795,150 @@ static void pa_refresh(void) {
     char err[200];
     pa_up(err, sizeof err);
 }
+
+
+/* ---- one thread for all of PortAudio (M20). an ASIO driver is an in-process COM object that has to be made, used and released on a thread with a COM apartment of its own kind (single-threaded: what the drivers say in the
+ * registry, "ThreadingModel Apartment"). Pa_Initialize makes the apartment of the thread it runs on; an open from ANOTHER thread (the AUDIO page's apply runs on the Lua thread, the watchdog on its own) found no apartment
+ * and PortAudio said "Failed to load ASIO driver". reproduced with the stub driver (linux/tests/asio_reopen_test.sh): same thread, again and again, works; a thread without COM, or with a multi-threaded apartment, fails.
+ * so every call into PortAudio is done by this worker thread, whoever asks: the callers wait for the answer (the calls take what they took before). it also pumps its message queue while it waits, as a single-threaded
+ * apartment should (a driver that posts a window message to its own thread is heard) ---- */
+#ifdef _WIN32
+typedef struct {
+    void (*fn)(void *);
+    void *arg;
+} pa_job;
+static HANDLE pa_job_ev, pa_done_ev;
+static pa_job pa_cur;
+static DWORD pa_worker_id;
+static INIT_ONCE pa_once = INIT_ONCE_STATIC_INIT;
+static CRITICAL_SECTION pa_call_lock;
+
+static DWORD WINAPI pa_worker(LPVOID unused) {
+    (void)unused;
+    (void)CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    pa_worker_id = GetCurrentThreadId();
+    SetEvent(pa_done_ev); /* "up" */
+    for (;;) {
+        DWORD w = MsgWaitForMultipleObjects(1, &pa_job_ev, FALSE, INFINITE, QS_ALLINPUT);
+        if (w == WAIT_OBJECT_0) {
+            pa_cur.fn(pa_cur.arg);
+            SetEvent(pa_done_ev);
+        } else {
+            MSG m;
+            while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&m);
+                DispatchMessageA(&m);
+            }
+        }
+    }
+    return 0;
+}
+
+static BOOL CALLBACK pa_once_init(PINIT_ONCE o, PVOID p, PVOID *c) {
+    (void)o, (void)p, (void)c;
+    InitializeCriticalSection(&pa_call_lock);
+    pa_job_ev = CreateEventA(NULL, FALSE, FALSE, NULL);
+    pa_done_ev = CreateEventA(NULL, FALSE, FALSE, NULL);
+    HANDLE t = CreateThread(NULL, 0, pa_worker, NULL, 0, NULL);
+    if (t) {
+        CloseHandle(t);
+        WaitForSingleObject(pa_done_ev, 10000);
+    }
+    return TRUE;
+}
+
+static void on_worker(void (*fn)(void *), void *arg) {
+    InitOnceExecuteOnce(&pa_once, pa_once_init, NULL, NULL);
+    if (!pa_worker_id || GetCurrentThreadId() == pa_worker_id) { /* (no worker could be made, or called from it: run here) */
+        fn(arg);
+        return;
+    }
+    EnterCriticalSection(&pa_call_lock);
+    pa_cur.fn = fn;
+    pa_cur.arg = arg;
+    SetEvent(pa_job_ev);
+    WaitForSingleObject(pa_done_ev, INFINITE);
+    LeaveCriticalSection(&pa_call_lock);
+}
+#else
+static void on_worker(void (*fn)(void *), void *arg) { fn(arg); }
+#endif
+
+typedef struct {
+    vaud_device *out;
+    int max, ret;
+} job_list;
+static void do_list(void *a) { job_list *j = a; j->ret = pa_list_w(j->out, j->max); }
+static int pa_list(vaud_device *out, int max) {
+    job_list j = {out, max, 0};
+    on_worker(do_list, &j);
+    return j.ret;
+}
+typedef struct {
+    const vaud_open_req *rq;
+    vaud_callback cb;
+    void *user;
+    vaud_opened *res;
+    char *err;
+    size_t errn;
+    vaud_error ret;
+} job_open;
+static void do_open(void *a) { job_open *j = a; j->ret = pa_open_w(j->rq, j->cb, j->user, j->res, j->err, j->errn); }
+static vaud_error pa_open(const vaud_open_req *rq, vaud_callback cb, void *user, vaud_opened *res, char *err, size_t errn) {
+    job_open j = {rq, cb, user, res, err, errn, VAUD_FAILED};
+    on_worker(do_open, &j);
+    return j.ret;
+}
+typedef struct {
+    char *err;
+    size_t errn;
+    int ret;
+} job_start;
+static void do_start(void *a) { job_start *j = a; j->ret = pa_start_w(j->err, j->errn); }
+static int pa_start(char *err, size_t errn) {
+    job_start j = {err, errn, -1};
+    on_worker(do_start, &j);
+    return j.ret;
+}
+static void do_close(void *a) { (void)a; pa_close_w(); }
+static void pa_close(void) { on_worker(do_close, NULL); }
+typedef struct {
+    unsigned rate, frames;
+    char *name;
+    size_t namen;
+    char *err;
+    size_t errn;
+    int ret;
+} job_sys;
+static void do_open_sys(void *a) { job_sys *j = a; j->ret = pa_open_sys_w(j->rate, j->frames, j->name, j->namen, j->err, j->errn); }
+static int pa_open_sys(unsigned rate, unsigned frames, char *name, size_t namen, char *err, size_t errn) {
+    job_sys j = {rate, frames, name, namen, err, errn, -1};
+    on_worker(do_open_sys, &j);
+    return j.ret;
+}
+static void do_close_sys(void *a) { (void)a; pa_close_sys_w(); }
+static void pa_close_sys(void) { on_worker(do_close_sys, NULL); }
+typedef struct {
+    char *out;
+    size_t n;
+} job_desc;
+static void do_describe(void *a) { job_desc *j = a; pa_describe_w(j->out, j->n); }
+static void pa_describe(char *out, size_t n) {
+    job_desc j = {out, n};
+    on_worker(do_describe, &j);
+}
+typedef struct {
+    const char *uid;
+    double ret;
+} job_clock;
+static void do_card_clock(void *a) { job_clock *j = a; j->ret = pa_card_clock_w(j->uid); }
+static double pa_card_clock(const char *uid) {
+    job_clock j = {uid, 0};
+    on_worker(do_card_clock, &j);
+    return j.ret;
+}
+static void do_refresh(void *a) { (void)a; pa_refresh_w(); }
+static void pa_refresh(void) { on_worker(do_refresh, NULL); }
 
 const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe, HAS_DIRECT_SYS, pa_card_clock, pa_refresh};
 

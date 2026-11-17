@@ -621,6 +621,65 @@ if os.environ.get("VERDANDI_PROBE") == "asio":
             result("asio-normal", (not flav) and "normal build" in note and "ASIO" not in tail.split("help=[")[-1], "the normal build says it has no ASIO and the AUDIO page does not mention it: flavour=%s note=%s" % (flavour, note[:120]))
         elif amode == "nostart":
             result("asio-nostart", flav and registered == "1", "the driver is there and starts for the probe; opening it failed at the start: mode=%s host_api=%s" % (mode_, api))
+        # M20: the stream is reopened while norns runs (the AUDIO page's apply runs on the Lua thread: the thread that the owner's PC failed on), and the engine's rate against the card's
+        def rate_info():
+            ok_, t_ = run("local i = _norns.audio_info() print('VT_RATE ' .. tostring(i.mode) .. '|' .. tostring(i.host_api) .. '|' .. tostring(i.rate) .. '|' .. tostring(i.device_rate) .. '|' .. tostring(i.card_rate) .. '|' .. tostring(i.rate_warn) .. '|' .. (tostring(i.config):gsub('\\n', ',')))\n", "VT_RATE", 30)
+            for l_ in t_.splitlines():
+                if l_.startswith("VT_RATE "):
+                    g = l_[8:].split("|") + [""] * 7
+                    return {"mode": g[0], "api": g[1], "rate": float(g[2] or 0), "dev": float(g[3] or 0), "card": float(g[4] or 0), "warn": g[5], "cfg": "|".join(g[6:])}
+            return {"mode": "?", "api": "?", "rate": 0, "dev": 0, "card": 0, "warn": "?", "cfg": ""}
+        def apply_conf(out_first=1, buffer=0, output="asio:Verdandi Test ASIO"):
+            conf = "output=%s\\ninput=\\nrate=48000\\nblock=128\\nbuffer=%d\\nexclusive=0\\nout_first=%d\\nin_l=1\\nin_r=2\\n" % (output, buffer, out_first)
+            ok_, t_ = run("local rc, msg = _norns.audio_apply(\"%s\") print('VT_APPLY ' .. tostring(rc) .. '|' .. tostring(msg))\n" % conf, "VT_APPLY", 60)
+            for l_ in t_.splitlines():
+                if l_.startswith("VT_APPLY "):
+                    rc_, _, msg_ = l_[9:].partition("|")
+                    return rc_, msg_
+            return "?", t_[-200:]
+        def near(a, b, pct=2.0):
+            return b > 0 and abs(a - b) <= b * pct / 100.0
+        if amode == "ok":
+            time.sleep(6)
+            ri = rate_info()
+            result("asio-rate48-engine", ri["rate"] == 48000 and ri["dev"] == 48000, "the stub card runs at 48000 Hz and so does the engine: engine %s, card (driver) %s" % (ri["rate"], ri["dev"]))
+            result("asio-rate48-measured", near(ri["card"], 48000) and ri["warn"] == "0", "the rate the card really delivers, measured: %.0f Hz (warning flag %s)" % (ri["card"], ri["warn"]))
+        elif amode == "rate44":
+            time.sleep(6)
+            ri = rate_info()
+            result("asio-rate44-engine", ri["mode"] == "device" and ri["rate"] == 44100 and ri["dev"] == 44100, "the card runs at 44100 Hz (another program's setting): the engine follows it: engine %s, card (driver) %s, mode %s" % (ri["rate"], ri["dev"], ri["mode"]))
+            result("asio-rate44-measured", near(ri["card"], 44100) and ri["warn"] == "0", "the rate the card really delivers, measured: %.0f Hz (warning flag %s)" % (ri["card"], ri["warn"]))
+        elif amode == "reopen":
+            ri = rate_info()
+            result("asio-reopen-start", ri["mode"] == "device" and ri["api"].startswith("ASIO"), "it started on the ASIO driver: %s %s" % (ri["mode"], ri["api"]))
+            rc_, msg_ = apply_conf(3, 128)
+            ri = rate_info()
+            result("asio-reopen-pair-buffer", rc_ == "0" and ri["mode"] == "device" and ri["api"].startswith("ASIO") and "out_first=3" in ri["cfg"] and "buffer=128" in ri["cfg"], "outputs 3+4 and buffer 128 while it runs: rc=%s msg=[%s] %s %s %s" % (rc_, msg_, ri["mode"], ri["api"], ri["cfg"]))
+            rc_, msg_ = apply_conf(1, 0)
+            ri = rate_info()
+            result("asio-reopen-back", rc_ == "0" and ri["mode"] == "device" and "out_first=1" in ri["cfg"], "and back to outputs 1+2, auto buffer: rc=%s msg=[%s] %s" % (rc_, msg_, ri["cfg"]))
+            rc_, msg_ = apply_conf(1, 0, output="")
+            ri = rate_info()
+            result("asio-reopen-refused-goes-back", ri["mode"] == "device" and ri["api"].startswith("ASIO"), "a change that cannot be made (no Windows sound card on the runner) closes the driver and opens it again as it was: rc=%s msg=[%s] %s %s" % (rc_, msg_[:120], ri["mode"], ri["api"]))
+            rc_, msg_ = apply_conf(3, 256)
+            ri = rate_info()
+            result("asio-reopen-again", rc_ == "0" and ri["mode"] == "device" and "out_first=3" in ri["cfg"] and "buffer=256" in ri["cfg"], "and once more, outputs 3+4, buffer 256: rc=%s msg=[%s] %s" % (rc_, msg_, ri["cfg"]))
+        elif amode == "fromnull":
+            ri = rate_info()
+            result("asio-fromnull-start", ri["mode"] in ("fallback", "null"), "there is no sound card on the runner: it started without sound (%s)" % ri["mode"])
+            rc_, msg_ = apply_conf(1, 0)
+            ri = rate_info()
+            result("asio-fromnull-apply", rc_ == "0" and ri["mode"] == "device" and ri["api"].startswith("ASIO"), "then the ASIO driver is chosen while it runs: rc=%s msg=[%s] %s %s" % (rc_, msg_, ri["mode"], ri["api"]))
+        elif amode == "hold":
+            ri = rate_info()
+            result("asio-hold-start", ri["mode"] in ("fallback", "null") and ri["rate"] == 48000, "it runs at 48000 Hz without a card (%s %s)" % (ri["mode"], ri["rate"]))
+            rc_, msg_ = apply_conf(1, 0)
+            ri = rate_info()
+            result("asio-hold-refused", rc_ != "0" and ri["mode"] != "device" and "44100 Hz" in msg_ and "48000 Hz" in msg_ and "does not change" in msg_, "the card is at 44100 Hz (another program has it), the engine at 48000: not opened, the reason in plain words: rc=%s msg=[%s]" % (rc_, msg_[:300]))
+        elif amode == "lie":
+            time.sleep(12)
+            ri = rate_info()
+            result("asio-lie-detected", ri["mode"] == "device" and ri["rate"] == 48000 and near(ri["card"], 44100, 3.0) and ri["warn"] == "1", "the driver says 48000 Hz but delivers 44100: engine %s, measured %.0f Hz, warning flag %s" % (ri["rate"], ri["card"], ri["warn"]))
     except Exception as e:
         result("asio-error", False, "%s" % e)
     sys.exit(0)

@@ -871,23 +871,33 @@ build_asio_stub() {
     local gcc_bin
     gcc_bin=$(command -v gcc 2> /dev/null || command -v x86_64-w64-mingw32-gcc 2> /dev/null)
     [ -n "$gcc_bin" ] || { echo "NOT FOUND: a C compiler for the stub ASIO driver"; return 1; }
-    "$gcc_bin" -std=gnu11 -Wall -shared -o "$(native "$WORK/asio_stub.dll")" "$(native "$HERE/asio_stub.c")" -Wl,--kill-at -lole32 -luuid || { echo "the stub ASIO driver did not compile"; return 1; }
+    "$gcc_bin" -std=gnu11 -Wall -shared -o "$(native "$WORK/asio_stub.dll")" "$(native "$HERE/asio_stub.c")" -Wl,--kill-at -lole32 -luuid -lwinmm || { echo "the stub ASIO driver did not compile"; return 1; }
 }
 run_asio_case() { # mode
-    local mode="$1" H="$WORK/user home asio $1" out="$M0_OUT/asio/$1" stubenv=""
+    local mode="$1" H="$WORK/user home asio $1" out="$M0_OUT/asio/$1" stubenv="" srate="" shold="" sreal=""
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
-    printf 'output=asio:Verdandi Test ASIO\nbuffer=0\n' > "$H/audio.conf"
-    case "$mode" in busy | nostart) stubenv="$mode" ;; esac
+    case "$mode" in
+        fromnull | hold) printf 'buffer=0\n' > "$H/audio.conf" ;; # (no ASIO at the start: the runner has no sound card, so it starts without sound and the probe chooses the ASIO driver while it runs)
+        *) printf 'output=asio:Verdandi Test ASIO\nbuffer=0\n' > "$H/audio.conf" ;;
+    esac
+    # M20: the stub driver's own behaviour per case: which clock the card runs at, whether another program holds it, whether the driver tells the truth about it, and a log of what the driver was asked
+    case "$mode" in
+        busy | nostart) stubenv="$mode" ;;
+        reopen | fromnull) stubenv=single ;; # a driver that lets one client in at a time: a driver that was not let go is "in use" at the next open
+        rate44) srate=44100 ;;
+        hold) srate=44100; shold=refuse ;;
+        lie) srate=48000; sreal=44100 ;;
+    esac
     VERDANDI_PROBE=asio VERDANDI_ASIO_MODE="$mode" "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
     local probe_pid=$!
-    export VERDANDI_STUB_ASIO="$stubenv"
+    export VERDANDI_STUB_ASIO="$stubenv" VERDANDI_STUB_RATE="$srate" VERDANDI_STUB_HOLD="$shold" VERDANDI_STUB_REAL="$sreal" VERDANDI_STUB_LOG="$(native "$out/stub.log")"
     if command -v timeout > /dev/null 2>&1; then
         timeout -k 10 200 "$APP/Verdandi$EXE" --headless --exit-after=85 --home="$(native "$H")"
     else
         "$APP/Verdandi$EXE" --headless --exit-after=85 --home="$(native "$H")"
     fi
-    unset VERDANDI_STUB_ASIO
+    unset VERDANDI_STUB_ASIO VERDANDI_STUB_RATE VERDANDI_STUB_HOLD VERDANDI_STUB_REAL VERDANDI_STUB_LOG
     wait "$probe_pid" 2> /dev/null
     if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
     cp -r "$H/logs" "$out/logs" 2> /dev/null || true
@@ -906,8 +916,17 @@ run_asio() {
     run_asio_case ok
     run_asio_case busy
     run_asio_case nostart
+    run_asio_case reopen
+    run_asio_case fromnull
+    run_asio_case rate44
+    run_asio_case hold
+    run_asio_case lie
     bash "$HERE/register_asio_stub.sh" remove
     return 0
+}
+nolog() { # file pattern what: the pattern must NOT be in the file
+    if grep -a -q -E "$2" "$1" 2> /dev/null; then echo "FOUND (must not be): $3: $(grep -a -E "$2" "$1" | head -2 | cut -c1-200)"; return 1; fi
+    echo "not found, as it should be: $3"
 }
 chk_asio_case() { # mode: what the log and the probe found
     local mode="$1" bad=0 out="$M0_OUT/asio/$1" L p
@@ -929,7 +948,30 @@ chk_asio_case() { # mode: what the log and the probe found
         ok)
             has "$L" "driver 'Verdandi Test ASIO' \(64-bit registry.*loads and starts.*4 inputs, 4 outputs, buffer 64 to 2048 frames \(preferred 256, powers of two\)" "the log names the driver, its channels and buffer sizes" || bad=1
             has "$L" "audio: device 'Verdandi Test ASIO' \(ASIO" "the engine runs through the ASIO driver" || bad=1
-            for p in asio-info asio-page asio-listed asio-running asio-devices asio-buffer-text; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done ;;
+            for p in asio-info asio-page asio-listed asio-running asio-devices asio-buffer-text asio-rate48-engine asio-rate48-measured; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done
+            has "$L" "audio: rates: the engine, softcut and tape run at 48000 Hz; the card itself runs at 48000 Hz .*the same" "the log says which rate the engine and the card run at, and that it is the same" || bad=1
+            nolog "$out/stub.log" "set_rate" "the driver was never asked to change the card's clock" || bad=1
+            has "$out/stub.log" "^init" "the stub driver's own log is there (the driver was loaded)" || bad=1 ;;
+        reopen)
+            for p in asio-reopen-start asio-reopen-pair-buffer asio-reopen-back asio-reopen-refused-goes-back asio-reopen-again; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done
+            nolog "$L" "busy or in use by another program" "the driver was never 'busy' because of Verdandi's own earlier open (the owner's failure)" || bad=1
+            nolog "$L" "Failed to load ASIO driver" "no 'Failed to load ASIO driver' in the log" || bad=1
+            nolog "$out/stub.log" "set_rate" "the driver was never asked to change the card's clock" || bad=1
+            has "$L" "audio: device 'Verdandi Test ASIO' \(ASIO" "the engine ran through the ASIO driver" || bad=1 ;;
+        fromnull)
+            for p in asio-fromnull-start asio-fromnull-apply; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done
+            nolog "$L" "Failed to load ASIO driver" "no 'Failed to load ASIO driver' in the log" || bad=1 ;;
+        rate44)
+            for p in asio-rate44-engine asio-rate44-measured; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done
+            has "$L" "audio: rates: the engine, softcut and tape run at 44100 Hz; the card itself runs at 44100 Hz .*the same" "the log says engine and card both run at 44100 Hz" || bad=1
+            nolog "$out/stub.log" "set_rate" "the driver was never asked to change the card's clock (it was at 44100, the engine asked 48000 and followed)" || bad=1 ;;
+        hold)
+            has "$out/probe.txt" "PROBE asio-hold-start ok" "it started at 48000 Hz without a card" || bad=1
+            has "$out/probe.txt" "PROBE asio-hold-refused ok" "the card at 44100 Hz is not opened by an engine at 48000, and the page's message says so" || bad=1
+            nolog "$out/stub.log" "set_rate" "the driver was NEVER asked to change the card's clock (another program has it)" || bad=1 ;;
+        lie)
+            has "$out/probe.txt" "PROBE asio-lie-detected ok" "a card that delivers 44100 Hz under an engine at 48000 Hz is detected" || bad=1
+            has "$L" "audio: WARNING at [0-9:.]*: the card really delivers about 44[0-9][0-9][0-9] Hz of sound, but the engine, softcut and tape run at 48000 Hz" "the log has the warning with both rates" || bad=1 ;;
         busy)
             has "$L" "NOT usable: the driver refused to start: \"Verdandi Test ASIO: the device is in use by another program\"" "the log names the driver and its own message" || bad=1
             has "$L" "no ASIO host API: 1 ASIO driver found but none starts" "the log says why there is no ASIO host API" || bad=1
@@ -1109,6 +1151,11 @@ m0_run m19-check-asio-none chk_asio_case none
 m0_run m19-check-asio-ok chk_asio_case ok
 m0_run m19-check-asio-busy chk_asio_case busy
 m0_run m19-check-asio-nostart chk_asio_case nostart
+m0_run m20-check-asio-reopen chk_asio_case reopen
+m0_run m20-check-asio-fromnull chk_asio_case fromnull
+m0_run m20-check-asio-rate44 chk_asio_case rate44
+m0_run m20-check-asio-hold chk_asio_case hold
+m0_run m20-check-asio-lie chk_asio_case lie
 m0_run m17-run-quit-sleep run_quit_grid sleep 400 300
 m0_run m17-check-quit-sleep chk_quit_grid sleep
 m0_run m17-run-quit-sleepmod run_quit_grid sleepmod 400 300

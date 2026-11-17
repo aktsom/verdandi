@@ -4,11 +4,18 @@
  * the host's bufferSwitch at the pace of the buffer. what it does is chosen by the environment variable VERDANDI_STUB_ASIO of the program that loads it:
  *   (not set)    works                 busy   init fails ("the device is in use by another program", as a driver that Ableton has does)       broken   the class cannot be made   slow   init takes 3 s
  *   nostart      init and open work, ASIOStart fails (a driver in a bad state, or another program took the card in between)
+ *   single       one client at a time: init fails while another instance of the driver (in this process) is still loaded: a program that leaves the driver loaded finds it "in use" when it opens it again (M20)
+ * more of the environment (M20): VERDANDI_STUB_RATE the card's clock when the driver is first loaded (44100 or 48000, default 48000); VERDANDI_STUB_HOLD another program has the card: "refuse" (ASIOSetSampleRate says no)
+ * or "silent" (it says yes and changes nothing); VERDANDI_STUB_REAL the rate the card REALLY runs at, when it is not the one it reports (a driver that lies: for the mismatch warning); VERDANDI_STUB_LOG a file that gets one
+ * line for every set_rate / init / release / start / stop the driver sees. its channels are called Analog 1, Analog 2, SPDIF L, SPDIF R (as an interface names them).
  * windows/ci/register_asio_stub.sh registers it (HKLM\SOFTWARE\ASIO\Verdandi Test ASIO and its CLSID), the CI removes it again.
  */
 #include <windows.h>
+#include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
+#include <stdlib.h>
 
 static const GUID CLSID_STUB = {0xd9b1e8e3, 0x6f1c, 0x4d6a, {0x9c, 0x57, 0x7c, 0x1a, 0x3f, 0x7b, 0x5e, 0x01}};
 
@@ -62,9 +69,38 @@ struct Driver {
     volatile LONG running;
     HANDLE thread;
     volatile LONG64 position;
+    int inited;
 };
 
 static volatile LONG g_locks;
+static volatile LONG g_inited;       /* instances that did init and were not released */
+static double g_rate = 0;            /* the card's clock (0 = not read from the environment yet) */
+static const char *env(const char *name) {
+    static char b[8][64];
+    static int k;
+    char *m = b[k++ & 7];
+    DWORD n = GetEnvironmentVariableA(name, m, 64);
+    return n > 0 && n < 64 ? m : "";
+}
+static void logev(const char *fmt, ...) {
+    const char *path = env("VERDANDI_STUB_LOG");
+    if (!path[0]) return;
+    FILE *f = fopen(path, "ab");
+    if (!f) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
+static double card_rate(void) {
+    if (g_rate == 0) {
+        const char *r = env("VERDANDI_STUB_RATE");
+        g_rate = r[0] ? atof(r) : 48000.0;
+    }
+    return g_rate;
+}
 static const char *mode(void) {
     static char m[32];
     DWORD n = GetEnvironmentVariableA("VERDANDI_STUB_ASIO", m, sizeof m);
@@ -86,6 +122,8 @@ static ULONG STDMETHODCALLTYPE d_release(Driver *d) {
     if (r == 0) {
         d->v->stop(d);
         d->v->disposeBuffers(d);
+        if (d->inited) InterlockedDecrement(&g_inited);
+        logev("release");
         InterlockedDecrement(&g_locks);
         HeapFree(GetProcessHeap(), 0, d);
     }
@@ -100,6 +138,14 @@ static long STDMETHODCALLTYPE d_init(Driver *d, void *sys) {
     if (!strcmp(mode(), "slow")) {
         Sleep(3000);
     }
+    if (!strcmp(mode(), "single") && g_inited > 0) {
+        snprintf(d->err, sizeof d->err, "Verdandi Test ASIO: the driver is already in use (by this program: it was not released)");
+        logev("init refused: in use");
+        return 0;
+    }
+    InterlockedIncrement(&g_inited);
+    d->inited = 1;
+    logev("init");
     d->err[0] = 0;
     return 1;
 }
@@ -107,12 +153,25 @@ static void STDMETHODCALLTYPE d_name(Driver *d, char *n) { (void)d; strcpy(n, "V
 static long STDMETHODCALLTYPE d_version(Driver *d) { (void)d; return 1; }
 static void STDMETHODCALLTYPE d_errmsg(Driver *d, char *s) { snprintf(s, 124, "%s", d->err[0] ? d->err : "no error"); }
 static DWORD WINAPI pump(LPVOID arg) {
+    /* the card's clock: buffer after buffer, each at its time by the PC's clock (not Sleep(n) after Sleep(n): that drifts by whole milliseconds), at the rate the card REALLY runs at */
     Driver *d = (Driver *)arg;
     long index = 0;
-    DWORD ms = (DWORD)(d->buffer_size * 1000.0 / 48000.0 + 0.5);
-    if (ms < 1) ms = 1;
+    const char *real = env("VERDANDI_STUB_REAL");
+    double rate = real[0] ? atof(real) : card_rate();
+    LARGE_INTEGER f, t0, now;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t0);
+    double n = 0;
     while (d->running) {
-        Sleep(ms);
+        n += 1;
+        double due = n * d->buffer_size / rate; /* seconds since the start */
+        for (;;) {
+            QueryPerformanceCounter(&now);
+            double t = (double)(now.QuadPart - t0.QuadPart) / (double)f.QuadPart;
+            if (t >= due || !d->running) break;
+            DWORD ms = (DWORD)((due - t) * 1000.0);
+            Sleep(ms > 1 ? ms - 1 : 0);
+        }
         if (!d->running) break;
         d->position += d->buffer_size;
         d->cb->bufferSwitch(index, 1);
@@ -123,6 +182,8 @@ static DWORD WINAPI pump(LPVOID arg) {
 static long STDMETHODCALLTYPE d_start(Driver *d) {
     if (!d->cb) return ASE_NotPresent;
     if (!strcmp(mode(), "nostart")) return -999; /* ASE_HWMalfunction: opens, but will not run */
+    logev("start");
+    timeBeginPeriod(1);
     d->running = 1;
     d->thread = CreateThread(NULL, 0, pump, d, 0, NULL);
     return d->thread ? ASE_OK : ASE_NotPresent;
@@ -133,6 +194,8 @@ static long STDMETHODCALLTYPE d_stop(Driver *d) {
         WaitForSingleObject(d->thread, 2000);
         CloseHandle(d->thread);
         d->thread = NULL;
+        timeEndPeriod(1);
+        logev("stop");
     }
     return ASE_OK;
 }
@@ -140,8 +203,17 @@ static long STDMETHODCALLTYPE d_channels(Driver *d, long *i, long *o) { (void)d;
 static long STDMETHODCALLTYPE d_latencies(Driver *d, long *i, long *o) { (void)d; *i = 256; *o = 256; return ASE_OK; }
 static long STDMETHODCALLTYPE d_bufsize(Driver *d, long *mn, long *mx, long *pref, long *gran) { (void)d; *mn = 64; *mx = 2048; *pref = 256; *gran = -1; return ASE_OK; }
 static long STDMETHODCALLTYPE d_can(Driver *d, double r) { (void)d; return (r == 48000.0 || r == 44100.0) ? ASE_OK : ASE_NoClock; }
-static long STDMETHODCALLTYPE d_getrate(Driver *d, double *r) { (void)d; *r = 48000.0; return ASE_OK; }
-static long STDMETHODCALLTYPE d_setrate(Driver *d, double r) { return d_can(d, r); }
+static long STDMETHODCALLTYPE d_getrate(Driver *d, double *r) { (void)d; *r = card_rate(); return ASE_OK; }
+static long STDMETHODCALLTYPE d_setrate(Driver *d, double r) {
+    logev("set_rate %.0f", r);
+    if (r == card_rate()) return ASE_OK;
+    if (d_can(d, r) != ASE_OK) return ASE_NoClock;
+    const char *h = env("VERDANDI_STUB_HOLD");
+    if (!strcmp(h, "refuse")) return ASE_NoClock; /* another program has the card at its rate: the driver says no */
+    if (!strcmp(h, "silent")) return ASE_OK;      /* ... or says yes and changes nothing */
+    g_rate = r;
+    return ASE_OK;
+}
 static long STDMETHODCALLTYPE d_clocksrc(Driver *d, void *c, long *n) {
     (void)d;
     if (c) {
@@ -164,7 +236,8 @@ static long STDMETHODCALLTYPE d_chinfo(Driver *d, ChannelInfo *c) {
     (void)d;
     if (c->channel < 0 || c->channel > 3) return ASE_InvalidParameter;
     c->isActive = 0; c->channelGroup = 0; c->type = ASIOSTFloat32LSB;
-    snprintf(c->name, sizeof c->name, "%s %ld", c->isInput ? "In" : "Out", c->channel + 1);
+    static const char *const nm[4] = {"Analog 1", "Analog 2", "SPDIF L", "SPDIF R"};
+    snprintf(c->name, sizeof c->name, "%s", nm[c->channel]);
     return ASE_OK;
 }
 static long STDMETHODCALLTYPE d_create(Driver *d, BufferInfo *b, long n, long size, Callbacks *cb) {

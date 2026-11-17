@@ -653,3 +653,11 @@ Your two grids (128 and 256) plugged in; the mod sidvagn on (draws on the second
 3. Start Ableton on the same driver while Verdandi runs. What happens (to Verdandi, to Ableton)? The log says it. Close Verdandi first if Ableton complains.
 4. Start Ableton FIRST, then Verdandi (ASIO zip): the log says what the driver answered. Does Verdandi fall back to the normal path with one plain line? Does the AUDIO page say ASIO is not available and why?
 5. Normal build, Ableton playing a heavy project: when you hear a click, look at `logs\norns.log`: lines `audio: UNDERRUN u... at hh:mm:ss.mmm` say how late and what scsynth was doing. Send me ten of them and the time of one click you heard.
+
+## Windows 0.10.11 (ASIO reopen, the card's rate) — save your Ableton project first
+1. ASIO zip, Ableton CLOSED. AUDIO: DRIVER low latency, OUTPUT the Fireface driver, K3. In `logs\norns.log` find `audio: rates: ... the card itself runs at ... Hz ... the same`: the engine and the card must say the same number (48000 if the card is at 48000).
+2. Change OUT CH to the S/PDIF pair (it is named like `9+10 SPDIF` if the driver names its channels), K3. It must switch without a restart; listen on the S/PDIF output. Then change BUFFER (128, 256), K3 each time; then back to 1+2. Each K3 must say it runs (no "busy", no "Failed to load ASIO driver" in the log).
+3. DRIVER normal, K3, then low latency again, K3: the second time must come back on ASIO without a restart.
+4. Ableton open and playing at 48000 Hz (the Fireface window shows 48000, greyed). Start Verdandi (ASIO zip) and choose low latency: the log's `rates:` line must say the card runs at 48000 and the engine at 48000. If Ableton runs the card at 44100, Verdandi must say 44100 for both.
+5. With Ableton playing, change the pair or buffer in Verdandi: either it works, or the AUDIO page says the card is at another rate than the engine ("Verdandi does not change a card's clock") and the old setting stays. Ableton must keep playing at its own rate, unaffected.
+6. Listen to a tape or softcut loop at a known pitch while the card runs at 48000: if the pitch is wrong (a little more than a semitone high), look for `audio: WARNING ... the card really delivers about N Hz`, and send me the log.

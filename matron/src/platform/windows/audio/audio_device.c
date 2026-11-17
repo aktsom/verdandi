@@ -426,7 +426,11 @@ static void drain_events(void) {
         }
         shown++;
         wall_text(e->us, when, sizeof when);
-        if (e->kind == 1) {
+        if (e->kind == 3) {
+            fprintf(stderr, "audio: WARNING at %s: the card really delivers about %llu Hz of sound, but the engine, softcut and tape run at %u Hz. Everything is played %s than it should (wrong pitch and speed). The card's clock and the engine's rate must be the same: set the "
+                            "card to %u Hz (its settings window or the program that holds it), or restart Verdandi so that it follows the card\n",
+                    when, (unsigned long long)e->flags, (unsigned)e->have, (double)e->flags > (double)e->have ? "faster" : "slower", (unsigned)e->have);
+        } else if (e->kind == 1) {
             fprintf(stderr, "audio: CARD GLITCH x%llu at %s: the host API (%s) flagged %s%s%s%s; this callback came %.1f ms after the one before (expected %.1f); card buffer %u frames (%s)\n", e->xr, when,
                     S.opened.host_api[0] ? S.opened.host_api : "?", (e->flags & 4) ? "an output underflow (the card ran out of sound) " : "", (e->flags & 2) ? "an input overflow " : "", (e->flags & 1) ? "an input underflow " : "",
                     e->flags & ~7u ? "and other flags " : "", e->gap_ms, e->expect_ms, S.card_frames, CUR.buffer ? "asked" : "auto");
@@ -442,6 +446,50 @@ static volatile int watch_running;
 static void *watch_run(void *arg);
 static atomic_ullong cb_count; /* callbacks of the card since the start: the watchdog looks at it */
 
+/* does the card deliver sound at the rate the engine runs at? frames per second of the PC's clock over windows of 3 s. 44100 against 48000 is 8 percent: two windows in a row more than 5 percent off is a warning (a stall of the
+ * PC does not repeat in the next window). the sound then plays at the wrong pitch and speed, and nothing else in the program would notice */
+static unsigned long long rw_t0;
+static unsigned long long rw_frames;
+static int rw_bad, rw_told;
+static void rate_watch_reset(void) {
+    rw_t0 = 0;
+    rw_frames = 0;
+    rw_bad = 0;
+    rw_told = 0;
+    S.card_rate_measured = 0;
+    S.rate_warn = 0;
+}
+static void rate_watch(unsigned long long now_us, unsigned frames) {
+    if (!rw_t0) {
+        rw_t0 = now_us;
+        rw_frames = 0;
+        return;
+    }
+    rw_frames += frames;
+    if (now_us - rw_t0 < 3000000ULL) {
+        return;
+    }
+    double hz = (double)rw_frames * 1e6 / (double)(now_us - rw_t0);
+    S.card_rate_measured = hz;
+    rw_t0 = now_us;
+    rw_frames = 0;
+    double eng = S.rate ? (double)S.rate : 48000.0;
+    if (hz > eng * 1.05 || hz < eng * 0.95) {
+        rw_bad++;
+    } else {
+        rw_bad = 0;
+        S.rate_warn = 0;
+        rw_told = 0;
+    }
+    if (rw_bad >= 2) {
+        S.rate_warn = 1;
+        if (!rw_told) {
+            rw_told = 1;
+            cev_put(3, (unsigned long long)(hz + 0.5), S.rate, 0);
+        }
+    }
+}
+
 static void card_callback(const float *in, float *out, unsigned frames, void *user) {
     atomic_fetch_add(&cb_count, 1);
     {
@@ -449,6 +497,7 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
         last_gap_ms = last_cb_us ? (double)(now - last_cb_us) / 1000.0 : 0.0;
         last_expect_ms = 1000.0 * frames / (S.rate ? S.rate : 48000);
         last_cb_us = now;
+        rate_watch(now, frames);
     }
     if (st_active) {
         selftest_tick();
@@ -607,11 +656,18 @@ int vaud_list_text(const vaud_backend *be, char *out, size_t n) {
     int count = be->list(dev, 96);
     size_t len = 0;
     out[0] = 0;
-    for (int i = 0; i < count && len + 600 < n; i++) {
-        char bufs[80] = "";
+    for (int i = 0; i < count && len + 2600 < n; i++) {
+        char bufs[80] = "", onames[1100] = "", inames[1100] = "";
         if (dev[i].buf_max > 0) snprintf(bufs, sizeof bufs, "%ld,%ld,%ld,%ld", dev[i].buf_min, dev[i].buf_max, dev[i].buf_pref, dev[i].buf_gran);
-        len += (size_t)snprintf(out + len, n - len, "%s\t%s%s\t%d\t%d\t%s\t%.1f\t%.1f\t%d\t%s\n", dev[i].uid, dev[i].name, dev[i].is_default ? " (default)" : "", dev[i].in_channels,
-                                dev[i].out_channels, dev[i].api, dev[i].low_out_ms, dev[i].low_in_ms, dev[i].loopback, bufs);
+        /* the channel names, joined with "|" (columns 10 and 11): "Analog 1|Analog 2|...|SPDIF L|SPDIF R" */
+        for (int k = 0; dev[i].out_names && k < dev[i].n_out_names && strlen(onames) + 30 < sizeof onames; k++) {
+            snprintf(onames + strlen(onames), sizeof onames - strlen(onames), "%s%s", k ? "|" : "", dev[i].out_names[k]);
+        }
+        for (int k = 0; dev[i].in_names && k < dev[i].n_in_names && strlen(inames) + 30 < sizeof inames; k++) {
+            snprintf(inames + strlen(inames), sizeof inames - strlen(inames), "%s%s", k ? "|" : "", dev[i].in_names[k]);
+        }
+        len += (size_t)snprintf(out + len, n - len, "%s\t%s%s\t%d\t%d\t%s\t%.1f\t%.1f\t%d\t%s\t%s\t%s\n", dev[i].uid, dev[i].name, dev[i].is_default ? " (default)" : "", dev[i].in_channels,
+                                dev[i].out_channels, dev[i].api, dev[i].low_out_ms, dev[i].low_in_ms, dev[i].loopback, bufs, onames, inames);
     }
     return count;
 }
@@ -762,6 +818,7 @@ static int activate(const vaud_opened *res, const vaud_config *cfg, char *err, s
     S.clock_rate = 0;
     S.opened = *res;
     S.card_frames = 0;
+    rate_watch_reset();
     fifos_primed = 0;
     atomic_store(&mic_ring.active, res->in_active && res->in_separate ? 1 : 0); /* (a duplex stream gives its input in the callback; a separate one arrives through vaud_push_mic) */
     verdandi_jack_null_external_clock(1);
@@ -805,8 +862,13 @@ static int activate_or_twin(const vaud_backend *be, vaud_opened *res, vaud_confi
 }
 
 static void log_device(const vaud_opened *res, const vaud_config *cfg) {
+    int asio = strstr(res->host_api, "ASIO") != NULL;
     if (res->device_rate > 0) {
-        fprintf(stderr, "audio: the device itself runs at %.0f Hz (its Windows setting / clock)%s\n", res->device_rate, (unsigned)res->device_rate == S.rate ? "" : (res->exclusive ? " - DIFFERENT from norns" : ": the Windows mixer converts to norns's rate"));
+        fprintf(stderr, "audio: rates: the engine, softcut and tape run at %u Hz; the card itself runs at %.0f Hz (%s)%s\n", S.rate, res->device_rate,
+                asio ? "read from the driver just before it was opened" : (res->exclusive ? "its Windows setting" : "its Windows setting: shared mode, Windows converts"),
+                (unsigned)(res->device_rate + 0.5) == S.rate ? ", the same" : (asio || res->exclusive ? ": DIFFERENT, the pitch and speed of everything would be wrong" : ": Windows converts to the engine's rate"));
+    } else {
+        fprintf(stderr, "audio: rates: the engine, softcut and tape run at %u Hz; the card's own rate is not known (the measurement of the first seconds will say)\n", S.rate);
     }
     fprintf(stderr, "audio: device '%s' (%s%s), %u Hz, engine block %u frames (%.1f ms), card buffer %s, output latency %.1f ms\n", res->device_name, res->host_api, res->exclusive ? ", exclusive" : "", S.rate, S.frames,
             1000.0 * S.frames / S.rate, cfg->buffer ? "asked" : "auto", res->out_latency_ms);
@@ -857,7 +919,7 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
             fprintf(stderr, "audio: %s. MIC and OFF work; the SYS choice is left out of the MIC button\n", S.sys_reason);
         }
     }
-    fprintf(stderr, "audio: output chosen: %s%s%s%s, input: %s%s%s, %u Hz, engine block %u, card buffer %s%s%s\n", cfg.output[0] ? "'" : "", cfg.output[0] ? cfg.output : "the Windows default device",
+    fprintf(stderr, "audio: output chosen: %s%s%s%s, input: %s%s%s, rate asked for %u Hz (the card's own rate is followed when it is another: see the rates line), engine block %u, card buffer %s%s%s\n", cfg.output[0] ? "'" : "", cfg.output[0] ? cfg.output : "the Windows default device",
             cfg.output[0] ? "'" : "", cfg.out_first > 1 ? " (outputs from the channel shown below)" : "", cfg.input[0] ? "'" : "", cfg.input[0] ? cfg.input : "none", cfg.input[0] ? "'" : "", cfg.rate,
             cfg.period, cfg.buffer ? "" : "auto", cfg.exclusive ? ", exclusive" : "", cfg.force_null ? " (null audio forced)" : "");
     if (cfg.out_first > 1 || cfg.in_l != 1 || cfg.in_r != 2) {
@@ -949,6 +1011,8 @@ static int apply_unlocked(const vaud_config *want, char *msg, size_t n) {
         BE->close();
         snprintf(why, sizeof why, "'%.60s' runs at %u Hz and norns at %u Hz (set rate= in audio.conf and restart)", res.device_name, res.rate, S.rate);
         e = VAUD_BAD_RATE;
+    } else if (e == VAUD_BAD_RATE && err[0] && !strncmp(cfg.output, "asio:", 5)) {
+        snprintf(why, sizeof why, "%.200s", err);
     } else if (e != VAUD_OK) {
         snprintf(why, sizeof why, "'%.60s' %s", cfg.output[0] ? shown(cfg.output) : "the default device", error_words(e));
     }

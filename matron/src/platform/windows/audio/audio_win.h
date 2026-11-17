@@ -31,6 +31,8 @@ typedef struct {
     int exclusive;
     char config_text[512];                /* what runs, as audio.conf lines (the AUDIO page starts from it) */
     double peak_db;                       /* the input level */
+    double card_rate;                     /* the rate the card really delivers sound at, measured against the PC's clock over 3 s windows (0 = not yet) */
+    int rate_warn;                        /* 1: that rate is more than 5 percent off the engine's: the sound plays at the wrong pitch and speed */
     unsigned clock_rate;                  /* the card's clock was set by another program to this rate (norns runs at `rate`): 0 = no conflict */
     double measured_ms;                   /* -1 none yet, -2 no signal */
     int in_active;

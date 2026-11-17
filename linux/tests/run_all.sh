@@ -123,6 +123,7 @@ if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/win
     run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
     run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
     run "windows:ASIO probe against a stub ASIO driver under Wine (nothing registered, a working driver with its channels and buffer sizes, a driver that refuses with its own message, a class that cannot be made, a missing driver file)" linux/tests/asio_probe_test.sh
+    run "windows:ASIO backend against a stub ASIO driver under Wine (open, close and open again from any thread, other pair, other buffer, the card clock is never changed, channel names, buffer sizes; SKIP without an ASIO build of PortAudio for mingw)" linux/tests/asio_backend_test.sh
     run "windows:update-and-run.cmd under Wine with stand-ins for curl, tar and the questions (a newer build unpacked into its own folder, old builds kept or removed on request, the data folder never touched, plain messages when the download fails)" linux/tests/update_and_run_test.sh
 else
     echo "SKIP  windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"

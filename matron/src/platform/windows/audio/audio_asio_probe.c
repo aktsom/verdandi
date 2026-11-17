@@ -28,7 +28,13 @@ typedef struct {
     long(STDMETHODCALLTYPE *getBufferSize)(IAsio *, long *, long *, long *, long *);
     long(STDMETHODCALLTYPE *canSampleRate)(IAsio *, double);
     long(STDMETHODCALLTYPE *getSampleRate)(IAsio *, double *);
+    long(STDMETHODCALLTYPE *setSampleRate)(IAsio *, double);
+    long(STDMETHODCALLTYPE *getClockSources)(IAsio *, void *, long *);
+    long(STDMETHODCALLTYPE *setClockSource)(IAsio *, long);
+    long(STDMETHODCALLTYPE *getSamplePosition)(IAsio *, void *, void *);
+    long(STDMETHODCALLTYPE *getChannelInfo)(IAsio *, void *);
 } IAsioVtbl;
+typedef struct { long channel, isInput, isActive, channelGroup, type; char name[32]; } AsioChannelInfo;
 struct IAsio { const IAsioVtbl *v; };
 
 static void say(void (*log)(const char *), const char *fmt, ...) __attribute__((format(printf, 2, 3)));
@@ -111,6 +117,26 @@ static DWORD WINAPI probe_thread(LPVOID arg) {
                 drv->v->getBufferSize(drv, &d->buf_min, &d->buf_max, &d->buf_pref, &d->buf_gran);
                 double r = 0;
                 if (drv->v->getSampleRate(drv, &r) == 0) d->rate = r;
+                static const double rates[4] = {44100, 48000, 88200, 96000};
+                for (int i = 0; i < 4; i++) {
+                    if (drv->v->canSampleRate(drv, rates[i]) == 0) d->can_rates |= 1u << i;
+                }
+                /* the channels' own names (the driver's: "Analog 1", "SPDIF L"), so that a pair can be recognised */
+                for (int dir = 1; dir >= 0; dir--) {
+                    int count = dir ? d->in_ch : d->out_ch;
+                    for (int c = 0; c < count && c < VA_CH; c++) {
+                        AsioChannelInfo ci;
+                        memset(&ci, 0, sizeof ci);
+                        ci.channel = c;
+                        ci.isInput = dir;
+                        char *to = dir ? d->in_names[c] : d->out_names[c];
+                        if (drv->v->getChannelInfo(drv, &ci) == 0) {
+                            ci.name[sizeof ci.name - 1] = 0;
+                            snprintf(to, 24, "%.23s", ci.name);
+                        }
+                        if (dir) d->n_in_names = c + 1; else d->n_out_names = c + 1;
+                    }
+                }
             }
             drv->v->Release(drv);
         }
@@ -127,7 +153,7 @@ static void already(va_driver *out, int n, const char *name, int *seen_at) {
     }
 }
 
-int va_probe(va_driver *out, int max, void (*log)(const char *line)) {
+static int probe_impl(va_driver *out, int max, void (*log)(const char *line), const char *only) {
     int n = 0;
     int views[2] = {64, 32};
     for (int vi = 0; vi < 2; vi++) {
@@ -205,6 +231,9 @@ int va_probe(va_driver *out, int max, void (*log)(const char *line)) {
         } else {
             say(log, "asio: driver '%s' (%d-bit registry): its class %s has no driver file registered under this view", d->name, d->view, d->clsid);
         }
+        if (only && _stricmp(only, d->name) != 0) {
+            continue; /* (looking at one driver only: the others are not loaded) */
+        }
         /* load it and ask, on a thread of its own with a time limit: a driver that hangs must not hang the program. the thread works on its own copy (heap memory that a stuck thread keeps for good) */
         probe_job *job = (probe_job *)calloc(1, sizeof *job);
         va_driver *copy = (va_driver *)calloc(1, sizeof *copy);
@@ -238,6 +267,23 @@ int va_probe(va_driver *out, int max, void (*log)(const char *line)) {
     }
     if (n == 0) say(log, "asio: no ASIO driver is registered on this PC (neither the 64-bit nor the 32-bit view): install the interface's ASIO driver");
     return n;
+}
+
+int va_probe(va_driver *out, int max, void (*log)(const char *line)) { return probe_impl(out, max, log, NULL); }
+
+int va_probe_one(const char *name, va_driver *out) {
+    static va_driver all[VA_MAX]; /* (static: it is big; the caller is the one thread of audio_backend_pa.c) */
+    memset(out, 0, sizeof *out);
+    int n = probe_impl(all, VA_MAX, NULL, name);
+    for (int i = 0; i < n; i++) {
+        if (!_stricmp(all[i].name, name)) {
+            *out = all[i];
+            return all[i].status == VA_OK ? 0 : -1;
+        }
+    }
+    out->status = VA_NO_CLASS;
+    snprintf(out->detail, sizeof out->detail, "no ASIO driver of this name is registered");
+    return -1;
 }
 
 void va_summary(const va_driver *d, int n, char *out, size_t outn, int *usable) {

@@ -159,4 +159,41 @@ for _, f in ipairs(want) do check(seen[f] ~= nil, "BUFFER offers " .. f .. " fra
 check(seen[32] == nil and seen[4096] == nil, "and nothing outside the driver's range")
 check(seen[128] == "128  2.7 ms", "128 frames are 2.7 ms (" .. tostring(seen[128]) .. ")")
 
+-- 5. M20: the driver's own channel names make the pairs recognisable (9+10 is the S/PDIF pair), for the outputs and the inputs
+local onames, inames = {}, {}
+for i = 1, 8 do onames[#onames + 1] = "Analog " .. i; inames[#inames + 1] = "Analog " .. i end
+onames[#onames + 1] = "SPDIF L"; onames[#onames + 1] = "SPDIF R"; inames[#inames + 1] = "SPDIF L"; inames[#inames + 1] = "SPDIF R"
+for i = 1, 8 do onames[#onames + 1] = "ADAT " .. i; inames[#inames + 1] = "ADAT " .. i end
+local devs5 = {base_devs[1], "asio:ASIO Fireface USB\tASIO Fireface USB\t18\t18\tASIO\t6\t6\t0\t128,128,128,0\t" .. table.concat(onames, "|") .. "\t" .. table.concat(inames, "|")}
+setup(devs5, {asio_flavour = true, asio_registered = 1, asio_usable = 1, asio_note = "1 ASIO driver usable", host_apis = "WASAPI ASIO"})
+select_row(1)
+page.enc(3, 1); page.enc(3, 1); page.enc(3, 1) -- low latency
+select_row(3) -- OUT CH
+local pairs_seen = {}
+for i = 1, 12 do
+  page.redraw()
+  for _, d in ipairs(drawn) do if d.s:match("^%d+%+%d+") then pairs_seen[#pairs_seen + 1] = d.s end end
+  page.enc(3, 1)
+end
+local seen_text = table.concat(pairs_seen, ",")
+check(seen_text:find("1+2 Analog", 1, true) ~= nil, "OUT CH: the first pair is called after the driver's name (" .. seen_text .. ")")
+check(seen_text:find("9+10 SPDIF", 1, true) ~= nil, "OUT CH: 9+10 is recognisable as the S/PDIF pair (" .. seen_text .. ")")
+check(seen_text:find("11+12 ADAT", 1, true) ~= nil, "OUT CH: and 11+12 as ADAT (" .. seen_text .. ")")
+-- the pair 9+10 chosen: its help names both channels
+select_row(3)
+page.enc(3, -20)
+for i = 1, 12 do
+  if (page.help_text("OUT CH") or ""):find("outputs 9+10", 1, true) then break end
+  page.enc(3, 1)
+end
+check((page.help_text("OUT CH") or ""):find("outputs 9+10: SPDIF L, SPDIF R", 1, true) ~= nil, "OUT CH help names the two channels of the pair (" .. tostring(page.help_text("OUT CH")) .. ")")
+
+-- 6. M20: the card really delivers another rate than the engine runs at (measured): the status line says so, the numbers first
+setup(devs5, {asio_flavour = true, asio_registered = 1, asio_usable = 1, asio_note = "1 ASIO driver usable", host_apis = "WASAPI ASIO", rate_warn = 1, card_rate = 44103.4, rate = 48000})
+local st = page.status_text()
+check(st:find("RATE? 44103 Hz", 1, true) ~= nil, "a card at 44100 under an engine at 48000: the status line names the rate the card delivers (" .. st .. ")")
+setup(devs5, {asio_flavour = true, asio_registered = 1, asio_usable = 1, asio_note = "1 ASIO driver usable", host_apis = "WASAPI ASIO", rate_warn = 0, card_rate = 48001.2, rate = 48000})
+check(not page.status_text():find("RATE", 1, true), "the same rate on both sides: nothing about it on the status line (" .. page.status_text() .. ")")
+
+
 if fails == 0 then _print("audio asio page: all scenarios pass") else _print(fails .. " FAILED") os.exit(1) end

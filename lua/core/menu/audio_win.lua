@@ -25,7 +25,8 @@ local function read_devices()
     if f[1] and f[1] ~= "" then
       local bmin, bmax, bpref, bgran = (f[9] or ""):match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
       local buffers = bmin and {min = tonumber(bmin), max = tonumber(bmax), pref = tonumber(bpref), gran = tonumber(bgran)} or nil -- ASIO: what the driver reports, in frames
-      table.insert(m.devs, {uid = f[1], name = (f[2] or f[1]):gsub(" %(default%)$", ""), ins = tonumber(f[3]) or 0, outs = tonumber(f[4]) or 0, api = f[5] or "WASAPI", loopback = f[8] == "1", buffers = buffers})
+      local function names(col) local t = {}; for nm in ((col or "") .. "|"):gmatch("([^|]*)|") do if nm ~= "" then t[#t + 1] = nm end end; return t end -- the driver's own channel names ("Analog 1", "SPDIF L")
+      table.insert(m.devs, {onames = names(f[10]), inames = names(f[11]), uid = f[1], name = (f[2] or f[1]):gsub(" %(default%)$", ""), ins = tonumber(f[3]) or 0, outs = tonumber(f[4]) or 0, api = f[5] or "WASAPI", loopback = f[8] == "1", buffers = buffers})
     end
   end
   m.hosts = {"WASAPI"}
@@ -114,18 +115,35 @@ local function cur_in()
   return inputs()[1]
 end
 
+-- a pair's name from the driver's channel names: "9+10 SPDIF" for "SPDIF L" and "SPDIF R", "1+2 Analog" for "Analog 1" and "Analog 2"; the numbers alone when the driver names nothing
+local function pair_name(a, b, na, nb)
+  local label = a .. "+" .. b
+  if na and nb and na ~= "" then
+    local i = 1
+    while i <= #na and i <= #nb and na:sub(i, i) == nb:sub(i, i) do i = i + 1 end
+    local stem = na:sub(1, i - 1):gsub("[%s%-_]+$", "")
+    if #stem < 3 then stem = na:gsub("%s*[%d]+$", ""):gsub("%s+[LR]$", "") end
+    if stem == "" then stem = na end
+    label = label .. " " .. stem:sub(1, 10)
+  end
+  return label
+end
 -- the output pair (low latency): 1+2, 3+4 ...
 local function outpairs()
-  local l, n = {}, cur_out().outs or 2
-  for first = 1, math.max(1, n - 1), 2 do table.insert(l, {first = first, name = first .. "+" .. (first + 1)}) end
+  local o = cur_out()
+  local l, n = {}, o.outs or 2
+  local nm = o.onames or {}
+  for first = 1, math.max(1, n - 1), 2 do table.insert(l, {first = first, name = pair_name(first, first + 1, nm[first], nm[first + 1]), names = (nm[first] and nm[first + 1]) and (nm[first] .. ", " .. nm[first + 1]) or nil}) end
   return l
 end
 
 -- the input channels: pairs (1+2, 3+4 ...), then single channels heard on both sides ("3 mono")
 local function inpairs()
-  local n, l = cur_in().ins or 0, {}
-  for first = 1, n - 1, 2 do table.insert(l, {l = first, r = first + 1, name = first .. "+" .. (first + 1)}) end
-  for c = 1, n do table.insert(l, {l = c, r = c, name = c .. " mono"}) end
+  local i0 = cur_in()
+  local n, l = i0.ins or 0, {}
+  local nm = i0.inames or {}
+  for first = 1, n - 1, 2 do table.insert(l, {l = first, r = first + 1, name = pair_name(first, first + 1, nm[first], nm[first + 1]), names = (nm[first] and nm[first + 1]) and (nm[first] .. ", " .. nm[first + 1]) or nil}) end
+  for c = 1, n do table.insert(l, {l = c, r = c, name = c .. " mono" .. (nm[c] and (" " .. nm[c]:sub(1, 8)) or ""), names = nm[c]}) end
   if #l == 0 then l = {{l = 1, r = 2, name = "1+2"}} end
   return l
 end
@@ -200,11 +218,18 @@ m.help_text = function(row)
   elseif row == "DRIVER" and m.asio_problem then
     h = "ASIO: " .. (m.asio_short or m.asio_problem)
   elseif row == "OUT CH" and m.cfg.driver == "asio" then
-    h = string.format("which two of the driver's %d outputs", cur_out().outs or 2)
+    local ps = outpairs()
+    local p = ps[index_where(ps, function(q) return q.first == m.cfg.out_first end)]
+    h = p and p.names and string.format("outputs %d+%d: %s", p.first, p.first + 1, p.names) or string.format("which two of the driver's %d outputs", cur_out().outs or 2)
   elseif row == "IN CH" and m.cfg.driver == "asio" then
-    h = string.format("which of the driver's %d inputs: a pair, or one on both sides", cur_in().ins or 2)
+    local ps = inpairs()
+    local p = ps[index_where(ps, function(q) return q.l == m.cfg.in_l and q.r == m.cfg.in_r end)]
+    h = p and p.names and string.format("input%s %s: %s", p.l == p.r and "" or "s", p.l == p.r and tostring(p.l) or (p.l .. "+" .. p.r), p.names) or string.format("which of the driver's %d inputs: a pair, or one on both sides", cur_in().ins or 2)
+  elseif row == "OUTPUT" and m.cfg.driver == "asio" then
+    h = "the sound card's ASIO driver; OUT CH picks the pair"
   elseif row == "BUFFER" and m.cfg.driver == "asio" then
-    h = "the driver's own sizes in frames and ms; auto = its preferred one. its control panel may fix it"
+    local inf = _norns.audio_info()
+    h = string.format("the driver's own sizes in frames and ms at %d Hz; auto = its preferred one. its control panel may fix it", (inf and inf.rate and inf.rate > 0) and inf.rate or (m.cfg.rate or 48000))
   end
   if m.pending and m.pending(row) then h = "* chosen: K3 applies. " .. h end
   return h
@@ -524,6 +549,13 @@ local function status_line(info)
     return "null audio (silent)"
   end
   local line = string.format("%s  %.0f ms  u%d x%d", mode_word(info), info.total_ms or 0, info.underruns or 0, info.xruns or 0)
+  -- the card really delivers another rate than the engine runs at (measured): the sound plays at the wrong pitch and speed. the numbers, then the sentence a line at a time
+  if (info.rate_warn or 0) ~= 0 then
+    local pages = winui.pages(string.format("WRONG RATE: the card delivers %d Hz but norns runs at %d Hz: pitch and speed are off. set the card to %d Hz or restart Verdandi", math.floor((info.card_rate or 0) + 0.5), info.rate, info.rate), 124)
+    local phase = math.floor(m.tick / PAGE_TICKS) % (#pages + 1)
+    if phase > 0 then return pages[phase] end
+    return line .. string.format("  RATE? %d Hz", math.floor((info.card_rate or 0) + 0.5))
+  end
   -- the rate the card itself runs at, when it is not norns's own: the line then shows the numbers and, in turn, the two rates in plain words (shared mode: Windows converts; exclusive and ASIO follow the card)
   if (info.device_rate or 0) > 0 and math.floor(info.device_rate + 0.5) ~= info.rate then
     local pages = winui.pages(string.format("card %d Hz, norns %d Hz%s", math.floor(info.device_rate + 0.5), info.rate, (info.exclusive or (info.host_api or ""):find("ASIO", 1, true)) and "" or ", converted by Windows"), 124)

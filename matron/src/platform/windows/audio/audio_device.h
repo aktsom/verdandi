@@ -25,6 +25,9 @@ typedef struct {
     double default_rate;
     double low_out_ms; /* the driver's low latency for output and input, as PortAudio reports it */
     double low_in_ms;
+    const char (*out_names)[24];                  /* ASIO: what the driver calls its output / input channels (n_out_names / n_in_names of them); NULL = not known. points into the backend's own table, valid until the next list or refresh */
+    const char (*in_names)[24];
+    int n_out_names, n_in_names;
     long buf_min, buf_max, buf_pref, buf_gran; /* ASIO: the buffer sizes the driver reports, in frames (gran -1: powers of two, 0: only the preferred size); all 0 = not known */
 } vaud_device;
 
@@ -116,6 +119,8 @@ typedef struct {
     char sys_reason[200];     /* why not, in plain words, "" when it is */
     char sys_note[320];       /* why SYS does not work, "" otherwise */
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
+    double card_rate_measured; /* the rate the card really delivers sound at, from the callbacks' timing against the PC's clock (0 = not measured yet); more than 5 percent from `rate` for two windows in a row sets rate_warn */
+    int rate_warn;
     unsigned clock_rate;      /* the card is there but another program set its clock to this rate (norns runs at `rate`): 0 = no such conflict */
     unsigned engine_prime;    /* frames of extra delay of the re-blocking between the card's block and the engine's (0 when the card's block is a multiple of the engine's) */
     unsigned engine_lag;      /* blocks of scsynth's answers held back in the bridge (the engine blocks per card callback) */
