@@ -194,10 +194,11 @@ ck "the round is started again, twice (the rule of the server stop), with the ca
 ck "the third stop is the last: one plain message, no fourth round" "grep -q 'sclang.exe stopped on its own again' '$L5' && grep -q 'sclang keeps stopping' '$L5' && ! grep -q 'starting everything again (round 4)' '$L5'"
 rm -rf "$T/vhome6"; mkdir -p "$T/vhome6/logs"
 printf 'OLD-LAUNCHER-LOG-1\n' > "$T/vhome6/logs/launcher.log"; printf 'OLD-LAUNCHER-LOG-2\n' > "$T/vhome6/logs/launcher.1.log"; printf 'OLD-NORNS-LOG-1\n' > "$T/vhome6/logs/norns.log"
-(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=12 --home="Z:$T/vhome6" > "$T/launcher6a.out" 2>&1 &)
+P6=$(cd "$T/app" && { VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=12 --home="Z:$T/vhome6" > "$T/launcher6a.out" 2>&1 & echo $!; })
 sleep 5
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 30 "$WINE" ./Verdandi.exe --headless --home="Z:$T/vhome6" > "$T/launcher6b.out" 2>&1); rc6=$?
-sleep 12
+for _ in $(seq 1 60); do kill -0 "$P6" 2> /dev/null || break; sleep 1; done
+sleep 2
 L6="$T/vhome6/logs"
 ck "a second copy ends at once with code 3" "[ $rc6 -eq 3 ]"
 ck "a second copy does not push the logs of the running one out: launcher.1.log is still the one before, launcher.2.log the one before that" "grep -q OLD-LAUNCHER-LOG-1 '$L6/launcher.1.log' && grep -q OLD-LAUNCHER-LOG-2 '$L6/launcher.2.log'"
