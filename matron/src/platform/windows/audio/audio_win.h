@@ -37,6 +37,7 @@ typedef struct {
     double measured_ms;                   /* -1 none yet, -2 no signal */
     int in_active;
     char note[480];
+    char wanted_note[300];                /* "" or: the sound plays on another device than the chosen one, which one, and that the chosen one is tried again */
     char in_note[200];
     int sys_available;                    /* SYS can be chosen (PortAudio lists a WASAPI loopback device) */
     char sys_reason[200];

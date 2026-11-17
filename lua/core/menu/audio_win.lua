@@ -164,13 +164,19 @@ local function rows()
   return r
 end
 
+-- the rate the engine runs at now (shown: it can be the card's, followed), not the one audio.conf says (written: M21)
+local function shown_rate()
+  local i = _norns.audio_info()
+  return (i and i.rate and i.rate > 0) and i.rate or (m.cfg.rate or 48000)
+end
+
 local function buffer_text(b)
   if b == 0 then
     local o = m.cfg.driver == "asio" and cur_out() or nil
-    if o and o.buffers and o.buffers.pref > 0 then return string.format("auto  %d  %.1f ms", o.buffers.pref, o.buffers.pref / (m.cfg.rate or 48000) * 1000) end
+    if o and o.buffers and o.buffers.pref > 0 then return string.format("auto  %d  %.1f ms", o.buffers.pref, o.buffers.pref / shown_rate() * 1000) end
     return "auto"
   end
-  return string.format("%d  %.1f ms", b, b / (m.cfg.rate or 48000) * 1000)
+  return string.format("%d  %.1f ms", b, b / shown_rate() * 1000)
 end
 
 -- the buffer sizes to choose from: the usual ones, or (an ASIO driver) the ones the driver reports: powers of two between its smallest and largest, or its steps, or only its own size
@@ -339,6 +345,9 @@ end
 local function from_running()
   local info = _norns.audio_info()
   local c = parse(info and info.config or read_file(CONF))
+  -- the rate in audio.conf stays what the file says: a rate that the engine only FOLLOWED from the card (44100 under a card at 44100) is never written back (the file would then start the next run at it)
+  local filed = read_file(CONF)
+  if filed:find("rate%s*=") then c.rate = parse(filed).rate end
   c.driver = driver_of(c)
   m.cfg = c
   m.run = copy(c) -- what runs: the pending choices are the differences
@@ -549,6 +558,13 @@ local function status_line(info)
     return "null audio (silent)"
   end
   local line = string.format("%s  %.0f ms  u%d x%d", mode_word(info), info.total_ms or 0, info.underruns or 0, info.xruns or 0)
+  -- the sound plays on another device than the chosen one (the chosen one was away): which is which, a line at a time; the chosen device is tried again every 3 s
+  if (info.wanted_note or "") ~= "" then
+    local pages = winui.pages(info.wanted_note, 124)
+    local phase = math.floor(m.tick / PAGE_TICKS) % (#pages + 1)
+    if phase > 0 then return pages[phase] end
+    return line .. "  AWAY"
+  end
   -- the card really delivers another rate than the engine runs at (measured): the sound plays at the wrong pitch and speed. the numbers, then the sentence a line at a time
   if (info.rate_warn or 0) ~= 0 then
     local pages = winui.pages(string.format("WRONG RATE: the card delivers %d Hz but norns runs at %d Hz: pitch and speed are off. set the card to %d Hz or restart Verdandi", math.floor((info.card_rate or 0) + 0.5), info.rate, info.rate), 124)

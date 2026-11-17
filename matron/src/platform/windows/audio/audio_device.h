@@ -80,6 +80,8 @@ typedef struct {
     double (*card_clock)(const char *out_uid);
     /* optional. look at the devices again (a list made at the start does not know that the card's state changed); only called when no stream of this backend is open */
     void (*refresh)(void);
+    /* optional (M21). is this output device (its uid) there now? 1 yes, 0 no, -1 not known. must not disturb a stream that runs (no restart of the host API): used to see whether the device the user chose is back while the sound plays on another one */
+    int (*present)(const char *out_uid);
 } vaud_backend;
 
 typedef struct {
@@ -121,6 +123,9 @@ typedef struct {
     double in_peak_db;        /* the peak of the input in the last blocks (-120 .. 0), what the AUDIO page shows as the input level */
     double card_rate_measured; /* the rate the card really delivers sound at, from the callbacks' timing against the PC's clock (0 = not measured yet); more than 5 percent from `rate` for two windows in a row sets rate_warn */
     int rate_warn;
+    unsigned conf_rate;       /* the rate audio.conf / the page asked for (never the rate that was only FOLLOWED from the card): what the AUDIO page writes back */
+    char wanted_note[300];    /* "" or: the sound plays on another device than the chosen one (which, which, and that it is tried again) */
+    int give_up;              /* the card opens but stops calling back again and again: reopening does not cure it, it is not tried any more (until the next apply) */
     unsigned clock_rate;      /* the card is there but another program set its clock to this rate (norns runs at `rate`): 0 = no such conflict */
     unsigned engine_prime;    /* frames of extra delay of the re-blocking between the card's block and the engine's (0 when the card's block is a multiple of the engine's) */
     unsigned engine_lag;      /* blocks of scsynth's answers held back in the bridge (the engine blocks per card callback) */

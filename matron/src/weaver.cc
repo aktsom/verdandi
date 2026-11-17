@@ -4016,6 +4016,7 @@ int _audio_info(lua_State *l) {
     SET_S("host_api", a.host_api);
     SET_S("host_apis", a.host_apis);
     SET_S("asio_note", a.asio_note);
+    SET_S("wanted_note", a.wanted_note);
     SET_N("card_rate", a.card_rate);
     SET_I("rate_warn", a.rate_warn);
     SET_I("asio_registered", a.asio_registered);

@@ -130,6 +130,7 @@ void verdandi_audio_info(verdandi_audio_info_t *out) {
     out->card_xruns = s->card_xruns;
     out->in_active = dev && s->opened.in_active;
     snprintf(out->note, sizeof out->note, "%s", s->note);
+    snprintf(out->wanted_note, sizeof out->wanted_note, "%s", dev ? s->wanted_note : "");
     snprintf(out->in_note, sizeof out->in_note, "%s", dev ? s->opened.in_note : "");
     out->sys_available = s->sys_available;
     snprintf(out->sys_reason, sizeof out->sys_reason, "%s", s->sys_reason);

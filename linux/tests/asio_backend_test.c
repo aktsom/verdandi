@@ -20,7 +20,11 @@ int vwl_open(unsigned r, char *n, size_t nn, char *e, size_t en) { (void)r, (voi
 void vwl_close(void) {}
 
 static volatile long cbs;
-static void cb(const float *in, float *out, unsigned frames, void *user) { (void)in, (void)user; memset(out, 0, (size_t)frames * 2 * sizeof(float)); cbs++; }
+static void cb(const float *in, float *out, unsigned frames, void *user) {
+    (void)in, (void)user;
+    for (unsigned i = 0; i < frames; i++) out[2 * i] = out[2 * i + 1] = (float)((i % 32) < 16 ? 0.5 : -0.5); /* a square wave: sound */
+    cbs++;
+}
 
 static int fails;
 #define CHECK(c, ...) do { if (c) printf("ok   "); else { printf("FAIL "); fails++; } printf(__VA_ARGS__); printf("\n"); } while (0)
@@ -65,6 +69,25 @@ static int stub_log_has(const char *needle) {
     return n;
 }
 
+static int stub_log_line_has(const char *a, const char *b) {
+    char path[300];
+    if (!GetEnvironmentVariableA("VERDANDI_STUB_LOG", path, sizeof path)) return 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    char line[200];
+    int n = 0;
+    while (fgets(line, sizeof line, f)) if (strstr(line, a) && strstr(line, b)) n++;
+    fclose(f);
+    return n;
+}
+static void ctl(const char *text) { /* the stub driver's control file: "ratefail" = the driver cannot say which rate the card runs at; NULL removes it */
+    char path[300];
+    if (!GetEnvironmentVariableA("VERDANDI_STUB_CTL", path, sizeof path)) return;
+    if (!text) { remove(path); return; }
+    FILE *f = fopen(path, "wb");
+    if (f) { fputs(text, f); fclose(f); }
+}
+
 int main(int argc, char **argv) {
     unsigned card = argc > 1 ? (unsigned)atoi(argv[1]) : 48000;
     const vaud_backend *be = &vaud_backend_portaudio;
@@ -76,7 +99,7 @@ int main(int argc, char **argv) {
     CHECK(dv[at].n_out_names == 4 && !strcmp(dv[at].out_names[2], "SPDIF L") && !strcmp(dv[at].out_names[3], "SPDIF R"), "the driver's output channel names are listed (%s, %s)", dv[at].n_out_names ? dv[at].out_names[0] : "-", dv[at].n_out_names > 3 ? dv[at].out_names[3] : "-");
     CHECK(dv[at].n_in_names == 4 && !strcmp(dv[at].in_names[0], "Analog 1"), "... and the input channel names");
     CHECK((unsigned)(dv[at].default_rate + 0.5) == card, "the rate listed for the driver is the card's clock now: %.0f Hz (PortAudio's own default would be 44100 whatever the card does)", dv[at].default_rate);
-    CHECK(dv[at].buf_min == 64 && dv[at].buf_max == 2048 && dv[at].buf_pref == 256, "the driver's buffer sizes are listed (%ld to %ld, preferred %ld)", dv[at].buf_min, dv[at].buf_max, dv[at].buf_pref);
+    CHECK(dv[at].buf_min == 64 && dv[at].buf_max == 8192 && dv[at].buf_pref == 256, "the driver's buffer sizes are listed (%ld to %ld, preferred %ld)", dv[at].buf_min, dv[at].buf_max, dv[at].buf_pref);
 
     job j;
     memset(&j, 0, sizeof j);
@@ -107,6 +130,41 @@ int main(int argc, char **argv) {
     CHECK(stub_log_has("set_rate") == 0, "the driver was never asked to change the card's clock (%d set_rate lines)", stub_log_has("set_rate"));
     int inits = stub_log_has("init"), rel = stub_log_has("release");
     CHECK(rel >= inits - 1, "every driver that was loaded was released again (%d init, %d release)", inits, rel);
+    /* M21 fix 5: a buffer of 4096 or 8192 frames is sound, not silence (the host callback was cut at 2048 and answered with silence, and the watchdog reopened the card for ever) */
+    for (unsigned big = 4096; big <= 8192; big *= 2) {
+        memset(&j, 0, sizeof j); j.out_first = 1, j.rate = card, j.frames = big;
+        on_thread(th_nocom, &j);
+        CHECK(j.e == VAUD_OK && j.started, "a buffer of %u frames opens (%s)", big, j.err);
+        char want[40];
+        snprintf(want, sizeof want, "size=%u", big);
+        CHECK(stub_log_line_has("stop peak=0.5", want) >= 1, "... and the sound reaches the driver (peak 0.5 in its log, %s): not silence", want);
+    }
+    memset(&j, 0, sizeof j); j.out_first = 1, j.rate = card, j.frames = 32768;
+    on_thread(th_nocom, &j);
+    CHECK(j.e != VAUD_OK && strstr(j.err, "more than Verdandi can take"), "a buffer no callback can take is refused in plain words, not opened (%.100s)", j.err);
+    /* M21 fix 6: the card's rate cannot be read: no open (PortAudio would then ask the driver to set a rate), and never a set_rate */
+    ctl("ratefail");
+    memset(&j, 0, sizeof j); j.out_first = 1, j.rate = card, j.frames = 0;
+    on_thread(th_nocom, &j);
+    CHECK(j.e != VAUD_OK && strstr(j.err, "could not be read") && strstr(j.err, "will not risk changing it"), "rate unreadable: the open is refused in plain words (%.140s)", j.err);
+    on_thread(th_mta, &j);
+    CHECK(j.e != VAUD_OK, "... and again (the rate never works: still refused, not once opened)");
+    ctl(NULL);
+    memset(&j, 0, sizeof j); j.out_first = 1, j.rate = card, j.frames = 0;
+    on_thread(th_nocom, &j);
+    CHECK(j.e == VAUD_OK && j.started, "the rate readable again: it opens (%s)", j.err);
+    CHECK(stub_log_has("set_rate") == 0, "after all of it the driver was never asked to change the clock (%d set_rate lines)", stub_log_has("set_rate"));
+    /* M21 fix 4: asking the chosen driver for the card's clock loads that driver once, nothing else */
+    {
+        int c0 = stub_log_has("create");
+        double clk = be->card_clock("asio:Verdandi Test ASIO");
+        int c1 = stub_log_has("create");
+        CHECK((unsigned)(clk + 0.5) == card && c1 - c0 == 1, "the card's clock is asked from the chosen driver with ONE load of it (%.0f Hz, %d create lines)", clk, c1 - c0);
+        c0 = stub_log_has("create");
+        int here = be->present("asio:Verdandi Test ASIO"), gone = be->present("asio:No Such Card");
+        c1 = stub_log_has("create");
+        CHECK(here == 1 && gone == 0 && c1 - c0 == 1, "is the chosen driver there: yes for the stub, no for a name that is not registered, one load of the stub (%d, %d, %d create lines)", here, gone, c1 - c0);
+    }
     printf(fails ? "asio_backend_test: %d FAILED\n" : "asio_backend_test: ok\n", fails);
     return fails ? 1 : 0;
 }

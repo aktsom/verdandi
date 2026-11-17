@@ -1182,6 +1182,20 @@ int wmain(int argc, wchar_t **argv) {
         tell_user(L"Verdandi", MB_ICONERROR, L"Verdandi cannot create its folder %ls.\n\nIs the drive full or write-protected? Set VERDANDI_HOME to another folder.", g_home);
         return 2;
     }
+    /* one copy (M21: this is checked FIRST. a second copy used to rotate launcher.log before it found out it was the second one, and pushed the log of the running copy out of the way, one start after another) */
+    HANDLE mutex = CreateMutexW(NULL, TRUE, L"Local\\VerdandiLauncher");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        wchar_t lp0[MAX_PATH * 2];
+        join(lp0, MAX_PATH * 2, g_home, L"logs\\launcher.log");
+        g_log = _wfopen(lp0, L"ab"); /* (appended to the log of the running copy: nothing is rotated, no other log is touched) */
+        say(L"a second copy of Verdandi was started: it brought the running one forward and ended; no log was rotated");
+        bring_running_copy_forward();
+        if (g_log) {
+            fclose(g_log);
+            g_log = NULL;
+        }
+        return 3;
+    }
     wchar_t logs[MAX_PATH * 2], crash[MAX_PATH * 2], dust[MAX_PATH * 2], cache[MAX_PATH * 2], scconf[MAX_PATH * 2];
     join(logs, MAX_PATH * 2, g_home, L"logs");
     join(crash, MAX_PATH * 2, logs, L"crash");
@@ -1236,13 +1250,6 @@ int wmain(int argc, wchar_t **argv) {
         }
         say(L"Verdandi build %ls", build);
         SetEnvironmentVariableW(L"VERDANDI_BUILD", build);
-    }
-
-    /* one copy */
-    HANDLE mutex = CreateMutexW(NULL, TRUE, L"Local\\VerdandiLauncher");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        bring_running_copy_forward();
-        return 3;
     }
 
     /* the pieces */

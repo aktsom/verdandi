@@ -38,6 +38,9 @@ static int asio_busy, no_loopback, no_mic_open, fail_all, excl_busy, g_burst; /*
 static unsigned g_clock_owner = 0;         /* another program (an ASIO driver) set the card's clock to this rate: the Windows endpoint then refuses any other rate (the owner's Fireface at 44100 Hz) */
 static int g_card_dead = 0;                /* the card stopped calling back (its clock was changed under the stream) */
 static int g_refreshes = 0;
+static int g_opens, g_closes, g_card_clock_calls, g_present_calls; /* what the device layer asked of the fake card (M21) */
+static int g_gone_all;                     /* every device is gone (the card was pulled and Windows has no other) */
+static char g_gone_uid[64];                /* this one device is gone, the others are there (Windows has another default device) */
 static double g_dev_rate = 48000;          /* the rate the fake interface runs at (the Windows setting / the card's clock) */
 static int g_no_loop_dev;                  /* the PortAudio of the fake card lists no loopback device (the owner's MSYS2 build) */
 static volatile int g_guest_delay_ms;      /* the scsynth stand-in answers this much later (a start-up that loads synthdefs, a busy machine) */
@@ -143,6 +146,11 @@ static vaud_error fk_open(const vaud_open_req *rq, vaud_callback cb, void *u, va
     (void)u;
     last_req = *rq;
     const char *uid = rq->out_uid;
+    g_opens++;
+    if (g_gone_all || (g_gone_uid[0] && !strcmp(uid, g_gone_uid))) {
+        snprintf(err, en, uid[0] ? "no output device with this name" : "Windows has no default output device");
+        return VAUD_NOT_FOUND;
+    }
     if (fail_all) {
         snprintf(err, en, "device unavailable");
         return VAUD_FAILED;
@@ -200,7 +208,10 @@ static int fk_start(char *err, size_t en) {
     return 0;
 }
 static void fk_close(void) {
-    if (atomic_exchange(&card_run, 0)) pthread_join(card_thread, NULL);
+    if (atomic_exchange(&card_run, 0)) {
+        g_closes++;
+        pthread_join(card_thread, NULL);
+    }
 }
 static int fk_open_sys(unsigned rate, unsigned frames, char *name, size_t nn, char *err, size_t en) {
     (void)rate, (void)frames;
@@ -213,10 +224,11 @@ static int fk_open_sys(unsigned rate, unsigned frames, char *name, size_t nn, ch
     return 0;
 }
 static void fk_close_sys(void) { fake_sys_open = 0; }
-static double fk_card_clock(const char *uid) { return (g_clock_owner && !strcmp(uid, "wasapi:Fake Interface")) ? (double)g_clock_owner : 0.0; }
+static double fk_card_clock(const char *uid) { g_card_clock_calls++; return (g_clock_owner && !strcmp(uid, "wasapi:Fake Interface")) ? (double)g_clock_owner : 0.0; }
 static void fk_refresh(void) { g_refreshes++; }
 static void fk_describe(char *o, size_t n) { snprintf(o, n, "Fake PortAudio; host APIs: Fake WASAPI, Fake ASIO"); }
-static const vaud_backend FAKE = {"fake", fk_list, fk_open, fk_start, fk_close, fk_open_sys, fk_close_sys, fk_describe, 0, fk_card_clock, fk_refresh};
+static int fk_present(const char *uid) { g_present_calls++; return (g_gone_all || (g_gone_uid[0] && !strcmp(uid, g_gone_uid))) ? 0 : 1; }
+static const vaud_backend FAKE = {"fake", fk_list, fk_open, fk_start, fk_close, fk_open_sys, fk_close_sys, fk_describe, 0, fk_card_clock, fk_refresh, fk_present};
 
 /* ---- crone stand-in: sends 0.2 to the engines, plays what comes back ---- */
 static jack_client_t *crone;
@@ -929,6 +941,166 @@ static void scenario_clock(const char *sc) {
     g_clock_owner = 0; g_card_dead = 0;
 }
 
+
+/* M21 fix 1: the card goes away and comes back. with no other device (null audio, tried again every 3 s, quietly), with Windows' default device taking over (the chosen one is wanted, the page says which is which, the
+ * sound goes back when it answers, with no gap while it is away), and when the user applies another device meanwhile (that one is wanted now). */
+static int lines_with(const char *path, const char *what) {
+    fflush(stderr);
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    char l[1024];
+    int n = 0;
+    while (fgets(l, sizeof l, f)) if (strstr(l, what)) n++;
+    fclose(f);
+    return n;
+}
+static int wait_for(int (*cond)(void), int ms) {
+    for (int t = 0; t < ms; t += 100) {
+        if (cond()) return 1;
+        sleep_ms_f(100);
+    }
+    return cond();
+}
+static int c_fallback(void) { return vaud_get_state()->mode == VAUD_MODE_FALLBACK; }
+static int c_device(void) { return vaud_get_state()->mode == VAUD_MODE_DEVICE; }
+static int c_on_interface(void) { return vaud_get_state()->mode == VAUD_MODE_DEVICE && !strcmp(vaud_current_config()->output, "wasapi:Fake Interface"); }
+static int c_on_default(void) { return vaud_get_state()->mode == VAUD_MODE_DEVICE && !vaud_current_config()->output[0]; }
+static int c_two_opens(void) { return g_opens >= 2; }
+static void scenario_away(const char *sc) {
+    g_buffer = 0;
+    rec_cap = 48000 * 2; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    char logp[80];
+    snprintf(logp, sizeof logp, "/tmp/away-%d.log", (int)getpid());
+    freopen(logp, "w", stderr);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    snprintf(cfg.output, sizeof cfg.output, "wasapi:Fake Interface");
+    cfg.rate = 48000; cfg.period = 128;
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, NULL, &st);
+    CHECK(st.mode == VAUD_MODE_DEVICE, "%s: starts on the chosen card", sc);
+    sleep_ms_f(500);
+    if (!strcmp(sc, "away_nodefault")) {
+        g_gone_all = 1;
+        g_card_dead = 1;
+        CHECK(wait_for(c_fallback, 12000), "%s: the card that stops answering is noticed and, with no device at all, there is no sound", sc);
+        int o0 = g_opens;
+        sleep_ms_f(10500);
+        CHECK(c_fallback(), "%s: still no sound after 10 s (nothing to play on)", sc);
+        CHECK(g_opens - o0 >= 2 && g_opens - o0 <= 5, "%s: it is tried again every 3 s, for every reason (%d tries in 10.5 s)", sc, g_opens - o0);
+        CHECK(lines_with(logp, "no sound") <= 3, "%s: and it does not fill the log (%d lines about it)", sc, lines_with(logp, "no sound"));
+        CHECK(strstr(vaud_get_state()->note, "tried again every 3 s") != NULL, "%s: the page says so: '%s'", sc, vaud_get_state()->note);
+        g_gone_all = 0;
+        g_card_dead = 0;
+        CHECK(wait_for(c_on_interface, 9000), "%s: when the card answers again the sound is back on it", sc);
+        CHECK(strstr(vaud_get_state()->note, "reopened") != NULL, "%s: and the page says it: '%s'", sc, vaud_get_state()->note);
+    } else {
+        g_gone_uid[0] = 0;
+        snprintf(g_gone_uid, sizeof g_gone_uid, "wasapi:Fake Interface");
+        g_card_dead = 1;
+        wait_for(c_two_opens, 12000);
+        g_card_dead = 0; /* (the replacement device plays) */
+        CHECK(wait_for(c_on_default, 6000), "%s: Windows' default device takes over while the chosen card is away", sc);
+        const vaud_state *now = vaud_get_state();
+        CHECK(strstr(now->wanted_note, "Fake Interface") && strstr(now->wanted_note, "default device") && strstr(now->wanted_note, "every 3 s"), "%s: the page says which device is wanted and which one plays: '%s'", sc, now->wanted_note);
+        CHECK(strcmp(vaud_current_config()->output, "wasapi:Fake Interface") != 0 && vaud_current_config()->rate == 48000, "%s: what runs is the default device", sc);
+        int c0 = g_closes, p0 = g_present_calls;
+        sleep_ms_f(8500);
+        CHECK(g_closes == c0 && g_present_calls - p0 >= 2, "%s: while the card is away it is looked for every 3 s (%d looks) and the running sound is never stopped for it (%d closes)", sc, g_present_calls - p0, g_closes - c0);
+        if (!strcmp(sc, "away_apply")) {
+            char msg[300];
+            vaud_config w = *vaud_current_config();
+            snprintf(w.output, sizeof w.output, "wasapi:Fake ASIO");
+            int rc = vaud_apply(&w, msg, sizeof msg);
+            CHECK(rc == 0 && !strcmp(vaud_current_config()->output, "wasapi:Fake ASIO"), "%s: the user chooses another device on the page: rc %d '%s'", sc, rc, msg);
+            g_gone_uid[0] = 0; /* the first card is back, but it is not the wanted one any more */
+            sleep_ms_f(7000);
+            CHECK(!strcmp(vaud_current_config()->output, "wasapi:Fake ASIO") && vaud_get_state()->wanted_note[0] == 0, "%s: the new choice is the wanted device: the sound stays on it (%s)", sc, vaud_current_config()->output);
+        } else {
+            g_gone_uid[0] = 0;
+            CHECK(wait_for(c_on_interface, 9000), "%s: when the chosen card answers again the sound goes back to it", sc);
+            CHECK(vaud_get_state()->wanted_note[0] == 0 && strstr(vaud_get_state()->note, "back on 'Fake Interface'"), "%s: and the page says so: '%s'", sc, vaud_get_state()->note);
+            CHECK(lines_with(logp, "answers again: the sound is back on it") == 1, "%s: one line in the log", sc);
+        }
+    }
+    vaud_stop();
+    g_gone_all = 0; g_gone_uid[0] = 0; g_card_dead = 0;
+}
+
+/* M21 fix 4: the card's rate is the only reason for the retry: the retry asks the chosen device for its clock and nothing else (no restart of the host API, no open) */
+static void scenario_clock_quiet(void) {
+    g_buffer = 0;
+    rec_cap = 48000 * 2; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    snprintf(cfg.output, sizeof cfg.output, "wasapi:Fake Interface");
+    cfg.rate = 48000; cfg.period = 128;
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, NULL, &st);
+    sleep_ms_f(500);
+    g_clock_owner = 44100;
+    g_card_dead = 1;
+    CHECK(wait_for(c_fallback, 12000), "clock_quiet: the card whose clock was changed is noticed");
+    sleep_ms_f(400);
+    int r0 = g_refreshes, o0 = g_opens, c0 = g_card_clock_calls;
+    sleep_ms_f(9500);
+    CHECK(g_refreshes == r0 && g_opens == o0, "clock_quiet: three retries while the clock is at the other rate: no restart of the host API (%d), no open (%d)", g_refreshes - r0, g_opens - o0);
+    CHECK(g_card_clock_calls - c0 >= 2 && g_card_clock_calls - c0 <= 4, "clock_quiet: each retry asks the chosen card for its clock, once (%d asks in 9.5 s)", g_card_clock_calls - c0);
+    g_clock_owner = 0; g_card_dead = 0;
+    CHECK(wait_for(c_device, 9000), "clock_quiet: and when the other program lets go the stream is reopened");
+    vaud_stop();
+}
+
+/* M21 fix 7: the rate the engine only FOLLOWED from the card is not what the page writes to audio.conf */
+static void scenario_conf_rate(void) {
+    g_buffer = 0;
+    rec_cap = 48000 * 2; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    snprintf(cfg.output, sizeof cfg.output, "wasapi:Fake Interface");
+    cfg.rate = 48000; cfg.period = 128;
+    g_clock_owner = 44100;
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, NULL, &st);
+    CHECK(st.mode == VAUD_MODE_DEVICE && st.rate == 44100, "conf_rate: the engine follows the card to 44100 (%u)", st.rate);
+    CHECK(vaud_current_config()->rate == 48000, "conf_rate: the configuration that is written back still says 48000 (%u)", vaud_current_config()->rate);
+    char msg[300];
+    vaud_config w = *vaud_current_config();
+    int rc = vaud_apply(&w, msg, sizeof msg);
+    CHECK(rc == 0 && vaud_get_state()->rate == 44100, "conf_rate: an apply keeps the engine at 44100 (rc %d '%s')", rc, msg);
+    CHECK(vaud_current_config()->rate == 48000, "conf_rate: and the written configuration is still 48000 (%u)", vaud_current_config()->rate);
+    vaud_stop();
+    g_clock_owner = 0;
+}
+
+/* M21 fix 5: a buffer the engine cannot follow (4096 frames at an engine block of 128: 32 blocks, the bridge holds 16): said in plain words at the open, and not reopened for ever */
+static void scenario_bigbuf_refused(void) {
+    g_buffer = 4096;
+    g_opens = 0;
+    rec_cap = 48000 * 2; rec_l = calloc(rec_cap, sizeof(float)); rec_r = calloc(rec_cap, sizeof(float));
+    char logp[80];
+    snprintf(logp, sizeof logp, "/tmp/bigbuf-%d.log", (int)getpid());
+    freopen(logp, "w", stderr);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    vaud_config cfg;
+    memset(&cfg, 0, sizeof cfg);
+    cfg.rate = 48000; cfg.period = 128; cfg.buffer = 4096;
+    vaud_state st;
+    vaud_start(&FAKE, &cfg, NULL, &st);
+    CHECK(st.mode == VAUD_MODE_FALLBACK, "bigbuf_refused: no sound card is run with it (mode %d)", st.mode);
+    CHECK(strstr(vaud_get_state()->note, "more than the engine can follow") != NULL && strstr(vaud_get_state()->note, "choose a smaller BUFFER"), "bigbuf_refused: the page says why: '%s'", vaud_get_state()->note);
+    sleep_ms_f(9000);
+    CHECK(g_opens == 1 && vaud_get_state()->mode == VAUD_MODE_FALLBACK && vaud_get_state()->give_up, "bigbuf_refused: and it is not tried again and again (%d opens in 9 s)", g_opens);
+    /* the user chooses a buffer it can follow: that works, without a restart */
+    char msg[300];
+    vaud_config w = cfg;
+    w.buffer = 1024;
+    int rc = vaud_apply(&w, msg, sizeof msg);
+    CHECK(rc == 0 && vaud_get_state()->mode == VAUD_MODE_DEVICE && !vaud_get_state()->give_up, "bigbuf_refused: a smaller buffer chosen on the page runs (rc %d '%s')", rc, msg);
+    vaud_stop();
+}
+
 /* TEST without cables (owner's list, 6d): two seconds of the card's callbacks and of the engine's blocks are measured and judged */
 static void scenario_selftest(const char *sc) {
     char name[64];
@@ -1006,6 +1178,9 @@ int main(int argc, char **argv) {
     else if (!strncmp(sc, "apply_", 6)) scenario_apply(sc);
     else if (!strncmp(sc, "excl_", 5)) scenario_excl(sc);
     else if (!strncmp(sc, "rate_", 5)) scenario_rate(sc);
+    else if (!strcmp(sc, "clock_quiet")) scenario_clock_quiet();
+    else if (!strncmp(sc, "away_", 5)) scenario_away(sc);
+    else if (!strcmp(sc, "conf_rate")) scenario_conf_rate();
     else if (!strncmp(sc, "clock_", 6)) scenario_clock(sc);
     else if (!strncmp(sc, "selftest", 8)) scenario_selftest(sc);
     else if (!strcmp(sc, "startup")) scenario_startup(sc);
@@ -1015,6 +1190,13 @@ int main(int argc, char **argv) {
     else if (!strcmp(sc, "grow_start") || !strcmp(sc, "decay")) scenario_grow(sc);
     else if (!strcmp(sc, "reblock480")) { g_buffer = 0; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 480 && vaud_get_state()->engine_prime == 256, "reblock480: card 480, engine 256: primed with one engine block (%u %u)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime); CHECK(vaud_get_state()->card_xruns == 0, "reblock480: no glitch (%llu)", vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "reblock64")) { g_buffer = 64; run_chain(sc, 1, "", 48000, 128, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 64 && vaud_get_state()->engine_prime == 128 && vaud_get_state()->card_xruns == 0, "reblock64: card 64, engine 128 (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }
+    else if (!strcmp(sc, "reblock4096") || !strcmp(sc, "reblock8192")) { /* M21: 4096 and 8192 frames per callback are sound (the engine block is 512 and 1024: 8 blocks per callback) */
+        unsigned big = !strcmp(sc, "reblock4096") ? 4096 : 8192, blk = big == 4096 ? 512 : 1024;
+        g_buffer = (int)big; g_opens = 0; run_chain(sc, 1, "", 48000, blk, VAUD_MODE_DEVICE);
+        CHECK(vaud_get_state()->card_frames == big && vaud_get_state()->card_xruns <= 2, "%s: the card calls back with %u frames (%u) and the engine answers: sound, no silence (glitches %llu)", sc, big, vaud_get_state()->card_frames, vaud_get_state()->card_xruns);
+        CHECK(g_opens == 1, "%s: the card was opened once, never reopened (%d)", sc, g_opens);
+    }
+    else if (!strcmp(sc, "bigbuf_refused")) scenario_bigbuf_refused();
     else if (!strcmp(sc, "reblock1024")) { g_buffer = 1024; run_chain(sc, 1, "", 48000, 256, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_frames == 1024 && vaud_get_state()->engine_prime == 0 && vaud_get_state()->card_xruns == 0, "reblock1024: card 1024, engine 256: no extra delay (%u %u %llu)", vaud_get_state()->card_frames, vaud_get_state()->engine_prime, vaud_get_state()->card_xruns); }
     else if (!strcmp(sc, "burst")) { g_buffer = 128; g_burst = 4; g_host_frames = 512; run_chain(sc, 1, "", 48000, 128, VAUD_MODE_DEVICE); CHECK(vaud_get_state()->card_xruns == 0, "burst: callbacks of 128 frames arrive four in a row every 512 frames (a host period of 512 split by the host API's re-blocking) cost no glitch (%llu)", vaud_get_state()->card_xruns); CHECK(vaud_get_state()->engine_lag == 4, "burst: the bridge holds four blocks back (%u)", vaud_get_state()->engine_lag); }
     else if (!strncmp(sc, "in_", 3) || !strncmp(sc, "sys", 3) || !strncmp(sc, "measure", 7) || !strncmp(sc, "asio_", 5)) scenario_input(sc);

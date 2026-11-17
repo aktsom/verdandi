@@ -7,7 +7,8 @@
  *   single       one client at a time: init fails while another instance of the driver (in this process) is still loaded: a program that leaves the driver loaded finds it "in use" when it opens it again (M20)
  * more of the environment (M20): VERDANDI_STUB_RATE the card's clock when the driver is first loaded (44100 or 48000, default 48000); VERDANDI_STUB_HOLD another program has the card: "refuse" (ASIOSetSampleRate says no)
  * or "silent" (it says yes and changes nothing); VERDANDI_STUB_REAL the rate the card REALLY runs at, when it is not the one it reports (a driver that lies: for the mismatch warning); VERDANDI_STUB_LOG a file that gets one
- * line for every set_rate / init / release / start / stop the driver sees. its channels are called Analog 1, Analog 2, SPDIF L, SPDIF R (as an interface names them).
+ * line for every create / set_rate / init / release / start / stop the driver sees ("stop peak=... callbacks=... size=..." says how loud the host's output was: sound or silence); VERDANDI_STUB_BUFMAX the
+ * largest buffer it offers (default 2048); VERDANDI_STUB_CTL a file that can be made and removed WHILE the program runs: if it contains "ratefail" the driver cannot say which rate the card runs at (ASIOGetSampleRate fails). its channels are called Analog 1, Analog 2, SPDIF L, SPDIF R (as an interface names them).
  * windows/ci/register_asio_stub.sh registers it (HKLM\SOFTWARE\ASIO\Verdandi Test ASIO and its CLSID), the CI removes it again.
  */
 #include <windows.h>
@@ -70,6 +71,9 @@ struct Driver {
     HANDLE thread;
     volatile LONG64 position;
     int inited;
+    int isin[8];
+    double peak;
+    long callbacks;
 };
 
 static volatile LONG g_locks;
@@ -175,6 +179,18 @@ static DWORD WINAPI pump(LPVOID arg) {
         if (!d->running) break;
         d->position += d->buffer_size;
         d->cb->bufferSwitch(index, 1);
+        /* what the host put in the first output buffer it was given: the loudest sample, for the test that asks "sound or silence" */
+        for (int c = 0; c < d->nbufs; c++) {
+            if (!d->isin[c] && d->bufs[c][index]) {
+                const float *o = (const float *)d->bufs[c][index];
+                for (long k = 0; k < d->buffer_size; k++) {
+                    double a = o[k] < 0 ? -o[k] : o[k];
+                    if (a > d->peak) d->peak = a;
+                }
+                break;
+            }
+        }
+        d->callbacks++;
         index ^= 1;
     }
     return 0;
@@ -195,15 +211,34 @@ static long STDMETHODCALLTYPE d_stop(Driver *d) {
         CloseHandle(d->thread);
         d->thread = NULL;
         timeEndPeriod(1);
-        logev("stop");
+        logev("stop peak=%.4f callbacks=%ld size=%ld", d->peak, d->callbacks, d->buffer_size);
+        d->peak = 0;
+        d->callbacks = 0;
     }
     return ASE_OK;
 }
 static long STDMETHODCALLTYPE d_channels(Driver *d, long *i, long *o) { (void)d; *i = 4; *o = 4; return ASE_OK; }
 static long STDMETHODCALLTYPE d_latencies(Driver *d, long *i, long *o) { (void)d; *i = 256; *o = 256; return ASE_OK; }
-static long STDMETHODCALLTYPE d_bufsize(Driver *d, long *mn, long *mx, long *pref, long *gran) { (void)d; *mn = 64; *mx = 2048; *pref = 256; *gran = -1; return ASE_OK; }
+static long STDMETHODCALLTYPE d_bufsize(Driver *d, long *mn, long *mx, long *pref, long *gran) { (void)d; *mn = 64; *mx = env("VERDANDI_STUB_BUFMAX")[0] ? atol(env("VERDANDI_STUB_BUFMAX")) : 2048; *pref = 256; *gran = -1; return ASE_OK; }
 static long STDMETHODCALLTYPE d_can(Driver *d, double r) { (void)d; return (r == 48000.0 || r == 44100.0) ? ASE_OK : ASE_NoClock; }
-static long STDMETHODCALLTYPE d_getrate(Driver *d, double *r) { (void)d; *r = card_rate(); return ASE_OK; }
+static int ctl_has(const char *word) {
+    const char *path = env("VERDANDI_STUB_CTL");
+    if (!path[0]) return 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    char b[64] = "";
+    size_t n = fread(b, 1, sizeof b - 1, f);
+    b[n] = 0;
+    fclose(f);
+    return strstr(b, word) != NULL;
+}
+static long STDMETHODCALLTYPE d_getrate(Driver *d, double *r) {
+    (void)d;
+    logev("getrate");
+    if (ctl_has("ratefail")) return ASE_NotPresent; /* the driver cannot say which rate the card runs at */
+    *r = card_rate();
+    return ASE_OK;
+}
 static long STDMETHODCALLTYPE d_setrate(Driver *d, double r) {
     logev("set_rate %.0f", r);
     if (r == card_rate()) return ASE_OK;
@@ -248,6 +283,7 @@ static long STDMETHODCALLTYPE d_create(Driver *d, BufferInfo *b, long n, long si
             d->bufs[i][k] = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)size * 4);
             b[i].buffers[k] = d->bufs[i][k];
         }
+        d->isin[i] = (int)b[i].isInput;
     }
     d->nbufs = (int)n;
     d->buffer_size = size;
@@ -282,6 +318,7 @@ static HRESULT STDMETHODCALLTYPE f_create(IClassFactory *f, IUnknown *outer, REF
     if (!strcmp(mode(), "broken")) return E_FAIL;
     Driver *d = (Driver *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof *d);
     if (!d) return E_OUTOFMEMORY;
+    logev("create");
     d->v = &VT;
     d->refs = 1;
     InterlockedIncrement(&g_locks);

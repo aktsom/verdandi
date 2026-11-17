@@ -40,10 +40,11 @@ typedef struct PaAsioStreamInfo {
 #include <windows.h>
 #include <psapi.h>
 #include <objbase.h>
+#include <mmsystem.h>
 #include "audio_asio_probe.h"
 #endif
 
-#define MAXF 2048
+#define MAXF 16384 /* the card's callback at most (an ASIO buffer of 4096 or 8192 frames is sound; M21) */
 
 static PaStream *stream;     /* the main stream: output, and the input when it is on the same device */
 static PaStream *in_stream;  /* a separate input stream */
@@ -471,22 +472,33 @@ static vaud_error pa_open_w(const vaud_open_req *rq, vaud_callback cb, void *use
     }
     const PaDeviceInfo *odi = Pa_GetDeviceInfo(od);
     int is_asio = !strcmp(oapi, "ASIO");
+    unsigned asio_frames = 0; /* the size of the ASIO callbacks (the asked buffer, or the driver's preferred one) */
     memset(res->in_name, 0, sizeof res->in_name);
 #ifdef _WIN32
     if (is_asio) {
         /* the card's clock is another program's business too (the DAW that has the card at 48000): opening at another rate would make the driver change it, under the other program. so: ask the driver which rate the
          * card runs at NOW, and open only at that; any other rate is refused here and the caller (the start-up) follows the card, a live change keeps the engine's rate and says so */
         va_driver f;
-        if (va_probe_one(odi->name, &f) == 0 && f.rate > 0) {
-            res->device_rate = f.rate;
-            unsigned cur = (unsigned)(f.rate + 0.5);
-            if (cur != rq->rate) {
-                int ok = cur == 44100 || cur == 48000 || cur == 88200 || cur == 96000;
-                res->rate = ok ? cur : 0;
-                snprintf(err, errn, "the card (ASIO driver '%.50s') runs at %u Hz and the engine at %u Hz. Verdandi does not change a card's clock, another program may be using it%s", odi->name, cur, rq->rate,
-                         ok ? ": set the card to the engine's rate, or restart Verdandi so that it follows the card" : " (and norns can run at 44100, 48000, 88200 or 96000 Hz only)");
-                return VAUD_BAD_RATE;
-            }
+        if (va_probe_one(odi->name, &f) != 0 || f.rate <= 0) {
+            /* the rate could not be read (the driver refused, did not answer, or has no current rate): PortAudio would then ask the driver to set the rate it is opened at, which is a change of the card's clock.
+             * Verdandi never takes that risk: no open. the caller's retry and fallback (WASAPI on the same hardware) take over */
+            snprintf(err, errn, "the card's rate could not be read (ASIO driver '%.50s'%s%.120s), so Verdandi will not risk changing it", odi->name, f.detail[0] ? ": " : "", f.detail);
+            return f.status == VA_INIT || f.status == VA_TIMEOUT ? VAUD_BUSY : VAUD_FAILED;
+        }
+        res->device_rate = f.rate;
+        unsigned cur = (unsigned)(f.rate + 0.5);
+        if (cur != rq->rate) {
+            int ok = cur == 44100 || cur == 48000 || cur == 88200 || cur == 96000;
+            res->rate = ok ? cur : 0;
+            snprintf(err, errn, "the card (ASIO driver '%.50s') runs at %u Hz and the engine at %u Hz. Verdandi does not change a card's clock, another program may be using it%s", odi->name, cur, rq->rate,
+                     ok ? ": set the card to the engine's rate, or restart Verdandi so that it follows the card" : " (and norns can run at 44100, 48000, 88200 or 96000 Hz only)");
+            return VAUD_BAD_RATE;
+        }
+        asio_frames = rq->frames ? (unsigned)rq->frames : (unsigned)(f.buf_pref > 0 ? f.buf_pref : 0);
+        if (rq->frames > MAXF || (rq->frames == 0 && f.buf_pref > MAXF)) {
+            /* a buffer the engine cannot take in one callback: said, not tried (a card that opens and never answers would be reopened for ever) */
+            snprintf(err, errn, "the card's buffer of %ld frames is more than Verdandi can take (at most %d): choose a smaller BUFFER", rq->frames ? (long)rq->frames : f.buf_pref, MAXF);
+            return VAUD_FAILED;
         }
     }
 #endif
@@ -614,7 +626,7 @@ static vaud_error pa_open_w(const vaud_open_req *rq, vaud_callback cb, void *use
     snprintf(res->device_name, sizeof res->device_name, "%s", odi->name);
     snprintf(res->host_api, sizeof res->host_api, "%s%s", hi ? hi->name : "?", hi && hi->type == paWASAPI ? " shared" : "");
     res->rate = si ? (unsigned)(si->sampleRate + 0.5) : rq->rate;
-    res->frames = rq->frames;
+    res->frames = rq->frames ? rq->frames : asio_frames;
     res->exclusive = rq->exclusive && !is_asio;
     if (!is_asio || res->device_rate <= 0) res->device_rate = odi->defaultSampleRate;
 #if defined(HAVE_PA_WASAPI_H) && defined(_WIN32)
@@ -754,6 +766,13 @@ static void pa_describe_w(char *out, size_t n) {
 /* the clock of a card that another program (an ASIO driver that is running) has set: the device takes, in its own format (exclusive mode), only the rate it runs at; a free card takes several. exactly one rate
  * taken = that is the clock. 0: not WASAPI, not known, or free */
 static double pa_card_clock_w(const char *uid) {
+#ifdef _WIN32
+    if (uid && !strncmp(uid, "asio:", 5)) {
+        /* an ASIO driver: ask THIS driver for the card's clock, once (it is loaded for a moment and let go): no restart of PortAudio, no other driver is looked at */
+        va_driver f;
+        return va_probe_one(uid + 5, &f) == 0 && f.rate > 0 ? f.rate : 0;
+    }
+#endif
 #ifdef HAVE_PA_WASAPI_H
     static const double rates[4] = {44100, 48000, 88200, 96000};
     if (!uid || !strncmp(uid, "asio:", 5) || pa_up_quiet() != 0) {
@@ -786,6 +805,34 @@ static double pa_card_clock_w(const char *uid) {
 }
 
 /* look at the devices again: the list PortAudio made at its start does not know that a card's state changed. only when no stream is open (Pa_Terminate would end it) */
+/* is the chosen output device there now? without a restart of PortAudio and without touching a stream that plays */
+static int pa_present_w(const char *uid) {
+#ifdef _WIN32
+    if (!uid || !uid[0]) {
+        return 1; /* the Windows default device: whatever Windows has */
+    }
+    if (!strncmp(uid, "asio:", 5)) {
+        va_driver f;
+        return va_probe_one(uid + 5, &f) == 0 ? 1 : 0;
+    }
+    if (!strncmp(uid, "wasapi:", 7)) {
+        /* the names of the Windows devices as winmm lists them (cut at 31 characters): only the devices that are plugged in and enabled */
+        const char *name = uid + 7;
+        UINT n = waveOutGetNumDevs();
+        for (UINT i = 0; i < n; i++) {
+            WAVEOUTCAPSA c;
+            if (waveOutGetDevCapsA(i, &c, sizeof c) != MMSYSERR_NOERROR) continue;
+            size_t k = strlen(c.szPname);
+            if (!strncmp(name, c.szPname, k) && (k >= 31 || strlen(name) == k)) return 1;
+        }
+        return 0;
+    }
+#else
+    (void)uid;
+#endif
+    return -1;
+}
+
 static void pa_refresh_w(void) {
     if (!pa_ready || stream || in_stream || sys_stream) {
         return;
@@ -938,9 +985,19 @@ static double pa_card_clock(const char *uid) {
     return j.ret;
 }
 static void do_refresh(void *a) { (void)a; pa_refresh_w(); }
+typedef struct {
+    const char *uid;
+    int ret;
+} job_present;
+static void do_present(void *a) { job_present *j = a; j->ret = pa_present_w(j->uid); }
+static int pa_present(const char *uid) {
+    job_present j = {uid, -1};
+    on_worker(do_present, &j);
+    return j.ret;
+}
 static void pa_refresh(void) { on_worker(do_refresh, NULL); }
 
-const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe, HAS_DIRECT_SYS, pa_card_clock, pa_refresh};
+const vaud_backend vaud_backend_portaudio = {"PortAudio", pa_list, pa_open, pa_start, pa_close, pa_open_sys, pa_close_sys, pa_describe, HAS_DIRECT_SYS, pa_card_clock, pa_refresh, pa_present};
 
 /* what the log shows at start: the host APIs this PortAudio has (WASAPI missing is the first thing to look for when there is no sound) */
 void vaud_backend_pa_describe(char *out, size_t n) { pa_describe(out, n); }

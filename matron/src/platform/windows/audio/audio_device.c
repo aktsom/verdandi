@@ -18,14 +18,15 @@ extern int verdandi_jack_null_process(unsigned nframes, const float *cap_l, cons
 
 #define DEFAULT_RATE 48000u
 #define DEFAULT_PERIOD 128u /* the ENGINE block (M3 round 2): independent of the card's buffer */
-#define MAXF 2048u
+#define MAXF 2048u     /* the ENGINE's block at most */
+#define CARDMAX 16384u /* the card's callback at most (M21: an ASIO buffer of 4096 or 8192 frames is sound, not silence) */
 
 static vaud_state S;
 static const vaud_backend *BE;
 static int bridge_up;
 static int sys_open;
 static atomic_int in_mode; /* vaud_input_mode */
-static float scratch_l[MAXF], scratch_r[MAXF], cap_l[MAXF], cap_r[MAXF], mic_tmp[2 * MAXF], sys_tmp[2 * MAXF];
+static float scratch_l[MAXF], scratch_r[MAXF], cap_l[MAXF], cap_r[MAXF], mic_tmp[2 * CARDMAX], sys_tmp[2 * CARDMAX];
 
 /* ---- a ring of stereo frames between a thread of the backend (the input stream) and the card's callback: one writer, one reader. the reader keeps the fill near one block (clocks of two devices drift:
  * too much is dropped, too little is padded with silence and counted) ---- */
@@ -103,7 +104,7 @@ static void note_add(char *dst, size_t n, const char *fmt, ...) {
 
 static int rate_ok(unsigned r) { return r == 44100 || r == 48000 || r == 88200 || r == 96000; }
 static int period_ok(unsigned p) { return p >= 64 && p <= 1024 && p % 64 == 0; }
-static int buffer_ok(unsigned b) { return b == 0 || (b >= 32 && b <= 2048 && b % 32 == 0); }
+static int buffer_ok(unsigned b) { return b == 0 || (b >= 32 && b <= CARDMAX && b % 32 == 0); }
 static const char *shown(const char *uid) {
     const char *c = strchr(uid, ':');
     return c ? c + 1 : uid;
@@ -130,7 +131,7 @@ void vaud_config_check(vaud_config *cfg) {
         cfg->period = DEFAULT_PERIOD;
     }
     if (!buffer_ok(cfg->buffer)) {
-        note_add(cfg->notes, sizeof cfg->notes, "buffer %u is not auto or a multiple of 32 up to 2048: using auto. ", cfg->buffer);
+        note_add(cfg->notes, sizeof cfg->notes, "buffer %u is not auto or a multiple of 32 up to 16384: using auto. ", cfg->buffer);
         cfg->buffer = 0;
     }
     cfg->exclusive = cfg->exclusive ? 1 : 0;
@@ -245,7 +246,7 @@ static volatile unsigned measure_frames;  /* frames since the click */
 static double to_db(double x) { return x <= 1e-6 ? -120.0 : 20.0 * log10(x); }
 
 /* a fifo of stereo frames used by the card's thread only */
-#define FIFO_FRAMES 8192u
+#define FIFO_FRAMES 40000u /* a card callback of CARDMAX frames plus an engine block must fit */
 typedef struct {
     float l[FIFO_FRAMES], r[FIFO_FRAMES];
     unsigned head, n;
@@ -254,7 +255,7 @@ static vfifo fi, fo;
 static int fifos_primed;
 static void fifo_reset(vfifo *f) { f->head = f->n = 0; }
 static void fifo_push1(vfifo *f, float l, float r) {
-    if (f->n >= FIFO_FRAMES) { /* cannot happen with blocks up to 2048 and 1024; if it does, the oldest frame goes */
+    if (f->n >= FIFO_FRAMES) { /* cannot happen with blocks up to CARDMAX and 1024; if it does, the oldest frame goes */
         f->head = (f->head + 1) % FIFO_FRAMES;
         f->n--;
     }
@@ -332,6 +333,11 @@ void vaud_selftest_start(void) {
 }
 
 static vaud_config CUR; /* what runs now (defined again below: a tentative definition) */
+static vaud_config WANT; /* the device the user chose (at the start, or applied on the AUDIO page): the fallbacks never change it */
+static int want_set;
+static void set_wanted_note(void);
+static int away_backoff = 12; /* ticks of 250 ms between two looks for the chosen device while the sound plays elsewhere; doubles when a switch back did not work */
+static int told_away;
 
 /* ---- every underrun leaves a line in norns.log (M19). the card's callback must not log, lock or allocate: it only writes a record into a small ring; the watch thread (every 250 ms) turns the records into lines.
  * "u" on the AUDIO page counts the bridge's underruns (scsynth had no block ready when the card needed one: the engine's sound is silent for that block); "x" counts the card's glitches: the host API said the
@@ -503,11 +509,11 @@ static void card_callback(const float *in, float *out, unsigned frames, void *us
         selftest_tick();
     }
     (void)user;
-    if (frames > MAXF) {
+    if (frames > CARDMAX) {
         static int told;
         if (!told) {
             told = 1;
-            fprintf(stderr, "audio: the card called back with %u frames, not %u: silence for those blocks\n", frames, S.frames);
+            fprintf(stderr, "audio: the card called back with %u frames, more than the %u Verdandi can take at once: silence for those blocks\n", frames, CARDMAX);
         }
         memset(out, 0, (size_t)frames * 2 * sizeof(float));
         return;
@@ -814,8 +820,24 @@ static vaud_error open_chain(const vaud_backend *be, vaud_config *cfg, int follo
     return e;
 }
 
+/* how many frames one card callback may have: the callback runs that many frames in engine blocks of S.frames, one after the other, and the bridge to scsynth holds 16 blocks (12 of them can be in flight, the rest is
+ * the hold-back): up to 2048 frames as always, and more when the engine block is larger (12 blocks of it). a bigger card buffer is refused with a plain sentence when it is opened, not played as noise */
+static unsigned card_frames_max(void) {
+    unsigned m = S.frames * 12u;
+    return m < 2048u ? 2048u : (m > CARDMAX ? CARDMAX : m);
+}
+static int g_size_refused; /* the last open was refused for the size of the card's buffer: reopening cannot cure that */
+
 /* the stream that was opened runs: the engine takes the card's clock. returns 0 = ok */
 static int activate(const vaud_opened *res, const vaud_config *cfg, char *err, size_t errn) {
+    g_size_refused = 0;
+    if (res->frames > card_frames_max()) {
+        snprintf(err, errn, "the card's buffer of %u frames is more than the engine can follow at a block of %u frames (at most %u): choose a smaller BUFFER on SYSTEM > AUDIO, or a larger block= in audio.conf", res->frames, S.frames, card_frames_max());
+        fprintf(stderr, "audio: %s\n", err);
+        g_size_refused = 1;
+        BE->close();
+        return -1;
+    }
     S.clock_rate = 0;
     S.opened = *res;
     S.card_frames = 0;
@@ -830,6 +852,7 @@ static int activate(const vaud_opened *res, const vaud_config *cfg, char *err, s
         return -1;
     }
     CUR = *cfg;
+    CUR.rate = S.conf_rate ? S.conf_rate : cfg->rate; /* what was asked for, not the rate that was followed from the card: the AUDIO page writes this back to audio.conf */
     S.mode = VAUD_MODE_DEVICE;
     return 0;
 }
@@ -893,7 +916,10 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
     S.in_peak_db = -120;
     vaud_config_check(&cfg);
     S.rate = cfg.rate;
+    S.conf_rate = cfg.rate;
     S.frames = cfg.period;
+    WANT = cfg;
+    want_set = 1;
     if (cfg.notes[0]) {
         fprintf(stderr, "audio: %s\n", cfg.notes);
     }
@@ -945,8 +971,14 @@ void vaud_start(const vaud_backend *be, const vaud_config *cfg_in, const char *b
                 e = VAUD_FAILED;
             }
         }
-        if (S.mode != VAUD_MODE_DEVICE) {
-            note_add(S.note, sizeof S.note, "no sound: audio device %s%.60s%s %s. null audio is used", cfg.output[0] ? "'" : "(default)", shown(cfg.output), cfg.output[0] ? "'" : "", error_words(e));
+        if (S.mode != VAUD_MODE_DEVICE && g_size_refused) {
+            S.give_up = 1; /* a buffer the engine cannot follow: said, and not tried again and again */
+            S.note[0] = 0;
+            note_add(S.note, sizeof S.note, "no sound: %s", err);
+            fprintf(stderr, "audio: %s\n", S.note);
+            S.mode = VAUD_MODE_FALLBACK;
+        } else if (S.mode != VAUD_MODE_DEVICE) {
+            note_add(S.note, sizeof S.note, "no sound: audio device %s%.60s%s %s. null audio is used, tried again every 3 s", cfg.output[0] ? "'" : "(default)", shown(cfg.output), cfg.output[0] ? "'" : "", error_words(e));
             fprintf(stderr, "audio: %s (%s)\n", S.note, err);
             S.mode = VAUD_MODE_FALLBACK;
         }
@@ -991,11 +1023,14 @@ static int apply_unlocked(const vaud_config *want, char *msg, size_t n) {
         return 1;
     }
     vaud_config cfg = *want, old = CUR;
+    old.rate = S.rate; /* (CUR keeps the rate that was asked for; the engine runs at the one that was followed) */
+    S.give_up = 0;
     cfg.rate = S.rate; /* the engine's rate and block stay: scsynth and crone run on */
     cfg.period = S.frames;
     cfg.force_null = 0;
     cfg.notes[0] = 0;
     vaud_config_check(&cfg);
+    vaud_config chosen = cfg; /* what the user chose: the wanted device from now on, whatever replaces it when it is not there */
     vaud_input_set(0, 0); /* a new device: the input is OFF again (nothing reaches norns by surprise) */
     S.input = VAUD_IN_OFF;
     S.sys_note[0] = 0;
@@ -1024,6 +1059,11 @@ static int apply_unlocked(const vaud_config *want, char *msg, size_t n) {
             note_add(S.note, sizeof S.note, "%s%s", S.note[0] ? ". " : "", res.in_note);
         }
         log_device(&res, &cfg);
+        WANT = chosen;
+        want_set = 1;
+        away_backoff = 12;
+        told_away = 0;
+        set_wanted_note();
         snprintf(msg, n, "%s", S.note);
         return 0;
     }
@@ -1037,23 +1077,48 @@ static int apply_unlocked(const vaud_config *want, char *msg, size_t n) {
     if (e2 == VAUD_OK && activate(&res, &old, err, sizeof err) == 0) {
         S.note[0] = 0;
         log_device(&res, &old);
+        set_wanted_note();
         snprintf(msg, n, "%s: back to %.60s", why, res.device_name);
         return 1;
     }
     S.mode = VAUD_MODE_FALLBACK;
-    snprintf(S.note, sizeof S.note, "no sound: %s, and the old device cannot be opened either. null audio is used", why);
+    snprintf(S.note, sizeof S.note, "no sound: %s, and the old device cannot be opened either. null audio is used, the chosen device is tried again every 3 s", why);
     fprintf(stderr, "audio: %s\n", S.note);
     snprintf(msg, n, "%s", S.note);
     return 2;
 }
 
-/* ---- the watchdog: a card that stops calling back (its clock was changed under the stream by another program, the device was pulled) is reopened, and while it cannot be (the clock is at another rate than norns's) it is
- * tried again every 3 seconds until the other program lets go. the page gets the reason (vaud_state.clock_rate and the note) ---- */
-static void recover(const char *why_stopped) {
+/* ---- the watchdog. (1) a card that stops calling back is reopened once after 2 s. (2) while there is NO sound (null audio, whatever the reason: the card was pulled, not listed yet, busy, its clock at another rate)
+ * the chosen device is tried again every 3 s, for ever, quietly (one line when it fails the first time, none after, one when it works). (3) while the sound plays on ANOTHER device than the chosen one (the Windows
+ * default took over), the chosen one is looked for every 3 s without touching the running stream; when it answers, the sound goes back to it. (4) a card that opens but stops calling back again and again is not
+ * reopened in a loop: reopening does not cure that. M21 ---- */
+static int same_device(const vaud_config *a, const vaud_config *b) { return !strcmp(a->output, b->output) && a->out_first == b->out_first; }
+static void set_wanted_note(void) {
+    S.wanted_note[0] = 0;
+    if (want_set && S.mode == VAUD_MODE_DEVICE && !same_device(&WANT, &CUR)) {
+        snprintf(S.wanted_note, sizeof S.wanted_note, "playing on %s%.60s%s; the chosen %s%.60s%s is not there, tried again every 3 s", CUR.output[0] ? "'" : "", CUR.output[0] ? shown(CUR.output) : "the Windows default device", CUR.output[0] ? "'" : "",
+                 WANT.output[0] ? "'" : "", WANT.output[0] ? shown(WANT.output) : "default device", WANT.output[0] ? "'" : "");
+    }
+}
+
+/* mode: 0 = the watchdog saw the card stop (close it, open the chosen device), 1 = there is no sound: try again, and do nothing when the sound runs by now */
+static void recover(const char *why_stopped, int only_if_no_sound) {
     pthread_mutex_lock(&apply_lock);
-    if (!BE || (S.mode != VAUD_MODE_DEVICE && S.mode != VAUD_MODE_FALLBACK)) {
+    if (!BE || (S.mode != VAUD_MODE_DEVICE && S.mode != VAUD_MODE_FALLBACK) || (only_if_no_sound && S.mode != VAUD_MODE_FALLBACK) || S.give_up) {
         pthread_mutex_unlock(&apply_lock);
         return;
+    }
+    vaud_config cfg = want_set ? WANT : CUR;
+    cfg.rate = S.rate;
+    cfg.period = S.frames;
+    if (S.mode == VAUD_MODE_FALLBACK && S.clock_rate != 0 && BE->card_clock) {
+        /* the only reason for the retry is the card's rate: ask the ONE chosen device which rate it runs at now, nothing else (no restart of the host API, no other driver is looked at or loaded) */
+        double clk = BE->card_clock(cfg.output);
+        if (clk > 0 && rate_ok((unsigned)clk) && (unsigned)clk != S.rate) {
+            S.clock_rate = (unsigned)clk;
+            pthread_mutex_unlock(&apply_lock);
+            return;
+        }
     }
     int was_running = S.mode == VAUD_MODE_DEVICE;
     if (was_running) {
@@ -1061,12 +1126,9 @@ static void recover(const char *why_stopped) {
     }
     verdandi_jack_null_external_clock(0);
     S.mode = VAUD_MODE_FALLBACK;
-    if (BE->refresh) {
-        BE->refresh();
+    if (BE->refresh && strncmp(cfg.output, "asio:", 5) != 0) {
+        BE->refresh(); /* (an ASIO driver does not come and go with the devices of Windows: no restart of the host API, no scan of the other drivers) */
     }
-    vaud_config cfg = CUR;
-    cfg.rate = S.rate;
-    cfg.period = S.frames;
     char note[480] = "", err[256] = "";
     vaud_opened res;
     vaud_error e = open_chain(BE, &cfg, 0, &res, note, sizeof note, err, sizeof err);
@@ -1084,13 +1146,77 @@ static void recover(const char *why_stopped) {
         note_add(S.note, sizeof S.note, "the sound card was reopened (%s)%s%s", why_stopped, note[0] ? ". " : "", note);
         fprintf(stderr, "audio: %s\n", S.note);
         log_device(&res, &cfg);
+        set_wanted_note();
+        told_away = 0;
+    } else {
+        static unsigned long long last_say;
+        unsigned long long nowus = verdandi_bridge_now_us();
+        S.mode = VAUD_MODE_FALLBACK;
+        S.note[0] = 0;
+        note_add(S.note, sizeof S.note, "no sound: audio device %s%.60s%s %s. null audio is used, the device is tried again every 3 s", cfg.output[0] ? "'" : "(default)", shown(cfg.output), cfg.output[0] ? "'" : "", error_words(e == VAUD_OK ? VAUD_FAILED : e));
+        if (g_size_refused) {
+            S.give_up = 1; /* reopening cannot cure a buffer that is too big for the engine: no retry loop until the user applies something else */
+            snprintf(S.note + strlen(S.note), sizeof S.note - strlen(S.note), ". %.200s", err);
+        }
+        if (was_running || nowus - last_say > 60ULL * 1000000ULL || !last_say) { /* the first time, then once a minute: a card that stays away is not a stream of log lines */
+            fprintf(stderr, "audio: %s (%s; %s)\n", S.note, why_stopped, err);
+            last_say = nowus;
+        }
+    }
+    pthread_mutex_unlock(&apply_lock);
+}
+
+/* the sound plays on a fallback device: has the chosen one come back? looked at without touching the stream; only when it answers is the stream closed and the chosen device opened. when that does not work the
+ * fallback device is opened again (one short gap) and the next look is later (doubling up to a minute) so that a device that is listed but does not open cannot make a click every 3 s */
+static void try_return(void) {
+    pthread_mutex_lock(&apply_lock);
+    if (!BE || S.mode != VAUD_MODE_DEVICE || !want_set || same_device(&WANT, &CUR) || S.give_up) {
+        pthread_mutex_unlock(&apply_lock);
+        return;
+    }
+    if (BE->present && BE->present(WANT.output) == 0) {
+        pthread_mutex_unlock(&apply_lock);
+        return;
+    }
+    vaud_config old = CUR, cfg = WANT;
+    old.rate = S.rate;
+    cfg.rate = S.rate;
+    cfg.period = S.frames;
+    char note[480] = "", err[256] = "";
+    vaud_opened res;
+    BE->close();
+    verdandi_jack_null_external_clock(0);
+    S.mode = VAUD_MODE_FALLBACK;
+    if (BE->refresh && strncmp(cfg.output, "asio:", 5) != 0) {
+        BE->refresh();
+    }
+    vaud_error e = open_chain(BE, &cfg, 0, &res, note, sizeof note, err, sizeof err);
+    if (e == VAUD_OK && res.rate == S.rate && same_device(&cfg, &WANT) && activate_or_twin(BE, &res, &cfg, note, sizeof note, err, sizeof err) == 0 && same_device(&cfg, &WANT)) {
+        S.note[0] = 0;
+        note_add(S.note, sizeof S.note, "back on '%.60s': it answers again%s%s", cfg.output[0] ? shown(cfg.output) : "the default device", note[0] ? ". " : "", note);
+        fprintf(stderr, "audio: the chosen device '%s' answers again: the sound is back on it\n", cfg.output[0] ? cfg.output : "(default)");
+        log_device(&res, &cfg);
+        away_backoff = 12;
+        told_away = 0;
+        set_wanted_note();
+        pthread_mutex_unlock(&apply_lock);
+        return;
+    }
+    if (e == VAUD_OK) {
+        BE->close(); /* (it opened something else again: not the chosen device) */
+    }
+    if (S.mode == VAUD_MODE_DEVICE) {
+        BE->close();
+    }
+    away_backoff = away_backoff < 240 ? away_backoff * 2 : 240;
+    vaud_error e2 = open_chain(BE, &old, 0, &res, note, sizeof note, err, sizeof err);
+    if (e2 == VAUD_OK && res.rate == S.rate && activate(&res, &old, err, sizeof err) == 0) {
+        set_wanted_note();
     } else {
         S.mode = VAUD_MODE_FALLBACK;
         S.note[0] = 0;
-        note_add(S.note, sizeof S.note, "no sound: audio device %s%.60s%s %s. null audio is used until the card answers again", cfg.output[0] ? "'" : "(default)", shown(cfg.output), cfg.output[0] ? "'" : "", error_words(e == VAUD_OK ? VAUD_FAILED : e));
-        if (was_running) {
-            fprintf(stderr, "audio: %s (%s; %s)\n", S.note, why_stopped, err);
-        }
+        note_add(S.note, sizeof S.note, "no sound: neither the chosen device nor '%.60s' can be opened now. null audio is used, tried again every 3 s", old.output[0] ? shown(old.output) : "the default device");
+        fprintf(stderr, "audio: %s (%s)\n", S.note, err);
     }
     pthread_mutex_unlock(&apply_lock);
 }
@@ -1098,7 +1224,8 @@ static void recover(const char *why_stopped) {
 static void *watch_run(void *arg) {
     (void)arg;
     unsigned long long last = 0;
-    int still = 0, fallback_ticks = 0;
+    int still = 0, fallback_ticks = 0, away_ticks = 0, stalls = 0;
+    time_t last_stall = 0;
     while (watch_running) {
         struct timespec ts = {0, 250 * 1000000L};
         nanosleep(&ts, NULL);
@@ -1108,8 +1235,26 @@ static void *watch_run(void *arg) {
             if (now == last) {
                 if (++still >= 8) { /* two seconds without a callback */
                     still = 0;
-                    fprintf(stderr, "audio: the card has not called back for 2 seconds: reopening it\n");
-                    recover("it stopped answering");
+                    time_t t = time(NULL);
+                    stalls = (t - last_stall < 40) ? stalls + 1 : 1; /* (stalls of one card that keep coming back within 40 s of each other) */
+                    last_stall = t;
+                    if (stalls > 3) {
+                        /* the card opens and stops calling back again and again: reopening cannot cure it (a buffer it cannot run, a driver in a bad state): stop, and say so */
+                        pthread_mutex_lock(&apply_lock);
+                        if (S.mode == VAUD_MODE_DEVICE) {
+                            BE->close();
+                            verdandi_jack_null_external_clock(0);
+                            S.mode = VAUD_MODE_FALLBACK;
+                            S.give_up = 1;
+                            S.note[0] = 0;
+                            note_add(S.note, sizeof S.note, "no sound: the card opens but stops calling back again and again. Verdandi stopped reopening it (that does not help): choose another buffer or device on SYSTEM > AUDIO, or restart");
+                            fprintf(stderr, "audio: %s\n", S.note);
+                        }
+                        pthread_mutex_unlock(&apply_lock);
+                    } else {
+                        fprintf(stderr, "audio: the card has not called back for 2 seconds: reopening it\n");
+                        recover("it stopped answering", 0);
+                    }
                     last = atomic_load(&cb_count);
                 }
             } else {
@@ -1117,16 +1262,31 @@ static void *watch_run(void *arg) {
                 last = now;
             }
             fallback_ticks = 0;
-        } else if (S.mode == VAUD_MODE_FALLBACK && S.clock_rate != 0) {
+            if (want_set && !same_device(&WANT, &CUR)) { /* the sound plays on another device than the chosen one */
+                if (++away_ticks >= away_backoff) {
+                    away_ticks = 0;
+                    if (!told_away) {
+                        told_away = 1;
+                        fprintf(stderr, "audio: %s\n", S.wanted_note[0] ? S.wanted_note : "the sound plays on another device than the chosen one");
+                    }
+                    try_return();
+                    last = atomic_load(&cb_count);
+                }
+            } else {
+                away_ticks = 0;
+            }
+        } else if (S.mode == VAUD_MODE_FALLBACK && !S.give_up) {
             still = 0;
-            if (++fallback_ticks >= 12) {
+            away_ticks = 0;
+            if (++fallback_ticks >= 12) { /* every 3 s, for every reason: the card was pulled, is not listed yet, is busy, its clock is at another rate */
                 fallback_ticks = 0;
-                recover("another program let go of the card's clock");
+                recover("the card answers again", 1);
                 last = atomic_load(&cb_count);
             }
         } else {
             still = 0;
             fallback_ticks = 0;
+            away_ticks = 0;
         }
     }
     return NULL;

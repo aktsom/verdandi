@@ -50,9 +50,9 @@ for card in 48000 44100; do
     for mode in "" single; do
         echo "--- the card runs at $card Hz, driver mode '${mode:-normal}'"
         rm -f "$T/stub.log"
-        VERDANDI_STUB_RATE=$card VERDANDI_STUB_ASIO=$mode VERDANDI_STUB_LOG='C:\stub.log' timeout 200 "$WINE" "$T/backend.exe" "$card" 2>&1 | tee "$T/out.txt" | sed 's/^/    /'
+        VERDANDI_STUB_RATE=$card VERDANDI_STUB_ASIO=$mode VERDANDI_STUB_LOG='C:\stub.log' VERDANDI_STUB_CTL='C:\stub.ctl' VERDANDI_STUB_BUFMAX=8192 timeout 200 "$WINE" "$T/backend.exe" "$card" 2>&1 | tee "$T/out.txt" | sed 's/^/    /'
         grep -q "asio_backend_test: ok" "$T/out.txt" || fails=$((fails + 1))
-        rm -f "$T/prefix/drive_c/stub.log"
+        rm -f "$T/prefix/drive_c/stub.log" "$T/prefix/drive_c/stub.ctl"
     done
 done
 REG="$WINE reg" bash windows/ci/register_asio_stub.sh remove > /dev/null
