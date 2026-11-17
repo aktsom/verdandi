@@ -55,7 +55,6 @@ function init()
       params:set("utf8_x", 1)
       params:read(1)
       say("pset", params:get("utf8_x") == 42, "x=" .. tostring(params:get("utf8_x")))
-      say("home", (os.getenv("HOME") or ""):find("[\x80-\xff]") ~= nil or os.getenv("VERDANDI_SMOKE_ASCII") == "1", "HOME=[" .. tostring(os.getenv("HOME")) .. "]")
     end
     -- M2: the audio chain. scsynth starts a while after norns (sclang compiles first): wait for it to attach to the bridge, let some blocks flow, then say what the audio runs on and how the bridge did
     -- M3 first: it needs no scsynth, and a slow SuperCollider start must not decide whether it runs

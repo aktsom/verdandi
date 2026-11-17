@@ -1297,8 +1297,8 @@ chk_nonascii_utf8() {
     for w in data-file file-exists scandir-data script-list rename remove sample-info pset; do
         has "$LOGS/norns.log" "VERDANDI_SMOKE_UTF8 $w ok" "the script's own $w works in the folder with the odd name" || bad=1
     done
-    grep -a "VERDANDI_SMOKE_UTF8 home" "$LOGS/norns.log" | head -1
-    has "$LOGS/norns.log" "VERDANDI_SMOKE_UTF8 home ok HOME=\[[A-Za-z]:/.*Jos" "norns saw the home folder with its odd name (HOME)" || bad=1
+    # (norns shows scripts a virtual home, /home/we, so HOME in Lua says nothing: the launcher's own line names the real folder)
+    has "$HOMEDIR/logs/launcher.log" "user folder .*Jos" "the launcher started with the user folder that has the odd name" || bad=1
     if [ -n "$(find "$HOMEDIR/dust" -name 'verdandi_smoke*.png' 2> /dev/null | head -n 1)" ]; then echo "found: the screenshot was written in the folder with the odd name"; else echo "NOT FOUND: the screenshot"; bad=1; fi
     [ -s "$HOMEDIR/logs/launcher.log" ] && [ -s "$HOMEDIR/logs/norns.log" ] && [ -s "$HOMEDIR/logs/sclang.log" ] && echo "found: launcher.log, norns.log and sclang.log are in the folder with the odd name" || { echo "NOT FOUND: logs"; bad=1; }
     grep -a -q "cannot open\|No such file\|not found" "$HOMEDIR/logs/sclang.log" && { echo "sclang.log has 'cannot open / No such file / not found':"; grep -a "cannot open\|No such file\|not found" "$HOMEDIR/logs/sclang.log" | head -3; }
