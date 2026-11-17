@@ -23,22 +23,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Packages (the dependencies of linux/setup-deps.sh, and the cross compiler and Wine for the Windows tests)
+      - name: "Packages for the Windows tests (cross compiler, Wine) and the documented setup, linux/setup-deps.sh"
         run: |
-          sudo apt-get update -qq
           sudo dpkg --add-architecture i386 || true
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            build-essential ca-certificates cmake curl dpkg-dev git ninja-build pkg-config python3 zip unzip \
-            libasound2-dev libavahi-client-dev libavahi-compat-libdnssd-dev libboost-dev libcairo2-dev \
-            libevdev-dev libfftw3-dev libglib2.0-dev libgpiod-dev libjack-jackd2-dev liblo-dev \
-            liblua5.3-dev libncurses-dev libnng-dev libreadline-dev libsamplerate0-dev libsdl2-dev \
-            libsndfile1-dev libudev-dev portaudio19-dev lua5.3 xvfb xauth x11-apps x11-utils xdotool imagemagick \
-            gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix wine64 jackd2 || true
-          # libmonome (monome.h) for the grid tests: its own line, so that a missing package cannot spoil the rest
-          sudo apt-get install -y --no-install-recommends libmonome-dev || true
-          # whatever apt could not give (a package that moved) shows as SKIPPED tests, not as a green run: the tests check their tools
-          command -v lua5.3 && command -v x86_64-w64-mingw32-gcc-posix || true
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix wine64 zip unzip || true
+          linux/setup-deps.sh
+      - name: "Build norns (linux/build.sh), the desktop build the window tests start"
+        run: linux/build.sh
       - name: The tests of this shard
         env:
           SHARD: ${{ matrix.shard }}
