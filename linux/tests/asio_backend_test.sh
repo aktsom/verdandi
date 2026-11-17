@@ -41,19 +41,22 @@ export WINEPREFIX="$T/prefix" WINEDEBUG=-all WINEARCH=win64
 fails=0
 A=matron/src/platform/windows/audio
 $CC -std=gnu11 -Wall -Wextra -shared -o "$T/asio_stub.dll" windows/ci/asio_stub.c -Wl,--kill-at -lole32 -luuid -lwinmm || exit 1
-$CC -std=gnu11 -Wall -I "$PA/include" -I $A -o "$T/backend.exe" linux/tests/asio_backend_test.c $A/audio_backend_pa.c $A/audio_asio_probe.c "$PA/libportaudio.dll.a" -lole32 -luuid -lpsapi -lwinmm || { echo "FAIL: the test did not compile"; exit 1; }
+$CC -std=gnu11 -Wall -I "$PA/include" -I $A -o "$T/backend.exe" linux/tests/asio_backend_test.c "${BACKEND_SRC:-$A/audio_backend_pa.c}" $A/audio_asio_probe.c "$PA/libportaudio.dll.a" -lole32 -luuid -lpsapi -lwinmm || { echo "FAIL: the test did not compile"; exit 1; }
 cp "$PA/libportaudio.dll" "$T/"
 "$WINE" wineboot -i > /dev/null 2>&1
 cp "$T/asio_stub.dll" "$T/prefix/drive_c/asio_stub.dll"
 REG="$WINE reg" bash windows/ci/register_asio_stub.sh install 'C:\asio_stub.dll' > /dev/null
-for card in 48000 44100; do
-    for mode in "" single; do
+RUNS="48000: 48000:single 44100: 44100:single"
+[ -n "${QUICK:-}" ] && RUNS="48000:" # (QUICK=1: one run, for the "fix taken out" checks)
+for r in $RUNS; do
+    {
+        card="${r%%:*}"; mode="${r#*:}"
         echo "--- the card runs at $card Hz, driver mode '${mode:-normal}'"
         rm -f "$T/stub.log"
         VERDANDI_STUB_RATE=$card VERDANDI_STUB_ASIO=$mode VERDANDI_STUB_LOG='C:\stub.log' VERDANDI_STUB_CTL='C:\stub.ctl' VERDANDI_STUB_BUFMAX=8192 timeout 200 "$WINE" "$T/backend.exe" "$card" 2>&1 | tee "$T/out.txt" | sed 's/^/    /'
         grep -q "asio_backend_test: ok" "$T/out.txt" || fails=$((fails + 1))
         rm -f "$T/prefix/drive_c/stub.log" "$T/prefix/drive_c/stub.ctl"
-    done
+    }
 done
 REG="$WINE reg" bash windows/ci/register_asio_stub.sh remove > /dev/null
 rm -rf "$T"

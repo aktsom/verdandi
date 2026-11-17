@@ -1,0 +1,21 @@
+== WITHOUT the fix (retry): scenario away_nodefault
+FAIL away_nodefault: it is tried again every 3 s, for every reason (0 tries in 10.5 s)
+FAIL away_nodefault: when the card answers again the sound is back on it
+FAIL away_nodefault: and the page says it: 'no sound: audio device 'Fake Interface' was not found. null audio is used, the device is tried again every 3 s'
+== WITHOUT the fix (return): scenario away_default
+FAIL away_default: while the card is away it is looked for every 3 s (0 looks) and the running sound is never stopped for it (0 closes)
+FAIL away_default: when the chosen card answers again the sound goes back to it
+FAIL away_default: and the page says so: 'the sound card was reopened (it stopped answering). audio device 'Fake Interface' not found, using the default device'
+FAIL away_default: one line in the log
+== WITHOUT the fix (quiet): scenario clock_quiet
+FAIL clock_quiet: three retries while the clock is at the other rate: no restart of the host API (6), no open (3)
+== WITHOUT the fix (size): scenario bigbuf_refused
+FAIL bigbuf_refused: no sound card is run with it (mode 1)
+FAIL bigbuf_refused: the page says why: ''
+FAIL bigbuf_refused: and it is not tried again and again (1 opens in 9 s)
+== WITHOUT the fix (confrate): scenario conf_rate
+FAIL conf_rate: the configuration that is written back still says 48000 (44100)
+FAIL conf_rate: and the written configuration is still 48000 (44100)
+== WITHOUT the fix (wantkeep): scenario away_apply
+FAIL away_apply: the new choice is the wanted device: the sound stays on it (wasapi:Fake Interface)
+DONE
