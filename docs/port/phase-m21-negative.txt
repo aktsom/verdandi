@@ -38,3 +38,13 @@ asio_backend_test: 1 FAILED
 WITHOUT fix 4 (the clock of the chosen driver is not asked from that driver alone):
 FAIL the card's clock is asked from the chosen driver with ONE load of it (0 Hz, 0 create lines)
 asio_backend_test: 1 FAILED
+
+== fixes 3 and 8 (Wine, the launcher of 0.10.11 (b0b6d78) in place of the new one, the same test script):
+FAIL sclang.exe that ends on its own is noticed and named (its process, not its log)
+FAIL the round is started again, twice (the rule of the server stop), with the cause in the message
+FAIL the third stop is the last: one plain message, no fourth round
+FAIL a second copy does not push the logs of the running one out: launcher.1.log is still the one before, launcher.2.log the one before that
+FAIL it says so in the log of the running copy, which is still there
+== fix 7, Lua (audio_win.lua with the two rate lines taken out):
+FAIL followed rate (info.config says 44100): after an APPLY audio.conf still says rate=48000: input= rate=44100 ...
+FAIL BUFFER shows 128 frames as 2.9 ms at the running rate of 44100 Hz: 128  2.7 ms
