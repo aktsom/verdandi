@@ -990,10 +990,10 @@ static void scenario_away(const char *sc) {
         g_gone_all = 1;
         g_card_dead = 1;
         CHECK(wait_for(c_fallback, 12000), "%s: the card that stops answering is noticed and, with no device at all, there is no sound", sc);
-        int o0 = g_opens;
+        int r0 = g_refreshes; /* (every try looks at the devices again once: that is how tries are counted; one try opens twice, the chosen device and the default) */
         sleep_ms_f(10500);
         CHECK(c_fallback(), "%s: still no sound after 10 s (nothing to play on)", sc);
-        CHECK(g_opens - o0 >= 2 && g_opens - o0 <= 5, "%s: it is tried again every 3 s, for every reason (%d tries in 10.5 s)", sc, g_opens - o0);
+        CHECK(g_refreshes - r0 >= 2 && g_refreshes - r0 <= 4, "%s: it is tried again every 3 s, for every reason (%d tries in 10.5 s)", sc, g_refreshes - r0);
         CHECK(lines_with(logp, "no sound") <= 3, "%s: and it does not fill the log (%d lines about it)", sc, lines_with(logp, "no sound"));
         CHECK(strstr(vaud_get_state()->note, "tried again every 3 s") != NULL, "%s: the page says so: '%s'", sc, vaud_get_state()->note);
         g_gone_all = 0;
