@@ -48,3 +48,7 @@ jobs:
           path: ${{ runner.temp }}/test-logs
           if-no-files-found: ignore
           retention-days: 7
+      - name: The names of the failed, known and skipped tests of this shard
+        if: always()
+        run: |
+          grep -E '^(UNEXPECTED FAILURE|KNOWN FAILURE|SKIPPED:|RESULT)' "$RUNNER_TEMP/run_all.txt" | cut -c1-150 || true
