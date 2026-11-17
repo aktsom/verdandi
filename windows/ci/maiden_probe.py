@@ -210,7 +210,15 @@ if os.environ.get("VERDANDI_PROBE") == "kill":
             result("kill-%d-done" % k, r.returncode == 0, exe + " ended from outside: " + (r.stdout + r.stderr).strip()[:120])
             if k < 3:
                 saw = wait_for(lambda: ("starting everything again (round %d)" % (k + 1)) in text(LOG), 90)
-                result("kill-%d-restarted" % k, saw, "launcher.log says the round was started again (round %d)" % (k + 1) if saw else "no restart in launcher.log: " + repr(text(LOG)[-300:]))
+                more = ""
+                if not saw:  # (what the processes and the log of sclang say: for a failure that has to be understood from the report alone)
+                    try:
+                        tl = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
+                        more = " | processes: " + " ".join(l.split('","')[0].strip('"') + ":" + l.split('","')[1] for l in tl.splitlines() if any(n in l.lower() for n in ("sclang", "scsynth", "ws-wrapper", "norns", "verdandi")))
+                    except Exception as e:
+                        more = " | tasklist: %s" % e
+                    more += " | sclang.log: " + repr(text(os.path.join(HOME, "logs", "sclang.log"))[-400:])
+                result("kill-%d-restarted" % k, saw, "launcher.log says the round was started again (round %d)" % (k + 1) if saw else "no restart in launcher.log: " + repr(text(LOG)[-300:]) + more)
                 noted = wait_for(lambda: ("sclang.exe itself ended on its own, exit code" if who == "sclang" else "stopped on its own, exit code") in text(LOG), 5)
                 result("kill-%d-logged" % k, noted, "launcher.log names the stop and its exit code")
             else:

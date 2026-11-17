@@ -202,6 +202,10 @@ int wmain(int argc, wchar_t **argv) {
     }
     InterlockedExchange(&stopping, 1);
     printf("ws-wrapper: the program ended with exit code %lu\n", (unsigned long)code);
+    fflush(stdout);
+    /* M21: the process ends NOW, with the child's exit code. nng_close and the return from main wait for the websocket's threads and for clients that are still connected (maiden's console connections): the launcher
+     * waits for THIS process to learn that sclang has ended on its own, and it must not wait for a client to let go. the sockets close with the process. */
+    TerminateProcess(GetCurrentProcess(), code);
     nng_close(sock_ws);
     return (int)code;
 }

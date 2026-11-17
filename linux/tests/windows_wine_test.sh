@@ -192,6 +192,27 @@ L5="$T/vhome5/logs/launcher.log"
 ck "sclang.exe that ends on its own is noticed and named (its process, not its log)" "grep -q 'sclang.exe itself ended on its own, exit code 0xc0000005' '$L5'"
 ck "the round is started again, twice (the rule of the server stop), with the cause in the message" "grep -q 'sclang (the SuperCollider language) stopped (error 0xC0000005): restarting it and the script (1 of 2)' '$L5' && grep -q '(2 of 2)' '$L5' && [ \$(grep -c 'norns.exe started' '$L5') -ge 3 ]"
 ck "the third stop is the last: one plain message, no fourth round" "grep -q 'sclang.exe stopped on its own again' '$L5' && grep -q 'sclang keeps stopping' '$L5' && ! grep -q 'starting everything again (round 4)' '$L5'"
+# the wrapper that does not end with its child (a console connection that does not let go): the launcher looks for the process of sclang.exe by name
+cat > "$T/stubWrap.c" <<'STUB'
+#include <stdio.h>
+#include <windows.h>
+int main(int argc, char **argv) {
+    (void)argc;
+    char cmd[2000];
+    snprintf(cmd, sizeof cmd, "\"%s\"", argv[2]);
+    STARTUPINFOA si; PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof si); si.cb = sizeof si;
+    CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+    Sleep(INFINITE); /* (never ends, as the real one did not with a client connected) */
+    return 0;
+}
+STUB
+$CC "$T/stubWrap.c" -o "$T/app/ws-wrapper.exe" -static || exit 1
+rm -rf "$T/vhome7"; mkdir -p "$T/vhome7"
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 150 "$WINE" ./Verdandi.exe --headless --exit-after=110 --home="Z:$T/vhome7" > "$T/launcher7.out" 2>&1)
+L7="$T/vhome7/logs/launcher.log"
+ck "a wrapper that does not end with sclang: sclang.exe is looked for by name, and its absence is the stop" "grep -q 'sclang.exe is not running, though its wrapper has not ended' '$L7' && grep -q 'sclang (the SuperCollider language) stopped' '$L7' && grep -q '(1 of 2)' '$L7'"
+rm -f "$T/app/ws-wrapper.exe"
 rm -rf "$T/vhome6"; mkdir -p "$T/vhome6/logs"
 printf 'OLD-LAUNCHER-LOG-1\n' > "$T/vhome6/logs/launcher.log"; printf 'OLD-LAUNCHER-LOG-2\n' > "$T/vhome6/logs/launcher.1.log"; printf 'OLD-NORNS-LOG-1\n' > "$T/vhome6/logs/norns.log"
 P6=$(cd "$T/app" && { VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=12 --home="Z:$T/vhome6" > "$T/launcher6a.out" 2>&1 & echo $!; })

@@ -1112,6 +1112,36 @@ static int wait_for_bridge(const wchar_t *name, HANDLE norns, DWORD ms) {
     return 1;
 }
 
+/* is a process of this program folder with this image name running? (the process of sclang.exe itself, which ws-wrapper.exe started: its wrapper is what the launcher holds a handle of) */
+static int our_process_running(const wchar_t *name) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return 1; /* (cannot tell: not a reason to say it ended) */
+    }
+    int found = 0;
+    size_t applen = wcslen(g_app);
+    PROCESSENTRY32W pe;
+    pe.dwSize = sizeof pe;
+    for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
+        if (_wcsicmp(pe.szExeFile, name) != 0) {
+            continue;
+        }
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+        if (!h) {
+            found = 1; /* (a process of that name that we cannot look into: count it) */
+            continue;
+        }
+        wchar_t image[MAX_PATH * 2];
+        DWORD n = MAX_PATH * 2;
+        if (QueryFullProcessImageNameW(h, 0, image, &n) && n > applen && !_wcsnicmp(image, g_app, applen)) {
+            found = 1;
+        }
+        CloseHandle(h);
+    }
+    CloseHandle(snap);
+    return found;
+}
+
 static void bring_running_copy_forward(void) {
     HWND w = FindWindowW(NULL, L"Verdandi Windows");
     if (w) {
@@ -1330,6 +1360,7 @@ int wmain(int argc, wchar_t **argv) {
     DWORD code = 0, w = 0;
     DWORD err = 0;
     HANDLE pn = NULL, ps = NULL;
+    ULONGLONG sclang_started_at = 0; /* M21 */
     ULONGLONG sclang_log_from = 0;
     for (int round = 1;; round++) {
     /* one round = norns.exe and sclang from the start to the end of norns.exe. SYSTEM > RESTART (and a changed audio device) ends norns.exe with exit code 42: another round */
@@ -1404,6 +1435,7 @@ int wmain(int argc, wchar_t **argv) {
                 tell_user(L"Verdandi", MB_ICONWARNING, L"Windows could not start sclang.exe (error %lu). Verdandi goes on without engines.", (unsigned long)err);
             } else {
                 say(L"sclang.exe started");
+                sclang_started_at = GetTickCount64();
             }
         }
     }
@@ -1433,10 +1465,29 @@ int wmain(int argc, wchar_t **argv) {
         } else if (w != WAIT_TIMEOUT) {
             break;
         }
+        /* the process we hold is the wrapper (ws-wrapper.exe) of sclang: it ends with its child. should it not (a console connection that does not let go), the process of sclang.exe is looked for by name: gone for two looks
+         * in a row, 3 s apart, 15 s after the start = ended */
+        if (!sclang_ended && ps && !sclang_gone && sclang_started_at && GetTickCount64() - sclang_started_at > 15000) {
+            static ULONGLONG next_look;
+            static int missing;
+            ULONGLONG nowt = GetTickCount64();
+            if (nowt >= next_look) {
+                next_look = nowt + 3000;
+                missing = our_process_running(L"sclang.exe") ? 0 : missing + 1;
+                if (missing >= 2) {
+                    missing = 0;
+                    sclang_ended = 1;
+                    sclang_gone = 1;
+                    say(L"sclang.exe is not running, though its wrapper has not ended");
+                }
+            }
+        }
         unsigned long scode = 0;
         if (sclang_ended) {
-            DWORD sc = 0;
-            GetExitCodeProcess(ps, &sc);
+            DWORD sc = 1;
+            if (WaitForSingleObject(ps, 0) == WAIT_OBJECT_0) {
+                GetExitCodeProcess(ps, &sc);
+            }
             scode = (unsigned long)sc;
             say(L"sclang.exe itself ended on its own, exit code 0x%08lx (round %d)", scode, round);
         }
