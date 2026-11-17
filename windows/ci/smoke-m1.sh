@@ -1239,7 +1239,7 @@ time.sleep(170)" > "$WORK/busy-ports-listener.out" 2>&1 &
             "$PYTHON" -c "
 import socket, sys
 s = socket.create_connection(('127.0.0.1', $port), 5)
-s.sendall(b'GET / HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\\r\\nSec-WebSocket-Version: 13\\r\\n\\r\\n')
+s.sendall(b'GET / HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\\r\\nSec-WebSocket-Version: 13\\r\\nSec-WebSocket-Protocol: bus.sp.nanomsg.org\\r\\n\\r\\n')
 d = s.recv(200)
 print('console on port $port answered:', d.split(b'\\r\\n')[0].decode())" >> "$WORK/busy-ports-handshake.out" 2>&1
         done
