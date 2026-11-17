@@ -15,6 +15,11 @@
 
 #include <jack/jack.h>
 
+#ifdef _WIN32 /* (the Wine run builds this test with mingw: no setenv there) */
+#define setenv(k, v, o) _putenv_s((k), (v))
+#define unsetenv(k) _putenv_s((k), "")
+#endif
+
 #include "audio/audio_bridge_host.h"
 #include "audio/audio_device.h"
 #include "audio/exit_win.h"

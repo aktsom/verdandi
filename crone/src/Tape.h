@@ -6,6 +6,7 @@
 #define CRONE_TAPE_H
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <iostream>
@@ -371,6 +372,26 @@ class Tape {
             this->envIdx = 0;
             this->envState = SfStream::EnvState::Off;
             this->transportState = TransportState::Idle;
+        }
+
+        // M21: the program is ending. stop a recording that runs (or is paused) and wait until its file is closed: the header of a WAV file is only written by sf_close, a file that is cut off is a file of length zero.
+        // the stop is a fade-out that the audio thread plays (a few ms); when that does not happen in time (no audio callback) the disk thread is told to stop at once (flush and close, without the fade).
+        // returns 1 when nothing was recording or the file is closed, 0 when it was not closed within `ms`
+        int finalize(unsigned ms) {
+            if (!SfStream::isRunning && !SfStream::hasFile) {
+                return 1;
+            }
+            this->stop();
+            unsigned waited = 0;
+            while ((SfStream::isRunning || SfStream::hasFile) && waited < ms) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                waited += 5;
+                if (waited == ms / 3 && SfStream::isRunning) {
+                    SfStream::shouldStop = true; // the audio thread did not finish the fade-out: end it here
+                    this->cv.notify_one();
+                }
+            }
+            return (SfStream::isRunning || SfStream::hasFile) ? 0 : 1;
         }
 
         // call from audio thread

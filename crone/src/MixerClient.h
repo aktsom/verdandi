@@ -157,6 +157,10 @@ class MixerClient : public Client<6, 6> {
         tape.writer.stop();
     }
 
+    int finalizeTapeRecord(unsigned ms) {
+        return tape.writer.finalize(ms);
+    }
+
     void openTapePlayback(const char *path) {
         tape.reader.open(path);
     }

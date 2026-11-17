@@ -21,6 +21,13 @@ int main(void) {
     sw_message(2, 1, 2, m, sizeof m);
     CHECK(strstr(m, "keeps stopping") && strstr(m, "error 1") && strstr(m, "not restarting") && !strchr(m, '\n'), "the last line, one line");
     CHECK(strlen(m) < 200, "short enough for a note");
+    /* M21: sclang.exe itself ended (a crash prints nothing in sclang.log): the message names it, the rule is the same */
+    sw_message_who(1, 1, 0xC0000005UL, 1, m, sizeof m);
+    CHECK(strstr(m, "sclang (the SuperCollider language) stopped") && strstr(m, "0xC0000005") && strstr(m, "1 of 2"), "the restart line names sclang itself");
+    sw_message_who(2, 1, 0xC0000005UL, 2, m, sizeof m);
+    CHECK(strstr(m, "sclang keeps stopping") && strstr(m, "not restarting") && strlen(m) < 200, "the last line names sclang");
+    sw_message_who(1, 0, 1, 1, m, sizeof m);
+    CHECK(strstr(m, "SuperCollider stopped (error 1)") && !strstr(m, "sclang"), "the server's own line is unchanged");
     if (fails) { printf("%d failed\n", fails); return 1; }
     printf("server watch: all passed\n");
     return 0;

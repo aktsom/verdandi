@@ -36,12 +36,17 @@ static int sw_decide(unsigned long code, int restarts) {
     return restarts < SW_MAX_RESTARTS ? 1 : 2;
 }
 
-/* the plain line for the norns screen and the log. kind 1: restarting; kind 2: giving up */
-static void sw_message(int kind, unsigned long code, int restarts, char *out, size_t n) {
+/* the plain line for the norns screen and the log. kind 1: restarting; kind 2: giving up. who: what stopped ("SuperCollider" = the server, scsynth; or the language, sclang.exe itself: M21) */
+static void sw_message_who(int kind, int sclang_itself, unsigned long code, int restarts, char *out, size_t n) {
     char c[40];
     if ((code & 0xFFFF0000UL) == 0xC0000000UL || code > 255) snprintf(c, sizeof c, "0x%08lX", code);
     else snprintf(c, sizeof c, "%lu", code);
-    if (kind == 1) snprintf(out, n, "SuperCollider stopped (error %s): restarting it and the script (%d of %d)", c, restarts, SW_MAX_RESTARTS);
-    else snprintf(out, n, "SuperCollider keeps stopping (error %s): not restarting it again. Load another script, or restart Verdandi (see logs/sclang.log)", c);
+    if (kind == 1) {
+        if (sclang_itself) snprintf(out, n, "sclang (the SuperCollider language) stopped (error %s): restarting it and the script (%d of %d)", c, restarts, SW_MAX_RESTARTS);
+        else snprintf(out, n, "SuperCollider stopped (error %s): restarting it and the script (%d of %d)", c, restarts, SW_MAX_RESTARTS);
+    } else {
+        snprintf(out, n, "%s keeps stopping (error %s): not restarting it again. Load another script, or restart Verdandi (see logs/sclang.log)", sclang_itself ? "sclang" : "SuperCollider", c);
+    }
 }
+static void sw_message(int kind, unsigned long code, int restarts, char *out, size_t n) { sw_message_who(kind, 0, code, restarts, out, n); }
 #endif

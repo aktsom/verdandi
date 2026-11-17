@@ -135,6 +135,7 @@ extern void o_tape_rec_open(char *file);
 extern void o_tape_rec_start();
 extern void o_tape_rec_pause(int paused);
 extern void o_tape_rec_stop();
+extern int o_tape_finalize(unsigned ms); // the program ends: close a running tape recording (1 = done or none)
 extern void o_tape_play_open(char *file);
 extern void o_tape_play_start();
 extern void o_tape_play_pause(int paused);

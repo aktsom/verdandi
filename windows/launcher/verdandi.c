@@ -1415,6 +1415,7 @@ int wmain(int argc, wchar_t **argv) {
      * then one plain line and nothing more is tried. a loading screen never waits for ever on a dead server (docs/port/phase-m10.md) */
     ULONGLONG wait_start = GetTickCount64(), exit_at = exit_after > 0 ? wait_start + (ULONGLONG)exit_after * 1000 : 0;
     int forced_restart = 0, gave_up = (_wgetenv(L"VERDANDI_NO_SERVER_RESTART") != NULL); /* (the CI measures a crash without the answer to it) */
+    int sclang_gone = 0; /* M21: the process of sclang.exe itself ended (a crash prints nothing in sclang.log): its handle is waited on as well */
     if (g_server_stop_tick && wait_start - g_server_stop_tick > SW_QUIET_RESET_MS) g_server_restarts = 0;
     for (;;) {
         DWORD step = 1000;
@@ -1423,10 +1424,24 @@ int wmain(int argc, wchar_t **argv) {
             if (now >= exit_at) { w = WAIT_TIMEOUT; break; }
             if (exit_at - now < step) step = (DWORD)(exit_at - now);
         }
-        w = WaitForSingleObject(pn, step);
-        if (w != WAIT_TIMEOUT) break;
+        HANDLE hs[2] = {pn, ps};
+        int sclang_ended = 0;
+        w = WaitForMultipleObjects(ps && !sclang_gone ? 2 : 1, hs, FALSE, step);
+        if (w == WAIT_OBJECT_0 + 1) {
+            sclang_ended = 1;
+            sclang_gone = 1;
+        } else if (w != WAIT_TIMEOUT) {
+            break;
+        }
         unsigned long scode = 0;
-        if (ps && !gave_up && server_exit_since(logs, sclang_log_from, &scode)) {
+        if (sclang_ended) {
+            DWORD sc = 0;
+            GetExitCodeProcess(ps, &sc);
+            scode = (unsigned long)sc;
+            say(L"sclang.exe itself ended on its own, exit code 0x%08lx (round %d)", scode, round);
+        }
+        w = WAIT_TIMEOUT;
+        if (ps && !gave_up && (sclang_ended || server_exit_since(logs, sclang_log_from, &scode))) {
             int what = sw_decide(scode, g_server_restarts);
             char msg[400];
             if (what == 0) {
@@ -1440,15 +1455,15 @@ int wmain(int argc, wchar_t **argv) {
             g_server_stop_tick = GetTickCount64();
             if (_wgetenv(L"VERDANDI_SERVER_WATCH_LOG_ONLY") != NULL) {
                 /* the CI looks at the older start-up checks without the answer to a stop: it is only said */
-                sw_message(what == 1 ? 1 : 2, scode, g_server_restarts + 1, msg, sizeof msg);
-                say(L"scsynth.exe stopped on its own, exit code 0x%08lx (round %d): only logged, nothing is restarted (VERDANDI_SERVER_WATCH_LOG_ONLY)", scode, round);
+                sw_message_who(what == 1 ? 1 : 2, sclang_ended, scode, g_server_restarts + 1, msg, sizeof msg);
+                say(L"%ls stopped on its own, exit code 0x%08lx (round %d): only logged, nothing is restarted (VERDANDI_SERVER_WATCH_LOG_ONLY)", sclang_ended ? L"sclang.exe" : L"scsynth.exe", scode, round);
                 gave_up = 1;
                 continue;
             }
             if (what == 1) {
                 g_server_restarts++;
-                sw_message(1, scode, g_server_restarts, msg, sizeof msg);
-                say(L"scsynth.exe stopped on its own, exit code 0x%08lx (round %d): %hs", scode, round, msg);
+                sw_message_who(1, sclang_ended, scode, g_server_restarts, msg, sizeof msg);
+                say(L"%ls stopped on its own, exit code 0x%08lx (round %d): %hs", sclang_ended ? L"sclang.exe" : L"scsynth.exe", scode, round, msg);
                 write_note(msg);
                 request_norns_restart();
                 /* norns takes the request within a few seconds and ends with exit code 42; if it does not, it is ended here */
@@ -1464,8 +1479,8 @@ int wmain(int argc, wchar_t **argv) {
                 break;
             }
             gave_up = 1;
-            sw_message(2, scode, g_server_restarts, msg, sizeof msg);
-            say(L"scsynth.exe stopped on its own again, exit code 0x%08lx: %hs", scode, msg);
+            sw_message_who(2, sclang_ended, scode, g_server_restarts, msg, sizeof msg);
+            say(L"%ls stopped on its own again, exit code 0x%08lx: %hs", sclang_ended ? L"sclang.exe" : L"scsynth.exe", scode, msg);
             write_note(msg);
         }
     }

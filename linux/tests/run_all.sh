@@ -202,6 +202,11 @@ hello_late_ok() {
 }
 run "windows:start-up wait for SuperCollider (a time limit, the question every 100 ms, a late ready message from crone completes the start-up instead of staying SUPERCOLLIDER FAIL)" hello_late_ok
 run "windows:the PortAudio backend on Linux (list, an unknown device is refused as not found, start ends in a card or null audio with a note, no hang)" audio_pa_ok
+tape_ok() {
+    g++ -std=gnu++17 -I crone/src -I third-party/readerwriterqueue linux/tests/tape_finalize_test.cc crone/src/Window.cpp $(pkg-config --libs sndfile) -ljack -lpthread -o "$T/tape_finalize_test" || return 1
+    "$T/tape_finalize_test"
+}
+run "windows:a tape recording that runs when the program ends is closed first (the real crone Tape::Writer: a child that ends with _exit leaves a file with no valid header without finalize, a valid WAV file with it, also when the audio callback is gone)" tape_ok
 # the metrics of the norns screen font (measured by cairo), for the width tests (also used by the page width tests further down)
 gcc -o "$T/font_widths_dump" linux/tests/font_widths_dump.c $(pkg-config --cflags --libs cairo freetype2) 2> "$T/fwd.err" || cat "$T/fwd.err"
 "$T/font_widths_dump" "$REPO/resources/liquid.ttf" 8 > "$T/font_widths_liquid.txt"

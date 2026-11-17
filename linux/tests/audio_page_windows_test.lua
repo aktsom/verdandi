@@ -421,6 +421,41 @@ check(screen.text_extents(winui.fit(long, 80)) <= 80 and winui.fit(long, 80):sub
 check(winui.fit(long, 80, true, 0) == winui.fit(long, 80, true, 20) and winui.fit(long, 80, true, 50) == winui.fit(long, 80), "and it never scrolls: the selected row, any tick, the same cut text")
 check(winui.fit("short", 80, true, 50) == "short", "a short value is left alone")
 
+-- ---- M21 fix 7: the engine follows the card to 44100; an APPLY must not write that rate into audio.conf (the next start in normal mode would run at it) ----
+do
+  local f = real_open(tmp .. "/audio.conf", "w") f:write("output=\ninput=\nrate=48000\nblock=128\nbuffer=auto\nexclusive=0\n") f:close()
+  apply_rc, apply_msg = 0, ""
+  -- (the program of 0.10.11 reported the followed rate in info.config as well: both ways must leave the file alone)
+  for _, cfgrate in ipairs({44100, 48000}) do
+    local g = real_open(tmp .. "/audio.conf", "w") g:write("output=\ninput=\nrate=48000\nblock=128\nbuffer=auto\nexclusive=0\n") g:close()
+    info = mkinfo({rate = 44100, device_rate = 44100, config = "output=\ninput=\nrate=" .. cfgrate .. "\nblock=128\nbuffer=0\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
+    page.init(); applied = {}
+    turn(pos_of("BUFFER"), 2); page.key(3, 1)
+    local c2 = conf() or ""
+    check(#applied == 1 and c2:find("rate=48000", 1, true) and not c2:find("rate=44100", 1, true), "followed rate (info.config says " .. cfgrate .. "): after an APPLY audio.conf still says rate=48000: " .. c2:gsub("\n", " "))
+    page.redraw()
+    check(shown("ms"), "the running rate is what the BUFFER row's milliseconds use")
+  end
+  -- the milliseconds of a buffer are those of the rate that runs (128 frames at 44100 Hz are 2.9 ms, at 48000 Hz 2.7 ms)
+  info = mkinfo({rate = 44100, device_rate = 44100, config = "output=\ninput=\nrate=48000\nblock=128\nbuffer=128\nexclusive=0\nout_first=1\nin_l=1\nin_r=2\n"})
+  page.init(); page.redraw()
+  check(page.value_text and page.value_text("BUFFER"):find("2.9 ms", 1, true), "BUFFER shows 128 frames as 2.9 ms at the running rate of 44100 Hz: " .. tostring(page.value_text and page.value_text("BUFFER")))
+end
+
+-- ---- M21 fix 1: the sound plays on another device than the chosen one: the page says which is which ----
+do
+  info = mkinfo({wanted_note = "playing on the Windows default device; the chosen 'RME Fireface UC' is not there, tried again every 3 s"})
+  page.init()
+  local first = page.status_text()
+  check(first:find("AWAY", 1, true) ~= nil, "the status line says AWAY while the sound plays elsewhere: " .. first)
+  local sentence = false
+  for t = 1, 40 do page.tick = (page.tick or 0) + 1; ticks(1); local st2 = page.status_text(); if st2:find("RME Fireface", 1, true) or st2:find("chosen", 1, true) then sentence = true end end
+  check(sentence, "and the sentence follows, a line at a time, with the chosen device named")
+  info = mkinfo()
+  page.init()
+  check(not page.status_text():find("AWAY", 1, true), "back on the chosen device: nothing about it")
+end
+
 os.execute("rm -rf " .. tmp)
 print = _print
 print(fails == 0 and "audio page (windows): all scenarios pass" or (fails .. " failures"))

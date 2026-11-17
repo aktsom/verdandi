@@ -498,6 +498,17 @@ void o_tape_rec_stop() {
     crone_tape_rec_stop();
 }
 
+int o_tape_finalize(unsigned ms) {
+    return crone_tape_finalize(ms);
+}
+
+#ifdef NORNS_WINDOWS
+// exit_win.c (verdandi_win_exit: every way norns.exe ends on Windows) calls this before the card is stopped: the recording of the tape is closed, its WAV header written (M21)
+extern "C" int verdandi_tape_finalize(unsigned ms) {
+    return crone_tape_finalize(ms);
+}
+#endif
+
 void o_tape_play_open(char *file) {
     crone_tape_play_open(file);
     union event_data *ev = event_data_new(EVENT_TAPE_PLAY_FILE);

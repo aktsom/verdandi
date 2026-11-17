@@ -55,6 +55,11 @@ void matron_cleanup(void) {
         return;
     }
     done = true;
+    // a tape recording that runs is stopped and its file closed first (the WAV header is only written when the file is closed: a file cut off by the end of the process has the length zero). a short limit, inside the 3 s
+    // of the exit watchdog (exit_win.c); the same for a restart, which does not come through here: verdandi_win_exit
+    if (!o_tape_finalize(1500)) {
+        fprintf(stderr, "tape: the recording file was not closed within 1.5 s\n");
+    }
 #ifdef NORNS_WINDOWS
     // Windows: every way out ends here (window close, SLEEP, an exit() somewhere). the orderly shutdown below closes the Lua state, the OSC servers and the devices while the card's callback, the metro,
     // clock, sidecar and window threads still run: an access violation after "shutting down lua vm". the Lua side has saved its state before it gets here; the process ends at once (exit_win.h)

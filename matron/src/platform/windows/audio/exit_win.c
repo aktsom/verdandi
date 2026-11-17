@@ -13,6 +13,11 @@
 #endif
 
 extern void vaud_stop(void);
+/* a tape recording that runs is closed first (matron/src/oracle.cc defines the real one; a program without crone, the tests, gets this: nothing to close) */
+__attribute__((weak)) int verdandi_tape_finalize(unsigned ms) {
+    (void)ms;
+    return 1;
+}
 
 static int exit_code;
 /* crash_report_win.cc defines the real one (a crash report is being written); a program without it (the tests) gets this */
@@ -70,6 +75,14 @@ void verdandi_win_exit(int code) {
     start_watchdog();
     verdandi_stage("ending");
     fprintf(stderr, "norns.exe ends with exit code %d (card stopped first, no atexit handlers)\n", code);
+    fflush(NULL);
+    /* RESTART, the launcher's end event, SLEEP, a quit, a window close: all come here. a tape recording is stopped and its file closed (the WAV header is written by the close), within 1.5 s: the watchdog above ends the
+     * process at 3 s whatever happens. the card still runs, so the fade-out of the recording is played */
+    if (verdandi_tape_finalize(1500)) {
+        fprintf(stderr, "tape: no recording is left open (or it was closed first)\n");
+    } else {
+        fprintf(stderr, "tape: the recording file could not be closed within 1.5 s: it may be cut off\n");
+    }
     fflush(NULL);
     vaud_stop();
     fflush(NULL);

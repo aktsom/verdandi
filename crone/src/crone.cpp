@@ -146,6 +146,10 @@ void crone_tape_rec_pause(int paused) {
     mixerClient->pauseTapeRecord(paused);
 }
 
+int crone_tape_finalize(unsigned ms) {
+    return mixerClient ? mixerClient->finalizeTapeRecord(ms) : 1;
+}
+
 void crone_tape_rec_stop() {
     mixerClient->stopTapeRecord();
 }

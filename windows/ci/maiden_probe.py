@@ -198,32 +198,75 @@ if os.environ.get("VERDANDI_PROBE") == "kill":
     def server_up():
         ok, _ = repl(5556, '("VT_ALIVE " ++ Crone.server.serverRunning).postln;\x1b', "VT_ALIVE true", 8)
         return ok
+    # M21: VERDANDI_KILL_WHO=sclang ends sclang.exe itself (a crash of the language: nothing is printed in sclang.log) instead of the server
+    who = os.environ.get("VERDANDI_KILL_WHO", "scsynth")
+    exe = "sclang.exe" if who == "sclang" else "scsynth.exe"
     try:
         for k in (1, 2, 3):
             up = wait_for(lambda: norns_up() and server_up(), 240)
             result("kill-%d-up" % k, up, "norns and its server answer before the kill (round %d)" % k)
             if not up: break
-            r = subprocess.run(["taskkill", "/F", "/IM", "scsynth.exe"], capture_output=True, text=True)
-            result("kill-%d-done" % k, r.returncode == 0, "scsynth.exe ended from outside: " + (r.stdout + r.stderr).strip()[:120])
+            r = subprocess.run(["taskkill", "/F", "/IM", exe], capture_output=True, text=True)
+            result("kill-%d-done" % k, r.returncode == 0, exe + " ended from outside: " + (r.stdout + r.stderr).strip()[:120])
             if k < 3:
                 saw = wait_for(lambda: ("starting everything again (round %d)" % (k + 1)) in text(LOG), 90)
                 result("kill-%d-restarted" % k, saw, "launcher.log says the round was started again (round %d)" % (k + 1) if saw else "no restart in launcher.log: " + repr(text(LOG)[-300:]))
-                noted = wait_for(lambda: "stopped on its own, exit code" in text(LOG), 5)
+                noted = wait_for(lambda: ("sclang.exe itself ended on its own, exit code" if who == "sclang" else "stopped on its own, exit code") in text(LOG), 5)
                 result("kill-%d-logged" % k, noted, "launcher.log names the stop and its exit code")
             else:
                 gave = wait_for(lambda: "stopped on its own again" in text(LOG), 60)
+                if who == "sclang": gave = gave and "sclang.exe stopped on its own again" in text(LOG)
                 result("kill-3-gave-up", gave, "launcher.log says it does not restart again" if gave else "no 'again' line: " + repr(text(LOG)[-300:]))
                 time.sleep(15)
                 result("kill-3-no-round-4", "starting everything again (round 4)" not in text(LOG), "no fourth round was started")
                 result("kill-3-norns-alive", norns_up(), "norns is still running and answers")
-                shown = wait_for(lambda: "SuperCollider keeps stopping" in text(NLOG), 30)
+                shown = wait_for(lambda: ("sclang keeps stopping" if who == "sclang" else "SuperCollider keeps stopping") in text(NLOG), 30)
                 result("kill-3-message", shown, "norns.log has the plain message that it keeps stopping" if shown else "message not in norns.log")
         # the messages of the first two stops reached the norns screen
         n = text(NLOG)
-        result("kill-notes", n.count("### SuperCollider stopped (error") >= 2, "norns.log has the restart message of each of the two restarts (on the screen as well)")
+        result("kill-notes", n.count("### sclang (the SuperCollider language) stopped (error" if who == "sclang" else "### SuperCollider stopped (error") >= 2, "norns.log has the restart message of each of the two restarts (on the screen as well)")
         result("kill-done", True, "")
     except Exception as e:
         result("kill-error", False, "%s" % e)
+    sys.exit(0)
+
+# VERDANDI_PROBE=tape (M21): a tape recording runs while norns is ended in one of the ways (VERDANDI_TAPE_END: restart = SYSTEM > RESTART, request = the launcher's restart request after a server stop, quit = the quit event,
+# shutdown = SLEEP without the tape page's own stop, launcher = the launcher's end at --exit-after). the file is checked by the shell (windows/ci/wav_check.py)
+if os.environ.get("VERDANDI_PROBE") == "tape":
+    mode = os.environ.get("VERDANDI_TAPE_END", "restart")
+    def run(line, want, seconds=30):
+        return repl(5555, line, want, seconds)
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("tape-up", up, "norns answers (%s)" % mode)
+        time.sleep(6)
+        ok, tail = run("audio.tape_record_open(_path.tape .. 'm21.wav') audio.tape_record_start() print('VT_REC started')\n", "VT_REC started", 20)
+        time.sleep(7)
+        ok2, tail2 = run("print('VT_REC2 ' .. tostring(audio.tape_is_recording()))\n", "VT_REC2", 20)
+        result("tape-recording", ok and "VT_REC2 true" in tail2, "the tape records: " + tail2.strip()[-30:])
+        if mode == "restart":
+            try: run("_norns.restart() print('VT_END restart')\n", "VT_END", 10)
+            except Exception: pass
+        elif mode == "request":
+            with open(os.path.join(HOME, ".norns-request-restart"), "w") as f: f.write("1")
+        elif mode == "quit":
+            try: run("print('VT_END ' .. tostring(_norns.test_quit()))\n", "VT_END", 10)
+            except Exception: pass
+        elif mode == "shutdown":
+            try: run("norns.shutdown() print('VT_END shutdown')\n", "VT_END", 10)
+            except Exception: pass
+        # (launcher: nothing is sent: the launcher ends norns.exe itself at --exit-after)
+        time.sleep(5)
+        result("tape-end-asked", True, "norns was ended the way '%s' says" % mode)
+    except Exception as e:
+        result("tape-error", False, "%s" % e)
     sys.exit(0)
 
 # VERDANDI_PROBE=burst: a fast turning of the drawn knobs (M11): 4000 turns of E1 in a tight Lua loop (what a MIDI encoder can do), then the window gets a few seconds to catch up. the window logs one line

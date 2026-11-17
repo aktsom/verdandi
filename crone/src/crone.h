@@ -408,6 +408,8 @@ void crone_tape_rec_open(const char *arg0);
 void crone_tape_rec_start();
 void crone_tape_rec_pause(int paused);
 void crone_tape_rec_stop();
+// the program ends: stop a running tape recording and wait (up to ms) until its file is closed. 1 = closed or none, 0 = not in time
+int crone_tape_finalize(unsigned ms);
 void crone_tape_play_open(const char *arg0);
 void crone_tape_play_start();
 void crone_tape_play_pause(int paused);

@@ -72,7 +72,7 @@ for mode in null locked; do
 done
 
 echo "== launcher"
-$CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 -liphlpapi 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall windows/launcher/verdandi.c -o "$T/app/Verdandi.exe" -static -lws2_32 -liphlpapi || exit 1; }
+$CC -municode -mwindows -O2 -Wall "${LAUNCHER_SRC:-windows/launcher/verdandi.c}" -I windows/launcher -o "$T/app/Verdandi.exe" -static -lws2_32 -liphlpapi 2> /dev/null || { mkdir -p "$T/app"; $CC -municode -mwindows -O2 -Wall "${LAUNCHER_SRC:-windows/launcher/verdandi.c}" -I windows/launcher -o "$T/app/Verdandi.exe" -static -lws2_32 -liphlpapi || exit 1; }
 mkdir -p "$T/app/lua/core" "$T/app/supercollider" "$T/app/update"
 mkdir -p "$T/app/dust-seed/code/awake/lib"; echo "-- seed" > "$T/app/dust-seed/code/awake/awake.lua"; echo "-- lib" > "$T/app/dust-seed/code/awake/lib/x.lua"
 printf "9.9.9 abcdef1\nbuilt: test\n" > "$T/app/BUILD.txt"
@@ -162,6 +162,47 @@ sleep 2
 (cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=8 --home="Z:$T/vhome4" > "$T/launcher4.out" 2>&1)
 ck "a stale norns.exe of an earlier start is stopped before the new one starts" "grep -q 'stopping norns.exe (process [0-9]*) of an earlier start' '$T/vhome4/logs/launcher.log'"
 ck "sclang starts only after norns.exe has made the audio bridge" "[ \$(grep -n 'audio bridge of norns.exe is ready' '$T/vhome4/logs/launcher.log' | cut -d: -f1) -lt \$(grep -n 'sclang.exe started' '$T/vhome4/logs/launcher.log' | cut -d: -f1) ] && grep -Eq 'ready after 1[4-9][0-9][0-9] ms' '$T/vhome4/logs/launcher.log'"
+# M21: (3) sclang.exe itself ends (a crash prints nothing in sclang.log): the launcher waits on its process handle, restarts the round twice like it does for the server, then says so; (8) a second copy does not touch the logs
+cat > "$T/stubM21.c" <<'STUB'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <windows.h>
+int main(int argc, char **argv) {
+    (void)argc;
+    int is_norns = strstr(argv[0], "norns") != NULL;
+    const char *b = getenv("VERDANDI_BRIDGE");
+    if (is_norns && b) { char name[200]; snprintf(name, sizeof name, "Local\\%s", b); CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, name); }
+    printf("stub %s\n", argv[0]); fflush(stdout);
+    if (!is_norns) { Sleep(1500); return (int)0xC0000005; } /* sclang: a crash */
+    char req[600]; snprintf(req, sizeof req, "%s/.norns-request-restart", getenv("HOME"));
+    for (int i = 0; i < 400; i++) { /* norns: ends with exit code 42 when the launcher asks for a restart (what lua/core/menu.lua does) */
+        FILE *f = fopen(req, "r");
+        if (f) { fclose(f); remove(req); return 42; }
+        Sleep(100);
+    }
+    return 0;
+}
+STUB
+$CC "$T/stubM21.c" -o "$T/app/norns.exe" -static || exit 1
+cp "$T/app/norns.exe" "$T/app/supercollider/sclang.exe"
+rm -rf "$T/vhome5"; mkdir -p "$T/vhome5"
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 90 "$WINE" ./Verdandi.exe --headless --exit-after=45 --home="Z:$T/vhome5" > "$T/launcher5.out" 2>&1)
+L5="$T/vhome5/logs/launcher.log"
+ck "sclang.exe that ends on its own is noticed and named (its process, not its log)" "grep -q 'sclang.exe itself ended on its own, exit code 0xc0000005' '$L5'"
+ck "the round is started again, twice (the rule of the server stop), with the cause in the message" "grep -q 'sclang (the SuperCollider language) stopped (error 0xC0000005): restarting it and the script (1 of 2)' '$L5' && grep -q '(2 of 2)' '$L5' && [ \$(grep -c 'norns.exe started' '$L5') -ge 3 ]"
+ck "the third stop is the last: one plain message, no fourth round" "grep -q 'sclang.exe stopped on its own again' '$L5' && grep -q 'sclang keeps stopping' '$L5' && ! grep -q 'starting everything again (round 4)' '$L5'"
+rm -rf "$T/vhome6"; mkdir -p "$T/vhome6/logs"
+printf 'OLD-LAUNCHER-LOG-1\n' > "$T/vhome6/logs/launcher.log"; printf 'OLD-LAUNCHER-LOG-2\n' > "$T/vhome6/logs/launcher.1.log"; printf 'OLD-NORNS-LOG-1\n' > "$T/vhome6/logs/norns.log"
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 60 "$WINE" ./Verdandi.exe --headless --exit-after=12 --home="Z:$T/vhome6" > "$T/launcher6a.out" 2>&1 &)
+sleep 5
+(cd "$T/app" && VERDANDI_NO_LINK=1 timeout 30 "$WINE" ./Verdandi.exe --headless --home="Z:$T/vhome6" > "$T/launcher6b.out" 2>&1); rc6=$?
+sleep 12
+L6="$T/vhome6/logs"
+ck "a second copy ends at once with code 3" "[ $rc6 -eq 3 ]"
+ck "a second copy does not push the logs of the running one out: launcher.1.log is still the one before, launcher.2.log the one before that" "grep -q OLD-LAUNCHER-LOG-1 '$L6/launcher.1.log' && grep -q OLD-LAUNCHER-LOG-2 '$L6/launcher.2.log'"
+ck "it says so in the log of the running copy, which is still there" "grep -q 'a second copy of Verdandi was started' '$L6/launcher.log' && grep -q 'norns.exe started' '$L6/launcher.log'"
+ck "it does not rotate norns.log or sclang.log either" "grep -q OLD-NORNS-LOG-1 '$L6/norns.1.log' && [ ! -f '$L6/norns.2.log' ] && [ ! -f '$L6/sclang.2.log' ]"
 rm -f "$T/app/norns.exe"
 # a missing piece is said in plain words (headless: in the log), and nothing is started
 rm -f "$T/app/norns.exe"

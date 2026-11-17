@@ -554,6 +554,7 @@ chk_twins_engine() {
 }
 # M10: scsynth.exe is ended from outside three times (windows/ci/maiden_probe.py, VERDANDI_PROBE=kill): the launcher says so in launcher.log, starts everything again twice, then says it stops trying and leaves norns running
 KILL_HOME="$WORK/user home kill"
+SKILL_HOME="$WORK/user home sclang kill"
 run_server_kill() {
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
     local out="$M0_OUT/server-kill"
@@ -580,6 +581,108 @@ chk_server_kill() {
     for want in kill-1-up kill-1-done kill-1-restarted kill-1-logged kill-2-up kill-2-done kill-2-restarted kill-2-logged kill-3-up kill-3-done kill-3-gave-up kill-3-no-round-4 kill-3-norns-alive kill-3-message kill-notes kill-done; do
         has "$out/probe.txt" "PROBE $want ok" "$want" || bad=1
     done
+    return "$bad"
+}
+run_sclang_kill() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local out="$M0_OUT/sclang-kill"
+    rm -rf "$SKILL_HOME" "$out"; mkdir -p "$out"
+    seed_home "$SKILL_HOME"
+    VERDANDI_PROBE=kill VERDANDI_KILL_WHO=sclang "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$SKILL_HOME")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    if command -v timeout > /dev/null 2>&1; then
+        env -u VERDANDI_NO_SERVER_RESTART -u VERDANDI_SERVER_WATCH_LOG_ONLY timeout -k 10 800 "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$SKILL_HOME")"
+    else
+        env -u VERDANDI_NO_SERVER_RESTART -u VERDANDI_SERVER_WATCH_LOG_ONLY "$APP/Verdandi$EXE" --headless --exit-after=640 --home="$(native "$SKILL_HOME")"
+    fi
+    echo "launcher exit code $?"
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$SKILL_HOME/logs" "$out/logs" 2> /dev/null || true
+    return 0
+}
+chk_sclang_kill() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local out="$M0_OUT/sclang-kill" bad=0 want
+    echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
+    echo "--- launcher.log (the lines about the server):"; grep -a -i "sclang\|round\|restart" "$SKILL_HOME/logs/launcher.log" 2> /dev/null | head -40
+    for want in kill-1-up kill-1-done kill-1-restarted kill-1-logged kill-2-up kill-2-done kill-2-restarted kill-2-logged kill-3-up kill-3-done kill-3-gave-up kill-3-no-round-4 kill-3-norns-alive kill-3-message kill-notes kill-done; do
+        has "$out/probe.txt" "PROBE $want ok" "$want" || bad=1
+    done
+    return "$bad"
+}
+# M21: a second copy of Verdandi must not touch the logs of the running one (it used to rotate launcher.log before it found out it was the second copy)
+TWO_HOME="$WORK/user home two copies"
+run_two_copies() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local out="$M0_OUT/two-copies"
+    rm -rf "$TWO_HOME" "$out"; mkdir -p "$out" "$TWO_HOME/logs"
+    seed_home "$TWO_HOME"
+    printf 'OLD-LAUNCHER-LOG-1\n' > "$TWO_HOME/logs/launcher.log"
+    printf 'OLD-LAUNCHER-LOG-2\n' > "$TWO_HOME/logs/launcher.1.log"
+    printf 'OLD-NORNS-LOG-1\n' > "$TWO_HOME/logs/norns.log"
+    ( if command -v timeout > /dev/null 2>&1; then timeout -k 10 200 "$APP/Verdandi$EXE" --headless --exit-after=90 --home="$(native "$TWO_HOME")"; else "$APP/Verdandi$EXE" --headless --exit-after=90 --home="$(native "$TWO_HOME")"; fi ) > "$out/first.out" 2>&1 &
+    local first=$!
+    local i
+    for i in $(seq 1 60); do grep -a -q "norns.exe started" "$TWO_HOME/logs/launcher.log" 2> /dev/null && break; sleep 1; done
+    sleep 8
+    { ls -l --time-style=full-iso "$TWO_HOME/logs" 2> /dev/null | awk '{print $5, $9}'; } > "$out/before.txt"
+    cp "$TWO_HOME/logs/launcher.1.log" "$out/launcher.1.before" 2> /dev/null
+    "$APP/Verdandi$EXE" --headless --home="$(native "$TWO_HOME")" > "$out/second.out" 2>&1
+    echo "second copy exit code $?" > "$out/second.code"
+    { ls -l --time-style=full-iso "$TWO_HOME/logs" 2> /dev/null | awk '{print $5, $9}'; } > "$out/after.txt"
+    wait "$first" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$TWO_HOME/logs" "$out/logs" 2> /dev/null || true
+    return 0
+}
+chk_two_copies() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local out="$M0_OUT/two-copies" L="$M0_OUT/two-copies/logs" bad=0
+    cat "$out/second.code" 2> /dev/null
+    echo "--- the logs, before and after the second copy:"; cat "$out/before.txt" "$out/after.txt" 2> /dev/null
+    has "$out/second.code" "exit code 3" "the second copy ended at once (code 3)" || bad=1
+    has "$L/launcher.1.log" "OLD-LAUNCHER-LOG-1" "launcher.1.log is still the log of the start before (it was not pushed out by the second copy)" || bad=1
+    has "$L/launcher.2.log" "OLD-LAUNCHER-LOG-2" "launcher.2.log is the one before that" || bad=1
+    has "$L/launcher.log" "a second copy of Verdandi was started" "the second copy wrote one line into the log of the running one" || bad=1
+    has "$L/launcher.log" "norns.exe started" "and the log of the running copy is still there" || bad=1
+    has "$L/norns.1.log" "OLD-NORNS-LOG-1" "norns.log was rotated once, by the first copy only" || bad=1
+    [ ! -f "$L/norns.2.log" ] && echo "found: no second rotation of norns.log" || { echo "NOT FOUND: norns.2.log must not exist"; bad=1; }
+    return "$bad"
+}
+# M21: a tape recording that runs when norns ends is closed first (a file cut off by the end of the process has the length zero). one run per way of ending
+run_tape_case() { # mode
+    local mode="$1" H="$WORK/user home tape $1" out="$M0_OUT/tape/$1" after=170
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    mkdir -p "$H/dust/audio/tape"
+    [ "$mode" = launcher ] && after=60
+    VERDANDI_PROBE=tape VERDANDI_TAPE_END="$mode" "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    if command -v timeout > /dev/null 2>&1; then
+        env -u VERDANDI_NO_SERVER_RESTART timeout -k 10 $((after + 120)) "$APP/Verdandi$EXE" --headless --exit-after=$after --home="$(native "$H")"
+    else
+        env -u VERDANDI_NO_SERVER_RESTART "$APP/Verdandi$EXE" --headless --exit-after=$after --home="$(native "$H")"
+    fi
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    cp "$H/dust/audio/tape/m21.wav" "$out/m21.wav" 2> /dev/null || true
+}
+run_tape() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local m
+    for m in restart quit shutdown launcher; do run_tape_case "$m"; done
+    return 0
+}
+chk_tape() { # mode
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 0; }
+    local mode="$1" out="$M0_OUT/tape/$1" bad=0
+    echo "=== tape, ended by: $mode"
+    cat "$out/probe.txt" 2> /dev/null
+    grep -a -E "^tape:|ends with exit code|Tape::writer" "$out/logs/norns.log" 2> /dev/null | head -6
+    has "$out/probe.txt" "PROBE tape-recording ok" "the tape was recording when norns was ended" || bad=1
+    "$PYTHON" "$(native "$HERE/wav_check.py")" "$(native "$out/m21.wav")" 192000 || bad=1
     return "$bad"
 }
 # M10: a long file name under an [ext] link (the probe of the scenario 'all' made it): matron's audio.file_info and crone's Tape Reader open it; the log has no 'cannot open sndfile'
@@ -1181,6 +1284,15 @@ m0_run m11-run-enc-burst run_enc_burst
 m0_run m11-check-enc-burst chk_enc_burst
 m0_run m10-run-server-kill run_server_kill
 m0_run m10-check-server-kill chk_server_kill
+m0_run m21-run-sclang-kill run_sclang_kill
+m0_run m21-check-sclang-kill chk_sclang_kill
+m0_run m21-run-two-copies run_two_copies
+m0_run m21-check-two-copies chk_two_copies
+m0_run m21-run-tape run_tape
+m0_run m21-check-tape-restart chk_tape restart
+m0_run m21-check-tape-quit chk_tape quit
+m0_run m21-check-tape-shutdown chk_tape shutdown
+m0_run m21-check-tape-launcher chk_tape launcher
 m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server

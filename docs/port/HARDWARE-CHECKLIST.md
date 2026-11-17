@@ -661,3 +661,11 @@ Your two grids (128 and 256) plugged in; the mod sidvagn on (draws on the second
 4. Ableton open and playing at 48000 Hz (the Fireface window shows 48000, greyed). Start Verdandi (ASIO zip) and choose low latency: the log's `rates:` line must say the card runs at 48000 and the engine at 48000. If Ableton runs the card at 44100, Verdandi must say 44100 for both.
 5. With Ableton playing, change the pair or buffer in Verdandi: either it works, or the AUDIO page says the card is at another rate than the engine ("Verdandi does not change a card's clock") and the old setting stays. Ableton must keep playing at its own rate, unaffected.
 6. Listen to a tape or softcut loop at a known pitch while the card runs at 48000: if the pitch is wrong (a little more than a semitone high), look for `audio: WARNING ... the card really delivers about N Hz`, and send me the log.
+
+## Windows 0.10.12 (eight fixes) — save your Ableton project first
+1. Normal use, 20 minutes, Ableton open next to Verdandi: nothing should be different. `u` and `x` as in 0.10.11, no new line `audio: ... WARNING` in `logs\norns.log`.
+2. AUDIO page, change the OUTPUT pair or the BUFFER (low latency), K3: it works without a restart. Look at `audio.conf` (`%USERPROFILE%\Verdandi\audio.conf`): `rate=` is the same number as before, also when the card runs at 44100.
+3. Tape: start a recording on the TAPE page, wait 20 seconds, then choose SYSTEM > RESTART (not SLEEP). After Verdandi is back, the recording must be in `dust\audio\tape` and play in any player, with its full length. Do the same once with the window's close button.
+4. Open a script, start and stop Verdandi twice by double-clicking `Verdandi.exe` while it runs: the second double-click only brings the window forward; `logs\launcher.1.log` stays the log of the start before.
+5. Only if you want to: in Verdandi on low latency, choose the Windows speakers on the OUTPUT row and back to low latency: it comes back each time.
+Not asked of you: pulling the Fireface's cable while Ableton plays (that case is tested with a stand-in card only).
