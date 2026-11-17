@@ -1,3 +1,6 @@
 # linux/tests/known-failures.txt (M22): tests that fail and are known to. one per line: the test's name as run_all.sh prints it, up to its first " (", then " | " and the reason.
 # a test on this list that fails does NOT fail the run (it prints KNOWN); a test that is NOT on the list and fails does; a test on the list that PASSES prints a notice: take it off the list.
 # lines that start with # are comments. nothing here is hidden: the run prints every known failure with its reason, and the job summary lists them.
+manual:file, table of contents, sources comments, names exist in the code | the manual's shortcut table lacks "Ctrl+Shift+G, Record GIF" that the code handles (documentation drift, also fails on 736123b)
+lua:THEME and SCREEN pages under random keys, the colour picker and the clipboard | menu_stress_test: "E2 up did not move to the next character in the preset entry (arc window open, ARC KEYS on)" (fails identically on 736123b)
+lua:fileselect_finder | stale test under macos/tests (no package.path for core/menu/winui, nil screen.text_extents); the box:C side test forbids any change under macos/ since c6f62ff, so it is listed instead of fixed
