@@ -676,16 +676,16 @@ if os.environ.get("VERDANDI_PROBE") == "asio":
         def rate_info():
             ok_, t_ = run("local i = _norns.audio_info() print('VT_RATE ' .. tostring(i.mode) .. '|' .. tostring(i.host_api) .. '|' .. tostring(i.rate) .. '|' .. tostring(i.device_rate) .. '|' .. tostring(i.card_rate) .. '|' .. tostring(i.rate_warn) .. '|' .. (tostring(i.config):gsub('\\n', ',')))\n", "VT_RATE", 30)
             for l_ in t_.splitlines():
-                if l_.startswith("VT_RATE "):
-                    g = l_[8:].split("|") + [""] * 7
+                if "VT_RATE " in l_:  # (the program's own log lines are written to the same stream: a line can start in the middle of another)
+                    g = l_[l_.index("VT_RATE ") + 8:].split("|") + [""] * 7
                     return {"mode": g[0], "api": g[1], "rate": float(g[2] or 0), "dev": float(g[3] or 0), "card": float(g[4] or 0), "warn": g[5], "cfg": "|".join(g[6:])}
             return {"mode": "?", "api": "?", "rate": 0, "dev": 0, "card": 0, "warn": "?", "cfg": ""}
         def apply_conf(out_first=1, buffer=0, output="asio:Verdandi Test ASIO"):
             conf = "output=%s\\ninput=\\nrate=48000\\nblock=128\\nbuffer=%d\\nexclusive=0\\nout_first=%d\\nin_l=1\\nin_r=2\\n" % (output, buffer, out_first)
             ok_, t_ = run("local rc, msg = _norns.audio_apply(\"%s\") print('VT_APPLY ' .. tostring(rc) .. '|' .. tostring(msg))\n" % conf, "VT_APPLY", 60)
             for l_ in t_.splitlines():
-                if l_.startswith("VT_APPLY "):
-                    rc_, _, msg_ = l_[9:].partition("|")
+                if "VT_APPLY " in l_:  # (the program's own log lines share the stream: this one can start in the middle of another)
+                    rc_, _, msg_ = l_[l_.index("VT_APPLY ") + 9:].partition("|")
                     return rc_, msg_
             return "?", t_[-200:]
         def near(a, b, pct=2.0):
