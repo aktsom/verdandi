@@ -36,9 +36,9 @@ shard_of() { # test name -> shard
         *) echo heavy ;;
     esac
 }
-skip() { # "name (reason)": a test that was not run here, counted as skipped
+skip() { # "name (reason)": a test that was not run here: printed as SKIPPED (never PASS) and counted
     wanted "$1" || return 0
-    skip "$1"
+    echo "SKIPPED $1"
     SKIPPED+=("$1")
 }
 wanted() { [ -z "$SHARD" ] || [ "$(shard_of "$1")" = "$SHARD" ]; }
@@ -56,7 +56,7 @@ run() { # name, command...
     rc=$?
     first="$(grep -v '^[[:space:]]*$' "$log" | head -n 1)"
     if [ "$rc" -eq 77 ] || { [ "$rc" -eq 0 ] && [ "${first#SKIP}" != "$first" ]; }; then
-        skip "$name  [${first:-skipped}]"
+        echo "SKIPPED $name  [${first:-skipped}]"
         SKIPPED+=("$name")
     elif [ "$rc" -eq 0 ]; then
         if is_known_failure "$name"; then
