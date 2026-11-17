@@ -19,3 +19,22 @@ FAIL conf_rate: and the written configuration is still 48000 (44100)
 == WITHOUT the fix (wantkeep): scenario away_apply
 FAIL away_apply: the new choice is the wanted device: the sound stays on it (wasapi:Fake Interface)
 DONE
+
+== fix 2 (tape), tape_finalize_test with the call taken out (TAPE_NO_FINALIZE=1):
+FAIL finalized: the process ended with _exit; the file has no valid header (length zero) (frames in the file 54784, frames its header says 0)
+FAIL finalized_no_audio: the process ended with _exit; the file has no valid header (length zero) (frames in the file 55040, frames its header says 0)
+tape_finalize_test: 2 FAILED
+
+== fixes 4, 5, 6 (Wine, stub ASIO driver, the real audio_backend_pa.c with ONE fix taken out; all of them in: "asio_backend_test: ok"):
+WITHOUT fix 5 (callbacks above 2048 frames are silence again):
+FAIL a buffer of 4096 frames opens (the card's buffer of 4096 frames is more than Verdandi can take (at most 2048): choose a smaller BUFFER)
+FAIL ... and the sound reaches the driver (peak 0.5 in its log, size=4096): not silence
+FAIL a buffer of 8192 frames opens ...
+FAIL ... and the sound reaches the driver (peak 0.5 in its log, size=8192): not silence
+asio_backend_test: 4 FAILED
+WITHOUT fix 6 (no refusal when the card's rate cannot be read):
+FAIL rate unreadable: the open is refused in plain words (the card (ASIO driver 'Verdandi Test ASIO') runs at 0 Hz and the engine at 48000 Hz. ...
+asio_backend_test: 1 FAILED
+WITHOUT fix 4 (the clock of the chosen driver is not asked from that driver alone):
+FAIL the card's clock is asked from the chosen driver with ONE load of it (0 Hz, 0 create lines)
+asio_backend_test: 1 FAILED
