@@ -45,6 +45,12 @@ seed_home() { # a home folder in which norns resumes the smoke script
     mkdir -p "$H/dust/code/plugin_test/Extensions"
     printf '\177ELF\002\001\001\000plug-in for the raspberry pi' > "$H/dust/code/plugin_test/Extensions/PiOnly.scx"
     printf '\317\372\355\376plug-in for the mac' > "$H/dust/code/plugin_test/Extensions/MacOnly.scx"
+    # M22: a sample (a 480-frame, 48 kHz, mono 16-bit wav, written here) for the script's audio.file_info
+    mkdir -p "$H/dust/audio"
+    "$PYTHON" -c "
+import struct, sys, wave
+w = wave.open(sys.argv[1], 'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
+w.writeframes(b''.join(struct.pack('<h', (i * 64) % 20000) for i in range(480))); w.close()" "$H/dust/audio/utf8_sample.wav"
     "$PYTHON" -c "
 import sys
 b=bytearray(512); b[0:2]=b'MZ'; b[0x3c]=0x80; b[0x80:0x84]=b'PE\0\0'; b[0x84]=0x64; b[0x85]=0x86
@@ -652,7 +658,7 @@ chk_two_copies() {
 }
 # M21: a tape recording that runs when norns ends is closed first (a file cut off by the end of the process has the length zero). one run per way of ending
 run_tape_case() { # mode
-    local mode="$1" H="$WORK/user home tape $1" out="$M0_OUT/tape/$1" after=170
+    local mode="$1" H="${TAPE_HOME_BASE:-$WORK/user home tape} $1" out="$M0_OUT/${TAPE_SUB:-tape}/$1" after=170
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
     mkdir -p "$H/dust/audio/tape"
@@ -677,7 +683,7 @@ run_tape() {
 }
 chk_tape() { # mode
     [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
-    local mode="$1" out="$M0_OUT/tape/$1" bad=0
+    local mode="$1" out="$M0_OUT/${TAPE_SUB:-tape}/$1" bad=0
     echo "=== tape, ended by: $mode"
     cat "$out/probe.txt" 2> /dev/null
     grep -a -E "^tape:|ends with exit code|Tape::writer" "$out/logs/norns.log" 2> /dev/null | head -6
@@ -1263,6 +1269,59 @@ chk_busy_ports() {
     [ "$(grep -c "answered: HTTP/1.1 101" "$WORK/busy-ports-handshake.out" 2> /dev/null)" -ge 2 ] && echo "found: both consoles answer a websocket handshake on their new ports" || { echo "NOT FOUND: two 101 answers"; bad=1; }
     return "$bad"
 }
+# M22 item 1: names with accents and letters outside the Windows code page (the runner uses code page 1252: the Ā and the Ж are outside it, the é is inside), for the USER folder and for the PROGRAM folder, and with blanks.
+# the program folder is a copy of the unpacked one. what must work: the program starts, the script list and the script's own files, the screenshot, a sample's header, a preset, tape recording and its file, the logs
+# (docs/port/phase-m22.md). the names are written as bytes (UTF-8) so that this file's own encoding does not matter
+NA_NAME=$'Jos\xc3\xa9 \xc4\x80 \xd0\x96'
+ORIG_APP=""
+na_use() {
+    [ -n "$ORIG_APP" ] || ORIG_APP="$APP"
+    NA_PARENT="$WORK/Verdandi $NA_NAME folder"
+    APP="$NA_PARENT/Verdandi"
+    HOMEDIR="$WORK/user $NA_NAME home"
+    LOGS="$HOMEDIR/logs"
+}
+run_nonascii() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
+    ORIG_APP="$APP"
+    na_use
+    rm -rf "$NA_PARENT" "$HOMEDIR"
+    mkdir -p "$NA_PARENT"
+    cp -r "$ORIG_APP" "$APP" || return 1
+    seed_home "$HOMEDIR"
+    run_program
+}
+na_chk() { [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }; na_use; "$@"; } # the same check as for the ASCII folders, on the folders with the odd names
+chk_nonascii_utf8() {
+    local bad=0 w
+    for w in data-file file-exists scandir-data script-list rename remove sample-info pset; do
+        has "$LOGS/norns.log" "VERDANDI_SMOKE_UTF8 $w ok" "the script's own $w works in the folder with the odd name" || bad=1
+    done
+    grep -a "VERDANDI_SMOKE_UTF8 home" "$LOGS/norns.log" | head -1
+    has "$LOGS/norns.log" "VERDANDI_SMOKE_UTF8 home ok HOME=\[[A-Za-z]:/.*Jos" "norns saw the home folder with its odd name (HOME)" || bad=1
+    if [ -n "$(find "$HOMEDIR/dust" -name 'verdandi_smoke*.png' 2> /dev/null | head -n 1)" ]; then echo "found: the screenshot was written in the folder with the odd name"; else echo "NOT FOUND: the screenshot"; bad=1; fi
+    [ -s "$HOMEDIR/logs/launcher.log" ] && [ -s "$HOMEDIR/logs/norns.log" ] && [ -s "$HOMEDIR/logs/sclang.log" ] && echo "found: launcher.log, norns.log and sclang.log are in the folder with the odd name" || { echo "NOT FOUND: logs"; bad=1; }
+    grep -a -q "cannot open\|No such file\|not found" "$HOMEDIR/logs/sclang.log" && { echo "sclang.log has 'cannot open / No such file / not found':"; grep -a "cannot open\|No such file\|not found" "$HOMEDIR/logs/sclang.log" | head -3; }
+    return "$bad"
+}
+run_nonascii_tape() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
+    na_use
+    TAPE_HOME_BASE="$WORK/user $NA_NAME tape" TAPE_SUB=tape-nonascii run_tape_case quit
+}
+chk_nonascii_tape() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
+    TAPE_SUB=tape-nonascii chk_tape quit
+}
+chk_utf8_manifests() {
+    local bad=0 e f
+    for e in norns.exe ws-wrapper.exe Verdandi.exe nice.exe sudo.exe systemctl.exe sclang.exe scsynth.exe; do
+        f="$(find "$APP" -name "$e" -type f | head -n 1)"
+        if [ -z "$f" ]; then echo "NOT FOUND: $e in the program folder"; bad=1; continue; fi
+        if grep -a -q activeCodePage "$f"; then echo "found: $e has the UTF-8 code page manifest"; else echo "NOT FOUND: the UTF-8 code page manifest in $e"; bad=1; fi
+    done
+    return "$bad"
+}
 m0_run m1-unpack unpack || exit 0
 # M22: the download and the folder inside it have fixed names (no version): the same Defender exclusion serves every build
 chk_static_names() {
@@ -1274,6 +1333,7 @@ chk_static_names() {
 }
 set_app
 m0_run m22-static-names chk_static_names
+m0_run m22-utf8-manifests chk_utf8_manifests
 m0_run m1-seed seed
 m0_run m1-run run_program
 collect > /dev/null 2>&1
@@ -1356,6 +1416,16 @@ m0_run m21-check-tape-restart chk_tape restart
 m0_run m21-check-tape-quit chk_tape quit
 m0_run m21-check-tape-shutdown chk_tape shutdown
 m0_run m21-check-tape-launcher chk_tape launcher
+m0_run m22-run-nonascii run_nonascii
+m0_run m22-check-nonascii-launcher na_chk chk_launcher
+m0_run m22-check-nonascii-lua na_chk chk_lua
+m0_run m22-check-nonascii-script na_chk chk_script
+m0_run m22-check-nonascii-utf8 na_chk chk_nonascii_utf8
+m0_run m22-check-nonascii-sclang na_chk chk_sclang_context
+m0_run m22-check-nonascii-audio na_chk chk_audio
+m0_run m22-check-nonascii-noise na_chk chk_noise
+m0_run m22-run-nonascii-tape run_nonascii_tape
+m0_run m22-check-nonascii-tape chk_nonascii_tape
 m0_run m7-run-plugin-load run_plugin_load
 m0_run m7-check-plugin-load chk_plugin_load
 m0_run m7-check-plugins-server chk_plugins_server

@@ -78,9 +78,27 @@ build() {
     cmake --build "$BLD" --config Release --target install --parallel "${JOBS:-4}"
 }
 
+# M22: sclang.exe and scsynth.exe use UTF-8 as their "ANSI" code page (windows/manifest/verdandi-utf8.manifest), merged into the manifest the build gave them (or added when there is none): user and program folders
+# with accents or letters outside the Windows code page. mt.exe is part of the MSVC environment of this job. each result is checked (the manifest text is in the file)
+add_utf8_manifest() {
+    local tree="$1" exe m
+    m="$(cd "$(dirname "${BASH_SOURCE[0]}")/../manifest" && pwd)/verdandi-utf8.manifest"
+    command -v cygpath > /dev/null 2>&1 && m="$(cygpath -w "$m")"
+    for exe in sclang.exe scsynth.exe; do
+        local w="$tree/$exe"
+        command -v cygpath > /dev/null 2>&1 && w="$(cygpath -w "$w")"
+        if ! mt.exe -nologo -manifest "$m" -inputresource:"$w;#1" -outputresource:"$w;#1" 2> /dev/null; then
+            echo "$exe has no manifest of its own: adding ours"
+            mt.exe -nologo -manifest "$m" -outputresource:"$w;#1" || return 1
+        fi
+        grep -a -q activeCodePage "$tree/$exe" && echo "$exe: UTF-8 code page manifest is in the file" || { echo "$exe: the manifest is NOT in the file"; return 1; }
+    done
+}
+
 package_tree() {
     local tree="$BLD/Install/SuperCollider"
     [ -f "$tree/sclang.exe" ] && [ -f "$tree/scsynth.exe" ] || { echo "no sclang.exe / scsynth.exe in $tree"; find "$BLD/Install" -maxdepth 2 2> /dev/null; return 1; }
+    add_utf8_manifest "$tree" || return 1
     find "$tree" -maxdepth 1 | head -40
     (cd "$BLD/Install" && 7z a -tzip "$M0_OUT/sc-win64.zip" SuperCollider > /dev/null)
     find "$M0_OUT" -maxdepth 1 -name sc-win64.zip -size +1k

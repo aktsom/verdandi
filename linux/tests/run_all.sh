@@ -160,6 +160,7 @@ run "windows:JACK-compatible null backend (ring buffer, unique names, ports, phy
 if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/wine/wine64 ]; then
     run "windows:null backend, POSIX stand-ins, shell runner and launcher, cross-built and run under Wine" linux/tests/windows_wine_test.sh
     run "windows:M22 busy console ports 5555/5556: the launcher takes free ports, says which program holds them, keeps norns and sclang running (Wine)" linux/tests/console_ports_wine_test.sh
+    run "windows:M22 user and program folders with accents and letters outside the code page: the UTF-8 manifest, narrow calls under Wine, with a control without the manifest" linux/tests/utf8_paths_wine_test.sh
     run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
     run "windows:ASIO probe against a stub ASIO driver under Wine (nothing registered, a working driver with its channels and buffer sizes, a driver that refuses with its own message, a class that cannot be made, a missing driver file)" linux/tests/asio_probe_test.sh
     run "windows:ASIO backend against a stub ASIO driver under Wine (open, close and open again from any thread, other pair, other buffer, the card clock is never changed, channel names, buffer sizes; SKIP without an ASIO build of PortAudio for mingw)" linux/tests/asio_backend_test.sh

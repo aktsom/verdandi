@@ -22,6 +22,41 @@ function init()
     screen.export_screenshot("verdandi_smoke")
     print("VERDANDI_SMOKE screenshot " .. norns.state.data .. "verdandi_smoke.png")
     print("VERDANDI_SMOKE_OK frames=" .. frames .. " clock=" .. tostring(clock.get_beats and clock.get_beats() or "n/a"))
+    -- M22: file names with accents and letters outside the Windows code page (the user folder and the program folder of the CI run in this test have some, see smoke-m1.sh m22-nonascii; the file names
+    -- below are ASCII so that they say nothing about the Lua source). the script writes its own data files, reads them back, lists its data folder and the script folder, reads a sample's header, and saves and loads a preset
+    do
+      local function say(what, ok, more) print("VERDANDI_SMOKE_UTF8 " .. what .. " " .. (ok and "ok" or "FAIL") .. (more and (" " .. more) or "")) end
+      local d = norns.state.data
+      local f = io.open(d .. "own data.txt", "w")
+      if f then f:write("verdandi data \xc3\xa9 \xc4\x80 \xd0\x96\n"); f:close() end
+      local g = io.open(d .. "own data.txt", "r")
+      local back = g and g:read("a") or ""
+      if g then g:close() end
+      say("data-file", back == "verdandi data \xc3\xa9 \xc4\x80 \xd0\x96\n", "bytes=" .. #back)
+      say("file-exists", util.file_exists(d .. "own data.txt"))
+      local found = false
+      for _, n in ipairs(util.scandir(d) or {}) do if n:find("own data", 1, true) then found = true end end
+      say("scandir-data", found)
+      found = false
+      for _, n in ipairs(util.scandir(_path.code) or {}) do if n:find("verdandi_smoke", 1, true) then found = true end end
+      say("script-list", found)
+      say("rename", os.rename(d .. "own data.txt", d .. "own data 2.txt") and util.file_exists(d .. "own data 2.txt"))
+      say("remove", os.remove(d .. "own data 2.txt") and not util.file_exists(d .. "own data 2.txt"))
+      local sample = _path.audio .. "utf8_sample.wav"
+      if util.file_exists(sample) then
+        local ch, frames, rate = audio.file_info(sample)
+        say("sample-info", ch == 1 and frames == 480 and rate == 48000, string.format("ch=%s frames=%s rate=%s", tostring(ch), tostring(frames), tostring(rate)))
+      else
+        say("sample-info", false, "the sample was not seeded")
+      end
+      params:add_number("utf8_x", "utf8 x", 0, 100, 7)
+      params:set("utf8_x", 42)
+      params:write(1, "utf8 test")
+      params:set("utf8_x", 1)
+      params:read(1)
+      say("pset", params:get("utf8_x") == 42, "x=" .. tostring(params:get("utf8_x")))
+      say("home", (os.getenv("HOME") or ""):find("[\x80-\xff]") ~= nil or os.getenv("VERDANDI_SMOKE_ASCII") == "1", "HOME=[" .. tostring(os.getenv("HOME")) .. "]")
+    end
     -- M2: the audio chain. scsynth starts a while after norns (sclang compiles first): wait for it to attach to the bridge, let some blocks flow, then say what the audio runs on and how the bridge did
     -- M3 first: it needs no scsynth, and a slow SuperCollider start must not decide whether it runs
     -- M3: the input switch on a machine that may have no input at all (the CI runner): MIC and SYS must say no or yes, never hang or crash, and OFF must always work

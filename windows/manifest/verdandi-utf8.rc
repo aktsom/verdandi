@@ -1,0 +1,4 @@
+/* the application manifest that makes every program of Verdandi use UTF-8 as its "ANSI" code page (Windows 10 1903 and later; older Windows ignores it and nothing changes there): getenv, argv, fopen, CreateFileA, std::filesystem and the like then read and
+ * write the same UTF-8 that the launcher puts into the environment and the configuration files, for user and program folders with accents or letters outside the Windows code page (docs/port/phase-m22.md).
+ * norns.exe, ws-wrapper.exe, Verdandi.exe and the shims get it by windres; sclang.exe and scsynth.exe (MSVC) by mt.exe (windows/ci/build-sc.sh) */
+1 24 "verdandi-utf8.manifest"

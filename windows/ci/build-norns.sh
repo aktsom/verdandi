@@ -26,17 +26,25 @@ build() {
     cmake --build "$BLD" -- -k 0
 }
 
+# M22: the UTF-8 code page manifest, as an object file for the programs that are not built by CMake (the launcher, the shims)
+utf8_manifest() {
+    mkdir -p "$BLD"
+    (cd "$REPO/windows/manifest" && windres verdandi-utf8.rc -O coff -o "$BLD/verdandi-utf8.o")
+}
+
 launcher() {
     mkdir -p "$BLD"
-    gcc -municode -mwindows -O2 -Wall -Wextra "$REPO/windows/launcher/verdandi.c" -o "$BLD/Verdandi.exe" -static -lws2_32 -liphlpapi
+    utf8_manifest || return 1
+    gcc -municode -mwindows -O2 -Wall -Wextra "$REPO/windows/launcher/verdandi.c" "$BLD/verdandi-utf8.o" -o "$BLD/Verdandi.exe" -static -lws2_32 -liphlpapi
 }
 
 # M9: nice.exe, sudo.exe and systemctl.exe (one source, the program's name chooses what it does): scripts written for a norns call them (docs/port/phase-m9.md)
 shims_build() {
     mkdir -p "$BLD"
+    [ -f "$BLD/verdandi-utf8.o" ] || utf8_manifest || return 1
     local n
     for n in nice sudo systemctl; do
-        gcc -municode -mwindows -O2 -Wall -Wextra -I "$REPO/windows/shims" "$REPO/windows/shims/shim_win.c" -o "$BLD/$n.exe" -static || return 1
+        gcc -municode -mwindows -O2 -Wall -Wextra -I "$REPO/windows/shims" "$REPO/windows/shims/shim_win.c" "$BLD/verdandi-utf8.o" -o "$BLD/$n.exe" -static || return 1
     done
 }
 

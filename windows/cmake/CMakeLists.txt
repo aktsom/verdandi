@@ -2,9 +2,12 @@
 #   cmake -S windows/cmake -B build/win -G Ninja -DCMAKE_PREFIX_PATH=<prefix with Lua 5.3 and libmonome>
 # the sources are listed in norns-sources.txt (one list for this file and for windows/ci/xcheck.sh, the mingw cross-check on Linux). waf is not used on Windows.
 cmake_minimum_required(VERSION 3.20)
-project(verdandi LANGUAGES C CXX)
+project(verdandi LANGUAGES C CXX RC)
 
 set(REPO "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+# M22: every program of Verdandi gets the UTF-8 code page manifest (windows/manifest/verdandi-utf8.rc): paths with accents or letters outside the Windows code page
+set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} -I${REPO}/windows/manifest")
+set(VERDANDI_UTF8_RC ${REPO}/windows/manifest/verdandi-utf8.rc)
 get_filename_component(REPO "${REPO}" ABSOLUTE)
 
 if(NOT WIN32)
@@ -71,7 +74,7 @@ set(VERDANDI_VERSION_MINOR ${CMAKE_MATCH_2})
 set(VERDANDI_VERSION_PATCH ${CMAKE_MATCH_3})
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${REPO}/windows/VERSION)
 
-add_executable(norns ${NORNS_SOURCES})
+add_executable(norns ${NORNS_SOURCES} ${VERDANDI_UTF8_RC})
 set_target_properties(norns PROPERTIES OUTPUT_NAME "norns")
 
 # the version of the Windows build: 0.2.0 = milestone M2 (real audio; 0.1.0 was M1) (matron VERSION_*; the norns update number on the home screen comes from update/version.txt)
@@ -115,7 +118,7 @@ target_include_directories(norns PRIVATE ${PORTAUDIO_INCLUDE_DIRS})
 target_link_options(norns PRIVATE -static-libgcc -static-libstdc++ -Wl,--stack,8388608)
 
 # M6: ws-wrapper.exe puts a program's standard input and output on a websocket (maiden's norns and sclang consoles); see windows/ws-wrapper/ws_wrapper_win.c
-add_executable(ws-wrapper ${REPO}/windows/ws-wrapper/ws_wrapper_win.c)
+add_executable(ws-wrapper ${REPO}/windows/ws-wrapper/ws_wrapper_win.c ${VERDANDI_UTF8_RC})
 target_include_directories(ws-wrapper PRIVATE ${NNG_INC})
 target_link_libraries(ws-wrapper PRIVATE ${NNG_LIB} ws2_32 mswsock advapi32 bcrypt pthread)
 target_link_options(ws-wrapper PRIVATE -municode -static-libgcc)
