@@ -10,6 +10,11 @@ on:
     branches: [linux-port, windows-port]
   workflow_dispatch:
 
+# a newer push replaces the run in progress on the same branch (every run is about two hours of runners)
+concurrency:
+  group: linux-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
     name: tests (${{ matrix.shard }})
