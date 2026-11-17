@@ -33,7 +33,7 @@ shard_of() { # test name -> shard
         windows) printf 'windows-%s' "$(( $(printf '%s' "$1" | cksum | cut -d' ' -f1) % 2 ))" ;;
         lua | box | screen | input | manual | branding | scan-fkeys | metro | devices | udev | linux | script | shims | launcher | tidy | shell | engine*) echo lua ;;
         c | grid | midi | clock | serialosc | audio) echo native ;;
-        *) echo heavy ;;
+        *) printf 'heavy-%s' "$(( $(printf '%s' "$1" | cksum | cut -d' ' -f1) % 2 ))" ;;
     esac
 }
 skip() { # "name (reason)": a test that was not run here: printed as SKIPPED (never PASS) and counted
@@ -48,12 +48,16 @@ logfile() { # name -> a safe, short file name in $T (a name may hold slashes, > 
     printf '%s/%s-%s.log' "$T" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_' | cut -c1-60)" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
 }
 run() { # name, command...
-    local name="$1" log rc first
+    local name="$1" log rc first t0 took
     shift
     wanted "$name" || return 0
     log="$(logfile "$name")"
-    "$@" > "$log" 2>&1
+    t0=$SECONDS
+    # a test that hangs ends after TEST_TIMEOUT seconds (default 1500) and counts as a failure that says so, instead of using up the whole job
+    if [ "$(type -t "$1")" != function ] && command -v timeout > /dev/null 2>&1 && [ "${TEST_TIMEOUT:-1500}" != 0 ]; then timeout -k 20 "${TEST_TIMEOUT:-1500}" "$@" > "$log" 2>&1; else "$@" > "$log" 2>&1; fi
     rc=$?
+    [ "$rc" -eq 124 ] && echo "TIMED OUT after ${TEST_TIMEOUT:-1500} s" >> "$log"
+    took=$((SECONDS - t0))
     first="$(grep -v '^[[:space:]]*$' "$log" | head -n 1)"
     if [ "$rc" -eq 77 ] || { [ "$rc" -eq 0 ] && [ "${first#SKIP}" != "$first" ]; }; then
         echo "SKIPPED $name  [${first:-skipped}]"
@@ -63,7 +67,7 @@ run() { # name, command...
             echo "PASS  $name  [it is on linux/tests/known-failures.txt and passes now: take it off the list]"
             NOWPASS+=("$name")
         else
-            echo "PASS  $name"
+            echo "PASS  $name  [${took}s]"
         fi
         PASSED=$((PASSED + 1))
     elif is_known_failure "$name"; then

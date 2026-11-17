@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [lua, native, windows-0, windows-1, heavy]
+        shard: [lua, native, windows-0, windows-1, heavy-0, heavy-1]
     steps:
       - uses: actions/checkout@v4
         with:
