@@ -1,5 +1,8 @@
-## M22 (0.10.13), CI results being collected
-Windows CI (real runner) on dce1fe1: every job green (UTF-8 manifests, a copy of the program in a folder `José Ā Ж` with a user folder of the same kind, static names, busy ports on 5555/5556 in the ASIO job). The publish step got HTTP 403 creating the release tag; diagnostics were added (see docs/port/phase-m22.md). linux-tests: shards run (about 1 h 50 each), failures verified or explained in linux/tests/known-failures.txt. Details: docs/port/phase-m22.md.
+## M22 (0.10.13): done, checked in CI
+- Windows (real runner, commit d0d2c6e, run 44205198123): normal job 114 passed, 0 failed, 10 skipped (the skips are ASIO cases that run in the ASIO job); the ASIO job green. Includes: UTF-8 manifests in every program, a copy of the program in a folder named with e, A-macron and Zhe (and a user folder the same), busy console ports 5555/5556 (a python listener holds both), static zip names and folder names.
+- Release windows-latest: Verdandi-windows-latest.zip (81,601,348 bytes), Verdandi-windows-asio-latest.zip (92,288,029 bytes), versioned copies, sha256 files, BUILD.txt. The per-commit release was refused with HTTP 403 three times on earlier commits (cause not settled); the publish step now skips it in that case and still updates windows-latest.
+- linux-tests (run 44291607065, commit e8c29b1): all six shards green; 35 tests are on linux/tests/known-failures.txt with reasons (code unchanged since 736123b; the list-code font test was verified on 736123b itself, the rest are CI-only or environment). The job was shown to go red for a test broken on purpose (docs/port/phase-m22.md).
+- Owner's checks: docs/port/HARDWARE-CHECKLIST.md, "Windows 0.10.13".
 
 # STATUS
 
