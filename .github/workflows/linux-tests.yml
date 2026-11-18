@@ -1,0 +1,60 @@
+name: linux-tests
+
+# M22: the unit tests of linux/tests/run_all.sh (about 300: the audio chain with a fake card, the Wine reproduction tests, the Lua pages, the C tests, the launcher with stand-ins ...) run on every push to this branch.
+# the suite is long, so it is cut into SHARDS that run side by side (SHARD=... in run_all.sh); the Windows build jobs (windows-m1.yml) are a different workflow and do not wait for this one, nor this one for them.
+# a test that cannot run here says SKIPPED (with the reason), never PASS. a test on linux/tests/known-failures.txt may fail without failing the job; a test that is NOT on the list and fails does, and a test on the
+# list that passes says so (a notice and the job summary). docs/port/phase-m22.md
+
+on:
+  push:
+    branches: [scratch-head-compare, scratch-baseline-736123b]
+    paths-ignore: ['docs/**', '**.md', 'STATUS.md']   # (a push that changes only text does not restart a run of about two hours)
+  workflow_dispatch:
+
+# a newer push replaces the run in progress on the same branch (every run is about two hours of runners)
+concurrency:
+  group: linux-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests (${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [lua, native, windows-0, windows-1, heavy-0, heavy-1]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0 # (the box:C side test compares with an old commit, c6f62ff)
+      - name: "Packages for the Windows tests (cross compiler, Wine) and the documented setup, linux/setup-deps.sh"
+        run: |
+          sudo dpkg --add-architecture i386 || true
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix wine64 zip unzip || true
+          linux/setup-deps.sh
+      - name: "Build norns (linux/build.sh), the desktop build the window tests start"
+        run: linux/build.sh
+      - name: The tests of this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          LIBMONOME_INC: /usr/local/include
+          KEEP_LOGS: ${{ runner.temp }}/test-logs
+        run: |
+          set -o pipefail
+          linux/tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/run_all.txt"
+      - name: The logs of the tests (when something failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.shard }}
+          path: ${{ runner.temp }}/test-logs
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: The names of the failed, known and skipped tests of this shard
+        if: always()
+        run: |
+          grep -E '^(UNEXPECTED FAILURE|KNOWN FAILURE|PASSES NOW|SIG |SKIPPED:|RESULT)' "$RUNNER_TEMP/run_all.txt" | cut -c1-330 || true

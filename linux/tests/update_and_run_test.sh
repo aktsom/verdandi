@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # linux/tests/update_and_run_test.sh: windows/update-and-run.cmd under Wine with stand-ins for curl.exe, tar.exe and choice.exe (Wine has no curl and no tar): the logic of the script, not the tools of Windows.
-# what it proves: a newer build is unpacked into a folder of its own next to the old one (named Verdandi-<version>-<hash>), the old one stays until asked, "no" keeps everything, "yes" removes only older
-# BUILD folders (Verdandi.exe and norns.exe) and never the data folder, the build in the folder is recognised as the newest, a failed download (404, no connection, an error page, a bad checksum) says so in plain
+# what it proves (M22: STATIC folder names): a newer build replaces the folder Verdandi (the ASIO build: Verdandi-asio) in the same place, under the same name, so that a Windows Defender exclusion keeps working; the build it replaces
+# is kept as Verdandi.previous; the script that runs is inside the folder that is replaced (it copies itself to the temp folder first); "no" keeps older builds, "yes" removes only Verdandi.previous and old
+# versioned folders (Verdandi.exe and norns.exe) and never the data folder, the build in the folder is recognised as the newest, a failed download (404, no connection, an error page, a bad checksum) says so in plain
 # words, changes nothing and offers the build that is there. 77 = no cross compiler or no Wine.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
@@ -19,7 +20,7 @@ export WINEPREFIX="$T/prefix" WINEDEBUG=-all
 fail=0
 ck() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi; }
 
-mkdir -p "$T/stubs" "$T/server/unpacked"
+mkdir -p "$T/stubs" "$T/server/unpacked" "$T/server/unpacked-asio"
 cat > "$T/curl.c" <<'S'
 /* stand-in for curl.exe: -o FILE URL; the "address" is a file name in the folder VERDANDI_TEST_SERVER. exit 22 when it is not there (HTTP 404), 7 when VERDANDI_TEST_OFFLINE is set */
 #include <stdio.h>
@@ -78,7 +79,7 @@ int main(int argc, char **argv) {
     }
     if (!dir) return 2;
     char src[800];
-    snprintf(src, sizeof src, "%s\\unpacked", getenv("VERDANDI_TEST_SERVER"));
+    snprintf(src, sizeof src, "%s\\%s", getenv("VERDANDI_TEST_SERVER"), getenv("VERDANDI_TEST_UNPACK") ? getenv("VERDANDI_TEST_UNPACK") : "unpacked");
     return copy_tree(src, dir);
 }
 S
@@ -106,86 +107,95 @@ mkbuild() { # dir version hash
     cp windows/update-and-run.cmd "$1/"
     echo "owner/repo" > "$1/UPDATE-SOURCE.txt"
 }
-# the "release": BUILD.txt, a zip (any 1.2 MB file), its checksum is left out here, and the folder the stand-in tar unpacks
-mkbuild "$T/server/unpacked/Verdandi-0.3.0-bbbbbbb" 0.3.0 bbbbbbb
+# the "release": BUILD.txt, a zip (any 1.2 MB file; the checksum is left out here), and the folders the stand-in tar unpacks: Verdandi (the default build) and Verdandi-asio. both folders have FIXED names
+mkbuild "$T/server/unpacked/Verdandi" 0.3.0 bbbbbbb
+mkbuild "$T/server/unpacked-asio/Verdandi-asio" 0.3.0 bbbbbbb; echo asio > "$T/server/unpacked-asio/Verdandi-asio/FLAVOR.txt"
 printf '0.3.0 bbbbbbb\n' > "$T/server/BUILD.txt"
 head -c 1200000 /dev/zero > "$T/server/Verdandi-windows-latest.zip"
 
-newroot() { # a parent folder with an old build, the data folder and something else
+newroot() { # a parent folder "X" as Windows' Extract All makes it (Verdandi-windows-latest), the old build in X/Verdandi, the data folder and something else next to it
     R="$T/r$1"
-    rm -rf "$R"; mkdir -p "$R/Verdandi/dust/code" "$R/other"
-    echo "my script" > "$R/Verdandi/dust/code/mine.lua"
-    mkbuild "$R/Verdandi-0.2.0-aaaaaaa" 0.2.0 aaaaaaa
-    mkbuild "$R/Verdandi" 0.1.0 oldold   # (a very old build folder that is also named like the data folder: it holds Verdandi.exe, norns.exe, dust and logs of its own)
-    rm -f "$R/Verdandi/Verdandi.exe" "$R/Verdandi/norns.exe" # ... but this one is the data folder: no program in it
+    rm -rf "$R"; mkdir -p "$R/X" "$R/other" "$R/mydata/dust/code"
+    echo "my script" > "$R/mydata/dust/code/mine.lua"
+    mkbuild "$R/X/Verdandi" 0.2.0 aaaaaaa
+    ROOT="$R"; OLD="$R/X/Verdandi"; PAR="$R/X"
 }
 # shellcheck disable=SC1003
 winpath() { printf 'Z:%s' "$1" | tr / '\\'; }
 run() { # script folder, extra args, env assignments...; the output is in $T/out.txt
     local dir="$1" args="$2"; shift 2
-    printf '@echo off\r\nset PATH=%s;%%PATH%%\r\ncd /d %s\r\nset VERDANDI_TEST_SERVER=%s\r\nset USERPROFILE=%s\r\nset VERDANDI_CHOICE=%s\\answer.exe\r\n%s\r\ncall "%s\\update-and-run.cmd" %s\r\necho EXITCODE=%%errorlevel%%\r\n' \
-        "$(winpath "$T/stubs")" "$(winpath "$T/stubs")" "$(winpath "$T/server")" "$(winpath "$ROOT")" "$(winpath "$T/stubs")" "$*" "$(winpath "$dir")" "$args" > "$T/run.cmd"
+    printf '@echo off\r\nset PATH=%s;%%PATH%%\r\ncd /d %s\r\nset VERDANDI_TEST_SERVER=%s\r\nset USERPROFILE=%s\r\nset VERDANDI_HOME=%s\r\nset VERDANDI_CHOICE=%s\\answer.exe\r\n%s\r\ncall "%s\\update-and-run.cmd" %s\r\necho EXITCODE=%%errorlevel%%\r\n' \
+        "$(winpath "$T/stubs")" "$(winpath "$T/stubs")" "$(winpath "$T/server")" "$(winpath "$ROOT")" "$(winpath "$ROOT/mydata")" "$(winpath "$T/stubs")" "$*" "$(winpath "$dir")" "$args" > "$T/run.cmd"
     (cd "$T" && timeout 120 "$WINE" cmd /c "$(winpath "$T/run.cmd")" > "$T/out.txt" 2>&1)
 }
+first_line() { head -n 1 "$1" | tr -d '\r'; }
 
-echo "== a newer build exists; the answer to 'remove older builds' is no"
-ROOT="$T/r1"; newroot 1; mkbuild "$T/r1/Verdandi-0.1.5-ccccccc" 0.1.5 ccccccc
-run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
-tr -d "\r" < "$T/out.txt" | head -40
-tr -d "\r" < "$T/out.txt" | sed -n 11,40p
+echo "== a newer build exists; it goes into the SAME folder name; the old one is kept as Verdandi.previous; the answer to 'remove older builds' is no"
+newroot 1; mkbuild "$PAR/Verdandi-0.1.5-ccccccc" 0.1.5 ccccccc
+run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+tr -d "\r" < "$T/out.txt" | sed -n 1,40p
 ck "it says which build this folder holds and which is the newest" "grep -q 'This folder holds build: 0.2.0 aaaaaaa' '$T/out.txt' && grep -q 'The newest build is:     0.3.0 bbbbbbb' '$T/out.txt'"
-ck "the new build is unpacked into a folder of its own next to the old one" "[ -f '$ROOT/Verdandi-0.3.0-bbbbbbb/Verdandi.exe' ] && [ -f '$ROOT/Verdandi-0.2.0-aaaaaaa/Verdandi.exe' ]"
-ck "the temporary unpack folder is gone" "[ ! -e '$ROOT/.verdandi-unpack' ]"
-ck "an older build (not the folder the script runs from) is listed and kept (answer no)" "grep -q 'Older unpacked builds' '$T/out.txt' && grep -q 'Verdandi-0.1.5-ccccccc' '$T/out.txt' && [ -f '$ROOT/Verdandi-0.1.5-ccccccc/Verdandi.exe' ] && [ -f '$ROOT/Verdandi-0.2.0-aaaaaaa/Verdandi.exe' ]"
-ck "the data folder (Verdandi, with dust) is not offered and not touched" "! grep -q 'r1.Verdandi\$' '$T/out.txt' && [ -f '$ROOT/Verdandi/dust/code/mine.lua' ]"
-ck "the script ends with 0 and does not start Verdandi with /NOSTART" "grep -q 'EXITCODE=0' '$T/out.txt' && [ ! -e '$ROOT/Verdandi-0.3.0-bbbbbbb/started.txt' ]"
+ck "the new build is in the folder Verdandi, the same path as the old one (the path an exclusion is made for)" "[ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ -f '$PAR/Verdandi/Verdandi.exe' ]"
+ck "the old build is kept beside it as Verdandi.previous, and the answer says so" "[ \"\$(first_line '$PAR/Verdandi.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && grep -q 'kept as' '$T/out.txt'"
+ck "no folder with the version in its name was made" "[ ! -e '$PAR/Verdandi-0.3.0-bbbbbbb' ]"
+ck "the temporary unpack folder is gone" "[ ! -e '$PAR/.verdandi-unpack' ]"
+ck "older builds (Verdandi.previous and the old versioned folder) are listed and kept (answer no)" "grep -q 'Older unpacked builds next to it' '$T/out.txt' && grep -q 'Verdandi.previous' '$T/out.txt' && grep -q 'Verdandi-0.1.5-ccccccc' '$T/out.txt' && [ -d '$PAR/Verdandi-0.1.5-ccccccc' ]"
+ck "the data folder is not offered and not touched" "[ -f '$ROOT/mydata/dust/code/mine.lua' ] && ! grep -q 'mydata' '$T/out.txt' | grep -q x"
+ck "the script ends with 0 and does not start Verdandi with /NOSTART" "grep -q 'EXITCODE=0' '$T/out.txt' && [ ! -e '$PAR/Verdandi/started.txt' ]"
+ck "the copy of the script that ran is not in the folder that was replaced (it ran from the temp folder)" "grep -q 'Put in place' '$T/out.txt'"
 
-echo "== start: the new Verdandi.exe is started from its own folder"
-ROOT="$T/r2"; newroot 2
-run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/KEEP" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+echo "== start: the new Verdandi.exe is started from the same folder"
+newroot 2
+run "$OLD" "/KEEP" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 sleep 2
-ck "Verdandi.exe of the new build was started" "[ -f '$ROOT/Verdandi-0.3.0-bbbbbbb/started.txt' ]"
-ck "/KEEP: no question about older builds" "! grep -q 'Older unpacked builds' '$T/out.txt'"
+ck "Verdandi.exe of the new build was started" "[ -f '$PAR/Verdandi/started.txt' ]"
+ck "/KEEP: no question about older builds" "! grep -q 'Older unpacked builds next to it' '$T/out.txt'"
 
-echo "== run again from the new folder: it is the newest; 'yes' removes the older build, not itself, not the data"
-run "$ROOT/Verdandi-0.3.0-bbbbbbb" "/NOSTART" "set VERDANDI_TEST_CHOICE=Y&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+echo "== run again from the new folder: it is the newest; 'yes' removes Verdandi.previous, not itself, not the data"
+run "$PAR/Verdandi" "/NOSTART" "set VERDANDI_TEST_CHOICE=Y&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 ck "it says that this is the newest build" "grep -q 'You already have the newest build' '$T/out.txt'"
-ck "the older build is removed" "[ ! -e '$ROOT/Verdandi-0.2.0-aaaaaaa' ]"
-ck "the new build and the data folder are still there" "[ -f '$ROOT/Verdandi-0.3.0-bbbbbbb/Verdandi.exe' ] && [ -f '$ROOT/Verdandi/dust/code/mine.lua' ] && [ -d '$ROOT/other' ]"
+ck "the older build (Verdandi.previous) is removed" "[ ! -e '$PAR/Verdandi.previous' ]"
+ck "the new build and the data folder are still there" "[ -f '$PAR/Verdandi/Verdandi.exe' ] && [ -f '$ROOT/mydata/dust/code/mine.lua' ] && [ -d '$ROOT/other' ]"
+
+echo "== a third update: the one before is replaced, not piled up"
+newroot 7; mkdir -p "$PAR/Verdandi.previous"; echo oldest > "$PAR/Verdandi.previous/BUILD.txt"; cp "$T/app.exe" "$PAR/Verdandi.previous/Verdandi.exe"; cp "$T/app.exe" "$PAR/Verdandi.previous/norns.exe"
+run "$OLD" "/NOSTART /KEEP" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+ck "Verdandi.previous is now the build that was replaced (0.2.0), the older one is gone" "[ \"\$(first_line '$PAR/Verdandi.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.3.0 bbbbbbb' ]"
 
 echo "== the download fails: nothing published (404)"
-ROOT="$T/r3"; newroot 3
+newroot 3
 mv "$T/server/BUILD.txt" "$T/server/BUILD.txt.hidden"
-run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 mv "$T/server/BUILD.txt.hidden" "$T/server/BUILD.txt"
 ck "a plain message says that nothing is published (and that a private repository cannot be read)" "grep -q 'There is no published build' '$T/out.txt' && grep -q 'repository is private' '$T/out.txt'"
-ck "nothing was changed and the exit code says so" "[ ! -e '$ROOT/Verdandi-0.3.0-bbbbbbb' ] && grep -Eq 'EXITCODE=[12]' '$T/out.txt'" # (Wine reports 1 where Windows reports 2: exit /b of a called batch file)
+ck "nothing was changed and the exit code says so" "[ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ ! -e '$PAR/Verdandi.previous' ] && grep -Eq 'EXITCODE=[12]' '$T/out.txt'" # (Wine reports 1 where Windows reports 2: exit /b of a called batch file)
 
 echo "== the download fails: no internet"
-ROOT="$T/r4"; newroot 4
-run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_OFFLINE=1&set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+newroot 4
+run "$OLD" "/NOSTART" "set VERDANDI_TEST_OFFLINE=1&set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 ck "a plain message says that the server cannot be reached" "grep -q 'Cannot connect to the server' '$T/out.txt' && grep -q 'Nothing was changed' '$T/out.txt'"
 
 echo "== the download is an error page, not the zip"
-ROOT="$T/r5"; newroot 5
+newroot 5
 mv "$T/server/Verdandi-windows-latest.zip" "$T/server/zip.hidden"
 echo "<html>Not found</html>" > "$T/server/Verdandi-windows-latest.zip"
-run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
-ck "a file that is too small is refused as an error page" "grep -q 'that is an error page' '$T/out.txt' && [ ! -e '$ROOT/Verdandi-0.3.0-bbbbbbb' ]"
+ck "a file that is too small is refused as an error page, and the old build is untouched" "grep -q 'that is an error page' '$T/out.txt' && [ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ]"
 
-echo "== the ASIO build updates to the ASIO build (FLAVOR.txt): its own zip, its own folder name"
-ROOT="$T/r6"; newroot 6
-mkbuild "$ROOT/Verdandi-asio-0.2.0-aaaaaaa" 0.2.0 aaaaaaa; echo asio > "$ROOT/Verdandi-asio-0.2.0-aaaaaaa/FLAVOR.txt"
+echo "== the ASIO build updates to the ASIO build (FLAVOR.txt): its own zip, its own folder name Verdandi-asio, the normal build next to it is not touched"
+newroot 6
+mkbuild "$PAR/Verdandi-asio" 0.2.0 aaaaaaa; echo asio > "$PAR/Verdandi-asio/FLAVOR.txt"
 mv "$T/server/Verdandi-windows-latest.zip" "$T/server/zip.hidden"
 head -c 1200000 /dev/zero > "$T/server/Verdandi-windows-asio-latest.zip"
-run "$ROOT/Verdandi-asio-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_UNPACK=unpacked-asio&set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 rm -f "$T/server/Verdandi-windows-asio-latest.zip"; mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
-ck "the ASIO zip is downloaded and unpacked into Verdandi-asio-<version>-<hash>" "[ -f '$ROOT/Verdandi-asio-0.3.0-bbbbbbb/Verdandi.exe' ] && [ ! -e '$ROOT/Verdandi-0.3.0-bbbbbbb' ]"
+ck "the ASIO zip is downloaded and put in Verdandi-asio (kept as Verdandi-asio.previous)" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ -f '$PAR/Verdandi-asio/FLAVOR.txt' ] && [ \"\$(first_line '$PAR/Verdandi-asio.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ]"
+ck "the normal build's folder is not touched by it (and not offered for removal)" "[ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && ! grep -q 'next to it.*Verdandi\\\$' '$T/out.txt'"
 
 echo "== no address to download from"
-ROOT="$T/r6"; newroot 6
-rm -f "$ROOT/Verdandi-0.2.0-aaaaaaa/UPDATE-SOURCE.txt"
-run "$ROOT/Verdandi-0.2.0-aaaaaaa" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE="
+newroot 8
+rm -f "$OLD/UPDATE-SOURCE.txt"
+run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE="
 ck "it says that this copy does not know where to download from" "grep -q 'does not know where the newest build is published' '$T/out.txt'"
 exit $fail

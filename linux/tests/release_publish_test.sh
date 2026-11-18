@@ -19,6 +19,13 @@ if [ "$1 $2" = "release view" ]; then
         *) [ -n "${LATEST_EXISTS:-}" ] && exit 0 || exit 1 ;;
     esac
 fi
+if [ "$1 $2" = "release edit" ]; then # keep the notes that were given
+    prev=""; for a in "$@"; do [ "$prev" = "--notes-file" ] && cp "$a" "$GH_NOTES_OUT"; prev="$a"; done
+fi
+if [ -n "${GH_FAIL_TAGS:-}" ]; then # a token that may not make or move a tag (HTTP 403)
+    case "$1 $2" in "release create") echo "HTTP 403: Resource not accessible by integration"; exit 1 ;; esac
+    case " $* " in *" git/refs/tags/windows-latest "*) echo "HTTP 403"; exit 1 ;; esac
+fi
 if [ "$1 $2" = "release list" ]; then
     # 23 releases of commits (the newest first does not matter: the script sorts) and windows-latest
     for i in $(seq 1 23); do printf '2026-11-%02dT10:00:00Z windows-%07x\n' "$i" "$((0xabc000 + i))"; done
@@ -32,10 +39,10 @@ chmod +x "$T/gh"
 mkdir -p "$T/zip" "$T/status"
 SHA="4c8206661c6a97eacdd2b66a1c506aa43fd0d943"
 VERSION="$(head -n 1 windows/VERSION | tr -d '\r ')"
-head -c 2000000 /dev/zero > "$T/zip/Verdandi-windows-$VERSION-4c82066.zip"
+head -c 2000000 /dev/zero > "$T/zip/Verdandi-windows-latest.zip" # (M22: the build makes the zip with its STATIC name; the publish step makes the copy with the version)
 echo PASS > "$T/status/m1-run.status"; echo PASS > "$T/status/m1-check-lua.status"; echo "SKIP no python" > "$T/status/m1-check-screen.status"
 
-run() { LATEST_EXISTS="${LATEST_EXISTS:-}" GH="$T/gh" GH_LOG="$T/gh.log" GITHUB_SHA="$SHA" GITHUB_REPOSITORY="owner/repo" GITHUB_RUN_ID=77 ZIP_DIR="$T/zip" STATUS_DIR="$T/status" KEEP=20 COMMIT_MESSAGE="Windows: a test commit message" \
+run() { LATEST_EXISTS="${LATEST_EXISTS:-}" GH_NOTES_OUT="$T/notes-given.md" GH="$T/gh" GH_LOG="$T/gh.log" GITHUB_SHA="$SHA" GITHUB_REPOSITORY="owner/repo" GITHUB_RUN_ID=77 ZIP_DIR="$T/zip" STATUS_DIR="$T/status" KEEP=20 COMMIT_MESSAGE="Windows: a test commit message" \
     bash windows/ci/publish-release.sh > "$T/out.txt" 2>&1; }
 
 echo "== all checks passed, windows-latest does not exist yet"
@@ -91,7 +98,7 @@ ck "a blocking red check still holds windows-latest back" "! grep -q 'windows-la
 rm -f "$T/status/m1-check-keyboard.status" "$T/status/m2-check-cycles.status"
 
 echo "== the ASIO build is part of the run"
-mkdir -p "$T/asiozip"; head -c 2500000 /dev/zero > "$T/asiozip/Verdandi-windows-asio-$VERSION-4c82066.zip"
+mkdir -p "$T/asiozip"; head -c 2500000 /dev/zero > "$T/asiozip/Verdandi-windows-asio-latest.zip"
 : > "$T/gh.log"; ASIO_ZIP_DIR="$T/asiozip" LATEST_EXISTS=1 run
 ck "the per-commit release has both zips" "grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-$VERSION-4c82066.zip' && grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-asio-$VERSION-4c82066.zip'"
 ck "windows-latest gets the ASIO zip, its fixed name and its SHA-256 too" "grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip ' && grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip.sha256'"
@@ -108,4 +115,15 @@ echo "== the zip is missing"
 rm -f "$T/zip/"*.zip
 run; rc=$?
 ck "it stops with a message that names the missing zip" "[ $rc -ne 0 ] && grep -q 'is not in' '$T/out.txt'"
+head -c 2000000 /dev/zero > "$T/zip/Verdandi-windows-latest.zip"
+echo "== the token may not make or move a tag (403): no per-commit release, windows-latest is still updated in place, and says so"
+: > "$T/gh.log"; LATEST_EXISTS=1 GH_FAIL_TAGS=1 run; rc=$?
+ck "the publish step does not fail" "[ $rc -eq 0 ]"
+ck "the files of windows-latest were uploaded over the old ones" "grep -q 'release upload windows-latest' '$T/gh.log'"
+ck "the tag of windows-latest was not moved (no API call for it that succeeds is needed), and the title and notes were updated" "! grep -q 'refs/tags/windows-latest' '$T/gh.log' && grep -q 'release edit windows-latest' '$T/gh.log'"
+ck "the notes say that the tag was not moved" "grep -q 'did not let the workflow move the tag' '$T/notes-given.md'"
+ck "the output says that the per-commit release was skipped" "grep -q 'per-commit release is skipped' '$T/out.txt'"
+echo "== windows-latest does not exist and no tag can be made: that is a failure"
+: > "$T/gh.log"; LATEST_EXISTS= GH_FAIL_TAGS=1 run; rc=$?
+ck "it fails (nothing could be published)" "[ $rc -ne 0 ]"
 exit $fail

@@ -181,6 +181,7 @@ check(not again, "and the problem line is gone")
 _norns = nil
 
 -- SYSTEM's list: the page is there on a computer only
+_norns = _norns or {} -- (lua/core/menu/system.lua asks _norns.ext_list when it loads)
 local getenv = os.getenv
 local function system_with(platform)
   os.getenv = function(k) if k == "NORNS_PLATFORM" then return platform end return getenv(k) end
