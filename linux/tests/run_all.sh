@@ -41,7 +41,7 @@ skip() { # "name (reason)": a test that was not run here: printed as SKIPPED (ne
     echo "SKIPPED $1"
     SKIPPED+=("$1")
 }
-wanted() { [ -z "$SHARD" ] || [ "$(shard_of "$1")" = "$SHARD" ]; }
+wanted() { { [ -z "$SHARD" ] || [ "$(shard_of "$1")" = "$SHARD" ]; } && { [ -z "${ONLY:-}" ] || [[ "$1" =~ $ONLY ]]; }; } # (ONLY=<regex>: only the tests whose name matches, to try one test or the job itself)
 test_key() { printf '%s' "${1%% (*}"; } # the name up to its first " (": what the known-failures list names
 is_known_failure() { [ -f "$KNOWN_FILE" ] && grep -v '^#' "$KNOWN_FILE" | cut -d'|' -f1 | sed 's/ *$//' | grep -qxF -- "$(test_key "$1")"; }
 logfile() { # name -> a safe, short file name in $T (a name may hold slashes, > and quotes, and be long)
