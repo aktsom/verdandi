@@ -64,18 +64,18 @@ TITLE="Verdandi for Windows $VERSION ($SHORT)"
 # the release of this commit (a rerun replaces it)
 TAG="windows-$SHORT"
 "$GH" release delete "$TAG" --cleanup-tag --yes --repo "$REPO" 2> /dev/null || true
-if ! "$GH" release create "$TAG" "$WORK/$NAME" "${EXTRA[@]}" --repo "$REPO" --target "$SHA" --title "$TITLE" --notes-file "$WORK/notes.md" --prerelease; then
-    # M22: a 403 here (HTTP 403 "Resource not accessible by integration") showed up once: say what the API says, with harmless probes that are removed again, then stop as before
-    echo "== the release could not be made. what the GitHub API says (diagnosis; the probes below are removed again)"
-    echo "-- reading the releases:"; "$GH" api -i "repos/$REPO/releases?per_page=1" 2>&1 | grep -i -E '^(HTTP|x-accepted-github-permissions|x-github-request-id|message)|"message"' | head -5 || true
-    echo "-- a draft release (no tag is made by a draft):"; "$GH" api -i -X POST "repos/$REPO/releases" -f tag_name="diag-$SHORT" -f target_commitish="$SHA" -f name="diag" -F draft=true 2>&1 | grep -i -E '^(HTTP|x-accepted-github-permissions)|"message"|"id"' | head -5 || true
+REF_BLOCKED=0
+if "$GH" release create "$TAG" "$WORK/$NAME" "${EXTRA[@]}" --repo "$REPO" --target "$SHA" --title "$TITLE" --notes-file "$WORK/notes.md" --prerelease; then
+    echo "published $TAG"
+else
+    # M22: the workflow's token may not make a tag (HTTP 403 "Resource not accessible by integration"; the answer asked for contents=write AND workflows=write, which GITHUB_TOKEN cannot have) at a commit whose history changes
+    # a workflow file. the per-commit release is then NOT made, windows-latest is still updated in place (the files are replaced, its tag stays where it is), and the notes say so. say what the API answers, with probes that are removed again
+    REF_BLOCKED=1
+    echo "== the release of the commit ($TAG) could not be made: the per-commit release is skipped and windows-latest is updated without moving its tag. what the GitHub API says (the probes are removed again):"
+    echo "-- a draft release:"; "$GH" api -i -X POST "repos/$REPO/releases" -f tag_name="diag-$SHORT" -f target_commitish="$SHA" -f name="diag" -F draft=true 2>&1 | grep -i -E '^(HTTP|x-accepted-github-permissions)|"message"' | head -4 || true
     "$GH" api "repos/$REPO/releases?per_page=30" --jq '.[] | select(.name=="diag") | .id' 2> /dev/null | while read -r id; do "$GH" api -X DELETE "repos/$REPO/releases/$id" > /dev/null 2>&1 || true; done
-    echo "-- a tag ref at the commit:"; "$GH" api -i -X POST "repos/$REPO/git/refs" -f ref="refs/tags/diag-$SHORT" -f sha="$SHA" 2>&1 | grep -i -E '^(HTTP|x-accepted-github-permissions)|"message"' | head -5 || true
     "$GH" api -X DELETE "repos/$REPO/git/refs/tags/diag-$SHORT" > /dev/null 2>&1 || true
-    exit 1
 fi
-echo "published $TAG"
-
 # the release that has a fixed address. it is UPDATED in place, never deleted first: if the run is cancelled half way (a newer push cancels the run) the release is still there, with old or new files
 if [ "$failed" -eq 0 ]; then
     LATEST_TITLE="Verdandi for Windows: the newest build ($VERSION, $SHORT)"
@@ -84,7 +84,11 @@ if [ "$failed" -eq 0 ]; then
     if "$GH" release view windows-latest --repo "$REPO" > /dev/null 2>&1; then
         "$GH" release upload windows-latest "${ASSETS[@]}" --repo "$REPO" --clobber
         # the tag moves to this commit; the files of older builds (another version or hash in the name) are removed
-        "$GH" api -X PATCH "repos/$REPO/git/refs/tags/windows-latest" -f sha="$SHA" -F force=true > /dev/null
+        if [ "$REF_BLOCKED" -eq 0 ]; then
+            "$GH" api -X PATCH "repos/$REPO/git/refs/tags/windows-latest" -f sha="$SHA" -F force=true > /dev/null
+        else
+            printf '\n> **Note:** GitHub did not let the workflow move the tag `windows-latest` to this build (a tag at a commit that changes workflow files needs a permission the workflow token cannot have). The files above ARE this build (version %s, commit `%s`); the tag may still point at an older commit.\n' "$VERSION" "$SHA" >> "$WORK/notes.md"
+        fi
         "$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null | while read -r asset; do
             case "$asset" in
                 "$NAME" | Verdandi-windows-latest.zip | Verdandi-windows-latest.zip.sha256 | BUILD.txt) ;;
