@@ -7,7 +7,7 @@ name: linux-tests
 
 on:
   push:
-    branches: [linux-port, windows-port]
+    branches: [scratch-head-compare, scratch-baseline-736123b]
     paths-ignore: ['docs/**', '**.md', 'STATUS.md']   # (a push that changes only text does not restart a run of about two hours)
   workflow_dispatch:
 
@@ -57,4 +57,4 @@ jobs:
       - name: The names of the failed, known and skipped tests of this shard
         if: always()
         run: |
-          grep -E '^(UNEXPECTED FAILURE|KNOWN FAILURE|SKIPPED:|RESULT)' "$RUNNER_TEMP/run_all.txt" | cut -c1-150 || true
+          grep -E '^(UNEXPECTED FAILURE|KNOWN FAILURE|PASSES NOW|SIG |SKIPPED:|RESULT)' "$RUNNER_TEMP/run_all.txt" | cut -c1-330 || true
