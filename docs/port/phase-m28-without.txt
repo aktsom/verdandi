@@ -1,0 +1,18 @@
+# M28: the new tests against the pre-M28 product code (b0f9e02: matron and windows/cmake checked out from there; the tests are the new ones). each must fail.
+
+## pin_state_test.c (the decision rule)
+linux/tests/pin_state_test.c:78:9: error: unknown type name 'view_state_t'; did you mean 'pin_state_t'?
+linux/tests/pin_state_test.c:82:37: error: 'PIN_PRESS_TOGGLE' undeclared (first use in this function)
+linux/tests/pin_state_test.c:85:39: error: 'PIN_PRESS_BRING_UP' undeclared (first use in this function)
+
+## view_covered_wine_test (the covered check): view_covered_win.c is new in M28 (the checked-out tree keeps the file, but the old sdl_bridge.cc never calls it and has no "view" in its report); the Wine test itself runs only on the CI runner (Wine in this sandbox aborts on any program that uses user32: "free(): invalid pointer")
+
+## window probe (real norns built from the old code, Xvfb), run_all.sh: window:PIN brings the window up ...
+FAIL  window:PIN brings the window up when it is not in view (hidden, with PIN off and on: PIN ends on), and toggles when it is in view (log: tail below)
+        missing: a press in view toggles: PIN off (got: pin report 1: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 2: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 3: state=1 lit=1 main=1/-1 grid=- arc=- keys=- screen=-|pin report 4: state=0 lit=0 main=0/-1 grid=
+        missing: a press in view toggles: PIN on (got: pin report 1: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 2: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 3: state=1 lit=1 main=1/-1 grid=- arc=- keys=- screen=-|pin report 4: state=0 lit=0 main=0/-1 grid=-
+        missing: hidden while PIN is on: not in view, PIN still on (got: pin report 1: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 2: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 3: state=1 lit=1 main=1/-1 grid=- arc=- keys=- screen=-|pin report 4: state=0 lit=
+        missing: a press while hidden and PIN is on: back in view, PIN stays ON (not toggled off) (got: pin report 1: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 2: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 3: state=1 lit=1 main=1/-1 grid=- arc=- keys=- scre
+        missing: the next press in view toggles it off (got: pin report 1: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 2: state=0 lit=0 main=0/-1 grid=- arc=- keys=- screen=-|pin report 3: state=1 lit=1 main=1/-1 grid=- arc=- keys=- screen=-|pin report 4: state=0 lit=0 main=0/-1 
+Terminated
+RUN EXIT 124
