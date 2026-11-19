@@ -156,7 +156,7 @@ run "waf:unit tests" "$WAF" test
 if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
     run "maiden:server, origin checks" linux/tests/maiden_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:launcher, norns REPL origin" linux/tests/maiden_launcher_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
-    run "maiden:console ports 5555/5556 held by another program (the real norns.sh: norns starts, sclang's server runs, both consoles answer on the new ports, maiden's page is told, the plain line)" env PART=3 linux/tests/console_ports_linux_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
+    run "maiden:console ports 5555/5556 held by another program (the real norns.sh: norns starts, both consoles answer on the new ports, maiden's page is told, the plain line)" env PART=3 linux/tests/console_ports_linux_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:install a script, plug-in check" linux/tests/maiden_install_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:button (opens maiden, or a note when not running)" linux/tests/maiden_button_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
 else
@@ -1488,6 +1488,10 @@ if base is None or not base.startswith("800x516+"):
 for k, v in m.items():
     if k.endswith("_main") and v != base:
         bad.append("the norns window changed at %s: %s instead of %s" % (k, v, base))
+    elif "keys" in k and not k.endswith("_main"):
+        # M25: F7 is PIN (always on top) on Linux as on Windows: no keyboard window opens, whatever the count of windows named keys is at "open" or "closed"
+        if v != "0":
+            bad.append("%s: %s window(s) named keys, wanted 0 (F7 is PIN, it opens no window)" % (k, v))
     elif "_open" in k and not k.endswith("_main") and v != "1":
         bad.append("%s: %s window(s), wanted 1 (the key did not open it)" % (k, v))
     elif "_closed" in k and not k.endswith("_main") and v != "0":
