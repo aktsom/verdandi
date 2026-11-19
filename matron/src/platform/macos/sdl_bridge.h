@@ -39,6 +39,7 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
 #define SDL_BRIDGE_SHOW_PIN_REPORT 15 // CI only: n = a number to find the line again (Windows and Linux)
+#define SDL_BRIDGE_SHOW_WINDOW_TEST 16 // CI only: n = what to do to the main window (minimize, hide, restore, cover; see window_test in sdl_bridge.cc)
 #endif
 #ifdef NORNS_WINDOWS
 #define SDL_BRIDGE_SHOW_ARC_TEST 13 // CI only: n = what * 16 + ring, value (see arc_test in sdl_bridge.cc)
@@ -101,6 +102,8 @@ extern int sdl_bridge_arc_test(int what, int ring, int value);
 #ifdef NORNS_LINUX_DESKTOP
 // CI only, any thread: log what SDL (and Windows) say about the always-on-top state of every window (0 unless VERDANDI_TEST_HOOKS=1)
 extern int sdl_bridge_pin_report(int token);
+// CI only, any thread (M28): put the main window in a state the PIN press must notice: 1 minimize, 2 hide, 3 show and restore, 4 cover it with a window of our own, 5 take the cover away (0 unless VERDANDI_TEST_HOOKS=1)
+extern int sdl_bridge_window_test(int op);
 #endif
 // any thread: the ramp setting of the arc keys in the arc window (the keys of the norns window are lua's)
 extern void sdl_bridge_arc_keys_ramp(int ramp);

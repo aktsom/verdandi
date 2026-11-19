@@ -176,6 +176,7 @@ if command -v x86_64-w64-mingw32-gcc-posix > /dev/null 2>&1 && [ -x /usr/lib/win
     run "windows:every source of norns.exe compiles with mingw-w64 (syntax check by xcheck.sh)" env XC_QUIET=1 windows/ci/xcheck.sh
     run "windows:ASIO probe against a stub ASIO driver under Wine (nothing registered, a working driver with its channels and buffer sizes, a driver that refuses with its own message, a class that cannot be made, a missing driver file)" linux/tests/asio_probe_test.sh
     run "windows:ASIO backend against a stub ASIO driver under Wine (open, close and open again from any thread, other pair, other buffer, the card clock is never changed, channel names, buffer sizes; SKIP without an ASIO build of PortAudio for mingw)" linux/tests/asio_backend_test.sh
+    run "windows:M28 is the window fully covered? (real Win32 windows under Wine: nothing over it, fully covered, partly covered, raised above the cover, the cover gone; the call behind PIN bringing the window up)" linux/tests/view_covered_wine_test.sh
     run "windows:update-and-run.cmd under Wine with stand-ins for curl, tar and the questions (a newer build unpacked into its own folder, old builds kept or removed on request, the data folder never touched, plain messages when the download fails)" linux/tests/update_and_run_test.sh
 else
     skip "windows:cross-built tests (no mingw-w64 cross compiler or Wine here: apt install g++-mingw-w64-x86-64 wine64)"
@@ -1117,6 +1118,30 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     # the oled shows the script's rectangle (about 8% of it is white), the grid shows the lit key
     oled_mean() { convert "$WH/window-device.png" -crop 440x200+230+420 -colorspace Gray -format "%[fx:mean]" info:; }
     window_pixels() { awk -v m="$(oled_mean)" 'BEGIN { exit !(m > 0.03 && m < 0.3) }'; }
+    # M28: PIN while the window is not in view brings it up and turns PIN on (never off); in view it toggles (docs/port/phase-m28.md). the window is hidden with the test hook, the press is the MIDI action's
+    pin_bringup_scenario() {
+        PH="$(mktemp -d)"
+        ln -s "$REPO" "$PH/norns"
+        PLOG="$T/pin-bringup.log"
+        VERDANDI_TEST_HOOKS=1 NORNS_HOME="$PH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_pin_bringup.lua" "$PLOG" > /dev/null 2>&1
+        pr() { grep -a "^pin report $1: " "$PH/pin_report.log" 2> /dev/null | tail -1; }
+        bringup_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (got: $(cat "$PH/pin_report.log" 2> /dev/null | tr '\n' '|'))"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE pin bringup done" "$PLOG" && grep -q "PROBE pinup window_test hide.true" "$PLOG"'
+            chk "start: in view, PIN off" 'pr 1 | grep -q "state=0 lit=0 .* view=in$"'
+            chk "the window is hidden: not in view" 'pr 2 | grep -q "state=0 lit=0 .* view=out$"'
+            chk "a press while hidden: the window is back in view and PIN is ON" 'pr 3 | grep -q "state=1 lit=1 main=1/.* view=in$"'
+            chk "a press in view toggles: PIN off" 'pr 4 | grep -q "state=0 lit=0 main=0/.* view=in$"'
+            chk "a press in view toggles: PIN on" 'pr 5 | grep -q "state=1 lit=1 main=1/.* view=in$"'
+            chk "hidden while PIN is on: not in view, PIN still on" 'pr 6 | grep -q "state=1 lit=1 .* view=out$"'
+            chk "a press while hidden and PIN is on: back in view, PIN stays ON (not toggled off)" 'pr 7 | grep -q "state=1 lit=1 main=1/.* view=in$"'
+            chk "the next press in view toggles it off" 'pr 8 | grep -q "state=0 lit=0 main=0/.* view=in$"'
+            return $bad
+        }
+        run "window:PIN brings the window up when it is not in view (hidden, with PIN off and on: PIN ends on), and toggles when it is in view" bringup_ok
+    }
+    pin_bringup_scenario
     run "window:oled pixels" window_pixels
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
     # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend

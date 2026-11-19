@@ -72,6 +72,28 @@ int main(void) {
     CHECK(e != NULL && e->kind == WA_CONTROL, "pin is a control action (the button's)");
     CHECK(window_action_find("arc") == 6 && window_action_find("maiden") == 8, "the neighbours did not move");
 
+    // M28: a press while the window is not in view brings it up and turns PIN on; in view it toggles
+    {
+        pin_state_t q;
+        view_state_t in = {0, 0, 0}, in_unknown = {0, 0, -1}, mini = {1, 0, -1}, hidden = {0, 1, -1}, covered = {0, 0, 1}, mini_covered = {1, 0, 1};
+        CHECK(view_in_view(&in) && view_in_view(&in_unknown), "in view: not minimized, not hidden, not covered (or covered not told)");
+        CHECK(!view_in_view(&mini) && !view_in_view(&hidden) && !view_in_view(&covered) && !view_in_view(&mini_covered), "not in view: minimized, hidden, fully covered");
+        pin_init(&q);
+        CHECK(pin_press(&q, &in) == PIN_PRESS_TOGGLE && pin_get(&q) == 1, "in view, off: a press toggles it on");
+        CHECK(pin_press(&q, &in) == PIN_PRESS_TOGGLE && pin_get(&q) == 0, "in view, on: a press toggles it off");
+        pin_init(&q);
+        CHECK(pin_press(&q, &mini) == PIN_PRESS_BRING_UP && pin_get(&q) == 1, "minimized, off: brought up and PIN on");
+        CHECK(pin_press(&q, &hidden) == PIN_PRESS_BRING_UP && pin_get(&q) == 1, "hidden, already on: brought up and PIN stays ON (never toggles off)");
+        CHECK(pin_press(&q, &covered) == PIN_PRESS_BRING_UP && pin_get(&q) == 1, "covered, already on: brought up, PIN stays on");
+        CHECK(pin_press(&q, &in_unknown) == PIN_PRESS_TOGGLE && pin_get(&q) == 0, "back in view: the next press toggles as usual");
+        pin_init(&q);
+        CHECK(pin_press(&q, &covered) == PIN_PRESS_BRING_UP && pin_get(&q) == 1, "covered, off: brought up and PIN on");
+        int none[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}, one[9] = {0, 0, 0, 0, 0, 0, 0, 0, 1}, all[9] = {1, 1, 1, 1, 1, 1, 1, 1, 1};
+        CHECK(view_covered_from_samples(none, 9) == 1, "no sampled point shows our window: covered");
+        CHECK(view_covered_from_samples(one, 9) == 0 && view_covered_from_samples(all, 9) == 0, "one or all points show it: not covered (partly covered is in view)");
+        CHECK(view_covered_from_samples(none, 0) == -1, "no points: not told");
+    }
+
     if (fails) {
         printf("pin_state_test: %d FAILED\n", fails);
         return 1;

@@ -887,7 +887,7 @@ chk_pin() {
     cat "$out/probe.txt" 2> /dev/null
     cat "$out/pin_report.log" 2> /dev/null | head -20
     echo "--- norns.log (first 40 lines, then lines about windows):"; head -n 40 "$out/logs/norns.log" 2> /dev/null; grep -a -i -E "sdl|window|video|display|modal" "$out/logs/norns.log" 2> /dev/null | head -20
-    for p in pin-up pin-start-off pin-windows-open pin-on pin-arc-closed pin-arc-reopened pin-screen-reopened pin-off pin-midi-learn pin-midi-other-port pin-midi-on pin-midi-off; do
+    for p in pin-up pin-start-off pin-windows-open pin-on pin-arc-closed pin-arc-reopened pin-screen-reopened pin-off pin-midi-learn pin-midi-other-port pin-midi-on pin-midi-off pin-view-minimized pin-minimized-press pin-minimized-press-on pin-in-view-toggles pin-view-covered pin-covered-press pin-covered-gone-toggles; do
         has "$out/probe.txt" "PROBE $p ok" "the PIN check '$p'" || bad=1
     done
     return "$bad"

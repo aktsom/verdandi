@@ -15,3 +15,15 @@ int pin_native_topmost(SDL_Window *w) {
     }
     return (GetWindowLongW(info.info.win.window, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
 }
+
+int view_covered_win(HWND hwnd);
+
+// M28: 1 when other windows hide all of the window, 0 when some of it shows, -1 not told (not a Windows window, e.g. SDL's dummy driver)
+int pin_native_covered(SDL_Window *w) {
+    SDL_SysWMinfo info;
+    SDL_VERSION(&info.version);
+    if (w == NULL || !SDL_GetWindowWMInfo(w, &info) || info.subsystem != SDL_SYSWM_WINDOWS) {
+        return -1;
+    }
+    return view_covered_win(info.info.win.window);
+}

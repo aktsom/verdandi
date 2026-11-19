@@ -1062,6 +1062,38 @@ static void pin_windows(void *out[5]) {
     out[4] = screen_window_sdl();
 }
 
+// is the main window in view? minimized or hidden (X11: a window on another desktop is unmapped by the window manager, which SDL reports as hidden); on Windows also fully covered by other windows
+// (nine points asked with WindowFromPoint, platform/windows/view_covered_win.c). X11 does not tell "covered": only minimized and hidden count there
+#ifdef NORNS_WINDOWS
+extern "C" int pin_native_covered(SDL_Window *w);
+#endif
+static view_state_t main_view_state(void) {
+    view_state_t v = {0, 0, -1};
+    if (the_window == NULL) {
+        return v;
+    }
+    Uint32 f = SDL_GetWindowFlags(the_window);
+    v.minimized = (f & SDL_WINDOW_MINIMIZED) != 0;
+    v.hidden = (f & SDL_WINDOW_SHOWN) == 0 || (f & SDL_WINDOW_HIDDEN) != 0;
+#ifdef NORNS_WINDOWS
+    v.covered = (v.minimized || v.hidden) ? -1 : pin_native_covered(the_window);
+#endif
+    return v;
+}
+
+static void pin_restore_main(void) {
+    if (the_window == NULL) {
+        return;
+    }
+    Uint32 f = SDL_GetWindowFlags(the_window);
+    if (f & SDL_WINDOW_MINIMIZED) {
+        SDL_RestoreWindow(the_window);
+    }
+    if ((f & SDL_WINDOW_SHOWN) == 0 || (f & SDL_WINDOW_HIDDEN) != 0) {
+        SDL_ShowWindow(the_window);
+    }
+}
+
 static void toggle_pin(void) {
     if (!pin_possible()) {
         // not pretended: the state stays off, the button stays dark, one plain line says why
@@ -1070,10 +1102,18 @@ static void toggle_pin(void) {
         show_toast("ALWAYS ON TOP: NOT AVAILABLE ON WAYLAND", 3500);
         return;
     }
-    pin_toggle(&pin);
+    // M28: a press while the main window is not in view brings it up and turns PIN on (never off); in view it toggles as before (docs/port/phase-m28.md)
+    view_state_t view = main_view_state();
+    bool bring_up = pin_press(&pin, &view) == PIN_PRESS_BRING_UP;
+    if (bring_up) {
+        pin_restore_main(); // un-minimize and show: ordinary SDL requests, no input tricks; the keyboard focus may be refused by the system, the window still comes up
+    }
     void *w[5];
     pin_windows(w);
     pin_apply(&pin, w, 5, pin_set_cb, NULL);
+    if (bring_up && the_window != NULL) {
+        SDL_RaiseWindow(the_window); // after the always-on-top flag: on Windows that alone puts it above every normal window
+    }
     skin.keys_open = pin_get(&pin); // the button of this slot is lit while it is on, like the other toggle buttons
     shell_set_pin(pin_get(&pin));
     show_toast(pin_get(&pin) ? "ALWAYS ON TOP: ON" : "ALWAYS ON TOP: OFF", 2000);
@@ -1091,6 +1131,7 @@ static void pin_report(int token) {
     pin_windows(w);
     static const char *const names[5] = {"main", "grid", "arc", "keys", "screen"};
     char line[320];
+    view_state_t view = main_view_state();
     int n = snprintf(line, sizeof line, "pin report %d: state=%d lit=%d", token, pin_get(&pin), skin.keys_open);
     for (int i = 0; i < 5 && n < (int)sizeof line - 40; i++) {
         if (w[i] == NULL) {
@@ -1100,6 +1141,8 @@ static void pin_report(int token) {
             n += snprintf(line + n, sizeof line - n, " %s=%d/%d", names[i], flag, pin_native_topmost((SDL_Window *)w[i]));
         }
     }
+    // M28: where the main window is in view (the rule of the PIN press) comes last, so that the lines the older checks read are unchanged
+    snprintf(line + n, sizeof line - n, " view=%s", view_in_view(&view) ? "in" : "out");
     fprintf(stderr, "%s\n", line);
     fflush(stderr);
     // also in a file of its own: a run with real windows does not always keep stderr in norns.log (the CI reads this file)
@@ -1112,6 +1155,55 @@ static void pin_report(int token) {
             fclose(f);
         }
     }
+}
+
+// CI only (VERDANDI_TEST_HOOKS=1), main thread: put the main window in a state the PIN press must notice. 1 minimize, 2 hide, 3 show and restore, 4 cover it with a window of our own (a borderless window over it, Windows),
+// 5 take the cover away
+static SDL_Window *test_cover = NULL;
+static void window_test(int op) {
+    if (the_window == NULL) {
+        return;
+    }
+    switch (op) {
+    case 1:
+        SDL_MinimizeWindow(the_window);
+        break;
+    case 2:
+        SDL_HideWindow(the_window);
+        break;
+    case 3:
+        SDL_RestoreWindow(the_window);
+        SDL_ShowWindow(the_window);
+        break;
+    case 4:
+        if (test_cover == NULL) {
+            int x = 0, y = 0, ww = 0, wh = 0;
+            SDL_GetWindowPosition(the_window, &x, &y);
+            SDL_GetWindowSize(the_window, &ww, &wh);
+            test_cover = SDL_CreateWindow("cover", x - 20, y - 20, ww + 40, wh + 40, SDL_WINDOW_BORDERLESS | SDL_WINDOW_SHOWN);
+            if (test_cover != NULL) {
+                SDL_RaiseWindow(test_cover);
+            }
+        }
+        break;
+    case 5:
+        if (test_cover != NULL) {
+            SDL_DestroyWindow(test_cover);
+            test_cover = NULL;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+int sdl_bridge_window_test(int op) {
+    const char *e = getenv("VERDANDI_TEST_HOOKS");
+    if (e == NULL || strcmp(e, "1") != 0 || the_window == NULL || show_event_type == (Uint32)-1) {
+        return 0;
+    }
+    sdl_bridge_show_control(SDL_BRIDGE_SHOW_WINDOW_TEST, op, 0);
+    return 1;
 }
 
 int sdl_bridge_pin_report(int token) {
@@ -3634,6 +3726,10 @@ static void handle_show(int kind, int n, int value) {
 #ifdef NORNS_LINUX_DESKTOP
     if (kind == SDL_BRIDGE_SHOW_PIN_REPORT) {
         pin_report(n);
+        return;
+    }
+    if (kind == SDL_BRIDGE_SHOW_WINDOW_TEST) {
+        window_test(n);
         return;
     }
 #endif

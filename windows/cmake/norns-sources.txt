@@ -120,3 +120,4 @@ matron/src/platform/windows/grid/serialosc_win.cc
 matron/src/platform/windows/vgrid_device_win.c
 # --- M16: the PIN button (always on top): what Windows says about a window, for the CI check
 matron/src/platform/windows/pin_native_win.c
+matron/src/platform/windows/view_covered_win.c

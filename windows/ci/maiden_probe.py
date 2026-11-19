@@ -549,6 +549,34 @@ if os.environ.get("VERDANDI_PROBE") == "pin":
         run("_norns.midi.event(97, {0x90, 62, 100}) _norns.midi.event(97, {0x80, 62, 0}) print('VT_M2 off')\n", "VT_M2", 20); time.sleep(2)
         expect("pin-midi-off", 10, 0, {"main": 0, "arc": 0, "screen": 0}, "the second note turns it off again")
         run("_norns.midi.remove(97) _norns.midi.remove(98) print('VT_R done')\n", "VT_R", 20)
+        # M28: a press while the main window is not in view brings it up and turns PIN on (never off); in view it toggles. real Windows windows: minimized, and covered by a window of our own over all of it
+        def view_expect(name, tok, state, view, what):
+            d, raw = report(tok)
+            if d is None:
+                result(name, False, raw); return
+            good = d.get("state") == str(state) and d.get("view") == view and d.get("main") == "%s/%s" % (state, state)
+            result(name, good, "%s: %s" % (what, raw))
+        def view_only(name, tok, view, what):
+            d, raw = report(tok)
+            if d is None:
+                result(name, False, raw); return
+            result(name, d.get("view") == view, "%s: %s" % (what, raw))
+        run("print('VT_W1 ' .. tostring(_norns.window_test(1)))\n", "VT_W1", 20); time.sleep(3)
+        view_only("pin-view-minimized", 11, "out", "the main window is minimized: not in view")
+        run("print('VT_Q1 ' .. tostring(_norns.window_action('pin')))\n", "VT_Q1", 20); time.sleep(3)
+        view_expect("pin-minimized-press", 12, 1, "in", "a press while it is minimized brings it back and PIN is ON (SDL restore, then topmost)")
+        run("print('VT_W2 ' .. tostring(_norns.window_test(1)))\n", "VT_W2", 20); time.sleep(3)
+        run("print('VT_Q2 ' .. tostring(_norns.window_action('pin')))\n", "VT_Q2", 20); time.sleep(3)
+        view_expect("pin-minimized-press-on", 13, 1, "in", "minimized with PIN already on: a press brings it back and PIN stays ON")
+        run("print('VT_Q3 ' .. tostring(_norns.window_action('pin')))\n", "VT_Q3", 20); time.sleep(2)
+        view_expect("pin-in-view-toggles", 14, 0, "in", "in view: a press toggles PIN off")
+        run("print('VT_W3 ' .. tostring(_norns.window_test(4)))\n", "VT_W3", 20); time.sleep(3)
+        view_only("pin-view-covered", 15, "out", "another window covers all of the main window: not in view")
+        run("print('VT_Q4 ' .. tostring(_norns.window_action('pin')))\n", "VT_Q4", 20); time.sleep(3)
+        view_expect("pin-covered-press", 16, 1, "in", "a press while it is covered brings it in front and PIN is ON")
+        run("print('VT_W4 ' .. tostring(_norns.window_test(5)))\n", "VT_W4", 20); time.sleep(2)
+        run("print('VT_Q5 ' .. tostring(_norns.window_action('pin')))\n", "VT_Q5", 20); time.sleep(2)
+        view_expect("pin-covered-gone-toggles", 17, 0, "in", "the cover is gone, in view: a press toggles PIN off")
     except Exception as e:
         result("pin-error", False, "%s" % e)
     sys.exit(0)
