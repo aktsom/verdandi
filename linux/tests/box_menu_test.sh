@@ -35,7 +35,7 @@ max=$(sed -n 's/^#define MENU_MAX \([0-9]*\).*/\1/p' matron/src/platform/linux/m
 most=$((fixed - 1 + apps))
 [ "$max" -ge "$most" ] && ok "MENU_MAX $max holds the most the menu can have ($most items)" || bad "MENU_MAX $max is too small for $most items"
 # the rest of the menu is where it was: the items of the earlier steps are all still there
-for l in "Import files..." "Import folder..." "Copy samples into dust" "Open the file dialog when a script loads a file" "Show dust folder" "Show tape folder" "Screenshot" "Virtual grid" "Virtual arc" "Virtual keyboard" "Screen in its own window" "Input: microphone" "Input: all apps" "Input: off" "Quit"; do
+for l in "Import files..." "Import folder..." "Copy samples into dust" "Open the file dialog when a script loads a file" "Show dust folder" "Show tape folder" "Screenshot" "Virtual grid" "Virtual arc" "Always on top (PIN)" "Screen in its own window" "Input: microphone" "Input: all apps" "Input: off" "Quit"; do
     grep -qF "\"$l\"" $SH || bad "the menu lost '$l'"
 done
 ok "the earlier items are all still in the menu"

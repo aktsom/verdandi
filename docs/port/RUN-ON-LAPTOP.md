@@ -212,8 +212,7 @@ terminal output and `~/verdandi-home/logs/jackd.log` and `logs/sclang.log` if pr
 **Keys and knobs**
 - [ ] Click K1-K3 (they light and norns reacts); drag a knob; scroll over E1-E3.
 - [ ] Keyboard (window focused): `1 2 3` = K1 K2 K3; `q w`, `a s`, `z x` turn E1, E2, E3; Shift = bigger steps.
-- [ ] The KEYS button (or F7): the piano window opens; click a key and type `a w s e d f ...`; `z`/`x` octave. With a
-      script that listens to MIDI, the notes arrive (device "Verdandi keys").
+- [ ] The PIN button (the slot that was KEYS; or F7, since 0.10.14 / M25): the virtual keyboard is gone; the button keeps every Verdandi window on top of other windows (X11; on Wayland it says it cannot) until pressed again. Details: `HARDWARE-CHECKLIST.md`, "Linux and Windows 0.10.14".
 
 **Grid and arc**
 - [ ] GRID (or F6): the grid window opens; a script with `grid.connect()` sees "virtual grid"; clicking a key

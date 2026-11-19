@@ -1,0 +1,110 @@
+M25: the new tests run against the code of 25f0b79 (the fixes taken out; the new tests and the fixes' test files stay), 2026-11-19. each section: what was run, and what it said.
+The runs with the fixes put back are listed in docs/port/phase-m25.md section 8 and in the report of the phase.
+
+== tape_end_test.sh (norns ended in 8 ways): 5 of 8 fail without the fix (quit, close and SLEEP pass: they were already safe)
+  FAIL  term: NOT VALID: m25.wav: the header says 0 frames, the file has 192512 (need at least 96000), riff size 8 of 1155108
+  FAIL  hup: NOT VALID: m25.wav: the header says 0 frames, the file has 192512 (need at least 96000), riff size 8 of 1155108
+  FAIL  int: NOT VALID: m25.wav: the header says 0 frames, the file has 192512 (need at least 96000), riff size 8 of 1155108
+  FAIL  restart: NOT VALID: m25.wav: the header says 0 frames, the file has 217088 (need at least 96000), riff size 8 of 1302564
+  FAIL  shutdown: NOT VALID: m25.wav: the header says 0 frames, the file has 216064 (need at least 96000), riff size 8 of 1296420
+tape_end_test: 5 failed
+
+== Lua tests with the old lua/core/midimap_settings.lua (ARC DRAG default, the pin action) and the C test with the old window_actions.c
+== lua tests with the old midimap_settings.lua
+-- midimap_settings_test (linux)
+lua5.3: linux/tests/midimap_settings_test.lua:371: attempt to index a nil value (field 'pin')
+	linux/tests/midimap_settings_test.lua:371: in main chunk
+-- pin_action_test (linux)
+lua5.3: linux/tests/pin_action_test.lua:84: attempt to index a nil value (field 'pin')
+	linux/tests/pin_action_test.lua:84: in main chunk
+-- midimap_layer_test (linux)
+lua5.3: linux/tests/midimap_layer_test.lua:683: attempt to index a nil value (field 'pin')
+	linux/tests/midimap_layer_test.lua:683: in main chunk
+== c: pin_state_test with the old window_actions.c
+FAIL pin is where keys was (index 7), got -1
+FAIL there is no keys action
+FAIL pin is a control action (the button's)
+pin_state_test: 3 FAILED
+
+== console_ports_linux_test.sh PART=2 with the old ws-wrapper (the segmentation fault, status 139)
+  FAIL  the wrapper ends with the child's exit status (7), not with a crash (139) or an error (1): got '139', want '7'
+  FAIL  the child ran (its output is in our output, the log of the program): 'CHILD-RAN-' not in 'attempting to bind socket at url ws://127.0.0.1:47111
+  FAIL  the child went on to its end: 'CHILD-DONE' not in 'attempting to bind socket at url ws://127.0.0.1:47111
+  FAIL  the console is said to be off, with the reason: 'the console at ws://127.0.0.1:47111 is off' not in 'attempting to bind socket at url ws://127.0.0.1:47111
+  FAIL  a chatty child was blocked while the port was tried
+  FAIL  the address none: no console, the child runs, its status is ours: got '1', want '3'
+  FAIL  and says so: 'the console is off' not in 'attempting to bind socket at url none
+  FAIL  no arguments: the usage line and status 2: got '139', want '2'
+console_ports_linux_test: 8 failed
+
+== console_ports_linux_test.sh PART=3 with the old ws-wrapper and the old norns.sh (norns does not start with a port held)
+-- none: held: nothing; expected consoles: norns 5555, sclang 5556
+-- held-norns: held: 5555; expected consoles: norns 5655, sclang 5556
+  FAIL  held-norns: norns did not start: norns.sh: audio server: jackd|norns.sh: starting jackd (dummy, 48000 Hz, period 1024)|norns.sh: maiden at http://127.0.0.1:36869/
+  FAIL  held-norns: the norns console answers on port 5655: 'ok:' not in 'FAIL: port 5655: [Errno 111] Connection refused'
+  FAIL  held-norns: the sclang console answers on port 5556, and its server runs: 'ok:' not in 'FAIL: port 5556: [Errno 111] Connection refused'
+  FAIL  held-norns: maiden's page names the norns console port 5655: 'maiden_app_location:5655"' not in ''
+  FAIL  held-norns: and the sclang console port 5556: 'maiden_app_location:5556"' not in ''
+  FAIL  held-norns: the plain line is in the launcher's output: 'console: port ' not in 'norns.sh: audio server: jackd
+  FAIL  held-norns: and in norns.log (the line on the screen): 'is used by python3' not in 'attempting to bind socket at url ws://127.0.0.1:5555
+-- held-sclang: held: 5556; expected consoles: norns 5555, sclang 5656
+  FAIL  held-sclang: norns did not start: norns.sh: Verdandi is already running, but it did not answer the request to show its window (it may be starting up, or using ano
+  FAIL  held-sclang: the norns console answers on port 5555: 'ok:' not in 'FAIL: port 5555: [Errno 111] Connection refused'
+  FAIL  held-sclang: the sclang console answers on port 5656, and its server runs: 'ok:' not in 'FAIL: port 5656: [Errno 111] Connection refused'
+  FAIL  held-sclang: maiden's page names the norns console port 5555: 'maiden_app_location:5555"' not in ''
+  FAIL  held-sclang: and the sclang console port 5656: 'maiden_app_location:5656"' not in ''
+  FAIL  held-sclang: the plain line is in the launcher's output: 'console: port ' not in 'norns.sh: Verdandi is already running, but it did not answer the request to show
+  FAIL  held-sclang: and in norns.log (the line on the screen): 'is used by python3' not in ''
+-- held-both: held: 5555 5556; expected consoles: norns 5655, sclang 5656
+  FAIL  held-both: norns did not start: norns.sh: audio server: jackd|norns.sh: starting jackd (dummy, 48000 Hz, period 1024)|norns.sh: maiden at http://127.0.0.1:36869/m
+  FAIL  held-both: the norns console answers on port 5655: 'ok:' not in 'FAIL: port 5655: [Errno 111] Connection refused'
+  FAIL  held-both: the sclang console answers on port 5656, and its server runs: 'ok:' not in 'FAIL: port 5656: [Errno 111] Connection refused'
+  FAIL  held-both: maiden's page names the norns console port 5655: 'maiden_app_location:5655"' not in ''
+  FAIL  held-both: and the sclang console port 5656: 'maiden_app_location:5656"' not in ''
+  FAIL  held-both: the plain line is in the launcher's output: 'console: port ' not in 'norns.sh: audio server: jackd
+  FAIL  held-both: and in norns.log (the line on the screen): 'is used by python3' not in 'attempting to bind socket at url ws://127.0.0.1:5555
+(the held-sclang scenario of this run also failed because the norns of the scenario before it was still shutting down: the old code; it says nothing more)
+
+== window_state_test.sh with the old sdl_bridge.cc (the Windows-only block)
+  FAIL  no main-window.conf after the window was moved and resized
+  FAIL  the file does not have 130 70 760 500
+  FAIL  the window is 992x662+144+69, not 760x500+130+70
+  FAIL  no 'restored' line in the log
+  FAIL  x=9000 y=9000: the size is 992x662, not 900x560
+  FAIL  x=9000 y=9000: no line about the place that did not fit
+  FAIL  x=-5000 y=100: the size is 992x662, not 900x560
+  FAIL  x=-5000 y=100: no line about the place that did not fit
+  FAIL  x=1270 y=790: the size is 992x662, not 900x560
+  FAIL  x=1270 y=790: no line about the place that did not fit
+window_state_test: 10 failed
+
+== capture_dir_linux_test.sh with the old sdl_bridge.cc (the shot went straight into the Pictures folder)
+  FAIL  no screenshot in /tmp/tmp.VvSDoT6j6p/pics/Verdandi (found: /tmp/tmp.VvSDoT6j6p/pics/Verdandi 2026-11-19 at 03.10.45.png )
+  FAIL  a screenshot is directly in the Pictures folder
+  FAIL  no screenshot in the dust folder when the subfolder cannot be made
+capture_dir_linux_test: 3 failed
+
+== run_all.sh: window:arc drag (new settings up and down, Ctrl wheel notch 8 ticks)
+FAIL  window:arc drag with real mouse events (up and down, outside the window, round the ring, ring 3, right button, wheel, window stays) (log: tail below)
+        missing: new settings drag up and down on Linux too (M25) (got: )
+        missing: Ctrl is the four times faster turn (M25): one wheel notch with Ctrl held is 8 ticks, without it 2 (got: 2 1 2 22 1 2 2)
+    missing: new settings drag up and down on Linux too (M25) (got: )
+    missing: Ctrl is the four times faster turn (M25): one wheel notch with Ctrl held is 8 ticks, without it 2 (got: 2 1 2 22 1 2 2)
+
+== run_all.sh: window:mouse, keyboard... and window:MIDI actions (PIN checks), run with an empty known-failures list so that the failing lines show
+FAIL  window:mouse, keyboard, virtual grid and arc (log: tail below)
+        missing: no keyboard window is opened by F7 (the slot is PIN): no window named keys, and no Verdandi keys MIDI device (got: keys0=0|keys1=1|PROBE midi device	virtual	none	none|)
+        missing: PIN on: the state is on, the button is lit and the norns window says always on top (got: cat: /tmp/tmp.Oe2BKi3Krc/pin_report.log: No such file or directory|)
+        missing: PIN off again: the state and the button are off (got: cat: /tmp/tmp.Oe2BKi3Krc/pin_report.log: No such file or directory|)
+        missing: PIN on once more: the grid and arc windows that are open are on top too (got: cat: /tmp/tmp.Oe2BKi3Krc/pin_report.log: No such file or directory|)
+FAIL  window:MIDI actions (pads do what the buttons do: same effect as the mouse, hidden row, screenshot, fullscreen, detach, master switch by page, shortcut and menu tick, saved and restored) (log: tail below)
+        missing: the actions were set and the switch started ON (marks: shots_before=0 shots_after=1 docked_screens=0 docked_alive=yes conf_shortcut_on=yes detached_screens=1 conf_fs_on=detached=1,x=292,y=216,w=695,h=367,fullscree
+        missing: PIN: the mouse and the MIDI note turn it on (1) and off (0) alike (marks: shots_before=0 shots_after=1 docked_screens=0 docked_alive=yes conf_shortcut_on=yes detached_screens=1 conf_fs_on=detached=1,x=292,y=216,w=
+        missing: ... while E2 and K2 mappings keep working (marks: shots_before=0 shots_after=1 docked_screens=0 docked_alive=yes conf_shortcut_on=yes detached_screens=1 conf_fs_on=detached=1,x=292,y=216,w=695,h=367,fullscreen=1,b
+    missing: no keyboard window is opened by F7 (the slot is PIN): no window named keys, and no Verdandi keys MIDI device (got: keys0=0|keys1=1|PROBE midi device	virtual	none	none|)
+    missing: PIN on: the state is on, the button is lit and the norns window says always on top (got: cat: /tmp/tmp.Oe2BKi3Krc/pin_report.log: No such file or directory|)
+    missing: PIN off again: the state and the button are off (got: cat: /tmp/tmp.Oe2BKi3Krc/pin_report.log: No such file or directory|)
+    missing: PIN on once more: the grid and arc windows that are open are on top too (got: cat: /tmp/tmp.Oe2BKi3Krc/pin_report.log: No such file or directory|)
+    missing: the actions were set and the switch started ON (marks: shots_before=0 shots_after=1 docked_screens=0 docked_alive=yes conf_shortcut_on=yes detached_screens=1 conf_fs_on=detached=1,x=292,y=216,w=695,h=367,fullscr
+    missing: PIN: the mouse and the MIDI note turn it on (1) and off (0) alike (marks: shots_before=0 shots_after=1 docked_screens=0 docked_alive=yes conf_shortcut_on=yes detached_screens=1 conf_fs_on=detached=1,x=292,y=216,
+    missing: ... while E2 and K2 mappings keep working (marks: shots_before=0 shots_after=1 docked_screens=0 docked_alive=yes conf_shortcut_on=yes detached_screens=1 conf_fs_on=detached=1,x=292,y=216,w=695,h=367,fullscreen=1

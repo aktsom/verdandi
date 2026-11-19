@@ -1087,6 +1087,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     window_ok() {
         local bad=0
         chk() { grep -q "$2" "$WLOG" || { echo "missing: $1"; bad=1; }; }
+        chk2() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (got: $(eval "${3:-true}" 2>&1 | tr '\n' '|'))"; bad=1; }; } # (a shell condition instead of a pattern of the log)
         chk "script started" "PROBE window init"
         chk "probe ran to the end" "PROBE window done"
         chk "mouse: K2 down" "PROBE key.2.1"
@@ -1102,10 +1103,10 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         chk "arc key down" "PROBE arckey.1.1"
         chk "arc key up" "PROBE arckey.1.0"
         # M25: the KEYS button's slot is PIN (always on top), as on Windows: no keyboard window, no MIDI device of it; F7 toggles the state of every window
-        chk "no keyboard window is opened by F7 (the slot is PIN): no window named keys, and no Verdandi keys MIDI device" 'grep -q "^keys0=0" "$WH/probe.marks" && grep -q "^keys1=0" "$WH/probe.marks" && ! grep -q "PROBE midi device.*Verdandi keys" "$WLOG"' 'cat "$WH/probe.marks"; grep "PROBE midi device" "$WLOG"'
-        chk "PIN on: the state is on, the button is lit and the norns window says always on top" 'grep -q "pin report 1: state=1 lit=1 main=1/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
-        chk "PIN off again: the state and the button are off" 'grep -q "pin report 2: state=0 lit=0 main=0/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
-        chk "PIN on once more: the grid and arc windows that are open are on top too" 'grep -q "pin report 3: state=1 lit=1 main=1/[-0-9]* grid=1/[-0-9]* arc=1/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
+        chk2 "no keyboard window is opened by F7 (the slot is PIN): no window named keys, and no Verdandi keys MIDI device" 'grep -q "^keys0=0" "$WH/probe.marks" && grep -q "^keys1=0" "$WH/probe.marks" && ! grep -q "PROBE midi device.*Verdandi keys" "$WLOG"' 'cat "$WH/probe.marks"; grep "PROBE midi device" "$WLOG"'
+        chk2 "PIN on: the state is on, the button is lit and the norns window says always on top" 'grep -q "pin report 1: state=1 lit=1 main=1/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
+        chk2 "PIN off again: the state and the button are off" 'grep -q "pin report 2: state=0 lit=0 main=0/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
+        chk2 "PIN on once more: the grid and arc windows that are open are on top too" 'grep -q "pin report 3: state=1 lit=1 main=1/[-0-9]* grid=1/[-0-9]* arc=1/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
         return $bad
     }
     run "window:mouse, keyboard, virtual grid and arc" window_ok
@@ -1114,6 +1115,8 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     window_pixels() { awk -v m="$(oled_mean)" 'BEGIN { exit !(m > 0.03 && m < 0.3) }'; }
     run "window:oled pixels" window_pixels
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
+    # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend
+    run "window:PIN says it cannot when the video driver is not x11 (Wayland has no always-on-top request: state off, button dark, one plain sentence in the log)" linux/tests/pin_unavailable_test.sh
     run "window:main window size and place are kept and put back (a place that is off every screen, a monitor that was to the left, a size above the screen, a damaged file)" linux/tests/window_state_test.sh
     cp "$WH/window-device.png" "$WH/window-devices.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
 
