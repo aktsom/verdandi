@@ -62,16 +62,14 @@ extern "C" {
 
 // every item calls back with its id on the main thread
 enum {
-    SHELL_MENU_IMPORT = 1, // the file picker; the chosen paths come to the import callback
-    SHELL_MENU_DUST,       // dust in the file manager
+    // (no import items since M27: "Import files...", "Import folder..." and "Copy samples into dust" are gone from this menu; ext folders replace them)
+    SHELL_MENU_DUST = 1,   // dust in the file manager
     SHELL_MENU_TAPE,       // dust/audio/tape in the file manager
     SHELL_MENU_SCREENSHOT, // the screen as png
     SHELL_MENU_GIF,        // start / stop a gif recording of the screen
     SHELL_MENU_GRID,
     SHELL_MENU_ARC,
     SHELL_MENU_KEYS,
-    SHELL_MENU_IMPORT_FOLDER, // (handled by the shell, like IMPORT)
-    SHELL_MENU_COPY_SAMPLES,  // toggle: audio is copied into dust, not linked (the shell's own)
     SHELL_MENU_INPUT_MIC,     // (the shell calls on_input)
     SHELL_MENU_INPUT_OFF,
     SHELL_MENU_INPUT_SYSTEM,  // all applications but norns
@@ -84,7 +82,7 @@ enum {
     SHELL_MENU_MAIDEN,       // the menu twins of the MAIDEN and MANUAL buttons, for when the row is hidden
     SHELL_MENU_MANUAL,
     SHELL_MENU_MIDI_ACTIONS, // toggle: the MIDI actions are on (Ctrl+Shift+M too; lua saves it in midimap.conf, docs/port/midi-actions-plan.md)
-    SHELL_MENU_EXTRA_FOLDERS, // Windows build: opens SYSTEM > EXT FOLDERS (docs/port/phase-m8.md)
+    SHELL_MENU_EXTRA_FOLDERS, // opens SYSTEM > EXT FOLDERS (Windows since M8, Linux since M27; docs/port/phase-m27.md)
     SHELL_MENU_INPUT_APP = 40, // + n: the n-th application of the list
 };
 

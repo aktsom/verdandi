@@ -335,7 +335,7 @@ m6_ok() {
 }
 run "windows:serialosc handling (exact image names only, a service before its processes, the plain note, the administrator command and how to keep it from coming back) and the plug-in kinds (only a PE x86-64 file is loaded: ELF, Mach-O, ARM are moved aside) and the quoting of the sidecar's command line (round trip against an independent parser)" m6_ok
 run "windows:maiden probe of the CI against the Linux stack (maiden answers, a script with an accented, spaced name is installed from a zip over HTTP, the norns and sclang consoles on websockets answer, a page from another site gets no console; skipped when maiden is not built)" bash linux/tests/maiden_probe_test.sh
-run "windows:ext folders (links named [ext] <folder> under dust/audio: the refusals, name clash, the same folder twice, a path inside dust, a folder with no audio, a real folder with a link's name is never touched, only a real link is removed, the target's files survive, removal with a file open, restart and a missing target; POSIX backend of the code the Windows runner runs with junctions)" bash -c 'cc -std=gnu11 -Wall -Wno-format-truncation -I matron/src/platform/common linux/tests/extfolders_test.c matron/src/platform/common/extfolders.c -o "$0/extfolders_test" && "$0/extfolders_test"' "$T"
+run "windows:ext folders (links named [ext] <folder> under dust/audio: the refusals, name clash, the same folder twice, a path inside dust, a folder with no audio, a real folder with a link's name is never touched, only a real link is removed, the target's files survive, removal with a file open, restart and a missing target; POSIX backend of the code the Windows runner runs with junctions)" bash -c 'cc -std=gnu11 -Wall -Wno-format-truncation -I matron/src/platform/common -I matron/src/platform/macos linux/tests/extfolders_test.c matron/src/platform/common/extfolders.c -o "$0/extfolders_test" && "$0/extfolders_test"' "$T"
 run "windows:SYSTEM > EXT FOLDERS page (rows, MISSING mark, ADD FOLDER opens the picker, K3 on a folder only asks, K3 again removes, K2 cancels, the warning says the files are NOT deleted, K2 goes back, the menu item opens the page)" lua5.3 linux/tests/extra_folders_page_test.lua
 run "windows:folder picker and key names as source checks (cancel only for ERROR_CANCELLED, GUIDs from the headers, every step logged with its HRESULT, the failure text reaches the screen, PowerShell fallback present, GIF note says Ctrl on Windows/Linux and Cmd only on macOS)" bash linux/tests/picker_source_test.sh
 run "windows:find -printf as -exec printf (the installer of twins: same files as GNU find, what is left alone)" lua5.3 linux/tests/find_printf_test.lua
@@ -1158,12 +1158,13 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "menu opened and closed" 'ml "PROBE menu done"'
             chk "screenshot png in dust" 'ls "$MH"/dust/Verdandi*.png'
             chk "gif in dust" 'ls "$MH"/dust/Verdandi*.gif'
-            chk "Import files: audio linked" '[ -L "$MH/dust/audio/mac/picked.wav" ]'
+            chk "the script's file dialog: audio from outside dust is linked into dust" '[ -L "$MH/dust/audio/mac/picked.wav" ]'
             chk "lua file dialog answered" 'ml "PROBE chosen.$MH/dust/audio/mac/picked.wav"'
             if [ "$picker" = zenity ]; then
-                chk "zenity asked for files" 'grep -q -- "--file-selection" "$MH/zenity.args" && grep -q -- "--multiple" "$MH/zenity.args"'
+                chk "zenity asked for a file (the script's dialog)" 'grep -q -- "--file-selection" "$MH/zenity.args"'
+                chk "no dialog asked for several files: the Import items are gone (M27)" '! grep -q -- "--multiple" "$MH/zenity.args"'
             else
-                chk "portal got OpenFile for several files" 'grep -q "\"multiple\": true" "$MH/portal.log"'
+                chk "no OpenFile for several files: the Import items are gone (M27)" '! grep -q "\"multiple\": true" "$MH/portal.log"'
                 chk "portal got OpenFile for one file" 'grep -q "\"multiple\": false" "$MH/portal.log"'
                 chk "portal got a start folder" 'grep -q "\"current_folder\": \"/" "$MH/portal.log"'
             fi
@@ -1171,7 +1172,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             return $bad
         }
         if [ "$picker" = zenity ]; then
-            run "window:menu, screenshot, gif, import, file dialog (zenity stub), quit" menu_ok
+            run "window:menu, screenshot, gif, file dialog (zenity stub), quit; no import dialog" menu_ok
         else
             run "window:file dialog through the portal (mock portal on a private bus)" menu_ok
         fi
@@ -1210,9 +1211,9 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         cp "$DH/ui.conf" "$T/dialog-ui.conf" 2> /dev/null
         PATH="$DH/stub:$PATH" NORNS_PICKER=zenity NORNS_HOME="$DH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_file_dialog_restart.lua" "$DLOG2" > /dev/null 2>&1
         mark() { sed -n "s/^$1=//p" "$DH/probe.marks" 2> /dev/null | tail -1; }
-        # the menu row of the new item (x 300..600, y 225..251) in the three menu pictures
-        row() { convert "$DH/$1" -crop 300x26+300+199 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
-        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,199 600,225" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        # the menu row of the item (x 300..600, y 173..199) in the three menu pictures
+        row() { convert "$DH/$1" -crop 300x26+300+173 +repage -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
+        rest() { convert "$DH/$1" -fill black -draw "rectangle 300,173 600,199" -colorspace Gray -depth 8 gray:- | md5sum | cut -d' ' -f1; }
         dialog_ok() {
             local bad=0
             chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$DH/probe.marks" 2> /dev/null))"; bad=1; }; }
@@ -1236,6 +1237,36 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         rm -rf "$DI"
     }
     dialog_scenario
+    # M27: ext folders on Linux, in the real norns (docs/port/phase-m27.md): the functions are registered, a dropped folder becomes an ext folder (the event the window system sends, VERDANDI_TEST_HOOKS), the file browser's listing sees
+    # it, a dropped file is refused and nothing is imported, the old import links (dust/audio/mac) are listed and removed with the original and a copy untouched, removing an ext folder takes away the link only, and with no folder chooser
+    # (NORNS_PICKER=none) the page gets a plain sentence
+    ext_scenario() {
+        EH="$(mktemp -d)"
+        ln -s "$REPO" "$EH/norns"
+        ELOG="$T/ext-folders.log"
+        VERDANDI_TEST_HOOKS=1 NORNS_PICKER=none NORNS_HOME="$EH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_ext_folders.lua" "$ELOG" > /dev/null 2>&1
+        mark() { sed -n "s/^$1=//p" "$EH/probe.marks" 2> /dev/null | tail -1; }
+        ext_ok() {
+            local bad=0
+            chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (marks: $(tr '\n' ' ' < "$EH/probe.marks" 2> /dev/null))"; bad=1; }; }
+            chk "the probe ran" 'grep -q "PROBE ext folders done" "$ELOG"'
+            chk "the ext functions are registered on Linux (list, add, remove, pick, sync, the old-link pair, the drop hook)" 'grep -q "PROBE ext registered.true.true.true.true.true.true.true" "$ELOG"'
+            chk "SYSTEM > EXT FOLDERS exists on Linux" 'grep -q "PROBE ext system page.true" "$ELOG"'
+            chk "the old import link is listed, the copy next to it is not" 'grep -q "PROBE legacy list.1.old.wav.ok" "$ELOG"'
+            chk "a dropped folder becomes an ext folder" 'grep -q "PROBE drop folder.1.\[ext\] Drops Samples.ok" "$ELOG"'
+            chk "a dropped file is refused: still one ext folder" 'grep -q "PROBE drop file.1\$" "$ELOG"'
+            chk "a dropped file is not imported or copied (dust/audio has only the link and mac, dust/code is empty)" '[ "$(mark file_not_imported)" = yes ] && ! grep -q "dropped-file" "$EH/audio-after-drop.txt"'
+            chk "the file browser's listing shows the folder as [ext] Drops Samples/" 'grep -q "PROBE browser sees.true" "$ELOG"'
+            chk "the page opens from lua (the right-click item calls it)" 'grep -q "PROBE page.EXTRA" "$ELOG"'
+            chk "a copy in the import folder is refused, never removed" 'grep -q "PROBE legacy refuse copy.false" "$ELOG" && [ "$(mark copy_stays)" = yes ]'
+            chk "an old import link is removed: the link goes, the original stays" '[ "$(mark legacy_link_gone)" = yes ] && [ "$(mark legacy_original_stays)" = yes ]'
+            chk "an ext folder is removed: the link goes, the files stay" '[ "$(mark ext_link_gone)" = yes ] && [ "$(mark ext_files_stay)" = yes ]'
+            chk "no folder chooser: one plain sentence, no crash" 'grep -q "PROBE pick answer.true.no folder window: install zenity" "$ELOG"'
+            return $bad
+        }
+        run "window:ext folders on Linux (registered, a dropped folder is added, a dropped file refused, old import links listed and removed, files never touched, no chooser: a plain sentence)" ext_ok
+    }
+    ext_scenario
     # the box styles in the real window (docs/port/box-style-plan.md): the pixel style from box.conf, "Show the page buttons" in the menu (saved, the row gone and not clickable, the page keys
     # still work), Ctrl+M mutes with the row hidden (the MUTE chip shows, the output level goes to -inf and back), the colours tint the aluminium style, and after a restart the look is still there
     box_scenario() {
@@ -1715,7 +1746,7 @@ PY
             # shortcuts
             chk "Ctrl+Shift+S in the screen window gives the same picture as docked" 'same "$f/shot-docked.png" "$f/shot-detached.png"'
             chk "a GIF recorded while detached is the same as one recorded docked (size, first frame; a still script is one frame)" '[ -s "$f/gif-docked.gif" ] && [ -s "$f/gif-detached.gif" ] && [ "$(identify "$f/gif-docked.gif" | head -1 | cut -d" " -f3)" = "$(identify "$f/gif-detached.gif" | head -1 | cut -d" " -f3)" ] && convert "$f/gif-docked.gif[0]" "$f/gif-d0.png" && convert "$f/gif-detached.gif[0]" "$f/gif-x0.png" && same "$f/gif-d0.png" "$f/gif-x0.png"'
-            chk "Ctrl+O in the screen window opens the import dialog" 'grep -q -- "--multiple" "$f/zenity.args"'
+            chk "Ctrl+O in the screen window opens no import dialog any more (M27)" '! grep -q -- "--multiple" "$f/zenity.args" 2> /dev/null'
             # sizes
             convert "$f/screen-700.png" -crop 644x322+28+39 +repage "$f/p700.png" 2> /dev/null
             chk "in between (700 x 400): inside every block the pixel is the screen's level" 'sm "$f/p700.png" "$f/s-700.png"; same "$f/s-docked.png" "$f/s-700.png"'

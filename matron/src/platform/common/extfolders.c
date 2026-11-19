@@ -821,3 +821,87 @@ int ef_remove(const char *conf, const char *audio, const char *name, char *msg, 
     snprintf(msg, n, "Removed %s. Your files were not touched.", name);
     return 0;
 }
+
+/* ---- the links of the old Import (dust/audio/mac) ---- */
+#ifndef _WIN32
+int ef_legacy_list(const char *audio, ef_item *out, int max) {
+    char dir[2048];
+    join(dir, sizeof dir, audio, EF_LEGACY_DIR);
+    DIR *d = opendir(dir);
+    if (!d) {
+        return 0;
+    }
+    int n = 0;
+    struct dirent *e;
+    while (n < max && (e = readdir(d)) != NULL) {
+        char p[4096], tgt[1024];
+        struct stat st;
+        if (e->d_name[0] == '.' || strlen(e->d_name) >= sizeof out[0].name) {
+            continue;
+        }
+        if (snprintf(p, sizeof p, "%s/%s", dir, e->d_name) >= (int)sizeof p || lstat(p, &st) != 0 || !S_ISLNK(st.st_mode)) {
+            continue;
+        }
+        ssize_t l = readlink(p, tgt, sizeof tgt - 1);
+        if (l < 0) {
+            continue;
+        }
+        tgt[l] = 0;
+        size_t nl = strlen(e->d_name); /* (checked above: shorter than the field) */
+        memcpy(out[n].name, e->d_name, nl);
+        out[n].name[nl] = 0;
+        snprintf(out[n].path, sizeof out[n].path, "%s", tgt);
+        out[n].state = stat(p, &st) == 0 ? EF_OK : EF_MISSING;
+        n++;
+    }
+    closedir(d);
+    /* the same order every time (readdir has none) */
+    for (int i = 1; i < n; i++) {
+        for (int j = i; j > 0 && strcmp(out[j - 1].name, out[j].name) > 0; j--) {
+            ef_item t = out[j];
+            out[j] = out[j - 1];
+            out[j - 1] = t;
+        }
+    }
+    return n;
+}
+
+int ef_legacy_remove(const char *audio, const char *name, char *msg, size_t n) {
+    if (!name || !*name || strchr(name, '/') || !strcmp(name, ".") || !strcmp(name, "..") || strlen(name) >= 200) {
+        say(msg, n, "Not removed: that is not the name of an imported link.");
+        return -1;
+    }
+    char dir[2048], p[4096];
+    join(dir, sizeof dir, audio, EF_LEGACY_DIR);
+    join(p, sizeof p, dir, name);
+    struct stat st;
+    if (lstat(p, &st) != 0) {
+        say(msg, n, "Not removed: that link is not there any more.");
+        return -1;
+    }
+    if (!S_ISLNK(st.st_mode)) {
+        say(msg, n, "Not removed: this is a real file or folder in dust, not a link. It was left alone.");
+        return -1;
+    }
+    if (unlink(p) != 0) {
+        say(msg, n, "Not removed: the link could not be taken away.");
+        return -1;
+    }
+    snprintf(msg, n, "Removed the link %s. Your files were not touched.", name);
+    return 0;
+}
+#else
+int ef_legacy_list(const char *audio, ef_item *out, int max) {
+    (void)audio;
+    (void)out;
+    (void)max;
+    return 0;
+}
+
+int ef_legacy_remove(const char *audio, const char *name, char *msg, size_t n) {
+    (void)audio;
+    (void)name;
+    say(msg, n, "Not removed: there are no imported links in this build.");
+    return -1;
+}
+#endif

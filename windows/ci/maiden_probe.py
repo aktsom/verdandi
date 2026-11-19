@@ -553,6 +553,45 @@ if os.environ.get("VERDANDI_PROBE") == "pin":
         result("pin-error", False, "%s" % e)
     sys.exit(0)
 
+# VERDANDI_PROBE=extdrop (M27): a folder dropped on the window is added as an ext folder (a junction in dust\\audio), a dropped file is refused (nothing imported or copied), removing takes away only the link. the program runs with
+# VERDANDI_TEST_HOOKS=1: _norns.test_drop posts the same SDL_DROPFILE event the window system sends. folders with a blank and an accent in the name. results are 'PROBE extdrop-... ok|FAIL' lines
+if os.environ.get("VERDANDI_PROBE") == "extdrop":
+    def run(line, want, seconds=30):
+        return repl(5555, line, want, seconds)
+    try:
+        up = False
+        for _ in range(100):
+            try:
+                ok, _t = run("print('VT_UP ' .. tostring(norns.state.name))\n", "VT_UP", 8)
+                if ok: up = True; break
+            except Exception:
+                pass
+            time.sleep(2)
+        result("extdrop-up", up, "norns answers")
+        time.sleep(3)
+        src = os.path.join(HOME, "extdrop-src")
+        folder = os.path.join(src, u"Drop M\u00fasica")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "kick.wav"), "wb") as f: f.write(b"RIFF-kick")
+        dfile = os.path.join(src, "dropped-file.wav")
+        with open(dfile, "wb") as f: f.write(b"RIFF-file")
+        def lua_path(p): return p.replace("\\", "/")
+        link = os.path.join(HOME, "dust", "audio", u"[ext] Drop M\u00fasica")
+        ok, tail = run("print('VT_R ' .. tostring(_norns.test_drop ~= nil) .. ' ' .. tostring(_norns.ext_list ~= nil) .. ' ' .. tostring(_norns.ext_legacy_list ~= nil))\n", "VT_R", 20)
+        result("extdrop-registered", "VT_R true true true" in tail, "the hook and the ext functions are there: " + tail.strip()[-40:])
+        run("_norns.test_drop([[%s]]) print('VT_D1 posted')\n" % lua_path(folder), "VT_D1", 20); time.sleep(4)
+        ok, tail = run("local l = _norns.ext_list() print('VT_L1 ' .. #l .. ' ' .. tostring(l[1] and l[1].state))\n", "VT_L1", 20)
+        result("extdrop-folder-added", "VT_L1 1 ok" in tail, "a dropped folder is an ext folder: " + tail.strip()[-30:])
+        result("extdrop-junction", os.path.exists(os.path.join(link, "kick.wav")), "a file of the folder is readable through the junction in dust\\audio")
+        run("_norns.test_drop([[%s]]) print('VT_D2 posted')\n" % lua_path(dfile), "VT_D2", 20); time.sleep(4)
+        ok, tail = run("print('VT_L2 ' .. #_norns.ext_list())\n", "VT_L2", 20)
+        result("extdrop-file-refused", "VT_L2 1" in tail and not os.path.exists(os.path.join(HOME, "dust", "audio", "dropped-file.wav")) and not os.path.exists(os.path.join(HOME, "dust", "audio", "mac", "dropped-file.wav")) and not os.path.exists(os.path.join(HOME, "dust", "code", "dropped-file.wav")), "a dropped file adds nothing and is not imported or copied: " + tail.strip()[-20:])
+        ok, tail = run("local ok, text = _norns.ext_remove('[ext] Drop M\\xc3\\xbasica') print('VT_X ' .. tostring(ok))\n", "VT_X", 20)
+        result("extdrop-removed", "VT_X true" in tail and not os.path.exists(link) and os.path.exists(os.path.join(folder, "kick.wav")), "removing took away the junction and left the files: " + tail.strip()[-20:])
+    except Exception as e:
+        result("extdrop-error", False, "%s" % e)
+    sys.exit(0)
+
 # VERDANDI_PROBE=quitgrid (M17): two fake grids (a 128 and a 256) and the virtual arc are lit by a script (or by a metro of a "mod" with no script), then norns is ended in the way VERDANDI_QUIT_MODE says: sleep (the SLEEP row: norns.shutdown),
 # sleepmod (SLEEP with no script, a metro draws: a mod; sleepmodfast: it draws every 2 ms), event (what the right-click menu's Quit and the window's close button post), launcher (the launcher stops norns.exe at the end of --exit-after: nothing is done here), restart (_norns.restart), stall (a grid whose port is busy, then SLEEP).
 # the devices record every message they get (<home>/fakedev-*.log); windows/ci/grid_log_check.py reads them after the end. results: 'PROBE qg-... ok|FAIL'

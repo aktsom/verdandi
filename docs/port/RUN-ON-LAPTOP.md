@@ -119,7 +119,7 @@ default) fails because the card is busy: use the `dummy` driver or `pw-jack`.
 
 **Put a script on it.** With maiden: click MAIDEN in the window (see "maiden" at the end), or open
 `http://127.0.0.1:5000/maiden`, and use the library icon to install from the catalog. Without maiden: copy a script folder into `~/verdandi-home/dust/code/<name>/<name>.lua`
-(or use the menu's "Import files..." / "Import folder..."), then in the norns window use HOME > SELECT. A tiny
+(Ext folders, below, are for samples), then in the norns window use HOME > SELECT. A tiny
 test script that reports every key, encoder, grid, arc and MIDI event on the terminal:
 ```bash
 mkdir -p ~/verdandi-home/dust/code/probe
@@ -195,7 +195,7 @@ That gives the window and input with silent audio. Sound from a container needs 
 finds PipeWire itself) and meets the same questions as on the laptop; I did not try it. `/dev/snd` pass-through
 (`--device /dev/snd`) only works if nothing else on the laptop holds the card, which PipeWire does.
 Files from the container's file manager and portals do not exist in a container (no desktop session):
-"Import files..." needs `zenity` (installed) and your X server, which works, or a portal, which does not.
+"Ext folders" (the folder window) needs `zenity` (installed) and your X server, which works, or a portal, which does not.
 
 ## 4. Checklist: what to try
 
@@ -221,10 +221,7 @@ terminal output and `~/verdandi-home/logs/jackd.log` and `logs/sclang.log` if pr
 
 **Menu and files**
 - [ ] Right-click on the device or F10 opens the menu; mouse and arrow keys + Enter work; Escape closes it.
-- [ ] "Import files..." opens **your desktop's file dialog** (not zenity's grey one, if you have a portal);
-      choose a `.wav`: a note on the device says it was linked in `dust/audio/mac`; with "Copy samples into
-      dust" ticked it is copied. Also try dragging a `.wav` from the file manager onto the window (Shift held:
-      a copy).
+- [ ] The menu has "Ext folders" and no import items (M27). "Ext folders" opens SYSTEM > EXT FOLDERS: ADD FOLDER opens **your desktop's folder dialog**; choose a folder with samples: it shows in the file browser as `[ext] <name>`. Dropping a folder on the window adds it too; dropping a file says it is not imported.
 - [ ] A script's own file chooser (for example buffer 1 sample in PARAMS of a script that has it): by default **only norns's own browser** comes up on the screen (drive it with the keys); no window opens over it.
       Right-click menu > **Open the file dialog when a script loads a file**: tick it, open the chooser again: your desktop's dialog comes up next to the browser; choose a `.wav`: the script gets it as before. Cancel the dialog: the browser is still there and works. Untick it: the next chooser has no dialog. Quit and start Verdandi again: the tick is still there (menu) and the setting is in `~/Verdandi/ui.conf` as `file_dialog=1`.
 - [ ] "Show dust folder" and "Show tape folder" open your file manager.

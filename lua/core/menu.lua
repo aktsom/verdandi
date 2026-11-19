@@ -914,7 +914,7 @@ m["SLEEP"] = require 'core/menu/sleep'
 m["MIX"] = require 'core/menu/mix'
 m["TAPE"] = require 'core/menu/tape'
 m["MODS"] = require 'core/menu/mods'
--- Windows build: SYSTEM > EXT FOLDERS (docs/port/phase-m8.md); the links that are missing are made again once at start. Nothing here runs without norns.exe's _norns.ext_list
+-- SYSTEM > EXT FOLDERS (Windows since docs/port/phase-m8.md, Linux since M27); the links that are missing are made again once at start. Nothing here runs without _norns.ext_list (norns.exe and the Linux desktop build)
 if _norns.ext_list ~= nil then
   m["EXTRA"] = require 'core/menu/extra'
   if _norns.ext_sync ~= nil then

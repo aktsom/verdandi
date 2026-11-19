@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include "extfolders.h"
+#include "dust_import.h" /* DUST_LINK_DIR: the folder the old Import links in */
 static int fails;
 #define CHECK(c, what) do { if (!(c)) { fails++; printf("FAIL %s\n", what); } } while (0)
 static void put(const char *dir, const char *name, const char *text) {
@@ -140,6 +141,37 @@ int main(void) {
     char gone[400]; snprintf(gone, sizeof gone, "%s.gone", empty); rename(empty, gone);
     CHECK(ef_remove(conf, audio, "[ext] empty", msg, sizeof msg) == 0 && !exists(p), "a link to a missing folder can be removed");
     CHECK(exists(gone), "...and nothing else moved");
+
+    /* M27: the links the old Import made in dust/audio/mac: listed (links only), removed one by one, copies and real files never touched */
+    CHECK(strcmp(DUST_LINK_DIR, EF_LEGACY_DIR) == 0, "the legacy folder name is the one dust_import.h makes links in");
+    {
+        char mac[400], orig[400], copy[400], realdir[400], lk[500];
+        snprintf(mac, sizeof mac, "%s/" EF_LEGACY_DIR, audio);
+        snprintf(cmd, sizeof cmd, "mkdir -p '%s'", mac); if (system(cmd)) return 2;
+        CHECK(ef_legacy_list(audio, it, 8) == 0, "no old import links: an empty list");
+        snprintf(orig, sizeof orig, "%s/orig-loop.wav", root); put(root, "orig-loop.wav", "RIFF-loop");
+        snprintf(lk, sizeof lk, "%s/loop.wav", mac); if (symlink(orig, lk) != 0) return 2;
+        snprintf(lk, sizeof lk, "%s/gone.wav", mac); if (symlink("/nonexistent/gone.wav", lk) != 0) return 2;
+        put(mac, "copy.wav", "RIFF-a-copy");                              /* a real file in the same folder: a copy, never listed */
+        snprintf(realdir, sizeof realdir, "%s/realdir", mac); mkdir(realdir, 0777);
+        n = ef_legacy_list(audio, it, 8);
+        CHECK(n == 2 && !strcmp(it[0].name, "gone.wav") && it[0].state == EF_MISSING && !strcmp(it[1].name, "loop.wav") && it[1].state == EF_OK, "the list has the two links, in order, one marked missing, no copy and no folder");
+        CHECK(!strcmp(it[1].path, orig), "a link's path is where it points");
+        CHECK(ef_legacy_remove(audio, "copy.wav", msg, sizeof msg) == -1 && strstr(msg, "not a link"), "a real file is refused (a copy is never removed)");
+        snprintf(copy, sizeof copy, "%s/copy.wav", mac);
+        CHECK(strcmp(slurp(copy, buf, sizeof buf), "RIFF-a-copy") == 0, "...and it is still there");
+        CHECK(ef_legacy_remove(audio, "realdir", msg, sizeof msg) == -1 && exists(realdir), "a real folder is refused and stays");
+        CHECK(ef_legacy_remove(audio, "../audio", msg, sizeof msg) == -1 && ef_legacy_remove(audio, "a/b", msg, sizeof msg) == -1 && ef_legacy_remove(audio, "", msg, sizeof msg) == -1 && ef_legacy_remove(audio, "..", msg, sizeof msg) == -1, "a name with a path in it is refused");
+        CHECK(ef_legacy_remove(audio, "nothere.wav", msg, sizeof msg) == -1, "a missing name is refused");
+        CHECK(ef_legacy_remove(audio, "loop.wav", msg, sizeof msg) == 0, "a link is removed");
+        snprintf(lk, sizeof lk, "%s/loop.wav", mac);
+        CHECK(!exists(lk), "...the link is gone");
+        CHECK(strcmp(slurp(orig, buf, sizeof buf), "RIFF-loop") == 0, "...the original file is untouched");
+        CHECK(ef_legacy_remove(audio, "gone.wav", msg, sizeof msg) == 0, "a link to a missing original is removed too");
+        CHECK(ef_legacy_list(audio, it, 8) == 0, "no links left (the copy and the folder are not links)");
+        /* a link in the ext folders' own place is not an old import link */
+        CHECK(ef_legacy_remove(audio, "[ext] M\xc3\xbasica y sonidos", msg, sizeof msg) == -1, "an ext folder's name is not found in the import folder");
+    }
 
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", root); if (system(cmd)) {}
     if (fails) { printf("%d failed\n", fails); return 1; }

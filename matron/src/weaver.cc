@@ -12,8 +12,11 @@
 
 // linux / posix
 #include <glob.h>
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
 #include "platform/common/extfolders.h"
+#include <string>
+#endif
+#ifdef NORNS_WINDOWS
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -324,11 +327,18 @@ static int _system_glob(lua_State *l);
 #ifdef NORNS_WINDOWS
 static int _listdir(lua_State *l);
 static int _path_is_dir(lua_State *l);
+#endif
+#ifdef NORNS_LINUX_DESKTOP
 static int _ext_list(lua_State *l);
 static int _ext_add(lua_State *l);
 static int _ext_remove(lua_State *l);
 static int _ext_pick(lua_State *l);
 static int _ext_sync(lua_State *l);
+static int _ext_legacy_list(lua_State *l);
+static int _ext_legacy_remove(lua_State *l);
+static int _ext_test_drop(lua_State *l);
+#endif
+#ifdef NORNS_WINDOWS
 static int _audio_devices(lua_State *l);
 static int _audio_info(lua_State *l);
 static int _audio_measure(lua_State *l);
@@ -594,14 +604,21 @@ void w_init(void) {
     lua_register_norns("system_cmd", &_system_cmd);
     lua_register_norns("system_action", &_system_action);
     lua_register_norns("system_glob", &_system_glob);
-#ifdef NORNS_WINDOWS
-    lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
-    lua_register_norns("path_is_dir", &_path_is_dir); // util.file_exists is true for a folder, as on Linux (fopen refuses a folder on Windows)
-    lua_register_norns("ext_list", &_ext_list);     // M8: extra sample folders (links in dust/audio), docs/port/phase-m8.md
+#ifdef NORNS_LINUX_DESKTOP
+    lua_register_norns("ext_list", &_ext_list);     // M8: extra sample folders (links in dust/audio), docs/port/phase-m8.md; since M27 on Linux too (POSIX symlinks)
     lua_register_norns("ext_add", &_ext_add);
     lua_register_norns("ext_remove", &_ext_remove);
     lua_register_norns("ext_pick", &_ext_pick);
     lua_register_norns("ext_sync", &_ext_sync);
+    lua_register_norns("ext_legacy_list", &_ext_legacy_list);     // M27: the links the old Import made in dust/audio/mac
+    lua_register_norns("ext_legacy_remove", &_ext_legacy_remove);
+    if (getenv("VERDANDI_TEST_HOOKS") != NULL) {
+        lua_register_norns("test_drop", &_ext_test_drop); // tests only: a drop on the window without a mouse
+    }
+#endif
+#ifdef NORNS_WINDOWS
+    lua_register_norns("listdir", &_listdir); // native `ls -p` for the Windows build (lua checks for its presence)
+    lua_register_norns("path_is_dir", &_path_is_dir); // util.file_exists is true for a folder, as on Linux (fopen refuses a folder on Windows)
     lua_register_norns("audio_devices", &_audio_devices); // M2: the output devices for SYSTEM > AUDIO
     lua_register_norns("audio_info", &_audio_info);       // M2: what the audio is running on
     lua_register_norns("mic_input", &_mic_input);         // M3: MIC on or off
@@ -3890,6 +3907,9 @@ int _listdir(lua_State *l) {
     return 1;
 }
 
+#endif // NORNS_WINDOWS (the list functions above)
+
+#ifdef NORNS_LINUX_DESKTOP
 /* ---- M8: extra sample folders. the rules are in platform/common/extfolders.c; here the paths of this home and the Lua shape ---- */
 static std::string ext_home(void) {
     const char *h = getenv("NORNS_HOME");
@@ -3983,6 +4003,49 @@ int _ext_sync(lua_State *l) {
     return 1;
 }
 
+/* tests only (VERDANDI_TEST_HOOKS): the event the window system sends when a file or folder is dropped on the window */
+int _ext_test_drop(lua_State *l) {
+    sdl_bridge_test_drop(luaL_checkstring(l, 1));
+    return 0;
+}
+
+/***
+ * the links the old Import made in dust/audio/mac (never copies): a list of {name=, path=, state="ok"|"missing"}; empty where there are none (Windows)
+ * @function ext_legacy_list
+ */
+int _ext_legacy_list(lua_State *l) {
+    static ef_item items[EF_MAX * 8];
+    int n = ef_legacy_list(ext_audio().c_str(), items, EF_MAX * 8);
+    lua_newtable(l);
+    for (int i = 0; i < n; i++) {
+        lua_newtable(l);
+        lua_pushstring(l, items[i].name);
+        lua_setfield(l, -2, "name");
+        lua_pushstring(l, items[i].path);
+        lua_setfield(l, -2, "path");
+        lua_pushstring(l, items[i].state == EF_OK ? "ok" : "missing");
+        lua_setfield(l, -2, "state");
+        lua_rawseti(l, -2, i + 1);
+    }
+    return 1;
+}
+
+/***
+ * take away one old import link (only a real link; the original and copies are never touched): returns ok, a plain sentence
+ * @function ext_legacy_remove
+ * @tparam string name
+ */
+int _ext_legacy_remove(lua_State *l) {
+    const char *name = luaL_checkstring(l, 1);
+    char msg[400];
+    int r = ef_legacy_remove(ext_audio().c_str(), name, msg, sizeof msg);
+    lua_pushboolean(l, r >= 0);
+    lua_pushstring(l, msg);
+    return 2;
+}
+#endif // NORNS_LINUX_DESKTOP
+
+#ifdef NORNS_WINDOWS
 #include "platform/windows/audio/audio_win.h"
 #include "platform/windows/midi/midi_win.h"
 #include "platform/windows/audio/exit_win.h"

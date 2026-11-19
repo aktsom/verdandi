@@ -84,7 +84,7 @@ norns.script.load("code/probe/window_probe.lua")
 #sh bash "$NORNS_HOME/norns/linux/tests/detach_check.sh" cap '^Verdandi.screen$' "$NORNS_HOME/screen-big.png"
 #xdo search --name ^Verdandi.screen$ windowsize 695 367
 #sleep 1
-# 4. shortcuts from the screen window: Ctrl+Shift+S (the same picture as docked), then Ctrl+O (the import dialog: it changes what the script shows afterwards)
+# 4. shortcuts from the screen window: Ctrl+Shift+S (the same picture as docked), then Ctrl+O (M27: no import dialog any more: the key opens nothing, and no dialog must appear)
 #xdo search --name ^Verdandi.screen$ windowfocus
 #xdo key ctrl+shift+s
 #sleep 1.5

@@ -102,9 +102,14 @@
 #ifdef NORNS_WINDOWS
 #include "platform/windows/win_messages.h"
 #include "platform/windows/win_paths.h"
-#include "platform/linux/file_picker.h"
+#endif
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/linux/file_picker.h" // the folder chooser of SYSTEM > EXT FOLDERS (Windows and, since M27, Linux)
 #endif
 #include "gif_writer.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/common/ext_drop.h"
+#endif
 #include "platform/common/desktop_shell.h"
 #include "platform/common/key_names.h"
 #include "platform/common/redraw_throttle.h"
@@ -894,7 +899,7 @@ static void call_lua(const char *fn, std::vector<std::string> args) {
     event_post(event_custom_new(&lua_call_ops, new lua_call{fn, std::move(args)}, NULL));
 }
 
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
 // SYSTEM > EXT FOLDERS: the folder picker runs on its own thread; its answer is posted to lua like any event ("" = cancelled)
 static void ext_folder_done(const char *const *paths, int n, void *ctx) {
     (void)ctx;
@@ -908,7 +913,12 @@ static void ext_folder_done(const char *const *paths, int n, void *ctx) {
 
 void sdl_bridge_pick_folder(void) {
     if (picker_open(PICK_FOLDER, NULL, "Choose a folder with samples", ext_folder_done, NULL) != 0) {
+#ifdef NORNS_WINDOWS
         call_lua("ext_folder_chosen", {"", "the folder window could not be started"});
+#else
+        // Linux: none of the portal, zenity and kdialog is there. a plain sentence on the page; nothing else happens
+        call_lua("ext_folder_chosen", {"", "no folder window: install zenity or an xdg-desktop-portal (or drop a folder on this window)"});
+#endif
     }
 }
 #endif
@@ -2466,6 +2476,39 @@ static void import_chosen(const char *path) {
     import_queue_push({path, SHELL_IMPORT_LINK, true});
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+// a drop on any window (main thread), Windows and Linux (M27): a folder is added as an ext folder by lua, a file is refused with one short message
+#ifdef NORNS_WINDOWS
+extern "C" int norns_win_is_dir(const char *path_utf8);
+static bool drop_is_dir(const char *path) {
+    return norns_win_is_dir(path) != 0;
+}
+#else
+static bool drop_is_dir(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+#endif
+static void drop_path(const char *path) {
+    if (ext_drop_decide(drop_is_dir(path) ? 1 : 0) == EXT_DROP_ADD_FOLDER) {
+        call_lua("ext_dropped", {path});
+    } else {
+        post_toast(EXT_DROP_REFUSED);
+    }
+}
+
+// a test hook (weaver.cc registers it only when VERDANDI_TEST_HOOKS is set): the same event the window system sends for a drop
+void sdl_bridge_test_drop(const char *path) {
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = SDL_DROPFILE;
+    ev.drop.file = SDL_strdup(path);
+    if (SDL_PushEvent(&ev) < 1) {
+        SDL_free(ev.drop.file);
+    }
+}
+#endif
+
 //--- the screen out: png and gif on the desktop
 
 #ifdef NORNS_WINDOWS
@@ -2936,7 +2979,7 @@ static void menu_item(int id) {
         post_window_button(5);
         break;
     case SHELL_MENU_EXTRA_FOLDERS:
-        call_lua("open_extra_folders", {}); // lua opens SYSTEM > EXT FOLDERS (Windows only: the item is not in the Linux menu)
+        call_lua("open_extra_folders", {}); // lua opens SYSTEM > EXT FOLDERS (Windows and Linux)
         break;
     case SHELL_MENU_MIDI_ACTIONS:
         // the menu (or Ctrl+Shift+M) flipped its tick: lua saves it in midimap.conf (core/midimap.lua) and the page row follows
@@ -4019,8 +4062,13 @@ void sdl_bridge_run(void) {
             break;
         case SDL_DROPFILE:
             if (ev.drop.file != NULL) {
+#ifdef NORNS_LINUX_DESKTOP
+                // Windows and Linux (M27): a dropped folder becomes an ext folder, a dropped file is refused (nothing is imported or copied)
+                drop_path(ev.drop.file);
+#else
                 // option held while dropping: a copy, as in the Finder
                 import_path(ev.drop.file, shell_option_held() ? SHELL_IMPORT_COPY : SHELL_IMPORT_LINK);
+#endif
                 SDL_free(ev.drop.file);
             }
             break;

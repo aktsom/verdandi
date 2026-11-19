@@ -42,6 +42,14 @@ int ef_scan_audio(const char *dir, int depth);
 /* 1 = a link (symlink; on Windows a junction or symbolic link, a reparse point), 0 = a real folder, a file, or not there */
 int ef_is_link(const char *path);
 
+/* the links an older "Import" (macOS, and Linux before 0.10.16) made in dust/audio/<EF_LEGACY_DIR>: audio linked from where it was. only real symlinks are listed (name = the file name, path = where it points,
+ * state EF_OK or EF_MISSING when the original is gone); copies and real files in that folder are never listed. POSIX only: on Windows there is no such folder and the list is empty */
+#define EF_LEGACY_DIR "mac" /* = DUST_LINK_DIR of dust_import.h (a test checks that they agree) */
+int ef_legacy_list(const char *audio_dir, ef_item *out, int max);
+
+/* take away one such link. 0 = removed; -1 = refused (the text says why: not a link, a real file or folder, a name with a path in it). the original is never touched */
+int ef_legacy_remove(const char *audio_dir, const char *name, char *msg, size_t n);
+
 #ifdef __cplusplus
 }
 #endif

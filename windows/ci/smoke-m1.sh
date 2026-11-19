@@ -892,6 +892,36 @@ chk_pin() {
     done
     return "$bad"
 }
+# M27 (docs/port/phase-m27.md): a folder dropped on the window is added as an ext folder, a dropped file is refused and nothing is imported or copied, removing takes away only the link (windows/ci/maiden_probe.py
+# VERDANDI_PROBE=extdrop; the program runs headless with VERDANDI_TEST_HOOKS=1, _norns.test_drop posts the event the window system sends)
+run_extdrop() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
+    local H="$WORK/user home extdrop" out="$M0_OUT/extdrop"
+    rm -rf "$H" "$out"; mkdir -p "$out"
+    seed_home "$H"
+    VERDANDI_PROBE=extdrop "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
+    local probe_pid=$!
+    export VERDANDI_TEST_HOOKS=1
+    if command -v timeout > /dev/null 2>&1; then
+        timeout -k 10 200 "$APP/Verdandi$EXE" --headless --null-audio --exit-after=150 --home="$(native "$H")"
+    else
+        "$APP/Verdandi$EXE" --headless --null-audio --exit-after=150 --home="$(native "$H")"
+    fi
+    unset VERDANDI_TEST_HOOKS
+    wait "$probe_pid" 2> /dev/null
+    if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+    cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+    return 0
+}
+chk_extdrop() {
+    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
+    local bad=0 out="$M0_OUT/extdrop" p
+    cat "$out/probe.txt" 2> /dev/null
+    for p in extdrop-up extdrop-registered extdrop-folder-added extdrop-junction extdrop-file-refused extdrop-removed; do
+        has "$out/probe.txt" "PROBE $p ok" "the drop check '$p'" || bad=1
+    done
+    return "$bad"
+}
 # M17: grids and arcs off at every quit (windows/ci/maiden_probe.py VERDANDI_PROBE=quitgrid, windows/ci/grid_log_check.py): two fake grids (a 128 and a 256) and the virtual arc are lit by a script or by a metro with no script (a mod), norns is ended in one
 # way per run: the SLEEP row, the Quit event (menu and window close), the launcher's own stop, a restart, and a busy port; the devices record every message they get. the last message of each must be an "all off", and the end must come in time.
 # (the console close of the launcher and a kill from the Task Manager cannot be driven here: they are said in docs/port/phase-m17.md)
@@ -1369,6 +1399,8 @@ m0_run m13-run-arc-probe run_arc_probe
 m0_run m13-check-arc chk_arc
 m0_run m16-run-pin-probe run_pin_probe
 m0_run m16-check-pin chk_pin
+m0_run m27-run-extdrop run_extdrop
+m0_run m27-check-extdrop chk_extdrop
 m0_run m19-run-asio run_asio
 m0_run m19-check-asio-normal chk_asio_case normal
 m0_run m19-check-asio-none chk_asio_case none

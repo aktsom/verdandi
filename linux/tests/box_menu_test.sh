@@ -1,7 +1,7 @@
 #!/bin/bash
 # the right-click menu of the box styles (docs/port/box-style-plan.md 2.8), checked in the source of the shell (desktop_shell_linux.cc builds the menu in a static function, so the items are
 # read from it) and in the window code: "Show the page buttons" (a tick, saved by lua), "Mute output" with the hint Ctrl+M next to it, "Open maiden" and "Open the manual" (the menu twins of the
-# two buttons); Ctrl+M handled in C next to Ctrl+Q and Ctrl+O, without Shift, from the same place for the box and the screen window; the menu has room for every item (MENU_MAX against the
+# two buttons); Ctrl+M handled in C next to Ctrl+Q, without Shift, from the same place for the box and the screen window; the menu has room for every item (MENU_MAX against the
 # most the menu can hold); no script-facing F key is used; Mac and device unchanged (everything is behind NORNS_LINUX_DESKTOP / in the Linux shell file)
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -15,15 +15,15 @@ grep -q 'add_item(SHELL_MENU_SHOW_BUTTONS, "Show the page buttons", "", buttons_
 grep -q 'add_item(SHELL_MENU_MUTE, "Mute output", "Ctrl+M", muted)' $SH && ok "item: Mute output, hint Ctrl+M, ticked while muted" || bad "no 'Mute output  Ctrl+M' item"
 grep -q 'add_item(SHELL_MENU_MAIDEN, "Open maiden"' $SH && grep -q 'add_item(SHELL_MENU_MANUAL, "Open the manual"' $SH && ok "items: Open maiden, Open the manual" || bad "maiden / manual items"
 awk '/add_item\(SHELL_MENU_MUTE/ {m=NR} /add_item\(SHELL_MENU_INPUT_MIC/ {i=NR} END {exit !(m && i && m < i && i - m <= 6)}' $SH && ok "Mute output sits next to the Input items (the MIDI actions item between)" || bad "Mute output is not next to the Input items"
-grep -q 'ctrl && !shift && scancode == SDL_SCANCODE_M' $SH && ok "Ctrl+M (without Shift) is handled in the shell, next to Ctrl+Q and Ctrl+O" || bad "no Ctrl+M handler"
-awk '/ctrl && scancode == SDL_SCANCODE_O/ {o=NR} /scancode == SDL_SCANCODE_M/ {m=NR} /if \(!menu.open\)/ {c=NR} END {exit !(c && o && m && c < o && o < m)}' $SH && ok "the shortcut is in the branch for a closed menu (an open menu takes every key)" || bad "Ctrl+M not in the closed-menu branch"
+grep -q 'ctrl && !shift && scancode == SDL_SCANCODE_M' $SH && ok "Ctrl+M (without Shift) is handled in the shell, next to Ctrl+Q" || bad "no Ctrl+M handler"
+awk '/ctrl && scancode == SDL_SCANCODE_Q/ {o=NR} /scancode == SDL_SCANCODE_M/ {m=NR} /if \(!menu.open\)/ {c=NR} END {exit !(c && o && m && c < o && o < m)}' $SH && ok "the shortcut is in the branch for a closed menu (an open menu takes every key)" || bad "Ctrl+M not in the closed-menu branch"
 # MIDI actions (docs/port/midi-actions-plan.md): the ticked item built like the file dialog item, Ctrl+Shift+M next to Ctrl+M, the bridge tells lua
 grep -q 'add_item(SHELL_MENU_MIDI_ACTIONS, "MIDI actions enabled", "Ctrl+Shift+M", midi_actions.load())' $SH && ok "item: MIDI actions enabled, hint Ctrl+Shift+M, ticked from the stored state" || bad "no 'MIDI actions enabled' item"
 grep -q 'ctrl && shift && scancode == SDL_SCANCODE_M' $SH && ok "Ctrl+Shift+M is handled in the shell (closed-menu branch), next to Ctrl+M" || bad "no Ctrl+Shift+M handler"
 awk '/if \(!menu.open\)/ {c=NR} /ctrl && shift && scancode == SDL_SCANCODE_M/ {m=NR} /\/\/ open: it takes every key/ {o=NR} END {exit !(c && m && o && c < m && m < o)}' $SH && ok "Ctrl+Shift+M is in the branch for a closed menu" || bad "Ctrl+Shift+M is not in the closed-menu branch"
 grep -q 'case SHELL_MENU_MIDI_ACTIONS:' $BR && grep -q 'call_lua("midi_actions_changed"' $BR && grep -q 'window_actions_switch_message' $BR && ok "the bridge tells lua (midi_actions_changed) and says MIDI actions on/off in the window" || bad "MIDI actions wiring"
 grep -q 'shell_set_midi_actions' $BR && ok "lua can set the tick (sdl_bridge_set_midi_actions)" || bad "no way to set the tick from lua"
-grep -q 'ctrl && scancode == SDL_SCANCODE_O' $SH && grep -q 'ev->key.windowID == screen_window_id()' $BR && ok "the shell's shortcuts also come from the screen window (menu_event), so Ctrl+M does" || bad "screen window shortcuts"
+grep -q 'ctrl && scancode == SDL_SCANCODE_Q' $SH && grep -q 'ev->key.windowID == screen_window_id()' $BR && ok "the shell's shortcuts also come from the screen window (menu_event), so Ctrl+M does" || bad "screen window shortcuts"
 grep -q 'case SHELL_MENU_MUTE:' $BR && grep -q 'call_lua("output_mute"' $BR && ok "the bridge calls lua's output_mute (the same as the MUTE button)" || bad "mute is not wired"
 grep -q 'call_lua("box_buttons_changed"' $BR && ok "the tick is told to lua (box_buttons_changed), which saves it" || bad "box_buttons_changed"
 grep -q 'case SHELL_MENU_MAIDEN:' $BR && grep -q 'case SHELL_MENU_MANUAL:' $BR && ok "the maiden and manual items are wired" || bad "maiden / manual wiring"
@@ -35,10 +35,21 @@ max=$(sed -n 's/^#define MENU_MAX \([0-9]*\).*/\1/p' matron/src/platform/linux/m
 most=$((fixed - 1 + apps))
 [ "$max" -ge "$most" ] && ok "MENU_MAX $max holds the most the menu can have ($most items)" || bad "MENU_MAX $max is too small for $most items"
 # the rest of the menu is where it was: the items of the earlier steps are all still there
-for l in "Import files..." "Import folder..." "Copy samples into dust" "Open the file dialog when a script loads a file" "Show dust folder" "Show tape folder" "Screenshot" "Virtual grid" "Virtual arc" "Always on top (PIN)" "Screen in its own window" "Input: microphone" "Input: all apps" "Input: off" "Quit"; do
+for l in "Open the file dialog when a script loads a file" "Show dust folder" "Show tape folder" "Screenshot" "Virtual grid" "Virtual arc" "Always on top (PIN)" "Screen in its own window" "Input: microphone" "Input: all apps" "Input: off" "Quit"; do
     grep -qF "\"$l\"" $SH || bad "the menu lost '$l'"
 done
 ok "the earlier items are all still in the menu"
+# M27: the import items and Ctrl+O are gone from the Linux menu, "Ext folders" is in it on Linux and Windows (not behind NORNS_WINDOWS)
+for l in "Import files..." "Import folder..." "Copy samples into dust"; do
+    grep -qF "\"$l\"" $SH && bad "the menu still has '$l'" || :
+done
+grep -q 'SCANCODE_O' $SH && bad "Ctrl+O is still handled" || ok "no import items in the menu and no Ctrl+O (M27)"
+grep -q 'add_item(SHELL_MENU_EXTRA_FOLDERS, "Ext folders", "", 0);' $SH && ok "the item Ext folders is in the menu" || bad "no 'Ext folders' item"
+awk '/^static void menu_build/ {on=1} on && /add_item\(SHELL_MENU_EXTRA_FOLDERS/ {inside=0; for (i=0;i<depth;i++) inside=1; print (depth==0 ? "plain" : "guarded")} on && /^#if/ {depth++} on && /^#endif/ {depth--} on && /^}/ {exit}' $SH | grep -q plain && ok "Ext folders is not behind a platform guard: the same on Windows and Linux" || bad "Ext folders sits behind a platform guard"
+grep -q 'file_dialog.load());' $SH && ok "'Open the file dialog when a script loads a file' is kept" || bad "the file dialog item was lost"
+# a drop: a folder goes to lua's ext_dropped, a file gets the one refusal message, nothing is imported (Windows and Linux; the macOS drop is the #else branch)
+awk '/case SDL_DROPFILE:/ {on=1} on && /drop_path\(ev.drop.file\)/ {a=1} on && /#else/ {b=1} on && /import_path\(ev.drop.file/ {c=NR} on && /break;/ {exit} END {exit !(a && b && c)}' $BR && ok "SDL_DROPFILE: drop_path on Windows/Linux, import_path stays for the Mac" || bad "the drop code is not split by platform"
+grep -q 'call_lua("ext_dropped"' $BR && grep -q 'post_toast(EXT_DROP_REFUSED)' $BR && ok "the drop: a folder goes to ext_dropped, a file gets the refusal message" || bad "drop_path wiring"
 # the Mac and the device: the new code is behind the Linux guard
 for f in $BR matron/src/weaver.cc; do
     python3 - "$f" << 'PY' || bad "$f: a box line outside NORNS_LINUX_DESKTOP"

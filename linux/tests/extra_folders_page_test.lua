@@ -18,8 +18,16 @@ local list = {
   {name = "[ext] Drums", path = "D:\\Samples\\Drums", state = "ok"},
   {name = "[ext] Loops", path = "E:\\Loops", state = "missing"},
 }
-local removed, picked = {}, 0
+local removed, picked, toasts = {}, 0, {}
+local legacy = {
+  {name = "k.wav", path = "/m/k.wav", state = "ok"},
+  {name = "g.wav", path = "/g", state = "missing"},
+}
+local legacy_removed = {}
 _norns = {
+  toast = function(t) toasts[#toasts + 1] = t end,
+  ext_legacy_list = function() local c = {} for i, v in ipairs(legacy) do c[i] = {name = v.name, path = v.path, state = v.state} end return c end,
+  ext_legacy_remove = function(n) legacy_removed[#legacy_removed + 1] = n; for i, v in ipairs(legacy) do if v.name == n then table.remove(legacy, i) break end end; return true, "Removed the link " .. n .. ". Your files were not touched." end,
   ext_list = function() local c = {} for i, v in ipairs(list) do c[i] = v end return c end,
   ext_add = function(p) list[#list + 1] = {name = "[ext] New", path = p, state = "ok"}; return true, "Added [ext] New.", "[ext] New" end,
   ext_remove = function(n) removed[#removed + 1] = n; for i, v in ipairs(list) do if v.name == n then table.remove(list, i) break end end; return true, "Removed " .. n .. ". Your files were not touched." end,
@@ -28,7 +36,7 @@ _norns = {
 local page = dofile("lua/core/menu/extra.lua")
 page.init(); page.redraw()
 local function all_text() return table.concat(drawn, "\n") end
-check(shown("EXT FOLDERS  2"), "the standing line (the name of the page and the count)")
+check(shown("K3 REMOVE  K2 BACK"), "the hint line: what K3 and K2 do for a folder row")
 check(shown("[ext] Drums") and shown("[ext") and shown("ADD FOLDER"), "both folders (the longer row cut to fit) and ADD FOLDER are listed")
 check(all_text():find("[ext] Loops", 1, true) ~= nil or all_text():find("[ext] Lo", 1, true) ~= nil or true, "(the second row's label may be cut: the info area shows it whole when it is selected)")
 check(shown("MISSING"), "an unreachable folder is marked MISSING")
@@ -38,7 +46,8 @@ check(joined:find("[ext] Drums D:\\Samples\\D", 1, true) ~= nil and joined:find(
 table.insert(list, 1, {name = "[ext] A", path = "D:\\A", state = "ok"})
 page.init(); page.redraw()
 joined = all_text():gsub("\n", " ")
-check(joined:find("K3: remove", 1, true) ~= nil and joined:find("files stay", 1, true) ~= nil, "a row that fits: the info area says what K3 does")
+check(joined:find("Removing takes away", 1, true) ~= nil and joined:find("files stay", 1, true) ~= nil, "a row that fits: the info area says what a removal does")
+check(shown("K3 REMOVE  K2 BACK"), "the hint line stays when the info area shows other text")
 table.remove(list, 1)
 page.init(); page.redraw()
 -- K3 on a folder only asks
@@ -59,9 +68,10 @@ check(seen, "the answer says the files were not touched (a long sentence turns i
 page.enc(2, 1)
 page.key(3, 1); page.enc(2, 1); page.key(2, 1)
 check(#removed == 1, "E2 while asking does nothing and K2 cancels")
--- ADD FOLDER
-page.enc(2, 5); page.redraw()
-check(shown("K3: choose a folder"), "on ADD FOLDER the hint says K3 chooses")
+-- ADD FOLDER (E2 moves one row per turn)
+local function goto_row(n) for _ = 1, 12 do page.enc(2, -1) end for _ = 2, n do page.enc(2, 1) end end
+goto_row(2); page.redraw()
+check(shown("K3 ADD A FOLDER  K2 BACK"), "on ADD FOLDER the hint says K3 chooses (ADD FOLDER comes right after the folders)")
 page.key(3, 1); page.key(3, 1)
 check(picked == 1, "K3 on ADD FOLDER opens the picker once (a second press while it is open does not open another)")
 _norns.ext_folder_chosen("F:\\New\\Folder"); page.redraw()
@@ -75,6 +85,29 @@ local seen_fail, seen_cancel = false, false
 for _ = 1, 40 do _menu.timer.event(); page.redraw(); if shown("0x80070057") then seen_fail = true end; if shown("cancelled") then seen_cancel = true end end
 check(seen_fail, "a failure shows its error code on the screen")
 check(not seen_cancel, "a failure never says cancelled")
+-- the old import links: after ADD FOLDER, marked IMPORT, K3 twice removes only the link
+goto_row(4); page.redraw() -- (Loops, New, ADD FOLDER, then the links)
+check(shown("k.wav") and shown("IMPORT"), "an old import link is listed after ADD FOLDER and marked IMPORT")
+check(shown("K3 REMOVE  K2 BACK"), "the hint line on a legacy row")
+joined = all_text():gsub("\n", " ")
+check(joined:find("old import link", 1, true) ~= nil, "the info area says what an old import link is")
+goto_row(5); page.redraw()
+check(shown("IMPORT GONE"), "an import link whose file is gone is marked")
+goto_row(4)
+page.key(3, 1); page.redraw()
+check(#legacy_removed == 0 and #removed == 1, "the first K3 on an import link removes nothing")
+joined = all_text():gsub("\n", " ")
+check(joined:find("import", 1, true) and joined:find("k.wav", 1, true) and joined:find("NOT", 1, true), "the warning names the link and says the file is NOT deleted")
+page.key(3, 1)
+check(legacy_removed[1] == "k.wav" and #removed == 1, "K3 twice removes that import link (through ext_legacy_remove, not ext_remove)")
+-- a dropped folder is added like a chosen one: the answer on the page and a message on the window
+_norns.ext_dropped("G:\\Dropped"); page.redraw()
+check(shown("Added [ext] New"), "a dropped folder is added and the page shows the answer")
+check(toasts[#toasts] == "Added [ext] New.", "a dropped folder also gives a message on the window")
+-- with no old links (Windows): nothing extra in the list
+legacy = {}
+page.init(); page.redraw()
+check(not shown("IMPORT"), "no old import links: no such rows")
 -- K2 on the list goes back to SYSTEM
 page.key(2, 1)
 check(page_now == "SYSTEM", "K2 goes back")

@@ -41,13 +41,11 @@ static menu_t menu = {};
 static char menu_app[MENU_APPS][128]; // the applications in the menu, as built
 static int input_now = 1; // SKIN_INPUT_MIC until lua says otherwise
 static int recording = 0;
-static int copy_samples = 0;
 static int screen_out = 0; // the screen is in its own window
 static int buttons_shown = 1; // "Show the page buttons" (docs/port/box-style-plan.md): the bridge says what lua holds
 static int muted = 0;         // the output is muted: the tick of "Mute output"
 static std::atomic<int> midi_actions{1}; // "MIDI actions enabled": lua owns the value (midimap.conf, starts on), this is the tick
 static std::atomic<int> file_dialog{0}; // "Open the file dialog when a script loads a file": lua owns the value (ui.conf), this is the tick
-static int import_mode = SHELL_IMPORT_LINK;
 
 void shell_install(void (*on_item)(int id), void (*on_import)(const char *path, int mode),
                    void (*on_note)(const char *text),
@@ -146,25 +144,6 @@ int shell_get_file_dialog(void) {
     return file_dialog.load();
 }
 
-// the menu's Import: every chosen path goes through the import callback
-static void import_done(const char *const *paths, int n, void *ctx) {
-    (void)ctx;
-    for (int i = 0; i < n; i++) {
-        if (cb_import != NULL) {
-            cb_import(paths[i], import_mode);
-        }
-    }
-}
-
-static void menu_import(int folder) {
-    import_mode = copy_samples ? SHELL_IMPORT_COPY : SHELL_IMPORT_LINK;
-    if (picker_open(folder ? PICK_FOLDER : PICK_FILES, user_home().c_str(),
-                    folder ? "Import a folder into dust" : "Import samples or scripts into dust", import_done,
-                    NULL) != 0) {
-        note(NO_DIALOG_NOTE);
-    }
-}
-
 //--- the in-window menu
 
 static void add_item(int id, const char *label, const char *hint, int checked) {
@@ -190,19 +169,14 @@ static void add_separator(void) {
 static void menu_build(void) {
     menu.n = 0;
 #ifndef NORNS_WINDOWS
-    // (the Windows build has no importing yet: ext folders (SYSTEM > EXT FOLDERS) replace it. docs/port/phase-m8.md)
-    add_item(SHELL_MENU_IMPORT, "Import files...", "Ctrl+O", 0);
-    add_item(SHELL_MENU_IMPORT_FOLDER, "Import folder...", "", 0);
-    add_item(SHELL_MENU_COPY_SAMPLES, "Copy samples into dust", "", copy_samples);
+    // (the three import items and Ctrl+O are gone since M27: ext folders (SYSTEM > EXT FOLDERS, "Ext folders" below) replace them, the same on Windows and Linux. docs/port/phase-m27.md)
     add_item(SHELL_MENU_FILE_DIALOG, "Open the file dialog when a script loads a file", "", file_dialog.load());
 #endif
     add_item(SHELL_MENU_SHOW_BUTTONS, "Show the page buttons", "", buttons_shown);
     add_separator();
     add_item(SHELL_MENU_DUST, "Show dust folder", "", 0);
     add_item(SHELL_MENU_TAPE, "Show tape folder", "", 0);
-#ifdef NORNS_WINDOWS
     add_item(SHELL_MENU_EXTRA_FOLDERS, "Ext folders", "", 0);
-#endif
     add_separator();
     add_item(SHELL_MENU_SCREENSHOT, "Screenshot", "Ctrl+Shift+S", 0);
     add_item(SHELL_MENU_GIF, recording ? "Stop GIF recording" : "Record GIF", GIF_MENU_HINT, recording);
@@ -242,15 +216,6 @@ static void menu_build(void) {
 
 static void menu_do(int id) {
     switch (id) {
-    case SHELL_MENU_IMPORT:
-        menu_import(0);
-        break;
-    case SHELL_MENU_IMPORT_FOLDER:
-        menu_import(1);
-        break;
-    case SHELL_MENU_COPY_SAMPLES:
-        copy_samples = !copy_samples;
-        break;
     case SHELL_MENU_FILE_DIALOG:
         file_dialog = !file_dialog.load();
         if (cb_item != NULL) {
@@ -361,10 +326,6 @@ int shell_menu_key(int down, int scancode, int mods, double px, double py, doubl
         }
         if (ctrl && scancode == SDL_SCANCODE_Q) {
             menu_do(SHELL_MENU_QUIT);
-            return SHELL_USED;
-        }
-        if (ctrl && scancode == SDL_SCANCODE_O) {
-            menu_do(SHELL_MENU_IMPORT);
             return SHELL_USED;
         }
         if (ctrl && !shift && scancode == SDL_SCANCODE_M) {

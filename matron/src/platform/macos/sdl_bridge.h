@@ -66,9 +66,11 @@ extern void sdl_bridge_app_input(const char *target, const char *label);
 // again while it is open: it goes to dir. close: it goes away
 extern void sdl_bridge_choose_file(const char *dir);
 extern void sdl_bridge_choose_file_close(void);
-#ifdef NORNS_WINDOWS
-// any thread, does not block: the folder picker of Windows for SYSTEM > EXT FOLDERS; the choice comes back as _norns.ext_folder_chosen(path), "" when cancelled
+#ifdef NORNS_LINUX_DESKTOP
+// any thread, does not block: the folder chooser for SYSTEM > EXT FOLDERS (Windows: the folder window; Linux, since M27: platform/linux/file_picker.cc, the portal, zenity or kdialog); the choice comes back as _norns.ext_folder_chosen(path), "" when cancelled
 extern void sdl_bridge_pick_folder(void);
+// test hook: posts a drop of path on the window (registered in lua only with VERDANDI_TEST_HOOKS set)
+extern void sdl_bridge_test_drop(const char *path);
 #endif
 
 // any thread, does not block: a note that stays on the device screen until cleared with "" (Linux:

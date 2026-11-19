@@ -698,3 +698,20 @@ Do one step at a time.
 4. (c) Your own saved preset and your midimap.conf are as before (same mapping, same sensitivity).
 Results: step 1 [ ok / not ok ], (a) [ ], (b) [ ], (c) [ ]; notes: ...
 Cannot be tested here: the real Push 2, a real Windows desktop, cheat codes 2 itself (the test uses every metro the way it does).
+
+## Windows and Linux 0.10.16 (M27: Ext folders on both, the import items gone from the Linux menu, a dropped folder, a hint line) — nothing here touches the audio path
+Do one step at a time. The commit hash for Linux is in the report of this phase.
+**Windows**
+1. Update: close Verdandi, unzip the new Verdandi-windows-asio-latest.zip into the same folder, Unblock/Defender as always. The version line must say 0.10.16.
+2. Right-click the window > "Ext folders". Look at the bottom of the page: a line "K3 REMOVE  K2 BACK" (on ADD FOLDER: "K3 ADD A FOLDER  K2 BACK").
+3. ADD FOLDER (K3), choose a folder with a few samples. It shows as "[ext] <name>". In a script's file browser (or TAPE) it is listed the same way.
+4. Remove it: select it, K3 (the page asks in plain words), K3 again. Check in Explorer that the folder and all its files are still there.
+5. Drop a folder from Explorer on the window: it is added. Drop a file: the window says files are not imported, nothing is copied.
+**Linux laptop (the built copy in ~/verdandi-home/norns)**
+6. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`.
+7. Right-click: no "Import files...", "Import folder..." or "Copy samples into dust", and Ctrl+O does nothing; "Ext folders" is there.
+8. SYSTEM > EXT FOLDERS (or the menu item): add a folder with the folder dialog (it should be your desktop's own dialog; if none can be started the page says so in one sentence). See "[ext] <name>" in the file browser. Remove it (K3, K3); the files stay.
+9. The page also lists old import links (marked IMPORT) from the old Import (dust/audio/mac). Remove one: only the link goes, the original file stays; copies you made are not listed.
+10. Drop a folder on the window: added. Drop a file: refused with one short message.
+Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]  8 [ ]  9 [ ]  10 [ ]; notes: ...
+Cannot be tested here: the real folder dialogs (Windows' Explorer-style one, the Mint portal/zenity one), a real drag from a file manager (the tests post the same event the window system sends), network folders, and your own old import links.
