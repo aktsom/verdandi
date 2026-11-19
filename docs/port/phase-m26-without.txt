@@ -1,0 +1,29 @@
+# M26: the new tests against the 0.10.14 code (4dda51f): they must fail
+
+## midimap_push2_test.lua with the old midimap_settings.lua
+FAIL the label has no (UNVERIFIED): got PUSH 2 (UNVERIFIED), wanted PUSH 2
+FAIL it is not unverified
+FAIL it carries the arc encoders and the actions
+FAIL selected: k3 number: got 104, wanted 103
+FAIL selected: k1 number: got 102, wanted 9
+FAIL selected: e1 number: got 71, wanted 15
+FAIL selected: e2 number: got 72, wanted 71
+FAIL selected: e3 number: got 73, wanted 72
+FAIL selected: k2 number: got 103, wanted 102
+FAIL selected: a1 type: got none, wanted cc
+FAIL selected: a1 number: got nil, wanted 75
+FAIL selected: a1 mode: got abs, wanted rel2c
+
+## midimap_metro_test.lua with the old midimap.lua
+FAIL start_pick with no free metro raises no error: lua/core/midimap.lua:370: attempt to index a nil value (upvalue 'timer')
+FAIL the countdown redraws the page while waiting (0)
+FAIL no click: the learn times out after TIMEOUT: got pick, wanted idle
+FAIL start_listen with no free metro raises no error: lua/core/midimap.lua:370: attempt to index a nil value (upvalue 'timer')
+FAIL nothing played: the listen times out: got listen, wanted idle
+FAIL start_listen_action with no free metro raises no error: lua/core/midimap.lua:370: attempt to index a nil value (upvalue 'timer')
+FAIL action learn times out: got listen, wanted idle
+lua5.3: lua/core/midimap.lua:370: attempt to index a nil value (upvalue 'timer')
+stack traceback:
+	lua/core/midimap.lua:370: in upvalue 'timer_start'
+	lua/core/midimap.lua:443: in function 'core/midimap.start_listen'
+	linux/tests/midimap_metro_test.lua:98: in main chunk

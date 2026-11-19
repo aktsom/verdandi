@@ -102,10 +102,10 @@ press(2); eq(set_pages[#set_pages], "SYSTEM", "K2 goes back to SYSTEM")
 -- ---- the preset row
 fresh()
 check(drawn("NONE"), "the preset in use is shown")
-turn(3, 1); check(drawn("PUSH 2"), "E3 browses to PUSH 2"); check(drawn("UNVERIFIED"), "and it says UNVERIFIED")
+turn(3, 1); check(drawn("PUSH 2"), "E3 browses to PUSH 2"); check(not drawn("UNVERIFIED"), "and it does NOT say UNVERIFIED (M26: the owner's mapping from the real controller)")
 eq(S.state.ctl.e1.type, "none", "browsing does not apply")
-press(3); eq(S.state.ctl.e1.num, 71, "K3 applies it"); eq(S.state.preset, "PUSH 2", "the label is the preset")
-check(drawn("CC71"), "E1 shows CC71 now"); check(drawn("REL 2S"), "and its format")
+press(3); eq(S.state.ctl.e1.num, 15, "K3 applies it"); eq(S.state.preset, "PUSH 2", "the label is the preset")
+check(drawn("CC15"), "E1 shows CC15 now"); check(drawn("REL 2S"), "and its format")
 turn(3, 1); turn(3, 1); turn(3, 5); check(drawn("GENERIC") , "E3 stops at the last preset")
 turn(3, -9); check(drawn("NONE"), "and at the first")
 
@@ -216,13 +216,13 @@ press(3); eq(S.state.on_clash, "both", "K3 toggles too")
 fresh()
 S.select_preset("PUSH 2"); mm.changed()
 local port = midi.devices[2].port
-pmap.clear(); pmap.new("cutoff"); pmap.assign("cutoff", port, 1, 71)
+pmap.clear(); pmap.new("cutoff"); pmap.assign("cutoff", port, 1, 15)
 page.redraw(); check(drawn("!"), "a control whose CC is in the params MAP is marked !")
 pmap.clear(); page.redraw(); check(not drawn("!"), "and not when it is not")
 press(3)
 -- applying a preset warns
-fresh(); pmap.clear(); pmap.new("cutoff"); pmap.assign("cutoff", port, 1, 71)
-turn(3, 1); press(3); check(drawn("PARAMS MAP"), "applying a preset that clashes says so"); eq(S.state.ctl.e1.num, 71, "and applies it")
+fresh(); pmap.clear(); pmap.new("cutoff"); pmap.assign("cutoff", port, 1, 15)
+turn(3, 1); press(3); check(drawn("PARAMS MAP"), "applying a preset that clashes says so"); eq(S.state.ctl.e1.num, 15, "and applies it")
 pmap.clear()
 
 -- ---- SAVE AS and DELETE

@@ -201,17 +201,8 @@ local function preset(name, label, enc_cc, key_cc, unverified)
   return p
 end
 
--- PUSH 2: from the vendor's MIDI document as I remember it (not read here, no hardware): the track encoders send CC 71-78, the buttons above the display CC 102-109, the encoders
--- are relative (two's complement) and the buttons send 127 and 0. every number must be checked on the Push 2 (User mode) before this preset is called right: UNVERIFIED
-M.BUILTIN = {
-  preset("NONE", "NONE", nil, nil, false),
-  preset("PUSH 2", "PUSH 2 (UNVERIFIED)", {71, 72, 73}, {102, 103, 104}, true),
-  preset("GENERIC REL 2S", "GENERIC REL 2S", {16, 17, 18}, {64, 65, 66}, false),
-}
-local RESERVED = {}
-for _, p in ipairs(M.BUILTIN) do RESERVED[p.name:upper()] = true end
-RESERVED["CUSTOM"] = true
 
+local RESERVED = {} -- the names of the built-in presets and CUSTOM: filled below, when they exist
 function M.validate_name(name)
   if type(name) ~= "string" then return nil, "give a name" end
   local n = name:match("^%s*(.-)%s*$")
@@ -247,6 +238,76 @@ local function finish_ctl(id, fields, c, log_prefix)
   end
   if c.type == "none" then c.num = nil end
 end
+
+-- ---------------------------------------------------------------- the built-in presets (continued: the ones that carry text)
+-- a built-in preset from text in the format of a preset file (without the header and the name): the same fields, read through the same checks as a preset file (finish_ctl, finish_action), no device and no channel.
+-- the numbers are on the CURRENT sensitivity scale (sens_scale=2): nothing is converted here, so a built-in is never converted a second time. an action that does not exist on this platform (pin is "keys" on the Mac)
+-- is skipped without a word. a preset made like this carries the arc encoders and the actions as well
+local function builtin_from_text(name, label, text)
+  local p = {name = name, label = label, builtin = true, unverified = false, ctl = {}, arcs = {}, actions = {}}
+  local fields, afields = {}, {}
+  for k, v in text:gmatch("([%w%.]+)=(%S+)") do
+    local id, field = k:match("^([eka]%d)%.(%w+)$")
+    local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
+    if id then
+      fields[id] = fields[id] or {}
+      fields[id][field] = v
+    elseif aid and in_list(M.ACTION_IDS, aid) then
+      afields[aid] = afields[aid] or {}
+      afields[aid][afield] = v
+    end
+  end
+  for _, id in ipairs(M.IDS) do
+    p.ctl[id] = new_ctl(id)
+    finish_ctl(id, fields[id] or {}, p.ctl[id], "built-in " .. name .. ": ")
+  end
+  for _, id in ipairs(M.ARC_IDS) do
+    p.arcs[id] = new_ctl(id)
+    finish_ctl(id, fields[id] or {}, p.arcs[id], "built-in " .. name .. ": ")
+  end
+  for _, id in ipairs(M.ACTION_IDS) do
+    p.actions[id] = new_action()
+    finish_action(id, afields[id] or {}, p.actions[id], "built-in " .. name .. ": ")
+  end
+  return p
+end
+
+-- PUSH 2: the owner's mapping of an Ableton Push 2 (User mode), set up and saved on the real controller (M26). the three track encoders and the three buttons above the display, the four arc encoders and the actions;
+-- the encoders are relative (two's complement); the actions are steps (an encoder turned one way is one press) because the owner turns them on the Push 2's other encoders
+local PUSH2 = [[
+e1.type=cc e1.num=15 e1.mode=rel2c e1.sens=5
+e2.type=cc e2.num=71 e2.mode=rel2c e2.sens=5
+e3.type=cc e3.num=72 e3.mode=rel2c e3.sens=5
+k1.type=cc k1.num=9 k1.threshold=63
+k2.type=cc k2.num=102 k2.threshold=63
+k3.type=cc k3.num=103 k3.threshold=63
+a1.type=cc a1.num=75 a1.mode=rel2c a1.gain=3 a1.accel=off
+a2.type=cc a2.num=76 a2.mode=rel2c a2.gain=3 a2.accel=off
+a3.type=cc a3.num=77 a3.mode=rel2c a3.gain=3 a3.accel=off
+a4.type=cc a4.num=78 a4.mode=rel2c a4.gain=3 a4.accel=off
+act.mix.type=step act.mix.num=20 act.mix.mode=rel2c act.mix.dir=down
+act.tape.type=step act.tape.num=21 act.tape.mode=rel2c act.tape.dir=down
+act.home.type=step act.home.num=22 act.home.mode=rel2c act.home.dir=down
+act.params.type=step act.params.num=23 act.params.mode=rel2c act.params.dir=down
+act.input.type=none
+act.grid.type=none
+act.arc.type=step act.arc.num=24 act.arc.mode=rel2c act.arc.dir=down
+act.pin.type=step act.pin.num=25 act.pin.mode=rel2c act.pin.dir=down
+act.maiden.type=none
+act.manual.type=none
+act.mute.type=step act.mute.num=27 act.mute.mode=rel2c act.mute.dir=down
+act.detach.type=step act.detach.num=26 act.detach.mode=rel2c act.detach.dir=down
+act.fullscreen.type=none
+act.screenshot.type=none
+]]
+
+M.BUILTIN = {
+  preset("NONE", "NONE", nil, nil, false),
+  builtin_from_text("PUSH 2", "PUSH 2", PUSH2),
+  preset("GENERIC REL 2S", "GENERIC REL 2S", {16, 17, 18}, {64, 65, 66}, false),
+}
+for _, p in ipairs(M.BUILTIN) do RESERVED[p.name:upper()] = true end
+RESERVED["CUSTOM"] = true
 
 local function readable(text)
   if text:find("[%z\1-\8\11\12\14-\31\127]") then return false end

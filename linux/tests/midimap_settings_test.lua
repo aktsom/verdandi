@@ -143,12 +143,12 @@ fresh(); S.load()
 local list = S.preset_list()
 eq(list[1].name, "NONE", "the first preset is NONE"); local names = {}
 for _, p in ipairs(list) do names[p.name] = p; check(p.builtin == true, p.name .. " is built in") end
-check(names["PUSH 2"] ~= nil and names["PUSH 2"].unverified == true, "PUSH 2 is there and marked unverified")
+check(names["PUSH 2"] ~= nil and not names["PUSH 2"].unverified, "PUSH 2 is there and is NOT marked unverified (M26: the owner's mapping from the real controller)")
 check(names["GENERIC REL 2S"] ~= nil and not names["GENERIC REL 2S"].unverified, "GENERIC REL 2S")
-local p2 = names["PUSH 2"]
-eq(p2.ctl.e1.num, 71, "PUSH 2 e1 = CC 71"); eq(p2.ctl.e3.num, 73, "PUSH 2 e3 = CC 73"); eq(p2.ctl.e2.mode, "rel2c", "PUSH 2 encoders are two's complement")
-eq(p2.ctl.k1.num, 102, "PUSH 2 k1 = CC 102"); eq(p2.ctl.k3.num, 104, "PUSH 2 k3 = CC 104"); eq(p2.ctl.k1.type, "cc", "PUSH 2 keys are CC")
-check(p2.label ~= nil and p2.label:upper():find("UNVERIFIED", 1, true), "the preset list shows it as unverified")
+local p2 = names["GENERIC REL 2S"]
+eq(p2.ctl.e1.num, 16, "GENERIC e1 = CC 16"); eq(p2.ctl.e3.num, 18, "GENERIC e3 = CC 18"); eq(p2.ctl.e2.mode, "rel2c", "GENERIC encoders are two's complement")
+eq(p2.ctl.k1.num, 64, "GENERIC k1 = CC 64"); eq(p2.ctl.k3.num, 66, "GENERIC k3 = CC 66"); eq(p2.ctl.k1.type, "cc", "GENERIC keys are CC")
+eq(names["PUSH 2"].label, "PUSH 2", "the label of PUSH 2 has no UNVERIFIED suffix")
 for _, p in ipairs(list) do
   for _, id in ipairs({"e1", "e2", "e3", "k1", "k2", "k3"}) do
     check(p.ctl[id] ~= nil, p.name .. " has " .. id)
@@ -157,10 +157,10 @@ for _, p in ipairs(list) do
 end
 -- selecting
 S.set("e1", "dev", "mio"); S.set_clash("both")
-local oks = S.select_preset("PUSH 2"); check(oks, "select PUSH 2")
-eq(S.state.preset, "PUSH 2", "the label is the preset"); eq(S.state.ctl.e1.num, 71, "the mapping is the preset's"); eq(S.state.ctl.e1.dev, "ANY", "a preset sets the device to ANY")
+local oks = S.select_preset("GENERIC REL 2S"); check(oks, "select GENERIC REL 2S")
+eq(S.state.preset, "GENERIC REL 2S", "the label is the preset"); eq(S.state.ctl.e1.num, 16, "the mapping is the preset's"); eq(S.state.ctl.e1.dev, "ANY", "a preset sets the device to ANY")
 eq(S.state.on_clash, "both", "a preset does not change the clash rule")
-eq(S.load().preset, "PUSH 2", "the choice is saved")
+eq(S.load().preset, "GENERIC REL 2S", "the choice is saved")
 S.set("e1", "num", 99)
 eq(S.state.preset, "CUSTOM", "a change of a preset's mapping makes it CUSTOM")
 check(S.select_preset("NONE") and S.state.ctl.e1.type == "none", "NONE clears all six")
@@ -170,7 +170,7 @@ S.select_preset("NONE")
 
 -- ---- own presets
 fresh(); S.load()
-S.select_preset("PUSH 2"); S.set("e1", "num", 20); S.set("e1", "dev", "mio"); S.set("e1", "ch", 5)
+S.select_preset("GENERIC REL 2S"); S.set("e1", "num", 20); S.set("e1", "dev", "mio"); S.set("e1", "ch", 5)
 local okp, why = S.save_preset("My Push")
 check(okp, "save a preset: " .. tostring(why))
 local ptext = slurp("/home/we/midimap-presets/my-push.midimap")
@@ -311,10 +311,10 @@ eq(S.state.ctl.a3.type, "none", "clear: arc type none"); eq(S.state.ctl.a3.gain,
 -- presets and the arcs: the built-in ones leave the arcs alone; an own preset carries them (and no device or channel)
 fresh(); S.load()
 S.set("a1", "num", 80); S.set("a1", "mode", "relob"); S.set("a1", "gain", 10); S.set("a1", "dev", "mio")
-check(S.select_preset("PUSH 2"), "a built-in preset")
+check(S.select_preset("GENERIC REL 2S"), "a built-in preset")
 eq(S.state.ctl.a1.num, 80, "a built-in preset leaves the arc encoders as they are"); eq(S.state.ctl.a1.dev, "mio", "and their device")
 check(S.select_preset("NONE"), "NONE"); eq(S.state.ctl.a1.num, 80, "NONE clears the six, not the arc encoders")
-for _, p in ipairs(S.preset_list()) do if p.builtin then check(p.arcs == nil, p.name .. " has no arc section") end end
+for _, p in ipairs(S.preset_list()) do if p.builtin then check((p.name == "PUSH 2") == (p.arcs ~= nil), p.name .. ": only PUSH 2 (the owner's mapping, M26) has an arc section") end end
 S.set("a2", "num", 81); S.set("a2", "accel", "high")
 okp = S.save_preset("With arcs")
 check(okp, "save a preset with arc encoders")
@@ -400,8 +400,8 @@ S.load(); eq(S.last_rel_mode(), "relsm", "after a load: the last relative one in
 -- presets: built-ins leave the actions alone, own presets carry them without device and channel
 fresh(); S.load()
 S.assign_action("mix", "note", 36); S.set_action("mix", "dev", "mio"); S.set_action("mix", "ch", 4); S.assign_action("mute", "step", 77, {mode = "rel2c", dir = "down"})
-check(S.select_preset("PUSH 2"), "a built-in preset"); eq(S.state.actions.mix.num, 36, "leaves the actions"); eq(S.state.actions.mix.dev, "mio", "and their device")
-for _, p in ipairs(S.preset_list()) do if p.builtin then check(p.actions == nil, p.name .. " has no action section") end end
+check(S.select_preset("GENERIC REL 2S"), "a built-in preset"); eq(S.state.actions.mix.num, 36, "leaves the actions"); eq(S.state.actions.mix.dev, "mio", "and their device")
+for _, p in ipairs(S.preset_list()) do if p.builtin then check((p.name == "PUSH 2") == (p.actions ~= nil), p.name .. ": only PUSH 2 has an action section") end end
 S.save_preset("With pads")
 ptext = slurp("/home/we/midimap-presets/with-pads.midimap")
 check(ptext:find("act.mix.num=36", 1, true) and ptext:find("act.mute.dir=down", 1, true), "an own preset has the actions")

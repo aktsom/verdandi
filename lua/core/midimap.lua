@@ -360,15 +360,33 @@ local function window(arm, state, id)
   if _norns.midimap_show then _norns.midimap_show(state, id and skin_id(id) or 0) end
 end
 
-local timer
+-- the learn's tick (every 0.25 s: the time-outs, the end of a confirm, the countdown on the page). M26: it is driven by a clock coroutine, NOT by a metro. a norns has a fixed number of metros and a script
+-- (cheat codes 2) can use them all: metro.init then returns nil, and the old code called timer:start() on nil ("MIDI MAP page: key 3 1 raised an error ... 'timer'"), which also stopped the page from being drawn
+-- again and left the learn without its tick. clock coroutines are never used up, and a metro taken here was one the running script could not get. a coroutine that was cancelled (a script change clears every
+-- clock) is noticed by its heartbeat and started again by the next learn
+local tick_gen = 0 -- the coroutine that runs is the one that was started with this number; a new number ends it
+local tick_beat = -1e9 -- the time of its last tick (M.clock), -1e9 when none runs
 local function timer_stop()
-  if timer then pcall(function() timer:stop() end) end
+  tick_gen = tick_gen + 1
+  tick_beat = -1e9
 end
 local function timer_start()
-  if metro and metro.init then
-    if timer == nil then timer = metro.init(function() M.tick() end, 0.25, -1) end
-    timer:start()
-  end
+  if clock == nil or clock.run == nil or clock.sleep == nil then return end -- (no clock: a test drives M.tick itself)
+  local now = M.clock()
+  if now - tick_beat < 1.0 then return end -- one is running
+  tick_gen = tick_gen + 1
+  local mine = tick_gen
+  tick_beat = now
+  local ok = pcall(clock.run, function()
+    while tick_gen == mine do
+      clock.sleep(0.25)
+      if tick_gen ~= mine then break end
+      tick_beat = M.clock()
+      local okt, err = pcall(M.tick)
+      if not okt then print("MIDI MAP: the learn tick raised an error: " .. tostring(err)) end
+    end
+  end)
+  if not ok then tick_beat = -1e9 end
 end
 
 local function end_learn()

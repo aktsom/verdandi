@@ -689,3 +689,12 @@ Linux laptop (X11 session; on Wayland PIN says it cannot):
 8. Mapping that had the old keyboard action: if you had a MIDI pad on the KEYS action, `logs/norns.log` has one line `act.keys.*: the virtual keyboard action is gone`; assign PIN in MIDI MAP > ACTIONS if you want it.
 Windows PC (one short step): extract the new `Verdandi-windows-latest.zip` into the same folder as always, start Verdandi: sound as always; press PIN (on top, off again); start a tape recording and choose SYSTEM > RESTART: the recording is in `dust\audio\tape` and plays.
 Results to send: yes/no for 1 to 8 (Linux) and for the Windows step, and the Linux desktop (X11 or Wayland) and Mint version.
+
+## Windows 0.10.15 (M26: the PUSH 2 preset, the MIDI MAP learn error) — nothing here touches the audio path
+Do one step at a time.
+1. Update: unzip the new Verdandi-windows-asio-latest.zip into the same folder, Unblock the zip / Defender as always, start it and read the version line: it must say 0.10.15.
+2. (a) Load cheat codes 2, open the MIDI MAP page, map any control with LEARN. Expected: no "ERROR, SEE THE LOG" on screen, and no "MIDI MAP page:" error line in the log.
+3. (b) On the MIDI MAP page select PRESET, choose PUSH 2 and press K3. Expected: no "UNVERIFIED" note; the Push 2 controls (E1-E3, K1-K3, A1-A4) and the actions (mix, tape, home, params, arc, PIN, detach, mute) work as you have them now.
+4. (c) Your own saved preset and your midimap.conf are as before (same mapping, same sensitivity).
+Results: step 1 [ ok / not ok ], (a) [ ], (b) [ ], (c) [ ]; notes: ...
+Cannot be tested here: the real Push 2, a real Windows desktop, cheat codes 2 itself (the test uses every metro the way it does).
