@@ -288,12 +288,12 @@ fresh()
 page.pos = 16; page.redraw(); check(page.rows()[16] == "ARC KEYS", "row 16 is ARC KEYS"); check(drawn("ON"), "ON by default")
 turn(3, -1); eq(S.state.arc_keys, false, "E3 down turns it off"); check(drawn("OFF"), "shown"); turn(3, 1); eq(S.state.arc_keys, true, "E3 up turns it on")
 press(3); eq(S.state.arc_keys, false, "K3 toggles"); press(3)
--- ARC DRAG: how a left drag turns a ring of the arc window. the default is the platform's (the tests run as Linux: round the ring); K3 toggles, E3 up is UP/DOWN, down is CIRCLE; it is saved and sent to the window
+-- ARC DRAG: how a left drag turns a ring of the arc window. new settings: up and down (Windows 0.10.5, Linux M25); K3 toggles, E3 up is UP/DOWN, down is CIRCLE; it is saved and sent to the window
 fresh()
-check(page.rows()[17] == "ARC DRAG", "row 17 is ARC DRAG"); eq(S.state.arc_drag, "circle", "round the ring by default on Linux")
-page.pos = 17; page.redraw(); check(drawn("ARC DRAG") and drawn("CIRCLE"), "CIRCLE shown")
-turn(3, 1); eq(S.state.arc_drag, "updown", "E3 up is up and down"); check(drawn("UP/DOWN"), "shown"); turn(3, -1); eq(S.state.arc_drag, "circle", "E3 down is round the ring")
-press(3); eq(S.state.arc_drag, "updown", "K3 toggles"); press(3); eq(S.state.arc_drag, "circle", "and back")
+check(page.rows()[17] == "ARC DRAG", "row 17 is ARC DRAG"); eq(S.state.arc_drag, "updown", "up and down by default for new settings")
+page.pos = 17; page.redraw(); check(drawn("ARC DRAG") and drawn("UP/DOWN"), "UP/DOWN shown")
+turn(3, -1); eq(S.state.arc_drag, "circle", "E3 down is round the ring"); check(drawn("CIRCLE"), "shown"); turn(3, 1); eq(S.state.arc_drag, "updown", "E3 up is up and down")
+press(3); eq(S.state.arc_drag, "circle", "K3 toggles"); press(3); eq(S.state.arc_drag, "updown", "and back")
 -- a typed CC that another control uses: the question
 fresh()
 S.set("e2", "num", 71)

@@ -108,6 +108,19 @@ static void on_end_signal(int sig) {
     errno = e;
 }
 
+// M25: the end by a signal must never wait for ever (a hung tape, a hung device): after 4 s the signal's own action ends the process
+static void *end_signal_watchdog(void *arg) {
+    int sig = (int)(long)arg;
+    sleep(4);
+    signal(sig, SIG_DFL);
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, sig);
+    pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+    kill(getpid(), sig);
+    return NULL;
+}
+
 static void *end_signal_thread(void *unused) {
     (void)unused;
     unsigned char b = 0;
@@ -116,6 +129,16 @@ static void *end_signal_thread(void *unused) {
         r = read(quit_pipe[0], &b, 1);
     } while (r < 0 && errno == EINTR);
     if (r == 1) {
+        // M25: a tape recording that runs is closed first (the WAV header is written when the file is closed: a file cut off by the signal has length zero). bounded: o_tape_finalize gives up after
+        // 1.5 s, and a watchdog ends the process by the signal's own action after 4 s whatever hangs here. the same call the quit path (matron_cleanup) makes. RESTART and the shutdown action are
+        // "pkill -TERM norns" (system_cmd.cc), so they end here too
+        pthread_t wd;
+        if (pthread_create(&wd, NULL, end_signal_watchdog, (void *)(long)b) == 0) {
+            pthread_detach(wd);
+        }
+        if (!o_tape_finalize(1500)) {
+            fprintf(stderr, "tape: the recording file could not be closed within 1.5 s: it may be cut off\n");
+        }
         dev_list_monome_all_off(800);
         signal(b, SIG_DFL);
         sigset_t set;

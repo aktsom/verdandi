@@ -7,12 +7,15 @@ norns.script.load("code/probe/window_probe.lua")
 mm = norns.midimap
 S = require "core/midimap_settings"
 print("PROBE default", S.state.arc_drag)
+-- (the default of new settings is up and down since M25; the first step is round the ring, so it is chosen here, as MIDI MAP > ARC DRAG does)
+S.set_arc_drag("circle")
+mm.changed()
 _norns.grid_window("arc")
 #sleep 2
 #xdo search --name ^arc$ windowfocus
 #sleep 0.5
 #sh xdotool search --name '^arc$' getwindowgeometry --shell | tr '\n' ' ' > "$MARKS.geom0"
-# 1. round the ring (the Linux default): from the top of ring 1 to its right side, a quarter turn, in steps of 15 degrees on a circle of 40 pixels (one xdotool call a step with a short pause: xdotool's own chained moves right after a press lose one)
+# 1. round the ring (chosen above): from the top of ring 1 to its right side, a quarter turn, in steps of 15 degrees on a circle of 40 pixels (one xdotool call a step with a short pause: xdotool's own chained moves right after a press lose one)
 #sh ID=$(xdotool search --name '^arc$' | head -1); xdotool mousemove --window $ID 130 90 mousedown 1; for d in 15 30 45 60 75 90; do x=$(awk -v d=$d 'BEGIN { printf "%d", 130 + 40 * sin(d * 3.14159265 / 180) }'); y=$(awk -v d=$d 'BEGIN { printf "%d", 130 - 40 * cos(d * 3.14159265 / 180) }'); xdotool mousemove --window $ID $x $y; sleep 0.05; done; xdotool mouseup 1
 #sleep 0.5
 print("PROBE circle done")
@@ -53,6 +56,12 @@ mm.changed()
 #sh ID=$(xdotool search --name '^arc$' | head -1); xdotool mousemove --window $ID 170 130 mousedown 1; for i in $(seq 10); do xdotool mousemove_relative -- 0 2; sleep 0.03; done; xdotool mouseup 1
 #sleep 0.5
 print("PROBE circle again done")
+# 9. M25: Ctrl is the four times faster turn on Linux as on Windows (the Super key opens the desktop's menu when it is let go): one wheel notch is 2 ticks, with Ctrl held 8
+#sh ID=$(xdotool search --name '^arc$' | head -1); xdotool mousemove --window $ID 130 150; sleep 0.3; xdotool keydown ctrl; sleep 0.4; xdotool click 4; sleep 0.4; xdotool keyup ctrl; sleep 0.3
+print("PROBE ctrl wheel done")
+#sh xdotool click 4
+#sleep 0.5
+print("PROBE plain wheel done")
 #sh cp "$NORNS_HOME/midimap.conf" "$NORNS_HOME/midimap.after"
 #sh xdotool search --name '^arc$' getwindowgeometry --shell | tr '\n' ' ' > "$MARKS.geom1"
 print("PROBE arc drag done")

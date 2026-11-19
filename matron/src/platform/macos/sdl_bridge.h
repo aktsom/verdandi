@@ -37,8 +37,10 @@ extern void sdl_bridge_destroy_window(SDL_Window *window);
 #define SDL_BRIDGE_SHOW_ACTION 10       // n = the index of a window action (window_actions.h): the main thread does what a click on its button does
 #define SDL_BRIDGE_SHOW_ACTION_FLASH 11 // n = the control that was flashed: its press ends (internal)
 #endif
+#ifdef NORNS_LINUX_DESKTOP
+#define SDL_BRIDGE_SHOW_PIN_REPORT 15 // CI only: n = a number to find the line again (Windows and Linux)
+#endif
 #ifdef NORNS_WINDOWS
-#define SDL_BRIDGE_SHOW_PIN_REPORT 15 // CI only: n = a number to find the line again
 #define SDL_BRIDGE_SHOW_ARC_TEST 13 // CI only: n = what * 16 + ring, value (see arc_test in sdl_bridge.cc)
 #endif
 #define SDL_BRIDGE_SHOW_ENC_DRAW 12 // (internal) the timer of the throttled knob redraw (platform/common/redraw_throttle.h)
@@ -93,7 +95,9 @@ extern int sdl_bridge_arc_turn(int n, int ticks);
 #ifdef NORNS_WINDOWS
 // CI only, any thread: drive the arc window like a mouse (wheel, drag, ring press) and save its picture; 0 unless VERDANDI_TEST_HOOKS=1 and the window is open
 extern int sdl_bridge_arc_test(int what, int ring, int value);
-// CI only, any thread: log what SDL and Windows say about the always-on-top state of every window (0 unless VERDANDI_TEST_HOOKS=1)
+#endif
+#ifdef NORNS_LINUX_DESKTOP
+// CI only, any thread: log what SDL (and Windows) say about the always-on-top state of every window (0 unless VERDANDI_TEST_HOOKS=1)
 extern int sdl_bridge_pin_report(int token);
 #endif
 // any thread: the ramp setting of the arc keys in the arc window (the keys of the norns window are lua's)

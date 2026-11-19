@@ -678,13 +678,13 @@ asetup(); mm.walk_start(); note_on(2, 1, 42, 100); T = T + 10; mm.tick(); note_o
 eq(mm.learn.state, "listen", "walk: every assignment restarts the time-out")
 mm.leave(); eq(mm.walk_index(), nil, "walk: leaving the page ends it")
 -- a walk onto an assigned note asks
-asetup(function() S.assign_action("keys", "note", 50) end)
+asetup(function() S.assign_action("pin", "note", 50) end)
 mm.walk_start(); note_on(2, 1, 50, 100); eq(mm.learn.state, "ask", "walk: a note that another action has asks"); mm.answer(true)
-eq(S.state.actions.mix.num, 50, "walk: yes assigns it"); eq(S.state.actions.keys.type, "none", "walk: and clears the other"); eq(mm.learn.state, "listen", "walk: and goes on"); eq(mm.learn.target, "tape", "walk: with the next action")
+eq(S.state.actions.mix.num, 50, "walk: yes assigns it"); eq(S.state.actions.pin.type, "none", "walk: and clears the other"); eq(mm.learn.state, "listen", "walk: and goes on"); eq(mm.learn.target, "tape", "walk: with the next action")
 -- no to the question skips that action and goes on (it does not stop the walk)
-asetup(function() S.assign_action("keys", "note", 50) end)
+asetup(function() S.assign_action("pin", "note", 50) end)
 mm.walk_start(); note_on(2, 1, 50, 100); eq(mm.learn.state, "ask", "walk: asks again"); mm.answer(false)
-eq(mm.learn.state, "listen", "walk: no skips this action and goes on"); eq(mm.learn.target, "tape", "walk: with the next one"); eq(S.state.actions.keys.num, 50, "walk: and the other action keeps its note"); eq(S.state.actions.mix.type, "none", "walk: the skipped one stays empty")
+eq(mm.learn.state, "listen", "walk: no skips this action and goes on"); eq(mm.learn.target, "tape", "walk: with the next one"); eq(S.state.actions.pin.num, 50, "walk: and the other action keeps its note"); eq(S.state.actions.mix.type, "none", "walk: the skipped one stays empty")
 mm.cancel_quiet()
 
 -- the owner's report: a pad opened the manual (the MANUAL action was on the MUTE pad). every way an action gets a note or CC another action has must ask or say so

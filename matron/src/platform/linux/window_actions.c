@@ -17,11 +17,7 @@ static const wa_entry_t table[] = {
     {"input", WA_CONTROL, SKIN_MIC},
     {"grid", WA_CONTROL, SKIN_GRID},
     {"arc", WA_CONTROL, SKIN_ARC},
-#ifdef NORNS_WINDOWS
-    {"pin", WA_CONTROL, SKIN_KEYS}, // the virtual keyboard is not built on Windows: its slot is PIN (always on top)
-#else
-    {"keys", WA_CONTROL, SKIN_KEYS},
-#endif
+    {"pin", WA_CONTROL, SKIN_KEYS}, // the virtual keyboard is not built on Windows and, since M25, not offered on Linux: its slot is PIN (always on top)
     {"maiden", WA_CONTROL, SKIN_MAIDEN},
     {"manual", WA_CONTROL, SKIN_MANUAL},
     {"mute", WA_CONTROL, SKIN_MUTE},

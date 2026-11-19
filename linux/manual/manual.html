@@ -68,7 +68,7 @@
   <li><strong>Keys.</strong> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> are K1 K2 K3; <kbd>Q</kbd><kbd>W</kbd> <kbd>A</kbd><kbd>S</kbd> <kbd>Z</kbd><kbd>X</kbd> turn E1 E2 E3 left and right (<kbd>Shift</kbd> = 5 steps). <kbd>F1</kbd>&ndash;<kbd>F4</kbd> open MIX, TAPE, HOME and PARAMS; <kbd>F5</kbd> opens and closes the menu. Or click and drag with the mouse.</li>
   <li><strong>A script.</strong> HOME &gt; SELECT lists what is in <code>~/Verdandi/dust/code</code>. Put scripts there, drop files on the window, or install from the catalog with the <strong>MAIDEN</strong> button.</li>
   <li><strong>Sound in.</strong> The <strong>MIC</strong> button cycles MIC (the card&rsquo;s input), SYS (every other application) and OFF.</li>
-  <li><strong>Everything else is one right-click away.</strong> The right-click menu (or <kbd>F10</kbd>) holds import, screenshot, GIF, mute and the virtual grid, arc and keyboard (<kbd>F6</kbd> <kbd>F7</kbd> <kbd>F8</kbd>). The look of the screen and the box is HOME &gt; SYSTEM &gt; SCREEN and THEME.</li>
+  <li><strong>Everything else is one right-click away.</strong> The right-click menu (or <kbd>F10</kbd>) holds import, screenshot, GIF, mute, the virtual grid and arc (<kbd>F6</kbd> <kbd>F8</kbd>) and Always on top (<kbd>F7</kbd>). The look of the screen and the box is HOME &gt; SYSTEM &gt; SCREEN and THEME.</li>
   <li><strong>If it does not work</strong>, read <a href="#trouble">If something goes wrong</a>: the logs are in <code>~/Verdandi/logs</code>.</li>
 </ol>
 </section>
@@ -99,7 +99,7 @@
 <tr><td>Show the page buttons</td><td>show or hide the row of buttons</td></tr>
 <tr><td>Show dust folder, Show tape folder</td><td>open the folder in your file manager</td></tr>
 <tr><td>Screenshot, Record GIF</td><td>a PNG of the screen (4 times size) or a GIF of up to 60 seconds, saved to <code>~/Pictures</code> (or into dust if there is none); the window says where. They match the window&rsquo;s brightness, colour and contrast</td></tr>
-<tr><td>Virtual grid, arc, keyboard, Screen in its own window</td><td>as the buttons and <kbd>F6</kbd> <kbd>F8</kbd> <kbd>F7</kbd> <kbd>F9</kbd></td></tr>
+<tr><td>Virtual grid, arc, Always on top (PIN), Screen in its own window</td><td>as the buttons and <kbd>F6</kbd> <kbd>F8</kbd> <kbd>F7</kbd> <kbd>F9</kbd></td></tr>
 <tr><td>Open maiden, Open the manual</td><td>as the buttons, for when the row is hidden</td></tr>
 <tr><td>Mute output, MIDI actions enabled</td><td>ticked while on (<kbd>Ctrl</kbd>+<kbd>M</kbd>, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>)</td></tr>
 <tr><td>Input: &hellip;</td><td>microphone, all apps, one application, off</td></tr>
@@ -220,7 +220,7 @@
   <li>Set a track&rsquo;s input to MIDI &gt; that device &gt; All channels, arm the track, and play from a script: the notes reach the track.</li>
 </ol>
 <p>The module is gone after a reboot unless you keep it. As admin copy the two example files that come with the package: <code>/usr/share/doc/verdandi/examples/verdandi-virmidi.modules-load.conf</code> to <code>/etc/modules-load.d/verdandi-virmidi.conf</code> (loads <code>snd-virmidi</code> at boot), and <code>verdandi-virmidi.modprobe.conf</code> from the same folder to <code>/etc/modprobe.d/verdandi-virmidi.conf</code> (<code>options snd-virmidi midi_devs=1</code>: one port in Reaper&rsquo;s list instead of four). The package does not install them by itself, because a package should not load kernel modules or add MIDI ports to every DAW unasked.</p>
-<p><strong>Grids and arcs.</strong> The virtual grid (64, 128 or 256 keys), arc and keyboard open with <kbd>F6</kbd>, <kbd>F8</kbd>, <kbd>F7</kbd> or their buttons, from any window. Real grids and arcs are found on plug-in; the package installs a udev rule so your user may open them. A grid is listed once.</p>
+<p><strong>Grids and arcs.</strong> The virtual grid (64, 128 or 256 keys) and arc open with <kbd>F6</kbd>, <kbd>F8</kbd> or their buttons, from any window. The button next to ARC is <strong>PIN</strong> (<kbd>F7</kbd>): it keeps every Verdandi window on top of other windows until it is turned off again. It starts off every time and is not saved. It needs an X11 session; on Wayland the button says so and does nothing. Real grids and arcs are found on plug-in; the package installs a udev rule so your user may open them. A grid is listed once.</p>
 </section>
 
 <!-- sources: linux/norns.sh header, lua/core/keyboard.lua, lua/core/menu.lua, matron/src/platform/linux/desktop_shell_linux.cc (shell_menu_key, menu_build), screen_window.cc, window_keys.c;
@@ -233,7 +233,7 @@
 <tr><td><kbd>Q</kbd> <kbd>W</kbd> / <kbd>A</kbd> <kbd>S</kbd> / <kbd>Z</kbd> <kbd>X</kbd></td><td>E1 / E2 / E3 left and right; <kbd>Shift</kbd> adds 5 steps. In a script the arrows are E2 (up, down) and E3 (left, right)</td></tr>
 <tr><td><kbd>F1</kbd> <kbd>F2</kbd> <kbd>F3</kbd> <kbd>F4</kbd></td><td>MIX, TAPE, HOME, PARAMS</td></tr>
 <tr><td><kbd>F5</kbd></td><td>open or close the menu</td></tr>
-<tr><td><kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd></td><td>virtual grid / keyboard / arc window, open and close</td></tr>
+<tr><td><kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd></td><td>virtual grid / always on top (PIN) / arc window, open and close</td></tr>
 <tr><td><kbd>F9</kbd></td><td>screen in its own window, and back</td></tr>
 <tr><td><kbd>F10</kbd></td><td>the right-click menu (<kbd>Up</kbd> <kbd>Down</kbd> <kbd>Enter</kbd>, <kbd>Esc</kbd> closes)</td></tr>
 <tr><td><kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd></td><td>in the screen window: fullscreen, title bar on and off</td></tr>

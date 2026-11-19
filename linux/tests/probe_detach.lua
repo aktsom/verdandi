@@ -47,21 +47,12 @@ norns.script.load("code/probe/window_probe.lua")
 #sleep 0.3
 #xdo mouseup 1
 #sleep 0.5
-# the screen window hidden (unmapped): the grid and the virtual keys keep working
+# the screen window hidden (unmapped): the grid keeps working (the virtual keys are gone since M25: the slot is PIN)
 #xdo search --name ^Verdandi.screen$ windowunmap
 #sleep 0.5
 #xdo search --name ^grid$ mousemove --window %1 60 60 mousedown 1
 #sleep 0.3
 #xdo mouseup 1
-_norns.grid_window("keys")
-#sleep 1.5
-#xdo search --name ^keys$ windowfocus
-#xdo keydown d
-#sleep 0.3
-#xdo keyup d
-#sleep 0.5
-_norns.grid_window("keys")
-#sleep 0.5
 #xdo search --name ^Verdandi.screen$ windowmap
 #sleep 1
 #xdo search --name ^Verdandi.screen$ windowfocus

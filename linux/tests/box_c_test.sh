@@ -17,13 +17,13 @@ SK=matron/src/platform/macos; LN=matron/src/platform/linux
 cc -std=gnu11 -Wall -Wextra -I $LN linux/tests/box_palette_test.c $LN/box_palette.c -o "$T/bpt" -lm 2> "$T/cc.log" || { bad "box_palette_test does not build"; cat "$T/cc.log"; }
 [ -x "$T/bpt" ] && { "$T/bpt" > "$T/bpt.out" 2>&1 && ok "palette: $(tail -n 1 "$T/bpt.out")" || { bad "palette test"; cat "$T/bpt.out"; }; }
 
-cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_style_test.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/bst" $LF -lm 2> "$T/cc.log" || { bad "box_style_test does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DVERDANDI_KEYS_BUTTON -I $SK -I $LN $CF linux/tests/box_style_test.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/bst" $LF -lm 2> "$T/cc.log" || { bad "box_style_test does not build"; cat "$T/cc.log"; }
 if [ -x "$T/bst" ]; then
     NORNS_TEST_TTF="$REPO/resources/norns.ttf" "$T/bst" > "$T/bst.out" 2>&1 && ok "pixel style, hidden row, fonts, sizes: $(tail -n 1 "$T/bst.out")" || { bad "box_style_test"; cat "$T/bst.out"; }
 fi
 
 # the aluminium style with its default colours: byte for byte
-cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/dump" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DVERDANDI_KEYS_BUTTON -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/dump" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump does not build"; cat "$T/cc.log"; }
 if [ -x "$T/dump" ]; then
     mkdir -p "$T/new"
     "$T/dump" "$T/new"
@@ -33,7 +33,7 @@ fi
 
 # PIXEL stays exactly as it is (docs/port/retro-look-plan.md): the same 24 renders (6 states at 4 window sizes, the DARK look) as the code before the retro looks, with the pixel look set to 0 and not set, and the
 # same hit map; then the retro looks: sizes, layout, hit areas, outlines, decorations, determinism, the four built-in looks, the caches (box_retro_test.c)
-cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_LOOK -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/dumpp" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump (pixel) does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DVERDANDI_KEYS_BUTTON -DHAVE_LOOK -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_render_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/dumpp" $LF -lm 2> "$T/cc.log" || { bad "box_render_dump (pixel) does not build"; cat "$T/cc.log"; }
 if [ -x "$T/dumpp" ]; then
     for vv in unset 0; do
         mkdir -p "$T/pix-$vv"
@@ -42,7 +42,7 @@ if [ -x "$T/dumpp" ]; then
         if (cd "$T/pix-$vv" && sha256sum -c --quiet "$REPO/linux/tests/box_pixel_golden.txt" > "$T/sha.out" 2>&1); then ok "PIXEL (pixel look $vv): all $n renders are byte for byte the ones of the code before the retro looks"; else bad "PIXEL renders differ from the golden hashes ($vv)"; head -5 "$T/sha.out"; fi
     done
 fi
-cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_hit_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/hitd" $LF -lm 2> "$T/cc.log" || { bad "box_hit_dump does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -O1 -DNORNS_LINUX_DESKTOP -DVERDANDI_KEYS_BUTTON -DHAVE_VARIANT -I $SK -I $LN $CF linux/tests/box_hit_dump.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/hitd" $LF -lm 2> "$T/cc.log" || { bad "box_hit_dump does not build"; cat "$T/cc.log"; }
 if [ -x "$T/hitd" ]; then
     for vv in "" 0; do
         got=$("$T/hitd" $vv | sha256sum | cut -d' ' -f1)
@@ -50,12 +50,18 @@ if [ -x "$T/hitd" ]; then
     done
     [ "$("$T/hitd" 1 | sha256sum | cut -d' ' -f1)" != "$(cat linux/tests/box_pixel_hits_golden.txt)" ] && ok "RETRO's hit areas are its own (snapped to its block grid)" || bad "RETRO's hit map is PIXEL's"
 fi
-cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I $SK -I $LN $CF linux/tests/box_retro_test.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/brt" $LF -lm 2> "$T/cc.log" || { bad "box_retro_test does not build"; cat "$T/cc.log"; }
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DVERDANDI_KEYS_BUTTON -I $SK -I $LN $CF linux/tests/box_retro_test.c $SK/device_skin.c $LN/box_style.c $LN/toast_fit.c $LN/box_palette.c -o "$T/brt" $LF -lm 2> "$T/cc.log" || { bad "box_retro_test does not build"; cat "$T/cc.log"; }
 if [ -x "$T/brt" ]; then
     "$T/brt" > "$T/brt.out" 2>&1 && ok "retro looks: $(tail -n 1 "$T/brt.out")" || { bad "box_retro_test"; head -20 "$T/brt.out"; }
 fi
 
 # the Mac build and the Mac layout
+# M25: the slot of the virtual keyboard is labelled PIN on Linux (and Windows) and KEYS on the Mac (the tests above use -DVERDANDI_KEYS_BUTTON so that the golden pictures stay valid for the rest of the picture)
+printf '#include "device_skin.h"\n#include <stdio.h>\nint main(void) { puts(KEYS_LABEL); return 0; }\n' > "$T/label.c"
+for flags in "-DNORNS_LINUX_DESKTOP:PIN" "-DNORNS_LINUX_DESKTOP -DNORNS_WINDOWS:PIN" ":KEYS"; do
+    f="${flags%%:*}"; want="${flags##*:}"
+    cc -std=gnu11 $f -I $SK $CF "$T/label.c" -o "$T/label" 2> "$T/cc.log" && [ "$("$T/label")" = "$want" ] && ok "the slot's label is $want ($f)" || bad "the slot's label is not $want ($f)"
+done
 cc -std=gnu11 -Wall -Wextra -I $SK $CF -c $SK/device_skin.c -o "$T/mac.o" 2> "$T/cc.log" && ok "device_skin.c compiles without NORNS_LINUX_DESKTOP (the Mac build)" || { bad "Mac build of device_skin.c"; cat "$T/cc.log"; }
 cc -std=gnu11 -Wall -Wextra -I $SK $CF macos/tests/device_skin_test.c $SK/device_skin.c $SK/vgrid_skin.c $SK/varc_skin.c $SK/vkeys_skin.c -o "$T/mac_ds" $LF -lm 2> "$T/cc.log" || { bad "the Mac skin test does not build"; head -5 "$T/cc.log"; }
 [ -x "$T/mac_ds" ] && { "$T/mac_ds" > "$T/mac.out" 2>&1 && ok "the Mac skin test (macos/tests/device_skin_test.c) passes on the shared file: $(tail -n 1 "$T/mac.out")" || { bad "the Mac skin test fails"; tail -5 "$T/mac.out"; }; }

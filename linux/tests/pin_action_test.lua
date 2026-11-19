@@ -1,6 +1,7 @@
--- MIDI MAP on Windows: the PIN action (the KEYS slot): its name, learning it with the port, a mapped note toggling it once, the old "keys" lines of a file read as "pin", Linux keeps "keys". run from the repo root:
+-- MIDI MAP on Windows and Linux (Linux since M25): the PIN action (the KEYS slot): its name, learning it with the port, a mapped note toggling it once; the old "keys" lines of a file are read as "pin" on Windows and dropped
+-- (with a log line) on Linux; the Mac keeps "keys". run from the repo root:
 --   NORNS_PLATFORM=linux lua5.3 linux/tests/midimap_layer_test.lua
---   NORNS_PLATFORM=windows lua5.3 linux/tests/pin_action_test.lua   (and NORNS_PLATFORM=linux for the Linux half)
+--   NORNS_PLATFORM=windows lua5.3 linux/tests/pin_action_test.lua   (and NORNS_PLATFORM=linux, and NORNS_PLATFORM=macos for the Mac half)
 -- key is released when it must be, the learn states and every way out of them
 package.path = "lua/?.lua;lua/core/?.lua;lua/lib/?.lua;" .. package.path
 local tmp = os.tmpname()
@@ -65,6 +66,7 @@ local function note_on(id, ch, n, vel) send(id, {0x90 + ch - 1, n, vel}) end
 local function note_off(id, ch, n) send(id, {0x80 + ch - 1, n, 0}) end
 local function setup(fn) S.load(); S.select_preset("NONE"); S.set_clash("params"); for _, a in ipairs(S.ARC_IDS) do S.clear(a) end; S.set_arc_keys(true); S.set_arc_keys_accel(false); mm.load(); reset_out(); T = T + 100; if fn then fn() end; mm.changed() end
 local WINDOWS = os.getenv("NORNS_PLATFORM") == "windows"
+local LINUX = os.getenv("NORNS_PLATFORM") == "linux"
 local function learning() return mm.learn.state end
 local function setup2() S.load(); S.select_preset("NONE"); mm.load(); reset_out(); T = T + 100 end
 local function has(list, id) for _, v in ipairs(list) do if v == id then return true end end return false end
@@ -72,8 +74,8 @@ local function wa() local r = {} for _, o in ipairs(out) do if o:match("^wa:") t
 _norns.window_action = function(name) out[#out + 1] = "wa:" .. name end
 add(11, "Ableton Push 2 1"); add(12, "Ableton Push 2 2")
 
-if WINDOWS then
-  check(has(S.ACTION_IDS, "pin") and not has(S.ACTION_IDS, "keys"), "Windows: the action is pin, there is no keys")
+if WINDOWS or LINUX then
+  check(has(S.ACTION_IDS, "pin") and not has(S.ACTION_IDS, "keys"), "the action is pin, there is no keys")
   eq(S.ACTION_IDS[8], "pin", "pin is in the place of keys (the 8th of 14)")
   eq(#S.ACTION_IDS, 14, "still 14 actions")
   -- learned from a note: the port is stored (like every other action)
@@ -99,10 +101,32 @@ if WINDOWS then
   -- a file from before (the KEYS action was mapped, and did nothing): its lines are read as pin
   local g = io.open("/home/we/midimap.conf", "w")
   g:write("verdandi-midimap=1\nactions=1\nact.keys.type=note\nact.keys.num=77\nact.keys.dev=ANY\n"); g:close()
+  local msgs = {}
+  S.log = function(m) msgs[#msgs + 1] = m end
   setup2()
-  eq(S.state.actions.pin.num, 77, "an old act.keys.num line is read as pin")
+  if WINDOWS then
+    eq(S.state.actions.pin.num, 77, "Windows: an old act.keys.num line is read as pin")
+  else
+    -- Linux: the old keyboard action is dropped, quietly (one log line), nothing crashes, and PIN is not mapped to the pad that played the keyboard
+    eq(S.state.actions.pin.type, "none", "Linux: an old act.keys line is not turned into a pin mapping")
+    local n = 0
+    for _, l in ipairs(msgs) do if l:find("act.keys", 1, true) then n = n + 1 end end
+    eq(n, 1, "Linux: the drop is said once in the log (not once per line)")
+    S.save()
+    local f2 = io.open("/home/we/midimap.conf", "r"); local t2 = f2 and f2:read("a") or ""; if f2 then f2:close() end
+    check(t2:find("act.keys", 1, true) == nil, "Linux: and the next save has no act.keys line any more")
+    -- a preset file (the owner's own, from before) with an act.keys line loads without an error and makes no pin mapping
+    os.execute("mkdir -p /home/we/midimap-presets")
+    local pf = io.open("/home/we/midimap-presets/" .. S.slug("OLD KEYS") .. ".midimap", "w")
+    pf:write("verdandi-midimap-preset=1\nname=OLD KEYS\nact.keys.type=note\nact.keys.num=60\nact.mix.type=note\nact.mix.num=61\n"); pf:close()
+    S.reload_presets()
+    check(S.preset_by_name("OLD KEYS") ~= nil, "Linux: a preset with an old act.keys line still loads")
+    local okp, whyp = S.select_preset("OLD KEYS"); check(okp, "Linux: and can be chosen: " .. tostring(whyp))
+    eq(S.state.actions.pin.type, "none", "Linux: the old keys line of the preset made no pin mapping")
+    eq(S.state.actions.mix.num, 61, "Linux: the rest of the preset is used")
+  end
 else
-  check(has(S.ACTION_IDS, "keys") and not has(S.ACTION_IDS, "pin"), "Linux: the action is still keys, there is no pin")
+  check(has(S.ACTION_IDS, "keys") and not has(S.ACTION_IDS, "pin"), "the Mac keeps the action keys, there is no pin")
   eq(S.ACTION_IDS[8], "keys", "keys is the 8th")
 end
 if fails == 0 then real_print("pin_action_test: ok") else real_print("pin_action_test: " .. fails .. " FAILED") os.exit(1) end

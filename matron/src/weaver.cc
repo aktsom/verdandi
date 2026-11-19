@@ -405,9 +405,11 @@ static int _clipboard_request(lua_State *l);
 static int _toast(lua_State *l);
 static int _midimap_arm(lua_State *l);
 static int _arc_turn(lua_State *l);
+#ifdef NORNS_LINUX_DESKTOP
+static int _pin_report(lua_State *l);
+#endif
 #ifdef NORNS_WINDOWS
 static int _arc_test(lua_State *l);
-static int _pin_report(lua_State *l);
 static int _fake_grid(lua_State *l);
 static int _fake_grid_stall(lua_State *l);
 static int _test_quit(lua_State *l);
@@ -821,9 +823,11 @@ void w_init(void) {
     lua_register_norns("toast", &_toast);
     lua_register_norns("midimap_arm", &_midimap_arm);
     lua_register_norns("arc_turn", &_arc_turn);
+#ifdef NORNS_LINUX_DESKTOP
+    lua_register_norns("pin_report", &_pin_report);
+#endif
 #ifdef NORNS_WINDOWS
     lua_register_norns("arc_test", &_arc_test);
-    lua_register_norns("pin_report", &_pin_report);
     lua_register_norns("fake_grid", &_fake_grid);
     lua_register_norns("fake_grid_stall", &_fake_grid_stall);
     lua_register_norns("test_quit", &_test_quit);
@@ -4431,9 +4435,9 @@ int _arc_test(lua_State *l) {
 }
 #endif
 
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
 /***
- * Windows CI only (needs VERDANDI_TEST_HOOKS=1): log one line, "pin report <n>: ...", with the always-on-top state of every Verdandi window (norns.log)
+ * CI only (needs VERDANDI_TEST_HOOKS=1): log one line, "pin report <n>: ...", with the always-on-top state of every Verdandi window (norns.log)
  * @function pin_report
  * @tparam integer n a number to find the line again
  * @treturn boolean true if the hooks are on
@@ -4531,7 +4535,7 @@ int _midimap_show(lua_State *l) {
 /***
  * Linux desktop: MIDI actions (docs/port/midi-actions-plan.md): do what a click on a button of the window does (the main thread of the window runs it, like the mouse)
  * @function window_action
- * @tparam string name one of mix tape home params input grid arc keys maiden manual mute detach fullscreen screenshot
+ * @tparam string name one of mix tape home params input grid arc pin (keys on the Mac) maiden manual mute detach fullscreen screenshot
  * @treturn boolean true if the name is one of the 14 and the action was handed over
  */
 int _window_action(lua_State *l) {

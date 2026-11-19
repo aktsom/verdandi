@@ -517,6 +517,30 @@ RESTART_MARK="$NORNS_HOME/.norns-restart"
 AUDIO_MARK="$NORNS_HOME/.norns-restart-audio"
 rm -f "$RESTART_MARK" "$AUDIO_MARK"
 
+# the console websockets of maiden (norns 5555, sclang 5556): when another program holds one of these ports, a free one is used instead and maiden's page is told (M25, the same rules as the Windows launcher,
+# docs/port/phase-m22.md); with no free port that console is off. a busy port never stops norns, SuperCollider or the audio. the ports are chosen once: a restart of norns keeps them
+CONSOLE_PORTS="$REPO/linux/console-ports.sh"
+NORNS_WS_PORT=5555
+SCLANG_WS_PORT=5556
+CONSOLE_NOTE=""
+if [ -x "$CONSOLE_PORTS" ]; then
+    NORNS_WS_PORT="$("$CONSOLE_PORTS" choose 5555 0)"
+    SCLANG_WS_PORT="$("$CONSOLE_PORTS" choose 5556 "$NORNS_WS_PORT")"
+    for cw in "norns 5555 $NORNS_WS_PORT" "sclang 5556 $SCLANG_WS_PORT"; do
+        set -- $cw
+        if [ "$2" != "$3" ]; then
+            line="$("$CONSOLE_PORTS" why "$1" "$2" "$3")"
+            echo "norns.sh: console: $line"
+            CONSOLE_NOTE="${CONSOLE_NOTE:+$CONSOLE_NOTE }$line"
+        fi
+    done
+    # the plain line on the norns screen: the note file that lua/core/menu.lua shows (the Windows launcher's mechanism)
+    [ -n "$CONSOLE_NOTE" ] && printf '%s\n' "$CONSOLE_NOTE" > "$NORNS_HOME/.verdandi-note"
+fi
+ws_url() { # port: the websocket address for ws-wrapper, "none" when that console is off
+    if [ "$1" -gt 0 ] 2> /dev/null; then echo "ws://127.0.0.1:$1"; else echo none; fi
+}
+
 start_norns() {
     export NORNS_IN_PORTS="$IN_PORTS" NORNS_OUT_PORTS="$OUT_PORTS"
     # wrong-architecture plug-ins a script installed (it did that while norns ran, or an earlier version did): moved aside into disabled/ with a manifest line, before
@@ -539,7 +563,7 @@ start_norns() {
         # explicit <&0: a non-interactive shell gives background jobs /dev/null as stdin
         PATH="$shimpath" "$NORNS_BIN" <&0 &
     else
-        WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" PATH="$shimpath" "$WS" "ws://127.0.0.1:5555" "$NORNS_BIN" < /dev/null >> "$NORNS_LOGS/norns.log" 2>&1 &
+        WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" PATH="$shimpath" "$WS" "$(ws_url "$NORNS_WS_PORT")" "$NORNS_BIN" < /dev/null >> "$NORNS_LOGS/norns.log" 2>&1 &
     fi
     NORNS_PID=$!
     PIDS="$PIDS $NORNS_PID"
@@ -556,7 +580,7 @@ start_norns() {
     done
     # sclang's Qt WebEngine refuses to start as root (containers) without this
     [ "$(id -u)" -eq 0 ] && export QTWEBENGINE_DISABLE_SANDBOX=1 QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox
-    WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" QT_QPA_PLATFORM=offscreen "$WS" "ws://127.0.0.1:5556" sclang -i maiden \
+    WS_WRAPPER_ALLOWED_ORIGINS="$WS_ORIGINS" QT_QPA_PLATFORM=offscreen "$WS" "$(ws_url "$SCLANG_WS_PORT")" sclang -i maiden \
         < /dev/null >> "$NORNS_LOGS/sclang.log" 2>&1 &
     SCLANG_PID=$!
     PIDS="$PIDS $SCLANG_PID"
@@ -580,7 +604,13 @@ if [ -x "$MAIDEN/maiden" ]; then
         echo "norns.sh: port $MAIDEN_PORT is in use: maiden is not started (another port: NORNS_MAIDEN_PORT=5001 linux/norns.sh)"
     else
         "$NORNS_TIDY" rotate maiden
-        (cd "$MAIDEN" && exec ./maiden server --host 127.0.0.1 --port "$MAIDEN_PORT" --app ./app/build \
+        # a console port had to move: maiden's page reads its console ports from repl-endpoints.json, so it is served from a copy (<home>/.maiden-app) with the ports in use
+        MAIDEN_APP=./app/build
+        if [ -n "$CONSOLE_NOTE" ] && "$CONSOLE_PORTS" app-copy "$MAIDEN/app/build" "$NORNS_HOME/.maiden-app" "$NORNS_WS_PORT" "$SCLANG_WS_PORT"; then
+            MAIDEN_APP="$NORNS_HOME/.maiden-app"
+            echo "norns.sh: maiden: the console ports are norns $NORNS_WS_PORT, sclang $SCLANG_WS_PORT (page served from $MAIDEN_APP)"
+        fi
+        (cd "$MAIDEN" && exec ./maiden server --host 127.0.0.1 --port "$MAIDEN_PORT" --app "$MAIDEN_APP" \
             --data "$NORNS_HOME/dust" --doc "$NORNS_HOME/norns/doc" < /dev/null >> "$NORNS_LOGS/maiden.log" 2>&1) &
         PIDS="$PIDS $!"
         echo "norns.sh: maiden at http://127.0.0.1:$MAIDEN_PORT/maiden (log: $NORNS_LOGS/maiden.log)"

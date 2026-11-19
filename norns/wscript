@@ -181,6 +181,7 @@ def build(bld):
             '../matron/src/platform/macos/vgrid_skin.c',
             '../matron/src/platform/macos/vkeys_skin.c',
             '../matron/src/platform/macos/window_keys.c',
+            '../matron/src/platform/windows/win_state.c', # M25: the size and place of the main window (pure C, shared with the Windows build)
         ]
         linux_only = ['ALSA', 'LIBUDEV', 'LIBEVDEV', 'GLIB-2.0', 'GIO-2.0', 'LIBGPIOD', 'AVAHI-COMPAT-LIBDNS_SD', 'ATOMIC']
         matron_use = [u for u in matron_use if u not in linux_only]
@@ -238,6 +239,7 @@ def build(bld):
             '../matron/src/platform/macos/vgrid_skin.c',
             '../matron/src/platform/macos/vkeys_skin.c',
             '../matron/src/platform/macos/window_keys.c',
+            '../matron/src/platform/windows/win_state.c', # M25: the size and place of the main window (pure C, shared with the Windows build)
         ]
 
     norns_sources = norns_sources + matron_sources + crone_sources

@@ -28,9 +28,12 @@ M.ARC_IDS = {"a1", "a2", "a3", "a4"} -- the four encoders of the virtual arc (do
 M.ALL_IDS = {"e1", "e2", "e3", "k1", "k2", "k3", "a1", "a2", "a3", "a4"}
 M.ACCELS = {"off", "low", "high"}
 -- the actions (docs/port/midi-actions-plan.md): the buttons of the box and a few utility actions, in the order of the list on the page. there is no quit, no menu navigation, no typing
--- on Windows the virtual keyboard is not built and its button, key and action are PIN (always on top, docs/port/phase-m16.md): the action is called "pin" there and a file that has the old "keys" lines is read as "pin"
+-- on Windows the virtual keyboard is not built and its button, key and action are PIN (always on top, docs/port/phase-m16.md): the action is called "pin" there and a file that has the old "keys" lines is read as "pin".
+-- on Linux the same since M25 (the virtual keyboard is gone from the window): the action is "pin", but a file that has the old "keys" lines does NOT turn them into PIN (a pad that played the keyboard window must not
+-- suddenly switch always-on-top): they are dropped, with one line in the log. the Mac keeps "keys"
 local WINDOWS = os.getenv("NORNS_PLATFORM") == "windows"
-M.ACTION_IDS = {"mix", "tape", "home", "params", "input", "grid", "arc", WINDOWS and "pin" or "keys", "maiden", "manual", "mute", "detach", "fullscreen", "screenshot"}
+local LINUX = os.getenv("NORNS_PLATFORM") == "linux"
+M.ACTION_IDS = {"mix", "tape", "home", "params", "input", "grid", "arc", (WINDOWS or LINUX) and "pin" or "keys", "maiden", "manual", "mute", "detach", "fullscreen", "screenshot"}
 M.ACTION_KINDS = {"none", "note", "ccbutton", "step"}
 M.REL_MODES = {"rel2c", "relsm", "relob"}
 M.MODES = {"abs", "rel2c", "relsm", "relob"}
@@ -44,8 +47,11 @@ M.MAX_PRESET_FILE = 2048
 local function is_enc(id) return id:sub(1, 1) == "e" end
 local function is_key(id) return id:sub(1, 1) == "k" end
 M.ARC_DRAGS = {"updown", "circle"}
---- the way a drag turns a ring when nothing is saved: up and down on Windows (the owner's choice, Windows 0.10.5), round the ring on Linux (unchanged)
-function M.arc_drag_default() return os.getenv("NORNS_PLATFORM") == "windows" and "updown" or "circle" end
+--- the way a drag turns a ring in NEW settings (no midimap.conf yet): up and down, as on Windows (the owner's choice, Windows 0.10.5; Linux since M25)
+function M.arc_drag_default() return "updown" end
+--- the way a drag turned a ring in a file that has no arc_drag line (written before the option existed): what it always meant on that platform, so that an existing install keeps its behaviour:
+--- up and down on Windows, round the ring on Linux
+function M.arc_drag_legacy() return os.getenv("NORNS_PLATFORM") == "windows" and "updown" or "circle" end
 
 local function is_arc(id) return id:sub(1, 1) == "a" end
 
@@ -278,6 +284,8 @@ function M.load()
   elseif ver ~= "1" then M.log("version " .. ver .. " is newer than this one knows (read as far as understood)") end
   local fields, afields = {}, {}
   local file_scale = 1 -- the scale of the sens numbers in the file: 1 (old) until a sens_scale line says another
+  local dropped_keys = false
+  st.arc_drag = M.arc_drag_legacy() -- a file with no arc_drag line keeps the old meaning (M25); only new settings get the new default
   each_line(text, function(k, v, line)
     if k == "verdandi-midimap" then return end
     if k == "sens_scale" then
@@ -290,6 +298,10 @@ function M.load()
     if id and M.state.ctl[id] == nil then id = nil end -- a5 and the like are unknown keys
     local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
     if WINDOWS and aid == "keys" then aid = "pin" end
+    if LINUX and aid == "keys" then
+      if not dropped_keys then M.log("act.keys.*: the virtual keyboard action is gone (the KEYS button is PIN now): dropped; map PIN again if wanted"); dropped_keys = true end
+      return
+    end
     if aid and M.state.actions[aid] == nil then aid = nil end -- an action that does not exist (there is no quit): an unknown key
     if k == "preset" then
       if v ~= "" then st.preset = v else M.log("preset= is empty, using NONE") end
@@ -304,7 +316,7 @@ function M.load()
       afields[aid][afield] = v:match("^%s*(.-)%s*$")
     elseif k == "arc_drag" then
       if v == "updown" or v == "circle" then st.arc_drag = v
-      else M.log(string.format("arc_drag=%s is not updown or circle, using %s", v:sub(1, 40), M.arc_drag_default())) end
+      else M.log(string.format("arc_drag=%s is not updown or circle, using %s", v:sub(1, 40), M.arc_drag_legacy())) end
     elseif k == "arc_keys" or k == "arc_keys_accel" then
       if v == "1" or v == "0" then st[k] = v == "1"
       else M.log(string.format("%s=%s is not 0 or 1, using %s", k, v:sub(1, 40), k == "arc_keys" and "1" or "0")) end
@@ -577,6 +589,7 @@ local function read_preset_file(path, file)
     if id and not in_list(M.ALL_IDS, id) then id = nil end
     local aid, afield = k:match("^act%.(%l+)%.(%l+)$")
     if WINDOWS and aid == "keys" then aid = "pin" end
+    if LINUX and aid == "keys" then aid = nil end -- a preset from before M25: the virtual keyboard action is dropped
     if aid and not in_list(M.ACTION_IDS, aid) then aid = nil end
     if aid and in_list({"type", "num", "mode", "dir", "threshold"}, afield) then
       afields[aid] = afields[aid] or {}

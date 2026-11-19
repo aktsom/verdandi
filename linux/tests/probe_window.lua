@@ -35,28 +35,22 @@ a:refresh()
 #sleep 0.3
 #xdo mouseup 3
 #sleep 0.5
-# the virtual keyboard window: norns sees a MIDI device, a click on a key and a typed d play notes
-_norns.grid_window("keys")
-#sleep 1.5
+# M25: the KEYS button's slot is PIN (always on top), as on Windows: F7 / _norns.grid_window("keys") toggles it, no keyboard window opens and no MIDI device "Verdandi keys" appears. the window reports what SDL says about
+# every window (VERDANDI_TEST_HOOKS=1, <home>/pin_report.log)
 print("PROBE midi device", midi.vports[1].name, midi.vports[2].name, midi.vports[3].name)
-#click ^keys$ 0.195 0.797
-#sleep 0.4
-#xdo search --name ^keys$ windowfocus
-#xdo keydown d
-#sleep 0.3
-#xdo keyup d
-#sleep 0.5
-# closing and opening the keys window again: the device goes and comes back, and still plays
+#sh "$DC" count keys0 '^keys$'
 _norns.grid_window("keys")
 #sleep 1
-print("PROBE midi closed", midi.vports[2].connected)
+_norns.pin_report(1)
+#sleep 0.5
+#sh "$DC" count keys1 '^keys$'
 _norns.grid_window("keys")
-#sleep 1.5
-print("PROBE midi reopened", midi.vports[2].connected)
-#xdo search --name ^keys$ windowfocus
-#xdo keydown d
-#sleep 0.3
-#xdo keyup d
+#sleep 1
+_norns.pin_report(2)
+#sleep 0.5
+_norns.grid_window("keys")
+#sleep 1
+_norns.pin_report(3)
 #sleep 0.5
 #shot @home/window-devices.png
 print("PROBE window done")

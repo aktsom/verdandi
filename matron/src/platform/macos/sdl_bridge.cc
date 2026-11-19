@@ -96,8 +96,10 @@
 #include "platform/linux/clip_text.h"
 #endif
 #include "dust_import.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/windows/capture_dir.h" // (pure: where screenshots and GIFs go: <Pictures>/Verdandi; Windows and, since M25, Linux)
+#endif
 #ifdef NORNS_WINDOWS
-#include "platform/windows/capture_dir.h"
 #include "platform/windows/win_messages.h"
 #include "platform/windows/win_paths.h"
 #include "platform/linux/file_picker.h"
@@ -110,8 +112,10 @@
 #include "sdl_bridge.h"
 #include "varc_skin.h"
 #include "platform/linux/arc_input.h"
+#ifdef NORNS_LINUX_DESKTOP
+#include "platform/common/pin_state.h" // PIN (always on top): Windows since 0.10.7, Linux since M25: the KEYS button's slot
+#endif
 #ifdef NORNS_WINDOWS
-#include "platform/common/pin_state.h"
 extern "C" int pin_native_topmost(SDL_Window *w);
 #endif
 #include "vgrid_device.h"
@@ -512,9 +516,11 @@ static void set_icon(SDL_Window *window) {
 
 static void fit_main_window(SDL_Window *w);
 
-#ifdef NORNS_WINDOWS
-// Windows: the size and place of the main window are kept in <home>/main-window.conf (platform/windows/win_state.h) and put back at the next start; saved 600 ms after the last change
+#if defined(NORNS_WINDOWS) || defined(NORNS_LINUX_DESKTOP)
+// Windows and Linux (M25): the size and place of the main window are kept in <home>/main-window.conf (platform/windows/win_state.h, pure C, shared) and put back at the next start; saved 600 ms after the last
+// change. a place that no screen shows any more (a monitor removed, another resolution) is not used: the window stays where the system puts it
 #include "platform/windows/win_state.h"
+static bool main_window_moved_by_layout(void); // the grid and arc windows moved or resized the norns window for a moment (extras_layout): that place is not the user's choice
 static ws_t ws_now;
 static int ws_gen;
 static std::string ws_path() {
@@ -555,7 +561,7 @@ static Uint32 ws_save_timer(Uint32, void *param) {
 }
 // the main window moved or was resized (not while maximised or minimised): remember it and save when it has been quiet for a moment
 static void ws_changed(SDL_Window *w, Uint8 e, int d1, int d2) {
-    if (w == NULL || (SDL_GetWindowFlags(w) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP))) {
+    if (w == NULL || (SDL_GetWindowFlags(w) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) || main_window_moved_by_layout()) {
         return;
     }
     if (e == SDL_WINDOWEVENT_MOVED) {
@@ -573,7 +579,7 @@ static void ws_changed(SDL_Window *w, Uint8 e, int d1, int d2) {
 }
 #endif
 
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
 static void pin_set_window(SDL_Window *w); // the PIN button (below): a window that opens gets the state at once
 #endif
 
@@ -596,11 +602,11 @@ static void bridge_do(bridge_req_t *req) {
             SDL_SetWindowMinimumSize(req->window, (SKIN_W + 2 * SKIN_MARGIN) / 3, (SKIN_H + 2 * SKIN_MARGIN) / 3);
 #endif
             fit_main_window(req->window);
-#ifdef NORNS_WINDOWS
+#if defined(NORNS_WINDOWS) || defined(NORNS_LINUX_DESKTOP)
             ws_restore(req->window);
 #endif
             set_icon(req->window);
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
             pin_set_window(req->window);
 #endif
             the_window = req->window;
@@ -980,7 +986,7 @@ static SDL_Window *pane_open(pane_t *p, const char *title, int uw, int uh) {
     if (p->window != NULL) {
         SDL_SetWindowMinimumSize(p->window, uw / 3, uh / 3);
         set_icon(p->window);
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
         pin_set_window(p->window);
 #endif
         shell_adopt_windows();
@@ -1013,12 +1019,22 @@ static pane_t grid_pane = {};
 static pane_t arc_pane = {};
 static pane_t keys_pane = {};
 
-#ifdef NORNS_WINDOWS
-//--- PIN: "always on top" for every Verdandi window (the KEYS button's place on Windows; docs/port/phase-m16.md). starts off at every start, never saved
+#ifdef NORNS_LINUX_DESKTOP
+//--- PIN: "always on top" for every Verdandi window (the KEYS button's place on Windows and, since M25, on Linux; docs/port/phase-m16.md). starts off at every start, never saved
 static pin_state_t pin = {0};
 
+// can this desktop keep a window on top at all? SDL asks the window manager (X11: _NET_WM_STATE_ABOVE); a Wayland client has no such request. Windows always can
+static bool pin_possible(void) {
+#ifdef NORNS_WINDOWS
+    return true;
+#else
+    const char *drv = SDL_GetCurrentVideoDriver();
+    return drv != NULL && strcmp(drv, "x11") == 0;
+#endif
+}
+
 static void pin_set_window(SDL_Window *w) {
-    if (w != NULL) {
+    if (w != NULL && pin_possible()) {
         SDL_SetWindowAlwaysOnTop(w, pin_for_new_window(&pin) ? SDL_TRUE : SDL_FALSE);
     }
 }
@@ -1037,6 +1053,13 @@ static void pin_windows(void *out[5]) {
 }
 
 static void toggle_pin(void) {
+    if (!pin_possible()) {
+        // not pretended: the state stays off, the button stays dark, one plain line says why
+        const char *drv = SDL_GetCurrentVideoDriver();
+        fprintf(stderr, "window: always on top (PIN) is not available here: the video driver is '%s', which has no way to keep a window on top (Wayland has none: try an X11 session)\n", drv != NULL ? drv : "none");
+        show_toast("ALWAYS ON TOP: NOT AVAILABLE ON WAYLAND", 3500);
+        return;
+    }
     pin_toggle(&pin);
     void *w[5];
     pin_windows(w);
@@ -1047,7 +1070,12 @@ static void toggle_pin(void) {
     redraw(true);
 }
 
-// CI (VERDANDI_TEST_HOOKS=1): one line in norns.log with what SDL and Windows say about every window
+// CI (VERDANDI_TEST_HOOKS=1): one line in norns.log with what SDL and the system say about every window (Linux: -1 for the system's own answer, only SDL's flag)
+#ifndef NORNS_WINDOWS
+static int pin_native_topmost(SDL_Window *) {
+    return -1;
+}
+#endif
 static void pin_report(int token) {
     void *w[5];
     pin_windows(w);
@@ -1098,6 +1126,11 @@ int sdl_bridge_pin_report(int token) {
 
 static SDL_Rect main_before_extras;
 static bool main_saved = false;
+#if defined(NORNS_WINDOWS) || defined(NORNS_LINUX_DESKTOP)
+static bool main_window_moved_by_layout(void) {
+    return main_saved;
+}
+#endif
 
 // the free screen area (no menu bar, no dock) of the display the norns window is on
 static bool usable_bounds(SDL_Rect *u) {
@@ -1705,8 +1738,9 @@ static double turn_factor(void) {
     if (mod & KMOD_GUI) {
         return 4;
     }
-#ifdef NORNS_WINDOWS
-    // the Windows key opens the Start menu when it is let go: Ctrl is the faster turn here as well (a Ctrl-click is the push button, so a drag is not started with it)
+#ifndef __APPLE__
+    // Windows and Linux (M25): the Windows key (Super) opens the Start menu or the desktop's menu when it is let go: Ctrl is the faster turn here as well (a Ctrl-click is the push button, so a drag is not
+    // started with it; nothing else in the arc window uses Ctrl with the wheel or a drag, and the arc keys ignore a key pressed with Ctrl). The Super key keeps working. The Mac keeps Command only
     if (mod & KMOD_CTRL) {
         return 4;
     }
@@ -2112,8 +2146,8 @@ static void keys_control(int c) {
 }
 
 static void toggle_keys(void) {
-#ifdef NORNS_WINDOWS
-    toggle_pin(); // the virtual keyboard is not built on Windows: its button, F7 and the MIDI action are PIN
+#ifdef NORNS_LINUX_DESKTOP
+    toggle_pin(); // the virtual keyboard is not built on Windows and, since M25, not offered on Linux: its button, F7 and the MIDI action are PIN. (the Mac keeps its KEYS window)
     return;
 #endif
     if (keys_is_open()) {
@@ -2450,6 +2484,9 @@ static std::string windows_capture_dir(void) {
 }
 #endif
 
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+static bool capture_in_pictures = false; // Linux (M25): the shots went into <Pictures>/Verdandi (as on Windows), not into dust or the Pictures folder itself
+#endif
 // the user's own desktop (HOME is the norns home here)
 static std::string desktop_dir(void) {
 #ifdef NORNS_WINDOWS
@@ -2486,6 +2523,18 @@ static std::string desktop_dir(void) {
     }
 #endif
     struct stat st;
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+    // M25: as on Windows, screenshots and GIFs go into a subfolder "Verdandi" of the Pictures folder (which is found as before: XDG_PICTURES_DIR, ~/.config/user-dirs.dirs, ~/Pictures); the dust folder when
+    // there is no Pictures folder or the subfolder cannot be made. (before M25 the files went straight into the Pictures folder)
+    {
+        bool pic_ok = stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+        std::string sub = d + "/" + CAPTURE_SUBFOLDER;
+        bool made = pic_ok && ((stat(sub.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) || mkdir(sub.c_str(), 0755) == 0);
+        char out[2400];
+        capture_in_pictures = capture_dir_pick(pic_ok ? d.c_str() : "", made, dust_dir().c_str(), out, sizeof out) == 1;
+        return out;
+    }
+#endif
     return stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? d : dust_dir();
 }
 
@@ -2515,6 +2564,11 @@ static const char *where(const std::string &path) {
     if (path.find("/Desktop/") != std::string::npos) {
         return "Desktop";
     }
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+    if (capture_in_pictures) {
+        return "Pictures/Verdandi";
+    }
+#endif
     return path.find("/Pictures/") != std::string::npos ? "Pictures" : "dust";
 }
 
@@ -2720,7 +2774,7 @@ static void gif_toggle(void) {
 // the screen window gets the icon and the PIN state when it opens
 static void decorate_screen_window(SDL_Window *w) {
     set_icon(w);
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
     pin_set_window(w);
 #endif
 }
@@ -3534,11 +3588,13 @@ static void handle_show(int kind, int n, int value) {
         }
         return;
     }
-#ifdef NORNS_WINDOWS
+#ifdef NORNS_LINUX_DESKTOP
     if (kind == SDL_BRIDGE_SHOW_PIN_REPORT) {
         pin_report(n);
         return;
     }
+#endif
+#ifdef NORNS_WINDOWS
     if (kind == SDL_BRIDGE_SHOW_ARC_TEST) {
         arc_test(n / 16, n % 16, value);
         return;
@@ -4033,7 +4089,7 @@ void sdl_bridge_run(void) {
                 }
                 break;
             }
-#ifdef NORNS_WINDOWS
+#if defined(NORNS_WINDOWS) || defined(NORNS_LINUX_DESKTOP)
             if (e == SDL_WINDOWEVENT_MOVED || e == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 ws_changed(the_window, e, ev.window.data1, ev.window.data2);
             }

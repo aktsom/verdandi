@@ -64,15 +64,12 @@ int main(void) {
     CHECK(pin_get(&pin) == 1 && pin_get(&next) == 0, "the next start begins off");
 
     // the actions
-#ifdef NORNS_WINDOWS
-    CHECK(window_action_count() == 14, "14 actions on Windows too");
+    // Windows and, since M25, Linux: the slot of the virtual keyboard is PIN
+    CHECK(window_action_count() == 14, "14 actions on Windows and on Linux");
     CHECK(window_action_find("pin") == 7, "pin is where keys was (index 7), got %d", window_action_find("pin"));
-    CHECK(window_action_find("keys") == -1, "there is no keys action on Windows");
+    CHECK(window_action_find("keys") == -1, "there is no keys action");
     const wa_entry_t *e = window_action_get(window_action_find("pin"));
     CHECK(e != NULL && e->kind == WA_CONTROL, "pin is a control action (the button's)");
-#else
-    CHECK(window_action_find("keys") == 7 && window_action_find("pin") == -1, "on Linux the action is still keys and there is no pin");
-#endif
     CHECK(window_action_find("arc") == 6 && window_action_find("maiden") == 8, "the neighbours did not move");
 
     if (fails) {

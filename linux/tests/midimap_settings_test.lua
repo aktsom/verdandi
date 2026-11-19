@@ -275,21 +275,27 @@ eq(st.ctl.a2.type, "cc", "a2 kept"); eq(st.ctl.a2.gain, 8, "a2: a damaged gain i
 check(logged("a2.gain=900") and logged("a2.accel=warp") and logged("a2.mode=zigzag"), "each is logged")
 eq(st.ctl.a3.type, "none", "a3: a note is refused"); check(logged("a3.type=note"), "and logged")
 eq(st.arc_keys, true, "a damaged arc_keys is on"); eq(st.arc_keys_accel, false, "a damaged arc_keys_accel is off"); check(logged("arc_keys=maybe") and logged("arc_keys_accel=2"), "both logged")
--- ARC DRAG (Windows 0.10.5): how a left drag turns a ring. the default is up and down on Windows and round the ring elsewhere (Linux unchanged); saved in midimap.conf; a missing or damaged value is the default
+-- ARC DRAG (Windows 0.10.5; Linux M25): how a left drag turns a ring. NEW settings (no midimap.conf) are up and down on every platform; a file that has no arc_drag line keeps what it always meant (up and down on
+-- Windows, round the ring on Linux); saved in midimap.conf; a damaged value is that old meaning
 do
   local real_getenv, platform = os.getenv, nil
   os.getenv = function(k) if k == "NORNS_PLATFORM" and platform ~= nil then return platform end return real_getenv(k) end
   platform = "windows"; fresh(); st = S.load()
   eq(st.arc_drag, "updown", "Windows: up and down by default")
   platform = "linux"; fresh(); st = S.load()
-  eq(st.arc_drag, "circle", "Linux: round the ring by default (unchanged)")
+  eq(st.arc_drag, "updown", "Linux: up and down by default for new settings (M25)")
+  st = load_text("verdandi-midimap=1\npreset=NONE\n"); eq(st.arc_drag, "circle", "Linux: an existing file with no arc_drag line keeps round the ring")
+  platform = "windows"; st = load_text("verdandi-midimap=1\npreset=NONE\n"); eq(st.arc_drag, "updown", "Windows: an existing file with no arc_drag line keeps up and down")
+  platform = "linux"; st = load_text("verdandi-midimap=1\narc_drag=circle\n"); eq(st.arc_drag, "circle", "Linux: a saved circle stays circle")
+  st = load_text("verdandi-midimap=1\narc_drag=updown\n"); eq(st.arc_drag, "updown", "Linux: a saved up and down stays up and down")
+  fresh()
   platform = "windows"; fresh(); S.load()
   check(S.set_arc_drag("circle"), "the setting can be changed"); check(not S.set_arc_drag("sideways") and not S.set_arc_drag(true), "and nothing else is taken")
   check(slurp("/home/we/midimap.conf"):find("arc_drag=circle", 1, true), "the file has arc_drag=circle")
   logs = {}; again = S.load(); eq(again.arc_drag, "circle", "round trip: circle stays circle on Windows"); eq(#logs, 0, "a good file logs nothing")
   check(S.set_arc_drag("updown") and slurp("/home/we/midimap.conf"):find("arc_drag=updown", 1, true), "and up and down is saved too")
   platform = "linux"; again = S.load(); eq(again.arc_drag, "updown", "a saved up and down stays on Linux")
-  st = load_text("verdandi-midimap=1\narc_drag=maybe\n"); eq(st.arc_drag, "circle", "Linux: a damaged value is the default"); check(logged("arc_drag=maybe"), "and logged")
+  st = load_text("verdandi-midimap=1\narc_drag=maybe\n"); eq(st.arc_drag, "circle", "Linux: a damaged value is the old meaning"); check(logged("arc_drag=maybe"), "and logged")
   platform = "windows"; st = load_text("verdandi-midimap=1\narc_drag=maybe\n"); eq(st.arc_drag, "updown", "Windows: a damaged value is the default")
   st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\n"); eq(st.arc_drag, "updown", "Windows: an old file without the line gets up and down (nothing is saved for it yet)")
   platform = "linux"; st = load_text("verdandi-midimap=1\ne1.type=cc\ne1.num=9\n"); eq(st.arc_drag, "circle", "Linux: an old file without the line is round the ring as before")
@@ -328,7 +334,7 @@ eq(S.state.ctl.e1.num, 4, "an old preset applies"); eq(S.state.ctl.a3.num, 90, "
 
 -- ---- the actions (docs/port/midi-actions-plan.md 3.4): the buttons of the box and utility actions
 fresh(); S.load()
-eq(table.concat(S.ACTION_IDS, ","), "mix,tape,home,params,input,grid,arc,keys,maiden,manual,mute,detach,fullscreen,screenshot", "the 14 actions in the order of the list")
+eq(table.concat(S.ACTION_IDS, ","), "mix,tape,home,params,input,grid,arc,pin,maiden,manual,mute,detach,fullscreen,screenshot", "the 14 actions in the order of the list")
 eq(S.state.actions_on, true, "the master switch starts ON")
 for _, id in ipairs(S.ACTION_IDS) do
   local a = S.state.actions[id]
@@ -355,14 +361,14 @@ bad2("mix", "num", 200, "num 200"); bad2("mix", "type", "arc", "type arc"); bad2
 check(S.set_actions_on(false), "switch off"); eq(S.state.actions_on, false, "off"); check(not S.set_actions_on("no"), "a boolean is wanted")
 check(S.set_actions_on(true), "on")
 -- round trip
-S.assign_action("keys", "note", 45); S.set_action("keys", "dev", "mio"); S.set_actions_on(false)
+S.assign_action("pin", "note", 45); S.set_action("pin", "dev", "mio"); S.set_actions_on(false)
 text = slurp("/home/we/midimap.conf")
 check(text:find("actions=0", 1, true), "the file has the switch")
 check(text:find("act.mix.type=note", 1, true) and text:find("act.mix.num=36", 1, true) and text:find("act.mute.type=step", 1, true) and text:find("act.mute.mode=relob", 1, true) and text:find("act.mute.dir=up", 1, true), "the file has the actions")
-check(text:find("act.tape.type=note", 1, true) and text:find("act.keys.dev=mio", 1, true), "and a device")
+check(text:find("act.tape.type=note", 1, true) and text:find("act.pin.dev=mio", 1, true), "and a device")
 logs = {}
 again = S.load()
-eq(again.actions_on, false, "round trip: the switch"); eq(again.actions.mix.num, 36, "round trip: note"); eq(again.actions.mute.mode, "relob", "round trip: step"); eq(again.actions.keys.dev, "mio", "round trip: device")
+eq(again.actions_on, false, "round trip: the switch"); eq(again.actions.mix.num, 36, "round trip: note"); eq(again.actions.mute.mode, "relob", "round trip: step"); eq(again.actions.pin.dev, "mio", "round trip: device")
 eq(again.actions.mix.ch, 5, "round trip: channel"); eq(#logs, 0, "a good file logs nothing")
 -- damaged values fall back with a log line
 st = load_text("verdandi-midimap=1\nactions=maybe\nact.mix.type=note\nact.mix.num=300\nact.tape.type=step\nact.tape.num=5\nact.tape.mode=zigzag\nact.tape.dir=sideways\nact.home.type=ccbutton\nact.home.num=9\nact.home.threshold=500\nact.params.type=bogus\nact.params.num=3\nact.input.type=note\n")
@@ -415,7 +421,7 @@ S.save()
 text = slurp("/home/we/midimap.conf")
 check(text:find("e1.dev=virtual", 1, true) and text:find("act.mix.dev=virtual", 1, true) and not text:find("JACK in", 1, true), "saving writes the new name only")
 check(S.set("e2", "dev", "Verdandi JACK in") and S.state.ctl.e2.dev == "virtual", "typing or choosing the old name stores the new one")
-check(S.set_action("keys", "dev", "Verdandi JACK in") and S.state.actions.keys.dev == "virtual", "the same for an action")
+check(S.set_action("pin", "dev", "Verdandi JACK in") and S.state.actions.pin.dev == "virtual", "the same for an action")
 eq(S.state.ctl.e1.dev == "virtual" and S.state.ctl.e1.num, 71, "the rest of the control is as it was")
 
 if fails == 0 then print("midimap settings: all passed") end

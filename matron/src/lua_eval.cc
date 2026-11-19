@@ -149,9 +149,12 @@ static int docall(lua_State *L, int narg, int nres) {
     lua_pushcfunction(L, msghandler); /* push message handler */
     lua_insert(L, base);              /* put it under function and args */
     globalL = L;                      /* to be available to 'laction' */
-    signal(SIGINT, laction);          /* set C-signal handler */
+    /* M25: the handler that was there before is put back, not SIG_DFL: on the desktop builds norns' own SIGINT handler (the LEDs of the grids go off, a running tape recording is closed: main.cc) was
+    ** replaced by the default action after the first line of the REPL was evaluated, so a Ctrl+C or kill -INT later ended the process without any of that. on a norns device the old handler is
+    ** SIG_DFL, as before */
+    void (*previous)(int) = signal(SIGINT, laction); /* set C-signal handler */
     status = lua_pcall(L, narg, nres, base);
-    signal(SIGINT, SIG_DFL); /* reset C-signal handler */
+    signal(SIGINT, previous == SIG_ERR ? SIG_DFL : previous); /* reset C-signal handler */
     lua_remove(L, base);     /* remove message handler from the stack
                               **/
     return status;

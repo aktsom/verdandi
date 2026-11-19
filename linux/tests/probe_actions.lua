@@ -13,7 +13,7 @@ S.clear_all_actions()
 S.assign_action("mix", "note", 36)
 S.assign_action("tape", "note", 37)
 S.assign_action("mute", "note", 38)
-S.assign_action("keys", "note", 39)
+S.assign_action("pin", "note", 39)
 S.assign_action("screenshot", "note", 40)
 S.assign_action("detach", "note", 41)
 S.assign_action("fullscreen", "note", 42)
@@ -50,19 +50,23 @@ print("PROBE midi mute1", lvl())
 #sh "$MMS" 90:26:64 80:26:00 > "$MARKS.s3" 2>&1
 #sleep 1
 print("PROBE midi mute2", lvl())
-# 3. the keys window: mouse opens and closes it, then MIDI does
+# 3. PIN (the KEYS button's slot since M25): the mouse turns it on and off, then MIDI does (the window logs what SDL says: pin_report, VERDANDI_TEST_HOOKS=1)
 #click ^Verdandi.Linux$ 0.645 0.109
 #sleep 1.5
-#sh "$DC" count km1 '^keys$'
+_norns.pin_report(11)
+#sleep 0.5
 #click ^Verdandi.Linux$ 0.645 0.109
 #sleep 1.5
-#sh "$DC" count km2 '^keys$'
+_norns.pin_report(12)
+#sleep 0.5
 #sh "$MMS" 90:27:64 80:27:00 > "$MARKS.s4" 2>&1
 #sleep 1.5
-#sh "$DC" count kd1 '^keys$'
+_norns.pin_report(13)
+#sleep 0.5
 #sh "$MMS" 90:27:64 80:27:00 > "$MARKS.s5" 2>&1
 #sleep 1.5
-#sh "$DC" count kd2 '^keys$'
+_norns.pin_report(14)
+#sleep 0.5
 #xdo search --name ^Verdandi.Linux$ windowfocus
 # 4. the row of buttons hidden: MUTE by MIDI still works (nothing is drawn for it)
 bs.set_show_buttons(false)

@@ -137,6 +137,12 @@ cc $CFLAGS -I matron/src/platform/macos -I/usr/local/include linux/tests/monome_
     -lpthread -o "$T/mwt" && LD_LIBRARY_PATH=/usr/local/lib run "c:monome_write (a stalled serial port, no half message)" "$T/mwt"
 run "grid:LED data reaches the serial port (script, script change clears, prompt commands)" linux/tests/grid_led_test.sh
 run "grid:LEDs go off when norns ends (Ctrl+Q, window close, SIGTERM, SIGHUP, a crash; bounded; the crash report names functions)" linux/tests/grid_exit_test.sh
+# M25: a tape recording that runs when norns ends is closed first, whichever way it ends (the WAV header is written when the file is closed: a file cut off by a signal had length zero). SIGINT needed the REPL's
+# signal(SIGINT, SIG_DFL) fixed too (lua_eval.cc put the default action back after the first line of the REPL)
+run "audio:a tape recording is closed when norns ends (Ctrl+Q, window close, SIGTERM, SIGHUP, SIGINT, RESTART, the shutdown action, SLEEP: a WAV with a header that matches the file)" linux/tests/tape_end_test.sh
+# M25: a console port (5555 norns, 5556 sclang) that another program holds never stops norns, SuperCollider or the audio
+run "launcher:console ports held by another program: the choice and the plain line, ws-wrapper does not crash and does not stop its child (the old one died with a segmentation fault)" env PART=1 linux/tests/console_ports_linux_test.sh
+run "launcher:ws-wrapper with a port that is held (the child runs and its status is the wrapper's, a chatty child is not blocked, none = no console, a free port as before)" env PART=2 linux/tests/console_ports_linux_test.sh
 cc $CFLAGS "$M/dust_import_test.c" "$P/dust_import.c" -o "$T/dit" && run "c:dust_import" "$T/dit"
 # the same as an ordinary user: root can read every file, so the failed-copy case only runs here
 chmod 755 "$T" && setpriv --reuid=65534 --regid=65534 --clear-groups true 2> /dev/null &&
@@ -150,6 +156,7 @@ run "waf:unit tests" "$WAF" test
 if [ -x "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}/maiden" ]; then
     run "maiden:server, origin checks" linux/tests/maiden_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:launcher, norns REPL origin" linux/tests/maiden_launcher_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
+    run "maiden:console ports 5555/5556 held by another program (the real norns.sh: norns starts, sclang's server runs, both consoles answer on the new ports, maiden's page is told, the plain line)" env PART=3 linux/tests/console_ports_linux_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:install a script, plug-in check" linux/tests/maiden_install_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
     run "maiden:button (opens maiden, or a note when not running)" linux/tests/maiden_button_test.sh "${NORNS_MAIDEN_DIR:-$(dirname "$REPO")/maiden}"
 else
@@ -394,11 +401,12 @@ cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux $(pkg-config --cflags s
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/arc_input_test.c -o "$T/aic" -lm 2> "$T/aic.err" || cat "$T/aic.err"
 run "c:virtual arc mouse numbers (up and down drag: 12 ticks a unit, a lap in 85, Shift, Ctrl, outside the window; wheel notch 2 ticks, a full turn of the pointer 256 ticks, Shift a quarter, Super four times, flipped wheel, the angle past the edge, fractions carried, the sum exact; same code on Linux and Windows)" "$T/aic"
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP $(pkg-config --cflags cairo freetype2) -I matron/src/platform/common -I $LNM -I $SKM linux/tests/pin_state_test.c $LNM/window_actions.c -o "$T/pst" 2> "$T/pst.err" || cat "$T/pst.err"
-run "c:PIN (always on top): starts off, one toggle for every window, a window opened later or again gets the state, off for all; Linux keeps the action keys" "$T/pst"
+run "c:PIN (always on top): starts off, one toggle for every window, a window opened later or again gets the state, off for all; the action is pin on Linux as on Windows" "$T/pst"
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DNORNS_WINDOWS $(pkg-config --cflags cairo freetype2) -I matron/src/platform/common -I $LNM -I $SKM linux/tests/pin_state_test.c $LNM/window_actions.c -o "$T/pstw" 2> "$T/pstw.err" || cat "$T/pstw.err"
 run "c:PIN on Windows: the action list has pin in the place of keys, 14 names, the neighbours did not move" "$T/pstw"
 run "lua:PIN as a MIDI action on Windows (learned from a note with its port, one toggle per press, other port nothing, saved as act.pin, old act.keys lines read as pin)" env NORNS_PLATFORM=windows lua5.3 linux/tests/pin_action_test.lua
-run "lua:the action stays keys on Linux (no pin)" env NORNS_PLATFORM=linux lua5.3 linux/tests/pin_action_test.lua
+run "lua:PIN as a MIDI action on Linux (M25: the same as Windows; an old act.keys line is dropped with one log line, no pin mapping is made from it)" env NORNS_PLATFORM=linux lua5.3 linux/tests/pin_action_test.lua
+run "lua:the Mac keeps the action keys (no pin)" env NORNS_PLATFORM=macos lua5.3 linux/tests/pin_action_test.lua
 run "lua:virtual arc as a script sees it (led, all, segment, relative levels, deltas and keys once each, wheel plus mapped encoder add up, a real arc next to it, remove and come back)" env NORNS_PLATFORM=linux lua5.3 linux/tests/arc_virtual_test.lua
 run "lua:util.file_exists is true for a folder where io.open refuses one (Windows): a folder with and without a trailing slash, a file, a missing name, the unchanged Linux way; the old check fails for cheat codes 2's lib/nb/lib/" lua5.3 linux/tests/file_exists_dir_test.lua
 run "lua:the native folder check of util.file_exists gets the real path (virtual /home/we translated; the first Windows CI run of the fix found it missing from the list)" lua5.3 linux/tests/file_exists_virtual_home_test.lua
@@ -1074,7 +1082,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     mkdir -p "$WH/dust/code/probe"
     cp "$REPO/linux/tests/scripts/window_probe.lua" "$WH/dust/code/probe/"
     WLOG="$T/window.log"
-    NORNS_HOME="$WH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_window.lua" "$WLOG" > /dev/null 2>&1
+    DC="$REPO/linux/tests/detach_check.sh" VERDANDI_TEST_HOOKS=1 NORNS_HOME="$WH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_window.lua" "$WLOG" > /dev/null 2>&1
     wl() { grep -q "$1" "$WLOG"; }
     window_ok() {
         local bad=0
@@ -1093,13 +1101,11 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         chk "arc wheel" "PROBE arcdelta.1.2"
         chk "arc key down" "PROBE arckey.1.1"
         chk "arc key up" "PROBE arckey.1.0"
-        chk "keys window is a norns MIDI device (after the JACK MIDI input)" "PROBE midi device.virtual.Verdandi keys"
-        chk "click on a piano key: note on" "PROBE midi.note_on.52.111.1"
-        chk "click on a piano key: note off" "PROBE midi.note_off.52.0.1"
-        chk "typed d: note on" "PROBE midi.note_on.52.100.1"
-        chk "keys window closed: the device is gone" "PROBE midi closed.false"
-        chk "keys window opened again: the device is back" "PROBE midi reopened.true"
-        [ "$(grep -c "PROBE midi.note_on.52.100.1" "$WLOG")" = 2 ] || { echo "missing: a note after reopening"; bad=1; }
+        # M25: the KEYS button's slot is PIN (always on top), as on Windows: no keyboard window, no MIDI device of it; F7 toggles the state of every window
+        chk "no keyboard window is opened by F7 (the slot is PIN): no window named keys, and no Verdandi keys MIDI device" 'grep -q "^keys0=0" "$WH/probe.marks" && grep -q "^keys1=0" "$WH/probe.marks" && ! grep -q "PROBE midi device.*Verdandi keys" "$WLOG"' 'cat "$WH/probe.marks"; grep "PROBE midi device" "$WLOG"'
+        chk "PIN on: the state is on, the button is lit and the norns window says always on top" 'grep -q "pin report 1: state=1 lit=1 main=1/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
+        chk "PIN off again: the state and the button are off" 'grep -q "pin report 2: state=0 lit=0 main=0/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
+        chk "PIN on once more: the grid and arc windows that are open are on top too" 'grep -q "pin report 3: state=1 lit=1 main=1/[-0-9]* grid=1/[-0-9]* arc=1/" "$WH/pin_report.log"' 'cat "$WH/pin_report.log"'
         return $bad
     }
     run "window:mouse, keyboard, virtual grid and arc" window_ok
@@ -1107,6 +1113,8 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     oled_mean() { convert "$WH/window-device.png" -crop 440x200+230+420 -colorspace Gray -format "%[fx:mean]" info:; }
     window_pixels() { awk -v m="$(oled_mean)" 'BEGIN { exit !(m > 0.03 && m < 0.3) }'; }
     run "window:oled pixels" window_pixels
+    # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
+    run "window:main window size and place are kept and put back (a place that is off every screen, a monitor that was to the left, a size above the screen, a damaged file)" linux/tests/window_state_test.sh
     cp "$WH/window-device.png" "$WH/window-devices.png" "${SHOT_DIR:-/dev/null}" 2> /dev/null
 
     # the in-window menu and the file dialogs, once with a stub zenity answering, once against a mock of the
@@ -1350,7 +1358,8 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         printf 'style=pixel\npreset=DARK\nbox=2C2E33\nkeys=444853\nencoders=5D6270\nbuttons=3A3D45\nfont=E4E6EA\nshow_buttons=1\n' > "$AH/box.conf"
         ALOG="$T/actions1.log"
         ALOG2="$T/actions2.log"
-        MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions.lua" "$ALOG" > /dev/null 2>&1
+        rm -f "$AH/pin_report.log"
+        VERDANDI_TEST_HOOKS=1 MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions.lua" "$ALOG" > /dev/null 2>&1
         cp "$AH/midimap.conf" "$T/actions-midimap.conf" 2> /dev/null
         for _ in $(seq 1 60); do pgrep -x norns > /dev/null || break; sleep 1; done # the first norns must be gone, or the second start only raises its window
         MMS="$T/midimap_send" DC="$REPO/linux/tests/detach_check.sh" NORNS_HOME="$AH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_actions_restart.lua" "$ALOG2" > /dev/null 2>&1
@@ -1372,7 +1381,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
             chk "the actions were set and the switch started ON" '[ "$(alg "$ALOG" start)" = "true 8" ]'
             chk "TAPE: the MIDI note and the mouse give the same state (the menu open on the TAPE page)" '[ -n "$(alg "$ALOG" "mouse tape")" ] && [ "$(alg "$ALOG" "mouse tape")" = "$(alg "$ALOG" "midi tape")" ] && alg "$ALOG" "midi tape" | grep -q "true.TAPE"'
             chk "MUTE: the MIDI note and the mouse give the same level, muted then unmuted" '[ "$(alg "$ALOG" "mouse mute1")" = "$(alg "$ALOG" "midi mute1")" ] && [ "$(alg "$ALOG" "mouse mute2")" = "$(alg "$ALOG" "midi mute2")" ] && [ "$(alg "$ALOG" "mouse mute1")" != "$(alg "$ALOG" "mouse mute2")" ]'
-            chk "the keys window: the mouse and the MIDI note open it (1) and close it (0) alike" '[ "$(amark km1)" = 1 ] && [ "$(amark km2)" = 0 ] && [ "$(amark kd1)" = 1 ] && [ "$(amark kd2)" = 0 ]'
+            chk "PIN: the mouse and the MIDI note turn it on (1) and off (0) alike" 'pn() { sed -n "s/^pin report $1: state=\\([01]\\) lit=\\([01]\\).*/\\1\\2/p" "$AH/pin_report.log" | tail -1; }; [ "$(pn 11)" = 11 ] && [ "$(pn 12)" = 00 ] && [ "$(pn 13)" = 11 ] && [ "$(pn 14)" = 00 ]' 'cat "$AH/pin_report.log"'
             chk "the row of buttons hidden: MUTE by MIDI still works, with the same levels" '[ "$(alg "$ALOG" "hidden mute1")" = "$(alg "$ALOG" "mouse mute1")" ] && [ "$(alg "$ALOG" "hidden mute2")" = "$(alg "$ALOG" "mouse mute2")" ]'
             chk "the screenshot action makes one file" '[ "$(amark shots_after)" = "$(( $(amark shots_before) + 1 ))" ]'
             chk "fullscreen with the screen docked: no screen window appears and norns lives" '[ "$(amark docked_screens)" = 0 ] && [ "$(amark docked_alive)" = yes ]'
@@ -1538,7 +1547,7 @@ PY
     arc_scenario
 
     # the left-button drag in the real arc window with real mouse events (xdotool), Windows 0.10.5 (docs/port/phase-m14.md): ARC DRAG up and down (up clockwise, 12 ticks a pixel, a lap of 1024 in 85 pixels; Shift is not here, see probe_arc_drag.lua),
-    # round the ring (the Linux default, unchanged), the drag goes on outside the window until the button is let go, nothing turns after the release, ring 3 only turns ring 3, the right button and the wheel as before, the window never moves
+    # round the ring, the drag goes on outside the window until the button is let go, nothing turns after the release, ring 3 only turns ring 3, the right button and the wheel as before, the window never moves
     arc_drag_scenario() {
         DH="$(mktemp -d)"
         ln -s "$REPO" "$DH/norns"
@@ -1553,7 +1562,7 @@ PY
             local bad=0
             chk() { eval "$2" > /dev/null 2>&1 || { echo "missing: $1 (got: $(eval "${3:-true}"))"; bad=1; }; }
             chk "the probe ran" 'grep -q "PROBE arc drag done" "$DLOG"'
-            chk "on Linux the drag is round the ring by default (unchanged)" 'grep -q "^PROBE default.circle" "$DLOG"'
+            chk "new settings drag up and down on Linux too (M25)" 'grep -q "^PROBE default.updown" "$DLOG"'
             chk "round the ring: a quarter turn of the pointer is about 64 ticks, clockwise" 'inr "PROBE default" "PROBE circle done" 1 56 72' 'dsum "PROBE default" "PROBE circle done" 1'
             chk "the setting reaches the window (UP/DOWN)" 'grep -q "^PROBE setting.updown.true" "$DLOG"'
             chk "up 86 pixels (a third of the window height): about one lap, 1032 ticks, every message clockwise" 'inr "PROBE setting" "PROBE up done" 1 1020 1044 && [ "$(dsum "PROBE setting" "PROBE up done" 1 | cut -d" " -f3)" -gt 0 ]' 'dsum "PROBE setting" "PROBE up done" 1'
@@ -1563,6 +1572,7 @@ PY
             chk "ring 3 dragged down 20 pixels: -240 on ring 3, nothing on ring 1" 'inr "PROBE free move done" "PROBE ring3 done" 3 -252 -228 && [ "$(dsum "PROBE free move done" "PROBE ring3 done" 1 | cut -d" " -f2)" = 0 ]' 'dsum "PROBE free move done" "PROBE ring3 done" 3'
             chk "the right button is still the push button (a key down and up, a move with it held turns nothing) and a wheel notch is still 2" '[ "$(sed -n "/PROBE ring3 done/,/PROBE push wheel done/p" "$DLOG" | grep -c "PROBE arckey")" = 2 ] && [ "$(dsum "PROBE ring3 done" "PROBE push wheel done" 1)" = "2 1 2 2" ]' 'dsum "PROBE ring3 done" "PROBE push wheel done" 1'
             chk "round the ring again: down on the right side of ring 1 is clockwise, about 19 ticks" 'inr "PROBE push wheel done" "PROBE circle again done" 1 12 26' 'dsum "PROBE push wheel done" "PROBE circle again done" 1'
+            chk "Ctrl is the four times faster turn (M25): one wheel notch with Ctrl held is 8 ticks, without it 2" '[ "$(dsum "PROBE circle again done" "PROBE ctrl wheel done" 1 | cut -d" " -f1)" = 8 ] && [ "$(dsum "PROBE ctrl wheel done" "PROBE plain wheel done" 1 | cut -d" " -f1)" = 2 ]' 'dsum "PROBE circle again done" "PROBE ctrl wheel done" 1; dsum "PROBE ctrl wheel done" "PROBE plain wheel done" 1'
             chk "the arc window never moved" '[ -s "$DH/probe.marks.geom0" ] && [ "$(cat "$DH/probe.marks.geom0")" = "$(cat "$DH/probe.marks.geom1")" ]' 'cat "$DH/probe.marks.geom0" "$DH/probe.marks.geom1"'
             chk "midimap.conf has the setting (arc_drag=updown while it was on, circle after)" 'grep -q "^arc_drag=updown" "$DH/midimap.during" && grep -q "^arc_drag=circle" "$DH/midimap.after"'
             return $bad
@@ -1690,7 +1700,6 @@ PY
             chk "F6 in the screen window opens the grid" '[ "$(m1 grid_open)" = 1 ]'
             chk "a cell press reaches the script while the screen is detached" '[ "$(grep -c "PROBE gridkey.[0-9]*.[0-9]*.1" "$D1")" -ge 1 ]'
             chk "...and again while the screen window is hidden" '[ "$(grep -c "PROBE gridkey.[0-9]*.[0-9]*.1" "$D1")" -ge 2 ]'
-            chk "the virtual keys window plays a note while the screen window is hidden" 'grep -q "PROBE midi.note_on" "$D1"'
             chk "F6 again closes the grid" '[ "$(m1 grid_closed)" = 0 ]'
             # shortcuts
             chk "Ctrl+Shift+S in the screen window gives the same picture as docked" 'same "$f/shot-docked.png" "$f/shot-detached.png"'
