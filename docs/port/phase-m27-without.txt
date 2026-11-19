@@ -1,0 +1,47 @@
+# M27: the new tests against the pre-M27 product code (fc78536: matron, norns, lua checked out from there; the tests are the new ones). each must fail.
+
+## extra_folders_page_test.lua (hint line, old import links, dropped folder)
+FAIL the hint line: what K3 and K2 do for a folder row
+FAIL a row that fits: the info area says what a removal does
+FAIL the hint line stays when the info area shows other text
+FAIL on ADD FOLDER the hint says K3 chooses (ADD FOLDER comes right after the folders)
+ext folders: the folder window could not open (Show, error 0x80070057)
+FAIL an old import link is listed after ADD FOLDER and marked IMPORT
+FAIL the hint line on a legacy row
+FAIL the info area says what an old import link is
+FAIL an import link whose file is gone is marked
+FAIL the warning names the link and says the file is NOT deleted
+FAIL K3 twice removes that import link (through ext_legacy_remove, not ext_remove)
+lua5.3: linux/tests/extra_folders_page_test.lua:104: attempt to call a nil value (field 'ext_dropped')
+
+## extfolders_test.c (old-import link list and removal)
+linux/tests/extfolders_test.c:146:33: error: 'EF_LEGACY_DIR' undeclared (first use in this function)
+linux/tests/extfolders_test.c:149:40: error: expected ')' before 'EF_LEGACY_DIR'
+
+## box_menu_test.sh (menu items, Ctrl+O, drop code)
+  FAIL  the menu still has 'Import files...'
+  FAIL  the menu still has 'Import folder...'
+  FAIL  the menu still has 'Copy samples into dust'
+  FAIL  Ctrl+O is still handled
+  FAIL  Ext folders sits behind a platform guard
+  FAIL  the drop code is not split by platform
+  FAIL  drop_path wiring
+
+## window tests (real norns built from the old code, Xvfb), run_all.sh
+FAIL  window:menu, screenshot, gif, file dialog (zenity stub), quit; no import dialog (log: tail below)
+        missing: no dialog asked for several files: the Import items are gone (M27)
+FAIL  window:file dialog through the portal (mock portal on a private bus) (log: tail below)
+        missing: no OpenFile for several files: the Import items are gone (M27)
+FAIL  window:ext folders on Linux (registered, a dropped folder is added, a dropped file refused, old import links listed and removed, files never touched, no chooser: a plain sentence) (log: tail below)
+        missing: the file browser's listing shows the folder as [ext] Drops Samples/ (marks: legacy_original_stays=yes copy_stays=yes ext_link_gone=yes ext_files_stay=yes file_not_imported=yes )
+        missing: the page opens from lua (the right-click item calls it) (marks: legacy_original_stays=yes copy_stays=yes ext_link_gone=yes ext_files_stay=yes file_not_imported=yes )
+        missing: a copy in the import folder is refused, never removed (marks: legacy_original_stays=yes copy_stays=yes ext_link_gone=yes ext_files_stay=yes file_not_imported=yes )
+        missing: an old import link is removed: the link goes, the original stays (marks: legacy_original_stays=yes copy_stays=yes ext_link_gone=yes ext_files_stay=yes file_not_imported=yes )
+        missing: no folder chooser: one plain sentence, no crash (marks: legacy_original_stays=yes copy_stays=yes ext_link_gone=yes ext_files_stay=yes file_not_imported=yes )
+KNOWN window:MIDI actions (pads do what the buttons do: same effect as the mouse, hidden row, screenshot, fullscreen, detach, master switch by page, shortcut and menu tick, saved and restored)  [on linux/tests/known-failures.txt: 
+PASS  window:grid, keys and arc windows open and close with F6, F7, F8 again and again (from the norns window and from their own window, with the screen detached) and the norns window keeps its size and position  [0s]
+KNOWN window:detached screen (F9, button, placeholder, crisp scales, keys, shortcuts, F11, F10, close, saved state)  [on linux/tests/known-failures.txt: M23 2026-11-18: FAILS ON OLD. "missing: the tint is on in both" on old and he
+Terminated
+RUN EXIT 124
+
+(the Windows probe m27-run-extdrop / m27-check-extdrop runs only on the Windows CI runner; on the old code the program has no test_drop hook and no drop code, so its 'extdrop-registered' check fails.)
