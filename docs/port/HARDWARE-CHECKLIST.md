@@ -715,3 +715,17 @@ Do one step at a time. The commit hash for Linux is in the report of this phase.
 10. Drop a folder on the window: added. Drop a file: refused with one short message.
 Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]  8 [ ]  9 [ ]  10 [ ]; notes: ...
 Cannot be tested here: the real folder dialogs (Windows' Explorer-style one, the Mint portal/zenity one), a real drag from a file manager (the tests post the same event the window system sends), network folders, and your own old import links.
+
+## Windows and Linux 0.10.17 (M28: PIN brings the window up when it is not in view) — nothing here touches the audio path
+Do one step at a time. The commit hash for Linux is in the report of this phase.
+**Windows**
+1. Update: close Verdandi, unzip the new Verdandi-windows-asio-latest.zip into the same folder, Unblock/Defender as always. The version line must say 0.10.17.
+2. Map PIN to a controller button (MIDI MAP > the PIN action, LEARN). With the window in view, press the button: PIN toggles on and off as before.
+3. Minimize the window (PIN off). Press the button: the window comes back and PIN is ON. (Windows may not give it the keyboard focus: that is expected, click it if you need to type.)
+4. Turn PIN off (press while it is in view). Cover the window completely with another window (a maximized browser, for example). Press the button: the window comes in front and PIN is ON.
+5. With the window in view again, press: PIN toggles (off).
+**Linux laptop (the built copy in ~/verdandi-home/norns)**
+6. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`.
+7. The same checks: map PIN (or use F7 / the right-click item "Always on top (PIN)"). Minimize the window, press: it comes back and PIN is on. Move it to another desktop and press: it should come to the current one or at least be raised. Covered by another window: nothing special happens on Linux (it is not told as covered): the press just toggles. The window manager may not give the keyboard focus.
+Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
+Cannot be tested here: your window manager's own behaviour (focus, other desktops, minimize), Windows' focus rules on your machine, the real controller button.
