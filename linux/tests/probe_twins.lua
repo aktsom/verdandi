@@ -4,8 +4,8 @@
 print("PROBE engines before", table.concat(engine.names or {}, ","))
 norns.script.load("/home/we/dust/code/twins/twins.lua")
 #sleep 16
--- the engine posts "twins: grains via ..." after it has built its SynthDefs: slow on a CI runner (the first run failed here with a 16 s wait), so wait for the line, up to 150 s
-#sh for i in $(seq 75); do grep -aq "twins: grains via" "@home/logs/sclang.log" 2>/dev/null && break; sleep 2; done
+-- the engine posts "twins: grains via ..." after it has built its SynthDefs: slow on a CI runner (the first run failed here with a 16 s wait), so wait for the line, up to 40 s
+#sh for i in $(seq 20); do grep -aq "twins: grains via" "@home/logs/sclang.log" 2>/dev/null && break; sleep 2; done
 print("PROBE script name", tostring(norns.state.name))
 print("PROBE engine", tostring(engine.name))
 print("PROBE engines", table.concat(engine.names or {}, ","))

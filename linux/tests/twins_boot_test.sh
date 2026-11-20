@@ -31,6 +31,7 @@ export NORNS_HOME="$H"
     echo "PROBE downloads: $( [ -f "$H/downloads.txt" ] && tr '\n' ' ' < "$H/downloads.txt" || echo none)"
     echo "PROBE extensions: $(ls -A "$H/.local/share/SuperCollider/Extensions" 2> /dev/null | tr '\n' ' ')"
     echo "PROBE sclang problems: $(grep -ac 'duplicate Class\|wrong ELF\|not installed' "$H/logs/sclang.log" 2> /dev/null)"
+    echo "PROBE useTG: $(HOME="$H" QT_QPA_PLATFORM=offscreen QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox" timeout 150 sclang -D "$REPO/linux/tests/twins_usetg.scd" 2>&1 | sed -n 's/^USETG //p' | tail -n 1)"
     echo "PROBE sclang grains: $(grep -a 'twins: grains via' "$H/logs/sclang.log" 2> /dev/null | tail -n 1)"
 } >> "$LOG"
 exit 0

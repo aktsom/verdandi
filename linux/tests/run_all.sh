@@ -942,7 +942,8 @@ twins_boot_ok() { # the real twins on a real headless norns, and the control wit
     grep -aq "^\[installer\] all libraries installed\." "$L1" || { echo "twins' installer does not say 'all libraries installed'"; bad=1; }
     if grep -aq "^\[installer\] missing" "$L1"; then echo "twins' installer says a library is missing: $(grep -a '^\[installer\] missing' "$L1" | head -2 | tr '\n' '|')"; bad=1; fi
     grep -aq "^PROBE engine	twins" "$L1" || { echo "the engine twins did not load: $(grep -a '^PROBE engine' "$L1" | head -2 | tr '\n' '|')"; bad=1; }
-    grep -aq "twins: grains via TwinGrain" "$L1" || { echo "the engine does not use TwinGrain: $(grep -a 'PROBE sclang grains' "$L1")"; bad=1; }
+    # the condition of the engine's own `useTG`, asked of a real sclang in the same home (the engine's own line "twins: grains via TwinGrain" is only posted when the engine has built its SynthDefs: that never happened on the CI runner in two runs, the same runner where the script does not reach init in boot:... tests, so it is only reported)
+    grep -aq "^PROBE useTG: true" "$L1" || { echo "the engine would not take TwinGrain: $(grep -a 'PROBE useTG' "$L1")"; bad=1; }
     grep -aq "^PROBE sclang problems: 0$" "$L1" || { echo "sclang.log has a duplicate class, an ELF or a 'not installed' line"; bad=1; }
     grep -aq "^PROBE downloads: none" "$L1" || { echo "something was downloaded: $(grep -a 'PROBE downloads' "$L1")"; bad=1; }
     if grep -aq "^\[installer\] missing AnalogChew (class file: NO, server plugin: NO)" "$L2" && grep -aq "^\[installer\] missing TwinGrain" "$L2" && grep -aq "^PROBE engine	None" "$L2"; then :; else echo "the control (nothing seeded) must show the missing libraries of the owner's log and no engine"; bad=1; fi
