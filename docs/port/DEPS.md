@@ -323,3 +323,10 @@ Nothing is shipped in a product yet; these are the build inputs and what the M1 
 |---|---|---|---|
 | PortedPlugins (AnalogChew, AnalogLoss, AnalogDegrade and the rest of the collection that compiles with MSVC) | https://github.com/madskjeldgaard/portedplugins, tag v0.4.6 | GPL-3.0 (LICENSE-GPL-3.0.txt in the pack; the licence files of the plug-in folders and of the libraries CMake fetched at configure time are in `licences\` of the pack) | built in CI by `windows/ci/build-sc3plugins.sh`; the pack carries SOURCE-OFFER.txt (source and revision); installed in the per-user SuperCollider extensions folder |
 | nice.exe, sudo.exe, systemctl.exe | `windows/shims/shim_win.c` (this repository) | GPL-3.0 | tiny stand-ins, no new dependency |
+
+## Linux 0.10.18 (M29): PortedPlugins pack for the script twins
+
+| What | Source | Licence | Notes |
+|---|---|---|---|
+| PortedPlugins (22 plug-ins; twins needs AnalogChew, AnalogLoss, AnalogDegrade) | https://github.com/schollz/portedplugins, tag v0.4.6, commit def734c6d902a0be70caabb6f9f28b810e40f480 (`linux/portedplugins.pin`) | GPL-3.0 (text and source offer in the pack) | built for x86_64 by `linux/portedplugins-build.sh`; links only libstdc++/libm/libgcc_s/libc; SuperCollider headers (GPL-3.0) are fetched at build time only |
+| TwinGrain | inside the twins repository (github.com/danielrigler/twins) | no licence file | NOT shipped; the launcher copies the user's own copy, DECISIONS.md |

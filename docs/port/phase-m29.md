@@ -36,3 +36,9 @@ Emplaitress, Terrarium and the rest of mi-UGens, NamAmp, sc3-plugins, the Window
 
 ## 4. Tests (each is shown to fail on the old code: `phase-m29-without.txt`)
 Seed rules (a foreign copy left alone, an intact copy not touched, an update, the Raspberry Pi leftovers moved aside), the build (classes and plug-ins, no duplicate class, stamp), a real sclang boot in an empty home that finds every library twins needs (class and plug-in), twins' real installer (`installer.lua`) on the real norns with the current twins clone ("all libraries installed", engine loads), the TwinGrain copy rules, and the requirement check against a pinned list and the live twins.
+
+## Results
+- Pack: 22 plug-ins from schollz/portedplugins v0.4.6, 724 KB unpacked (about 180 KB as tar.gz), so the .deb grows by roughly 0.2 MB. No CI workflow builds the .deb; a new one is only needed when the owner wants the one-click install (the owner runs the checkout build now).
+- Windows: unchanged (its PortedPlugins pack and twins' fallback to GrainBuf stay). `windows/VERSION` is 0.10.18 only to keep both ports on one number.
+- Tests: 8 `twins:` entries, all pass here; each fails without the fix (`docs/port/phase-m29-without.txt`; the real-twins boot test is shown against its "off" control, because the old worktree had no norns build).
+- Not fixable: shipping TwinGrain ourselves (no licence in twins; DECISIONS.md).

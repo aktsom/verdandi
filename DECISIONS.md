@@ -84,3 +84,8 @@ Built (options compared in `KNOWN-ISSUES.md` 21): `sc/linux-compat/NornsSynthDef
 
 ## GATE G (OPEN): ASIO build as the default Windows zip? (`docs/port/asio-licence.md`)
 Built in M3: two Windows zips, the **WASAPI-only zip is the default**, the **ASIO zip** is published next to it (SDK under its GPLv3 option, notices and sources in the zip). **Recommendation: keep WASAPI-only as the default** until you have read `licenses\ASIO-SDK-LICENSE.txt` of an ASIO zip (I could read the licence only through mirrors, not from Steinberg's file; GPL-3.0-only vs. or-later and the trademark rules are unread) and until the ASIO zip has run on your PC. Options: (1) keep as is; (2) make the ASIO zip the default after your reading; (3) drop the ASIO build (delete the `asio` and `package-asio` jobs). Not blocking: both zips work either way.
+
+## M29: TwinGrain (the script twins) on Linux — licence and how it gets there
+Fact: TwinGrain's source and its prebuilt x86_64 file live inside the twins repository, which has no licence file. Without a licence we have no right to redistribute it, so Verdandi does not ship or rebuild it.
+Done (reversible): on Linux x86_64 the launcher copies the script's OWN files (`lib/ugens`, already on the owner's disk) to the place its K3 would copy them, only after the same load test, never over a foreign TwinGrain, never if the skip marker exists, `twins_grain=0` in `audio.conf` turns it off. Windows: twins never asks for TwinGrain there (it falls back to GrainBuf), nothing to do.
+Options: (A) this copy from the script, (B) ship our own build (needs the author's permission or a licence), (C) do nothing and let K3 do it by hand. Recommendation: A. If the owner wants B, ask the twins author for a licence.

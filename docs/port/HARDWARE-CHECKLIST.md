@@ -729,3 +729,13 @@ Do one step at a time. The commit hash for Linux is in the report of this phase.
 7. The same checks: map PIN (or use F7 / the right-click item "Always on top (PIN)"). Minimize the window, press: it comes back and PIN is on. Move it to another desktop and press: it should come to the current one or at least be raised. Covered by another window: nothing special happens on Linux (it is not told as covered): the press just toggles. The window manager may not give the keyboard focus.
 Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
 Cannot be tested here: your window manager's own behaviour (focus, other desktops, minimize), Windows' focus rules on your machine, the real controller button.
+
+## Linux 0.10.18 (M29: the script twins)
+Do one step at a time. The commit hash is in the report of this phase.
+**Linux laptop (the built copy in ~/verdandi-home/norns)**
+1. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh` (needs the network once; it ends with a line about PortedPlugins).
+2. Start `~/verdandi-home/norns/linux/norns.sh`, open twins. There must be no "missing" message, the engine loads, play a sound and check it comes out.
+3. `grep -i "installer" ~/verdandi-home/logs/norns.log` should say "all libraries installed"; `grep -i "PortedPlugins\|TwinGrain" ~/verdandi-home/logs/launcher.log` shows what was copied.
+**Windows**: unchanged, nothing to do (twins already worked there).
+Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]; notes: ...
+Cannot be tested here: sound out of twins, your Mint desktop, your own twins folder.

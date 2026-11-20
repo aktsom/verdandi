@@ -1,0 +1,35 @@
+M29: each new test run against the OLD code (the M28 state: the launcher without the PortedPlugins seed and TwinGrain copy, no pack step). Head of the old code: 125fac2
+=== portedplugins_seed_test on the old code
+script: FAIL /tmp/old/wt/linux/portedplugins-seed.sh missing
+exit 1
+=== twins_grain_test on the old code
+script: FAIL /tmp/old/wt/linux/twins-grain.sh missing
+exit 1
+=== portedplugins_build_test on the old code
+linux/tests/portedplugins_build_test.sh: line 8: /tmp/old/wt/linux/portedplugins.pin: No such file or directory
+checkout step: FAIL rc=127 linux/tests/portedplugins_build_test.sh: line 19: /tmp/old/wt/linux/portedplugins-build.sh: No such file or directory
+exit 1
+=== portedplugins_boot_test on the old code
+the class library compiles with no duplicate class and no error: ok
+render: FAIL NOT RENDERED 
+no 'UGen not installed' message: ok
+control: without the pack sclang does not know AnalogChew and nothing is rendered (what the owner's log showed): ok
+exit 1
+=== twins_check_test on the old code
+invented text: FAIL python3: can't open file '/tmp/old/wt/linux/twins_check.py': [Errno 2] No such file or directory
+what to do: FAIL python3: can't open file '/tmp/old/wt/linux/twins_check.py': [Errno 2] No such file or directory
+bundled: FAIL rc=2 python3: can't open file '/tmp/old/wt/linux/twins_check.py': [Errno 2] No such file or directory
+layout: FAIL rc=2 python3: can't open file '/tmp/old/wt/linux/twins_check.py': [Errno 2] No such file or directory
+exit 1
+=== twins boot (real norns, old launcher)
+(the old worktree had no build of norns, so this run could not start the real norns: "norns not built". Said plainly: it is not a proof.)
+=== twins boot with the launcher doing what the old one did (NORNS_PORTED=0 NORNS_TWINS_GRAIN=0: nothing seeded, nothing copied; the same behaviour as 125fac2)
+This is the "off" control that run_all.sh runs on every CI run next to the real run (twins_boot_ok). It must show the owner's log and no engine:
+PROBE engines before	PolySub,SimplePassThru,PolyPerc,twins,TestSine,None
+[installer] missing AnalogChew (class file: NO, server plugin: NO)
+[installer] missing AnalogLoss (class file: NO, server plugin: NO)
+[installer] missing AnalogDegrade (class file: NO, server plugin: NO)
+[installer] missing TwinGrain (class file: NO, server plugin: NO)
+PROBE engine	None
+PROBE engines	PolySub,SimplePassThru,PolyPerc,twins,TestSine,None
+PROBE sclang grains: 
