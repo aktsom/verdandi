@@ -925,6 +925,31 @@ if command -v jackd > /dev/null; then
     fi
 fi
 
+# the script twins on Linux (docs/port/phase-m29.md): the PortedPlugins pack (AnalogChew, AnalogLoss, AnalogDegrade and the rest of the collection) and the TwinGrain that the script carries
+run "twins:PortedPlugins seed (stamp, seed into an empty home, update by serial, a changed or foreign copy left alone, the Raspberry Pi download of twins moved aside, a working second copy left alone, off switches)" linux/tests/portedplugins_seed_test.sh
+run "twins:TwinGrain: the copy the script's own installer would make is made before sclang starts (the installer's load test, a foreign TwinGrain left alone, the skip marker, an update, off switch)" linux/tests/twins_grain_test.sh
+run "twins:the PortedPlugins build step for a checkout (headers, pinned tag, 22 plug-ins, what twins needs, stamp, up to date, classes defined elsewhere taken out, no network is a warning)" linux/tests/portedplugins_build_test.sh
+run "twins:the pack in an empty home with the real sclang and scsynth (every class found, no duplicate class, the three UGens render, the installer's two halves; the control without the pack)" linux/tests/portedplugins_boot_test.sh
+run "twins:the check for the next twins change, on the pinned list (every library shipped; an invented library and a bundled file that is missing fail with a plain message)" linux/tests/twins_check_test.sh
+run "twins:the check against the CURRENT twins (goes red when twins starts to need a library nobody ships)" linux/tests/twins_check_test.sh live
+twins_boot_ok() { # the real twins on a real headless norns, and the control with seeding off (the owner's log)
+    local L1="$T/twins-boot.log" L2="$T/twins-boot-off.log" bad=0 rc
+    "$REPO/linux/tests/twins_boot_test.sh" "$L1"; rc=$?
+    [ $rc = 77 ] && return 77
+    "$REPO/linux/tests/twins_boot_test.sh" "$L2" off > /dev/null 2>&1
+    grep -aq "^norns.sh: PortedPlugins: seeded " "$L1" || { echo "the pack was not seeded"; bad=1; }
+    grep -aq "^norns.sh: twins: copied twins' own TwinGrain" "$L1" || { echo "the TwinGrain of the script was not copied"; bad=1; }
+    grep -aq "^\[installer\] all libraries installed\." "$L1" || { echo "twins' installer does not say 'all libraries installed'"; bad=1; }
+    if grep -aq "^\[installer\] missing" "$L1"; then echo "twins' installer says a library is missing: $(grep -a '^\[installer\] missing' "$L1" | head -2 | tr '\n' '|')"; bad=1; fi
+    grep -aq "^PROBE engine	twins" "$L1" || { echo "the engine twins did not load: $(grep -a '^PROBE engine' "$L1" | head -2 | tr '\n' '|')"; bad=1; }
+    grep -aq "twins: grains via TwinGrain" "$L1" || { echo "the engine does not use TwinGrain: $(grep -a 'PROBE sclang grains' "$L1")"; bad=1; }
+    grep -aq "^PROBE sclang problems: 0$" "$L1" || { echo "sclang.log has a duplicate class, an ELF or a 'not installed' line"; bad=1; }
+    grep -aq "^PROBE downloads: none" "$L1" || { echo "something was downloaded: $(grep -a 'PROBE downloads' "$L1")"; bad=1; }
+    if grep -aq "^\[installer\] missing AnalogChew (class file: NO, server plugin: NO)" "$L2" && grep -aq "^\[installer\] missing TwinGrain" "$L2" && grep -aq "^PROBE engine	None" "$L2"; then :; else echo "the control (nothing seeded) must show the missing libraries of the owner's log and no engine"; bad=1; fi
+    return $bad
+}
+run "twins:the real script twins on a norns with an empty extension folder: the launcher seeds the pack and copies TwinGrain, the installer says all libraries installed, the engine loads with TwinGrain, nothing is downloaded (control: seeding off shows the owner's log)" twins_boot_ok
+
 # "sudo systemctl restart norns-*" from a script (a script's installer, os.execute): the shims in linux/shims turn it into a restart request,
 # at once, without sudo or a password; other sudo commands get -n; the other systemctl commands go on unchanged
 run "shims:sudo and systemctl for norns-* units (fake real programs)" "$REPO/linux/tests/shim_test.sh"

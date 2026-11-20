@@ -1,0 +1,3 @@
+AnalogChew
+AnalogLoss
+AnalogDegrade
