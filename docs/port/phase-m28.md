@@ -19,6 +19,6 @@ What actually happens on bring-up: Windows may refuse to give the keyboard focus
 
 ## Tests (each shown to fail on the old code: `phase-m28-without.txt`)
 - C: `pin_state_test.c` extended: the decision rule (in view / minimized / hidden / covered / unknown), bring-up never turns PIN off, the nine-point sampling rule.
-- Wine: a mingw-built test creates real windows and calls `view_covered_win.c` (covered, not covered, partly covered, our window above, minimized).
+- Wine: a mingw-built test creates real windows and calls `view_covered_win.c` (covered, not covered, partly covered, raised above the cover, the cover gone). First run on CI: Wine without a display does not hit-test windows (the sanity check failed), so the test now checks that precondition, tries Xvfb, and is a SKIP with the reason when neither works; a check that runs and fails is a FAIL. The same call is proved on the real Windows runner (probe steps below).
 - Linux window probe (real norns on Xvfb, `VERDANDI_TEST_HOOKS=1`): hide the window, press PIN: it is shown again and PIN is on; PIN already on and hidden: stays on; in view: toggles.
 - Windows runner (real desktop): the PIN probe gets the steps minimize -> press, covered -> press, in view -> toggle.

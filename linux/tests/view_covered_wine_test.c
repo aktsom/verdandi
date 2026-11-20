@@ -47,6 +47,16 @@ int main(void) {
 
     HWND a = make(100, 100, 400, 300);
     pump();
+    /* the precondition: this Wine hit-tests windows at all (without a display it keeps windows that WindowFromPoint cannot find). if not, the test says so and is skipped, it does not pretend */
+    {
+        POINT c = {300, 250};
+        HWND hit = WindowFromPoint(c);
+        HWND root = hit != NULL ? GetAncestor(hit, GA_ROOT) : NULL;
+        if (root != a) {
+            printf("SKIP: this Wine does not find a visible window with WindowFromPoint (got %p, wanted %p)\n", (void *)root, (void *)a);
+            return 77;
+        }
+    }
     CHECK(view_covered_win(a) == 0, "a window with nothing over it is not covered");
     CHECK(view_covered_win(NULL) == -1, "no window: not told");
 
