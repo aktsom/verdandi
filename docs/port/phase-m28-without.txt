@@ -5,7 +5,7 @@ linux/tests/pin_state_test.c:78:9: error: unknown type name 'view_state_t'; did 
 linux/tests/pin_state_test.c:82:37: error: 'PIN_PRESS_TOGGLE' undeclared (first use in this function)
 linux/tests/pin_state_test.c:85:39: error: 'PIN_PRESS_BRING_UP' undeclared (first use in this function)
 
-## view_covered_wine_test (the covered check): view_covered_win.c is new in M28 (the checked-out tree keeps the file, but the old sdl_bridge.cc never calls it and has no "view" in its report); the Wine test itself runs only on the CI runner (Wine in this sandbox aborts on any program that uses user32: "free(): invalid pointer")
+## (removed again) view_covered_wine_test (the covered check; see phase-m28.md): view_covered_win.c is new in M28 (the checked-out tree keeps the file, but the old sdl_bridge.cc never calls it and has no "view" in its report); the Wine test itself runs only on the CI runner (Wine in this sandbox aborts on any program that uses user32: "free(): invalid pointer")
 
 ## window probe (real norns built from the old code, Xvfb), run_all.sh: window:PIN brings the window up ...
 FAIL  window:PIN brings the window up when it is not in view (hidden, with PIN off and on: PIN ends on), and toggles when it is in view (log: tail below)
