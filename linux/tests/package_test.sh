@@ -119,6 +119,16 @@ arm=0; for so in $MI/*.so; do [ "$(od -An -tx1 -j18 -N1 "$so" | tr -d ' ')" = 3e
 [ $arm = 0 ] && p "every mi-UGens binary in the package is x86_64" || f "a mi-UGens binary is not x86_64"
 [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-GPL-3.0.md ] && [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-eurorack-MIT.txt ] && [ -f /opt/verdandi/licenses/mi-ugens/LICENSE-libsamplerate-BSD-2.txt ] && grep -q "v7b1/mi-UGens" /opt/verdandi/licenses/SOURCES.txt && p "mi-UGens licences (GPL-3.0-or-later, MIT, BSD-2) and the source location are installed" || f "mi-UGens licences or source note missing"
 [ -f $U/.verdandi-stamp ] && cmp -s $U/.verdandi-stamp $MI/.verdandi-stamp && [ -f $U/Classes/MiPlaits.sc ] && p "the first run copied the pack into the user's SuperCollider extension folder (same stamp)" || f "the pack was not seeded: $(ls $H/.local/share/SuperCollider/Extensions 2>&1)"
+# PortedPlugins (M29: the libraries the script twins asks for): the pack is in the package (x86_64, stamped, intact, class file and plug-in of the three libraries, licences), the first run copied it
+PP=/opt/verdandi/portedplugins/PortedPlugins
+UP=$H/.local/share/SuperCollider/Extensions/PortedPlugins
+[ -f $PP/.verdandi-stamp ] && (cd $PP && sha256sum --quiet -c .verdandi-files) && p "the PortedPlugins pack is in the package, stamped and intact ($(grep '^commit=' $PP/.verdandi-stamp | cut -c8-14))" || f "PortedPlugins pack missing or not intact in the package"
+for c in AnalogChew AnalogLoss AnalogDegrade; do [ -f $PP/Classes/$c.sc ] && [ -f $PP/${c}_scsynth.so ] || f "PortedPlugins: $c class file or plug-in missing in the package"; done
+arm=0; for so in $PP/*.so; do [ "$(od -An -tx1 -j18 -N2 "$so" | tr -d ' ')" = 3e00 ] || arm=1; done
+[ $arm = 0 ] && p "every PortedPlugins binary in the package is x86_64, and twins' three libraries have their class file and plug-in" || f "a PortedPlugins binary is not x86_64"
+[ -f /opt/verdandi/licenses/portedplugins/LICENSE-GPL-3.0.txt ] && grep -q "portedplugins" /opt/verdandi/licenses/SOURCES.txt && p "PortedPlugins licence (GPL-3.0) and the source location are installed" || f "PortedPlugins licence or source note missing"
+[ -f $UP/.verdandi-stamp ] && cmp -s $UP/.verdandi-stamp $PP/.verdandi-stamp && [ -f $UP/Classes/AnalogChew.sc ] && p "the first run copied the PortedPlugins pack into the user's SuperCollider extension folder (same stamp)" || f "the PortedPlugins pack was not seeded: $(ls $H/.local/share/SuperCollider/Extensions 2>&1)"
+[ -x /opt/verdandi/linux/portedplugins-seed.sh ] && [ -x /opt/verdandi/linux/twins-grain.sh ] && p "the PortedPlugins seed and the TwinGrain copy scripts are installed" || f "PortedPlugins scripts missing"
 NA=/opt/verdandi/namamp/NamAmp
 [ -f $NA/NamAmp.so ] && [ -f $NA/.verdandi-namamp ] && [ "$(sha256sum $NA/NamAmp.so | cut -d' ' -f1)" = "$(sed -n 's/^sha256=//p' $NA/.verdandi-namamp)" ] && [ "$(od -An -tx1 -j18 -N2 $NA/NamAmp.so | tr -d ' ')" = 3e00 ] && p "the NamAmp plug-in is in the package: x86-64, stamped, sha256 matches" || f "NamAmp pack missing, not x86-64 or not intact"
 for lic in LICENSE-NeuralAmpModelerCore-MIT.txt LICENSE-Eigen-MPL-2.0.txt LICENSE-nlohmann-json-MIT.txt NamAmp.cpp.txt; do [ -f /opt/verdandi/licenses/namamp/$lic ] || { f "NamAmp licence file $lic missing"; }; done

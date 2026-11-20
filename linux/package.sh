@@ -3,6 +3,7 @@
 #
 # usage: linux/package.sh sc            SuperCollider 3.14.1 (no Qt) and sc3-plugins, staged for /opt/verdandi
 #        linux/package.sh maiden        maiden, built by linux/maiden-build.sh
+#        linux/package.sh ported        the PortedPlugins pack (the libraries the script twins asks for), built by linux/portedplugins-build.sh
 #        linux/package.sh tree          the program tree and the files around it
 #        linux/package.sh deb           control files, privacy scan, the .deb
 #        linux/package.sh all           sc, maiden, tree, deb (norns itself must be built: linux/build.sh)
@@ -158,6 +159,22 @@ mi_stamp() {
     "$REPO/linux/mi-ugens-seed.sh" stamp "$1" "$MI_UGENS_SERIAL" "$MI_UGENS_COMMIT" "$(date -u -d "@$EPOCH" +%Y-%m-%d)" "$VERSION" "$MI_UGENS_TAG + pull request $MI_UGENS_PR $MI_UGENS_PR_COMMIT"
 }
 
+# the x86_64 PortedPlugins pack (linux/portedplugins.pin; the libraries the script twins asks for, and the rest of the collection), built by linux/portedplugins-build.sh against the SuperCollider
+# source above; a class that SuperCollider, sc3-plugins or mi-UGens already defines is taken out. the result is $CACHE/portedplugins/PortedPlugins (stamped); build_tree copies it into the program tree
+build_ported() {
+    . "$REPO/linux/portedplugins.pin"
+    say "PortedPlugins $PORTED_TAG ($PORTED_COMMIT)"
+    [ -d "$CACHE/supercollider/include" ] || die "PortedPlugins: the SuperCollider source is missing in $CACHE/supercollider (run '$0 sc' first)"
+    local others=(--other-classes "$CACHE/supercollider/SCClassLibrary")
+    [ -d "$STAGE$SC_PREFIX/share/SuperCollider/Extensions" ] && others+=(--other-classes "$STAGE$SC_PREFIX/share/SuperCollider/Extensions")
+    [ -d "$CACHE/mi-ugens-pack/mi-UGens/Classes" ] && others+=(--other-classes "$CACHE/mi-ugens-pack/mi-UGens/Classes")
+    "$REPO/linux/portedplugins-build.sh" build "$CACHE/portedplugins" "$CACHE/supercollider" "${others[@]}" --version "$VERSION"
+}
+ported_stamp() {
+    . "$REPO/linux/portedplugins.pin"
+    "$REPO/linux/portedplugins-seed.sh" stamp "$1" "$PORTED_SERIAL" "$PORTED_COMMIT" "$(date -u -d "@$EPOCH" +%Y-%m-%d)" "$VERSION" "$PORTED_TAG of $PORTED_REPO"
+}
+
 # the x86_64 NamAmp plug-in (linux/namamp.pin): our own wrapper (linux/namamp/NamAmp.cpp) over NeuralAmpModelerCore at a pinned commit (Eigen is its submodule, nlohmann/json
 # is vendored in it), compiled against the SuperCollider source above. the result is $CACHE/namamp-pack/NamAmp (the plug-in, the stamp and the licence texts); build_tree copies it
 # into the program tree. nothing is downloaded at run time
@@ -301,6 +318,12 @@ build_tree() {
     rm -rf "$T/mi-ugens"
     mkdir -p "$T/mi-ugens"
     cp -a "$CACHE/mi-ugens-pack/mi-UGens" "$T/mi-ugens/mi-UGens"
+    install -m 755 "$REPO/linux/portedplugins-seed.sh" "$T/linux/portedplugins-seed.sh"
+    install -m 755 "$REPO/linux/twins-grain.sh" "$T/linux/twins-grain.sh"
+    [ -f "$CACHE/portedplugins/PortedPlugins/AnalogChew_scsynth.so" ] || die "the PortedPlugins pack is not built: run '$0 ported' (or '$0 all')"
+    rm -rf "$T/portedplugins"
+    mkdir -p "$T/portedplugins"
+    cp -a "$CACHE/portedplugins/PortedPlugins" "$T/portedplugins/PortedPlugins"
     install -m 755 "$REPO/linux/namamp-seed.sh" "$T/linux/namamp-seed.sh"
     install -m 755 "$REPO/linux/plugin-heal.sh" "$T/linux/plugin-heal.sh"
     [ -f "$CACHE/namamp-pack/NamAmp/NamAmp.so" ] || die "the NamAmp plug-in is not built: run '$0 namamp' (or '$0 all')"
@@ -325,6 +348,7 @@ build_tree() {
     done
     # the list of hashes is made last: the files above are final
     mi_stamp "$T/mi-ugens/mi-UGens"
+    ported_stamp "$T/portedplugins/PortedPlugins"
     namamp_stamp "$T/namamp/NamAmp"
 
     # the places the desktop looks in
@@ -343,8 +367,9 @@ build_licenses() {
     local L="$STAGE$PREFIX/licenses" f
     . "$REPO/linux/mi-ugens.pin"
     . "$REPO/linux/namamp.pin"
+    . "$REPO/linux/portedplugins.pin"
     rm -rf "$L"
-    mkdir -p "$L/mi-ugens" "$L/namamp" "$L/supercollider" "$L/sc3-plugins" "$L/libmonome" "$L/softcut" "$L/fonts" "$L/third-party"
+    mkdir -p "$L/mi-ugens" "$L/namamp" "$L/portedplugins" "$L/supercollider" "$L/sc3-plugins" "$L/libmonome" "$L/softcut" "$L/fonts" "$L/third-party"
     install -m 644 "$REPO/LICENSE.txt" "$L/norns-GPL-3.0.txt"
     install -m 644 "$REPO/crone/softcut/LICENSE.txt" "$L/softcut/LICENSE.txt"
     install -m 644 "$CACHE/supercollider/COPYING" "$L/supercollider/COPYING"
@@ -358,6 +383,9 @@ build_licenses() {
         [ -f "$CACHE/mi-ugens-pack/$f" ] || die "mi-UGens licence $f missing: run '$0 mi'"
         install -m 644 "$CACHE/mi-ugens-pack/$f" "$L/mi-ugens/$f"
     done
+    [ -f "$CACHE/portedplugins/LICENSE-GPL-3.0.txt" ] || die "PortedPlugins licence missing: run '$0 ported'"
+    install -m 644 "$CACHE/portedplugins/LICENSE-GPL-3.0.txt" "$L/portedplugins/LICENSE-GPL-3.0.txt"
+    [ -d "$CACHE/portedplugins/PortedPlugins/licenses" ] && cp -a "$CACHE/portedplugins/PortedPlugins/licenses/." "$L/portedplugins/"
     [ -f "$CACHE/libmonome/COPYRIGHT" ] || [ -f "$CACHE/libmonome/COPYING" ] || die "libmonome source (licence) missing: run '$0 all'"
     for f in COPYRIGHT COPYING; do [ -f "$CACHE/libmonome/$f" ] && install -m 644 "$CACHE/libmonome/$f" "$L/libmonome/$f"; done
     for f in resources/roboto-LICENSE.txt resources/vera-LICENSE.txt resources/bmp/bmp-LICENSE.txt resources/bmp/tom-thumb-LICENSE.txt; do
@@ -381,6 +409,9 @@ Verdandi is free software (GPL-3.0). The source of every part of this package is
       $MI_UGENS_REPO  ($MI_UGENS_TAG, commit $MI_UGENS_COMMIT, plus the head of its pull request $MI_UGENS_PR, commit $MI_UGENS_PR_COMMIT);
       built by build_mi in linux/package.sh of the Verdandi source, the pin is linux/mi-ugens.pin. the Mutable Instruments code:
       https://github.com/pichenettes/eurorack  (as vendored in that repository), libsamplerate: https://github.com/libsndfile/libsamplerate
+  PortedPlugins (the plug-ins the script twins needs, AnalogChew, AnalogLoss, AnalogDegrade, and the rest of the collection; GPL-3.0):
+      $PORTED_REPO  ($PORTED_TAG, commit $PORTED_COMMIT); built unchanged by linux/portedplugins-build.sh of the Verdandi source, the pin is
+      linux/portedplugins.pin. the licence texts are in licenses/portedplugins/
   NamAmp (our own wrapper, linux/namamp/NamAmp.cpp of the Verdandi source, GPL-3.0-or-later; a copy is in licenses/namamp/NamAmp.cpp.txt) over
       NeuralAmpModelerCore (MIT): $NAMAMP_CORE_REPO  (commit $NAMAMP_CORE_COMMIT)
       Eigen (MPL-2.0, its source: https://gitlab.com/libeigen/eigen, commit $NAMAMP_EIGEN_COMMIT, header only, a submodule of the NAM core)
@@ -531,6 +562,12 @@ License: GPL-3+
  The wrappers are GPL-3.0-or-later (/opt/verdandi/licenses/mi-ugens/LICENSE-GPL-3.0.md). The Mutable Instruments code they build on is MIT
  (LICENSE-eurorack-MIT.txt) and libsamplerate is BSD-2-Clause (LICENSE-libsamplerate-BSD-2.txt), in the same folder. The pack is copied into a
  user's SuperCollider extension folder by the launcher.
+
+Files: opt/verdandi/portedplugins/*
+Copyright: the PortedPlugins authors (Mads Kjeldgaard, Zack Scholl and the authors of the ported plug-ins, see the licence texts)
+License: GPL-3
+ GPL-3.0 (/opt/verdandi/licenses/portedplugins/LICENSE-GPL-3.0.txt, and the licence files of single plug-ins in the same folder). The pack is copied into a user's SuperCollider
+ extension folder by the launcher so that the script twins finds AnalogChew, AnalogLoss and AnalogDegrade.
 
 Files: opt/verdandi/namamp/*
 Copyright: the Verdandi authors (the wrapper), the authors of NeuralAmpModelerCore, Eigen and nlohmann/json
@@ -731,11 +768,12 @@ case "${1:-}" in
     sc) build_sc ;;
     namamp) build_namamp ;;
     mi) build_mi ;;
+    ported) build_ported ;;
     maiden) build_maiden ;;
     libmonome) build_libmonome ;;
     tree) build_libmonome; build_tree ;;
     deb) build_deb ;;
-    all) build_sc; build_mi; build_namamp; build_libmonome; build_maiden; build_tree; build_deb ;;
+    all) build_sc; build_mi; build_ported; build_namamp; build_libmonome; build_maiden; build_tree; build_deb ;;
     clean-root) build_clean_root ;;
     print-desktop) desktop_entry ;;
     print-description) deb_description ;;
