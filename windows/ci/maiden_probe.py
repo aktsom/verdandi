@@ -740,14 +740,28 @@ if os.environ.get("VERDANDI_PROBE") == "asio":
         elif amode == "nostart":
             result("asio-nostart", flav and registered == "1", "the driver is there and starts for the probe; opening it failed at the start: mode=%s host_api=%s" % (mode_, api))
         # M20: the stream is reopened while norns runs (the AUDIO page's apply runs on the Lua thread: the thread that the owner's PC failed on), and the engine's rate against the card's
-        def rate_info():
+        def rate_info(tries=3):
+            # M30: the program's own log lines (the clock line every 10 s) share the stream and can cut the answer line in two: nothing is found then, and asking again is harmless (it only reads). on 0.10.18 (72380cf) this cut "VT_APPLY" in the ASIO reopen check and the ASIO zip was not published
+            for _ in range(tries):
+                r_ = rate_info_once()
+                if r_["mode"] != "?":
+                    return r_
+            return r_
+        def rate_info_once():
             ok_, t_ = run("local i = _norns.audio_info() print('VT_RATE ' .. tostring(i.mode) .. '|' .. tostring(i.host_api) .. '|' .. tostring(i.rate) .. '|' .. tostring(i.device_rate) .. '|' .. tostring(i.card_rate) .. '|' .. tostring(i.rate_warn) .. '|' .. (tostring(i.config):gsub('\\n', ',')))\n", "VT_RATE", 30)
             for l_ in t_.splitlines():
                 if "VT_RATE " in l_:  # (the program's own log lines are written to the same stream: a line can start in the middle of another)
                     g = l_[l_.index("VT_RATE ") + 8:].split("|") + [""] * 7
                     return {"mode": g[0], "api": g[1], "rate": float(g[2] or 0), "dev": float(g[3] or 0), "card": float(g[4] or 0), "warn": g[5], "cfg": "|".join(g[6:])}
             return {"mode": "?", "api": "?", "rate": 0, "dev": 0, "card": 0, "warn": "?", "cfg": ""}
-        def apply_conf(out_first=1, buffer=0, output="asio:Verdandi Test ASIO"):
+        def apply_conf(out_first=1, buffer=0, output="asio:Verdandi Test ASIO", tries=3):
+            # M30: when the answer line was cut in two by a log line of the program (see rate_info), the same apply is asked again: it ends in the same state, so nothing is judged from a lost answer
+            for _ in range(tries):
+                rc_, msg_ = apply_conf_once(out_first, buffer, output)
+                if rc_ != "?":
+                    return rc_, msg_
+            return rc_, msg_
+        def apply_conf_once(out_first=1, buffer=0, output="asio:Verdandi Test ASIO"):
             conf = "output=%s\\ninput=\\nrate=48000\\nblock=128\\nbuffer=%d\\nexclusive=0\\nout_first=%d\\nin_l=1\\nin_r=2\\n" % (output, buffer, out_first)
             ok_, t_ = run("local rc, msg = _norns.audio_apply(\"%s\") print('VT_APPLY ' .. tostring(rc) .. '|' .. tostring(msg))\n" % conf, "VT_APPLY", 60)
             for l_ in t_.splitlines():

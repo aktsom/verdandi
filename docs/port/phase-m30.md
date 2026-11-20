@@ -19,6 +19,12 @@ So: the cause was (1) the step limit that left almost no room, and (2) a publish
 
 What this cannot do: if the ASIO checks really fail, there is still no new ASIO zip for that commit. The release then keeps the last good ASIO zip and says so, and the per-commit release `windows-<hash>` of that commit has the default zip only. The ASIO zip of an old build is never presented as the new one.
 
+## Second cause, found on the next run (72380cf)
+
+With the limits raised, the ASIO job ran 22 minutes and its step passed, but one check failed: `m20-check-asio-reopen`, the probe `asio-reopen-back`. The probe asks the running program to apply a setting and reads the answer line `VT_APPLY ...` from the console stream. The program's own log line (`clock: internal ticks woke ...`, every 10 s) was written into the same stream and cut the answer in two, so the probe found no answer ("rc=?") and judged the test failed, although the driver had reopened correctly (the next probe, `asio-reopen-refused-goes-back`, passed). A flake of the test, not of the program; it gated the ASIO zip out of the release a second time. This time the new publish step did its job: it failed the publish with "windows-latest is missing: Verdandi-windows-asio-latest.zip ..." and the release page said that the ASIO zip was not made.
+
+Fix (CI test code only, `windows/ci/maiden_probe.py`): when the answer line is lost, the probe asks again (up to three times; both calls leave the program in the same state, so asking twice is harmless). I could not run this probe here (it needs the Windows runner); the proof is the next Windows run.
+
 ## ONE ZIP? (check only, nothing built)
 
 ### Does the ASIO build offer everything the normal build does?
