@@ -462,6 +462,25 @@ NORNS_NAMAMP_GAIN="${NORNS_NAMAMP_GAIN:-$(conf_get namamp_gain)}"
 export NORNS_NAMAMP_GAIN
 NORNS_NAMAMP_PACK="${NORNS_NAMAMP_PACK:-$REPO/namamp/NamAmp}"
 export NORNS_NAMAMP_PACK
+# the PortedPlugins pack (x86_64: AnalogChew, AnalogLoss and AnalogDegrade, which the script twins asks for, and the rest of the collection): copied into the user's SuperCollider
+# extension folder before sclang starts, so that twins' installer finds its libraries and never downloads the Raspberry Pi build. the .deb has the pack in <program>/portedplugins; a
+# checkout gets it from linux/build.sh (linux/portedplugins-build.sh, build/linux/portedplugins). NORNS_PORTED=0 or ported=0 in audio.conf turns that off; NORNS_PORTED_HEAL=0 or
+# ported_heal=0 turns off the moving aside of twins' own Raspberry Pi download (only when our copy is intact). NORNS_TWINS_GRAIN=0 or twins_grain=0 turns off the copy of the
+# TwinGrain that the script twins carries (linux/twins-grain.sh: what its installer's K3 does, done before sclang starts). docs/port/phase-m29.md
+NORNS_PORTED="${NORNS_PORTED:-$(conf_get ported)}"
+export NORNS_PORTED
+NORNS_PORTED_HEAL="${NORNS_PORTED_HEAL:-$(conf_get ported_heal)}"
+export NORNS_PORTED_HEAL
+NORNS_TWINS_GRAIN="${NORNS_TWINS_GRAIN:-$(conf_get twins_grain)}"
+export NORNS_TWINS_GRAIN
+if [ -z "${NORNS_PORTED_PACK:-}" ]; then
+    if [ -d "$REPO/portedplugins/PortedPlugins" ]; then
+        NORNS_PORTED_PACK="$REPO/portedplugins/PortedPlugins"
+    else
+        NORNS_PORTED_PACK="$REPO/build/linux/portedplugins/PortedPlugins"
+    fi
+fi
+export NORNS_PORTED_PACK
 # any wrong-architecture SuperCollider plug-in that would stop sclang is moved aside into disabled/ at the start (linux/plugin-heal.sh); NORNS_PLUGIN_HEAL=0 or plugin_heal=0
 # in audio.conf turns that off, and then the plug-in check below only reports
 NORNS_PLUGIN_HEAL="${NORNS_PLUGIN_HEAL:-$(conf_get plugin_heal)}"
@@ -550,6 +569,10 @@ start_norns() {
     [ -x "$REPO/linux/mi-ugens-seed.sh" ] && "$REPO/linux/mi-ugens-seed.sh" seed "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     [ -x "$REPO/linux/mi-ugens-seed.sh" ] && MI_HEAL_TOOL="$REPO/build/linux/mi_heal" NORNS_TIDY="$NORNS_TIDY" "$REPO/linux/mi-ugens-seed.sh" heal "$NORNS_MI_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     [ -x "$REPO/linux/namamp-seed.sh" ] && "$REPO/linux/namamp-seed.sh" seed "$NORNS_NAMAMP_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
+    # the libraries the script twins asks for (PortedPlugins), then twins' Raspberry Pi leftovers moved aside, then the TwinGrain that the script carries (docs/port/phase-m29.md)
+    [ -x "$REPO/linux/portedplugins-seed.sh" ] && "$REPO/linux/portedplugins-seed.sh" seed "$NORNS_PORTED_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
+    [ -x "$REPO/linux/portedplugins-seed.sh" ] && NORNS_TIDY="$NORNS_TIDY" "$REPO/linux/portedplugins-seed.sh" heal "$NORNS_PORTED_PACK" "$NORNS_HOME" | sed 's/^/norns.sh: /'
+    [ -x "$REPO/linux/twins-grain.sh" ] && "$REPO/linux/twins-grain.sh" sync "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # before norns and sclang start: SuperCollider stops at the first plug-in it cannot load. what is still wrong here (a system folder, or the heal is off) is reported only (one line per file)
     [ -x "$REPO/build/linux/plugin_arch_check" ] && "$REPO/build/linux/plugin_arch_check" "$NORNS_HOME" | sed 's/^/norns.sh: /'
     # norns and the commands its scripts run (os.execute, norns.system_cmd) get linux/shims first on the PATH: "sudo systemctl restart norns-*" (a script's

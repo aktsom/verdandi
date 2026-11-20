@@ -1,0 +1,9 @@
+# the PortedPlugins pack Verdandi ships on Linux (x86_64, built by linux/portedplugins-build.sh against the SuperCollider headers). sourced by shell scripts.
+# upstream: the version the script twins downloads for the Raspberry Pi (its zip is .../schollz/portedplugins/releases/download/v0.4.6/...): GPL-3.0, the whole collection, each
+# plug-in on its own. a change here bumps PORTED_SERIAL so that the launcher replaces the older copy it seeded earlier (never a copy that is not its own, docs/port/phase-m29.md).
+PORTED_REPO=https://github.com/schollz/portedplugins.git
+PORTED_TAG=v0.4.6
+PORTED_COMMIT=def734c6d902a0be70caabb6f9f28b810e40f480
+PORTED_SERIAL=1
+# the libraries the script twins asks the installer for (twins.lua `requirements`): the pack must hold every one of them (class and plug-in)
+PORTED_TWINS_NEEDS="AnalogChew AnalogLoss AnalogDegrade"

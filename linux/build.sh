@@ -27,4 +27,10 @@ g++ -O2 -Wall -std=c++14 -I "$REPO/matron/src" "$REPO/linux/mi_heal.cc" -o "$REP
 if [ "${NORNS_NO_MAIDEN:-0}" != 1 ]; then
     "$REPO/linux/maiden-build.sh" || echo "linux/build.sh: WARNING: maiden was not built (see above); norns works without it"
 fi
+# the libraries the script twins asks for (PortedPlugins: AnalogChew, AnalogLoss, AnalogDegrade and the rest of the collection), built for this checkout against the headers of the installed
+# SuperCollider: seconds, once (again only when linux/portedplugins.pin or SuperCollider changes), needs the network. norns.sh copies the pack into the SuperCollider extension folder
+# before sclang starts, so that twins' installer finds them (docs/port/phase-m29.md). a failure is a warning: norns works without it. NORNS_NO_PORTED=1 skips this step
+if [ "${NORNS_NO_PORTED:-0}" != 1 ]; then
+    "$REPO/linux/portedplugins-build.sh" checkout "$REPO" || echo "linux/build.sh: WARNING: the PortedPlugins pack was not built (see above); the script twins will say that libraries are missing"
+fi
 echo "linux/build.sh: $REPO/build/norns/norns"
