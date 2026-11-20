@@ -278,7 +278,7 @@ jobs:
     needs: [sc, norns, asio, maiden, tools, plugins]
     if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' && needs.asio.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
-    timeout-minutes: 30
+    timeout-minutes: 90
     continue-on-error: true
     defaults:
       run:
@@ -317,7 +317,7 @@ jobs:
       - name: Assemble the folder and the zip
         run: FLAVOR=asio PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: Start it headless and check (ASIO host API listed, fallback, input)
-        timeout-minutes: 30
+        timeout-minutes: 75   # M30: was 30. the headless check took 23 min on 0.10.16 and ran into the limit on 0.10.18 (25cb7da): every check was then "not found", the gate failed and the ASIO zip was not published
         run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m3" SMOKE_SECONDS=60 SMOKE_CYCLES=3 EXPECT_ASIO=1 windows/ci/smoke-m1.sh
       - name: What failed
         if: always()

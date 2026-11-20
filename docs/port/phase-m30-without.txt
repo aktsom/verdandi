@@ -1,0 +1,10 @@
+M30: release_publish_test.sh against the OLD publish-release.sh (the M29 state). Six checks fail there (the ASIO assets of windows-latest were deleted when the run had no ASIO zip; no check of the release afterwards):
+FAIL no ASIO zip is uploaded and the notes say so
+FAIL no ASIO file of windows-latest is deleted
+FAIL the notes say that the ASIO zip is the one of the older build
+FAIL the publish step passes (both zips are on the release) and says so
+FAIL it fails with a message that names Verdandi-windows-asio-latest.zip and its SHA-256 file
+FAIL a release without the default zip fails the same way
+
+and with the new script:
+45 ok, 0 FAIL

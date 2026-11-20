@@ -89,18 +89,43 @@ if [ "$failed" -eq 0 ]; then
         else
             printf '\n> **Note:** GitHub did not let the workflow move the tag `windows-latest` to this build (a tag at a commit that changes workflow files needs a permission the workflow token cannot have). The files above ARE this build (version %s, commit `%s`); the tag may still point at an older commit.\n' "$VERSION" "$SHA" >> "$WORK/notes.md"
         fi
+        # M30: this job only ever adds or replaces. the files of older builds (another version or hash in the name) are removed, but NEVER the ASIO files when this run has no ASIO zip (its ASIO job failed
+        # or was too slow, as on 25cb7da: the old code removed them and the release lost the ASIO zip). with an ASIO zip in this run the ASIO files of older builds are replaced.
+        OLD_ASIO=""
         "$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null | while read -r asset; do
             case "$asset" in
                 "$NAME" | Verdandi-windows-latest.zip | Verdandi-windows-latest.zip.sha256 | BUILD.txt) ;;
-                "$ASIO_NAME" | Verdandi-windows-asio-latest.zip | Verdandi-windows-asio-latest.zip.sha256) [ "$HAVE_ASIO" -eq 1 ] || "$GH" release delete-asset windows-latest "$asset" --repo "$REPO" --yes || true ;;
+                "$ASIO_NAME" | Verdandi-windows-asio-latest.zip | Verdandi-windows-asio-latest.zip.sha256) ;;
+                Verdandi-windows-asio-*.zip) [ "$HAVE_ASIO" -eq 1 ] && { "$GH" release delete-asset windows-latest "$asset" --repo "$REPO" --yes || true; } ;;
                 *) "$GH" release delete-asset windows-latest "$asset" --repo "$REPO" --yes || true ;;
             esac
         done
+        if [ "$HAVE_ASIO" -eq 0 ]; then
+            OLD_ASIO="$("$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null | sed -n 's/^Verdandi-windows-asio-\(.*\)\.zip$/\1/p' | grep -v '^latest$' | head -n 1)"
+            if [ -n "$OLD_ASIO" ]; then
+                printf '\n> **Note:** the ASIO build of this commit was not made (its job failed or ran out of time), so `Verdandi-windows-asio-latest.zip` on this page is the one of the older build `%s`. It was kept, not removed.\n' "$OLD_ASIO" >> "$WORK/notes.md"
+            else
+                printf '\n> **Note:** the ASIO build of this commit was not made (its job failed or ran out of time) and there is no older ASIO zip on this page.\n' >> "$WORK/notes.md"
+            fi
+            echo "::warning::the ASIO zip of this commit was not made; windows-latest keeps the ASIO zip of ${OLD_ASIO:-no build}"
+        fi
         "$GH" release edit windows-latest --repo "$REPO" --title "$LATEST_TITLE" --notes-file "$WORK/notes.md" --latest
     else
         "$GH" release create windows-latest "${ASSETS[@]}" --repo "$REPO" --target "$SHA" --title "$LATEST_TITLE" --notes-file "$WORK/notes.md" --latest
     fi
     echo "published windows-latest"
+    # M30: the release must end with both static zips, their SHA-256 files and BUILD.txt, whatever order the jobs finished in: look at the release itself, not at what this script meant to upload
+    GOT="$("$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null || true)"
+    missing=""
+    for need in Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 Verdandi-windows-asio-latest.zip Verdandi-windows-asio-latest.zip.sha256 BUILD.txt; do
+        printf '%s\n' "$GOT" | grep -qx "$need" || missing="$missing $need"
+    done
+    if [ -n "$missing" ]; then
+        echo "ERROR: the release windows-latest is missing:$missing (it has: $(printf '%s' "$GOT" | tr '\n' ' '))"
+        PUBLISH_INCOMPLETE=1
+    else
+        echo "windows-latest has both zips, both SHA-256 files and BUILD.txt"
+    fi
 else
     echo "checks failed: windows-latest is left as it was"
 fi
@@ -112,4 +137,4 @@ fi
         echo "removing the old release $old"
         "$GH" release delete "$old" --cleanup-tag --yes --repo "$REPO" || true
     done
-exit 0
+exit "${PUBLISH_INCOMPLETE:-0}"

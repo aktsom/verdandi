@@ -15,7 +15,8 @@ cat > "$T/gh" <<'S'
 echo "gh $*" >> "$GH_LOG"
 if [ "$1 $2" = "release view" ]; then
     case " $* " in
-        *" --json "*) echo "Verdandi-windows-0.1.0-0000000.zip"; echo "BUILD.txt"; echo "Verdandi-windows-latest.zip" ;; # (the assets of the old build)
+        *" --json "*) # the assets of the release: GH_ASSETS (a file, one name per line) or, by default, a complete release of an old build (both zips, their SHA-256 files, BUILD.txt)
+            if [ -n "${GH_ASSETS:-}" ]; then cat "$GH_ASSETS"; else printf '%s\n' Verdandi-windows-0.1.0-0000000.zip BUILD.txt Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 Verdandi-windows-asio-0.1.0-0000000.zip Verdandi-windows-asio-latest.zip Verdandi-windows-asio-latest.zip.sha256; fi ;;
         *) [ -n "${LATEST_EXISTS:-}" ] && exit 0 || exit 1 ;;
     esac
 fi
@@ -103,7 +104,7 @@ mkdir -p "$T/asiozip"; head -c 2500000 /dev/zero > "$T/asiozip/Verdandi-windows-
 ck "the per-commit release has both zips" "grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-$VERSION-4c82066.zip' && grep 'release create windows-4c82066 ' '$T/gh.log' | grep -q 'Verdandi-windows-asio-$VERSION-4c82066.zip'"
 ck "windows-latest gets the ASIO zip, its fixed name and its SHA-256 too" "grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip ' && grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-asio-latest.zip.sha256'"
 ck "the default zip (WASAPI only) is still the fixed Verdandi-windows-latest.zip" "grep 'release upload windows-latest' '$T/gh.log' | grep -q 'Verdandi-windows-latest.zip '"
-ck "an ASIO zip of an older build in windows-latest is not removed while this run has one" "! grep -q 'delete-asset windows-latest Verdandi-windows-asio' '$T/gh.log'"
+ck "the fixed ASIO names in windows-latest are replaced in place, never removed (M30: only the versioned ASIO zip of an older build goes)" "! grep -q 'delete-asset windows-latest Verdandi-windows-asio-latest' '$T/gh.log'"
 VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" HAVE_ASIO=1 bash windows/ci/release-notes.sh > "$WORK_NOTES"
 ck "the notes say which zip is the default and point to the ASIO notice" "grep -q 'WASAPI only, the default' '$WORK_NOTES' && grep -q 'ASIO-NOTICE.txt' '$WORK_NOTES'"
 echo "== the ASIO build failed in this run: the release has the default zip only"
@@ -111,6 +112,23 @@ echo "== the ASIO build failed in this run: the release has the default zip only
 ck "no ASIO zip is uploaded and the notes say so" "! grep -q 'asio' '$T/gh.log' && grep -q 'no ASIO build in this release' '$T/out.txt'"
 VERSION="$VERSION" SHORT=4c82066 SHA="$SHA" STATUS_DIR="$T/status" REPO=owner/repo COMMIT_MESSAGE="x" bash windows/ci/release-notes.sh > "$WORK_NOTES"
 ck "the notes say that this release has only the WASAPI zip" "grep -q 'only the WASAPI zip' '$WORK_NOTES'"
+echo "== M30: the ASIO job of this run made no zip, and windows-latest has an older ASIO zip: it is KEPT (the old code removed it: this is how 25cb7da lost the ASIO zip)"
+printf '%s\n' Verdandi-windows-0.1.0-0000000.zip BUILD.txt Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 Verdandi-windows-asio-0.1.0-0000000.zip Verdandi-windows-asio-latest.zip Verdandi-windows-asio-latest.zip.sha256 > "$T/assets-old-asio.txt"
+: > "$T/gh.log"; GH_ASSETS="$T/assets-old-asio.txt" LATEST_EXISTS=1 run; rc=$?
+ck "no ASIO file of windows-latest is deleted" "! grep -q 'delete-asset windows-latest Verdandi-windows-asio' '$T/gh.log'"
+ck "the notes say that the ASIO zip is the one of the older build" "grep -q 'older build .0.1.0-0000000.' '$T/notes-given.md'"
+ck "the publish step passes (both zips are on the release) and says so" "[ $rc -eq 0 ] && grep -q 'windows-latest has both zips, both SHA-256 files and BUILD.txt' '$T/out.txt'"
+echo "== M30: the release has no ASIO zip at all after publishing: the publish step FAILS and names the files"
+printf '%s\n' Verdandi-windows-0.1.0-0000000.zip BUILD.txt Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 > "$T/assets-no-asio.txt"
+: > "$T/gh.log"; GH_ASSETS="$T/assets-no-asio.txt" LATEST_EXISTS=1 run; rc=$?
+ck "it fails with a message that names Verdandi-windows-asio-latest.zip and its SHA-256 file" "[ $rc -ne 0 ] && grep -q 'windows-latest is missing:.*Verdandi-windows-asio-latest.zip .*Verdandi-windows-asio-latest.zip.sha256' '$T/out.txt'"
+printf '%s\n' Verdandi-windows-0.1.0-0000000.zip BUILD.txt Verdandi-windows-asio-latest.zip Verdandi-windows-asio-latest.zip.sha256 > "$T/assets-no-default.txt"
+: > "$T/gh.log"; GH_ASSETS="$T/assets-no-default.txt" LATEST_EXISTS=1 run; rc=$?
+ck "a release without the default zip fails the same way" "[ $rc -ne 0 ] && grep -q 'windows-latest is missing: Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256' '$T/out.txt'"
+echo "== M30: this run has an ASIO zip: the ASIO files of OLDER builds are replaced, the fixed names are kept"
+printf '%s\n' Verdandi-windows-0.1.0-0000000.zip BUILD.txt Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 Verdandi-windows-asio-0.1.0-0000000.zip Verdandi-windows-asio-latest.zip Verdandi-windows-asio-latest.zip.sha256 > "$T/assets-old-asio.txt"
+: > "$T/gh.log"; GH_ASSETS="$T/assets-old-asio.txt" ASIO_ZIP_DIR="$T/asiozip" LATEST_EXISTS=1 run
+ck "the versioned ASIO zip of the older build is removed, the fixed names are not" "grep -q 'delete-asset windows-latest Verdandi-windows-asio-0.1.0-0000000.zip' '$T/gh.log' && ! grep -q 'delete-asset windows-latest Verdandi-windows-asio-latest' '$T/gh.log'"
 echo "== the zip is missing"
 rm -f "$T/zip/"*.zip
 run; rc=$?
