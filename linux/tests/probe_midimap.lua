@@ -12,7 +12,7 @@ _menu.set_mode(true)
 _menu.set_page("MIDIMAP")
 #sleep 1
 #shot @home/mm-idle.png
-pg.pos = 2
+pg.pos = 4  -- LEARN (M32: DEVICE and CHANNEL are rows 1 and 2, PRESET 3)
 pg.key(3, 1)
 #sleep 1
 print("PROBE learn state", mm.learn.state)

@@ -133,7 +133,7 @@ print("PROBE shortcut screen on", S.state.actions_on)
 # 9. the real capture of the ACTIONS list on the page
 _menu.set_mode(true)
 _menu.set_page("MIDIMAP")
-pg.pos = 13
+pg.pos = 15  -- ACTIONS (M32: two rows above PRESET)
 pg.key(3, 1)
 pg.apos = 1
 pg.redraw()
