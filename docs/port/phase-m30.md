@@ -25,6 +25,10 @@ With the limits raised, the ASIO job ran 22 minutes and its step passed, but one
 
 Fix (CI test code only, `windows/ci/maiden_probe.py`): when the answer line is lost, the probe asks again (up to three times; both calls leave the program in the same state, so asking twice is harmless). I could not run this probe here (it needs the Windows runner); the proof is the next Windows run.
 
+## Third cause, found on the next run (f599d36)
+
+The retry fixed `asio-reopen-back` (it passed). The same check then stopped one step later with `asio-error: WinError 10061 (connection refused)`: the console of the program takes one connection at a time and refuses for a moment right after the previous one closed. The twins probes of the same file already ask again after two seconds when that happens; the ASIO probe did not. The driver and the program were fine (the log shows the engine running through the ASIO driver). Fix: the same retry (eight tries, two seconds apart) in the ASIO probe's `run`. Again CI test code only, and again provable only on the Windows runner.
+
 ## ONE ZIP? (check only, nothing built)
 
 ### Does the ASIO build offer everything the normal build does?

@@ -243,7 +243,16 @@ if os.environ.get("VERDANDI_PROBE") == "kill":
 if os.environ.get("VERDANDI_PROBE") == "tape":
     mode = os.environ.get("VERDANDI_TAPE_END", "restart")
     def run(line, want, seconds=30):
-        return repl(5555, line, want, seconds)
+        # M30: the console takes one connection at a time and refuses for a moment right after another one closed (WinError 10061): the twins probes already ask again after two seconds. on f599d36 one such refusal
+        # between two steps of the reopen check ended the whole check ("asio-error"), and the ASIO zip was not published a third time
+        last = None
+        for _ in range(8):
+            try:
+                return repl(5555, line, want, seconds)
+            except (ConnectionError, OSError) as e:
+                last = e
+                time.sleep(2)
+        raise last
     try:
         up = False
         for _ in range(100):
