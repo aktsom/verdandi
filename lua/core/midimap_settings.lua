@@ -10,6 +10,8 @@
 --   arc_keys=1 arc_keys_accel=0     the keys 5/6 T/Y G/H B/N in the norns window, and the ramp of a held arc key
 --   arc_drag=updown                 how a left-button drag turns a ring of the arc window: updown (up is clockwise) or circle (round the ring). missing: updown on Windows, circle elsewhere
 --      dev: ANY or a device name (core/midimap_value.lua name_matches: `mio` is every port of the mio, `mio 2` that port); ch: 0 = any, 1 to 16
+--   global.dev=ANY global.ch=0       (M32) the top DEVICE and CHANNEL rows of the page: for every mapping with no device (dev ANY) or channel (ch 0) of its own. a mapping can say dev=* / ch=* to mean any device /
+--                                    any channel even when the top rows name one. not in preset files; selecting a preset does not change them
 -- unknown keys are ignored with a log line (and kept when the file is written again), missing keys take their defaults, a damaged value falls back to its own default with a log line.
 -- presets: built in (NONE, PUSH 2 (unverified), GENERIC REL 2S) and the owner's own, one small file each in <norns home>/midimap-presets/<slug>.midimap
 --   verdandi-midimap-preset=1
@@ -64,7 +66,7 @@ local function new_ctl(id)
 end
 
 local function defaults()
-  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, arc_drag = M.arc_drag_default(), actions_on = true, ctl = {}, actions = {}, extra = {}}
+  local st = {preset = "NONE", on_clash = "params", arc_keys = true, arc_keys_accel = false, arc_drag = M.arc_drag_default(), actions_on = true, global = {dev = "ANY", ch = 0}, ctl = {}, actions = {}, extra = {}}
   for _, id in ipairs(M.ALL_IDS) do st.ctl[id] = new_ctl(id) end
   for _, id in ipairs(M.ACTION_IDS) do st.actions[id] = new_action() end
   return st
@@ -82,6 +84,34 @@ local function whole(v)
   return v
 end
 
+-- M32 (docs/port/phase-m32.md): the top DEVICE and CHANNEL rows (`M.state.global`) apply to every mapping that has no device (or channel) of its own.
+-- a mapping's dev "ANY" (the value every old file and preset has) and ch 0 mean "follow the top row"; dev "*" and ch 17 (written "*") mean "any, even if the top row names one"
+M.CH_ANY = 17
+
+--- a channel as it is read or typed: 0 (follow the top row), 1 to 16, "*" or 17 (any channel); nil when it is none of these
+function M.clean_ch(v)
+  if v == "*" then return M.CH_ANY end
+  local n = whole(v)
+  if n == nil or n < 0 or n > M.CH_ANY then return nil end
+  return n
+end
+
+--- the device a mapping really listens to: its own, or the top row's for ANY; "*" is any device. "ANY" in the answer means any controller (core/midimap_value.lua name_matches is used for the rest)
+function M.eff_dev(dev)
+  if dev == nil or dev == "ANY" then return M.state and M.state.global and M.state.global.dev or "ANY" end
+  if dev == "*" then return "ANY" end
+  return dev
+end
+
+--- the channel a mapping really listens to: its own, or the top row's for 0; 0 in the answer is any channel
+function M.eff_ch(ch)
+  if ch == nil or ch == 0 then return M.state and M.state.global and M.state.global.ch or 0 end
+  if ch == M.CH_ANY then return 0 end
+  return ch
+end
+
+local function ch_text(n) return n == M.CH_ANY and "*" or tostring(n) end
+
 local function clean_dev(v)
   if type(v) ~= "string" then return nil, "a name" end
   local n = v:match("^%s*(.-)%s*$")
@@ -89,6 +119,7 @@ local function clean_dev(v)
   if n:find("[%z\1-\31\127]") then return nil, "no control characters" end
   if #n > M.MAX_DEV then return nil, M.MAX_DEV .. " characters at most" end
   if n:lower() == "any" then return "ANY" end
+  if n == "*" then return "*" end -- M32: any device even when the top DEVICE row names one
   return require('core/midimap_value').canonical_name(n) -- the old name of the virtual device is read, shown and written as "virtual"
 end
 
@@ -109,8 +140,8 @@ local function check_field(id, field, v)
   elseif field == "dev" then
     return clean_dev(v)
   elseif field == "ch" then
-    local n = whole(v)
-    if n == nil or n < 0 or n > 16 then return nil, "0 (any) to 16" end
+    local n = M.clean_ch(v)
+    if n == nil then return nil, "0 (the top CHANNEL row), 1 to 16, or * (any channel)" end
     return n
   elseif field == "mode" then
     if not (is_enc(id) or is_arc(id)) then return nil, "only encoders have a mode" end
@@ -151,8 +182,8 @@ local function check_action_field(field, v)
   elseif field == "dev" then
     return clean_dev(v)
   elseif field == "ch" then
-    local n = whole(v)
-    if n == nil or n < 0 or n > 16 then return nil, "0 (any) to 16" end
+    local n = M.clean_ch(v)
+    if n == nil then return nil, "0 (the top CHANNEL row), 1 to 16, or * (any channel)" end
     return n
   elseif field == "mode" then
     if in_list(M.REL_MODES, v) then return v end
@@ -378,6 +409,14 @@ function M.load()
     elseif k == "arc_drag" then
       if v == "updown" or v == "circle" then st.arc_drag = v
       else M.log(string.format("arc_drag=%s is not updown or circle, using %s", v:sub(1, 40), M.arc_drag_legacy())) end
+    elseif k == "global.dev" then
+      local d = clean_dev(v)
+      if d ~= nil and d ~= "*" then st.global.dev = d
+      else M.log(string.format("global.dev=%s is not a device name or ANY, using ANY", v:sub(1, 40))) end
+    elseif k == "global.ch" then
+      local n = M.clean_ch(v)
+      if n ~= nil and n <= 16 then st.global.ch = n
+      else M.log(string.format("global.ch=%s is not 0 (any) to 16, using any", v:sub(1, 40))) end
     elseif k == "arc_keys" or k == "arc_keys_accel" then
       if v == "1" or v == "0" then st[k] = v == "1"
       else M.log(string.format("%s=%s is not 0 or 1, using %s", k, v:sub(1, 40), k == "arc_keys" and "1" or "0")) end
@@ -428,7 +467,7 @@ local function write_ctl(f, id, c, with_device)
   if complete then f:write(id .. ".num=" .. c.num .. "\n") end
   if with_device then
     f:write(id .. ".dev=" .. c.dev .. "\n")
-    f:write(id .. ".ch=" .. c.ch .. "\n")
+    f:write(id .. ".ch=" .. ch_text(c.ch) .. "\n")
   end
   if is_enc(id) then
     f:write(id .. ".mode=" .. c.mode .. "\n")
@@ -449,7 +488,7 @@ local function write_action(f, id, a, with_device)
   f:write("act." .. id .. ".num=" .. a.num .. "\n")
   if with_device then
     f:write("act." .. id .. ".dev=" .. a.dev .. "\n")
-    f:write("act." .. id .. ".ch=" .. a.ch .. "\n")
+    f:write("act." .. id .. ".ch=" .. ch_text(a.ch) .. "\n")
   end
   if a.type == "step" then
     f:write("act." .. id .. ".mode=" .. a.mode .. "\n")
@@ -477,6 +516,8 @@ function M.save()
   f:write("arc_keys_accel=" .. (st.arc_keys_accel and "1" or "0") .. "\n")
   f:write("arc_drag=" .. st.arc_drag .. "\n")
   f:write("actions=" .. (st.actions_on and "1" or "0") .. "\n")
+  f:write("global.dev=" .. st.global.dev .. "\n")
+  f:write("global.ch=" .. st.global.ch .. "\n")
   for _, id in ipairs(M.ALL_IDS) do write_ctl(f, id, st.ctl[id], true) end
   for _, id in ipairs(M.ACTION_IDS) do write_action(f, id, st.actions[id], true) end
   for _, line in ipairs(st.extra or {}) do f:write(line .. "\n") end
@@ -622,6 +663,24 @@ end
 function M.set_clash(v)
   if not in_list(M.CLASH, v) then return false, "params or both" end
   M.state.on_clash = v
+  M.save()
+  return true
+end
+
+--- M32: the top DEVICE and CHANNEL rows (all mappings that have no device or channel of their own): field "dev" (ANY or a device name) or "ch" (0 = any, 1 to 16). saved at once; a preset is not changed and the label stays
+function M.set_global(field, value)
+  local g = M.state.global
+  if field == "dev" then
+    local d, why = clean_dev(value)
+    if d == nil or d == "*" then return false, why or "a device name or ANY" end
+    g.dev = d
+  elseif field == "ch" then
+    local n = M.clean_ch(value)
+    if n == nil or n > 16 then return false, "0 (any) to 16" end
+    g.ch = n
+  else
+    return false, "dev or ch"
+  end
   M.save()
   return true
 end

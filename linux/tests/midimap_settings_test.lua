@@ -78,7 +78,7 @@ fresh(); S.load()
 local function bad(id, f, v, what) local ok2, why = S.set(id, f, v); check(ok2 == false and type(why) == "string", what .. " refused"); end
 bad("e1", "num", 128, "CC 128"); bad("e1", "num", -1, "CC -1"); bad("e1", "num", 1.5, "CC 1.5"); bad("e1", "num", "x", "CC x")
 bad("e1", "type", "note", "a note on an encoder"); bad("e1", "type", "sysex", "an unknown type")
-bad("e1", "ch", 17, "channel 17"); bad("e1", "ch", -1, "channel -1")
+bad("e1", "ch", 18, "channel 18"); bad("e1", "ch", -1, "channel -1")
 bad("e1", "mode", "rel9", "unknown mode"); bad("e1", "sens", 0, "sens 0"); bad("e1", "sens", 10, "sens 10")
 bad("k1", "mode", "abs", "a mode on a key"); bad("k1", "threshold", 127, "threshold 127"); bad("k1", "threshold", -1, "threshold -1")
 bad("e1", "threshold", 10, "a threshold on an encoder"); bad("e9", "num", 1, "an unknown control")

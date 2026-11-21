@@ -739,3 +739,15 @@ Do one step at a time. The commit hash is in the report of this phase.
 **Windows**: unchanged, nothing to do (twins already worked there).
 Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]; notes: ...
 Cannot be tested here: sound out of twins, your Mint desktop, your own twins folder.
+
+## Windows and Linux 0.10.19 (M32: DEVICE and CHANNEL for all mappings, the full device name in WATCH) - nothing here touches the audio path
+Do one step at a time. The commit hash for Linux is in the report of this phase.
+**Windows (with the Push 2)**
+1. Update: close Verdandi, unzip the new Verdandi-windows-asio-latest.zip into the same folder (Unblock, Defender as always). The version line must say 0.10.19.
+2. SYSTEM > MIDI MAP > WATCH. Press the button that is mapped to PIN in user mode, then in regular mode. Write down the full device names WATCH shows (for example ABLETON PUSH 2 1 and ABLETON PUSH 2 2), and whether CH and CC differ between the two modes.
+3. K2 back. At the top of the page (E2 up from PRESET) set DEVICE to the user-mode port with E3. Press the PIN button in both modes: PIN must change only in user mode. Try a knob and another button the same way.
+4. Set DEVICE back to ANY: everything works as before (both modes act again).
+**Linux laptop (the built copy in ~/verdandi-home/norns)**
+5. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`. The same two rows are at the top of SYSTEM > MIDI MAP. Without a Push: map a control with LEARN from the virtual MIDI device (`virtual`), set DEVICE at the top to another device name: the virtual one no longer moves it; set it to `virtual`: it moves again.
+Results (copy and fill in): 1 [ ]  2 [ ] (names: ...)  3 [ ]  4 [ ]  5 [ ]; notes: ...
+Cannot be tested here: the real Push 2 and its two modes.

@@ -164,11 +164,12 @@ function M.clashes()
     local c = S.state.ctl[id]
     if c.type == "cc" and c.num ~= nil then
       for pid, p in pairs(norns.pmap.data or {}) do
-        if p.cc == c.num and (c.ch == 0 or p.ch == c.ch) then
+        local ech, edev = S.eff_ch(c.ch), S.eff_dev(c.dev)
+        if p.cc == c.num and (ech == 0 or p.ch == ech) then
           local vp = midi and midi.vports and midi.vports[p.dev]
           local name = vp and vp.name or ""
           local dev_ok
-          if c.dev == "ANY" then dev_ok = not V.is_non_controller(name) else dev_ok = V.name_matches(c.dev, name) end
+          if edev == "ANY" then dev_ok = not V.is_non_controller(name) else dev_ok = V.name_matches(edev, name) end
           if dev_ok then
             out[#out + 1] = {id = id, cc = c.num, param = pid, name = param_name(pid)}
             break
@@ -253,13 +254,15 @@ end
 
 --- the control (other than `id`) that would also answer to a CC or note with this device and channel filter, or nil
 function M.find_overlap(id, type_, num, dev, ch)
+  -- M32: compared as they act: a mapping with ANY / 0 follows the top DEVICE and CHANNEL rows
+  local edev, ech = S.eff_dev(dev), S.eff_ch(ch)
   for _, other in ipairs(M.ALL_IDS) do
     local c = S.state.ctl[other]
-    if other ~= id and kind_of(c) == type_ and c.num == num and V.dev_overlap(c.dev, dev) and V.ch_overlap(c.ch, ch) then return other end
+    if other ~= id and kind_of(c) == type_ and c.num == num and V.dev_overlap(S.eff_dev(c.dev), edev) and V.ch_overlap(S.eff_ch(c.ch), ech) then return other end
   end
   for _, other in ipairs(S.ACTION_IDS) do
     local a = S.state.actions[other]
-    if other ~= id and a.type ~= "none" and a.num == num and (a.type == "note" and "note" or "cc") == type_ and V.dev_overlap(a.dev, dev) and V.ch_overlap(a.ch, ch) then return other end
+    if other ~= id and a.type ~= "none" and a.num == num and (a.type == "note" and "note" or "cc") == type_ and V.dev_overlap(S.eff_dev(a.dev), edev) and V.ch_overlap(S.eff_ch(a.ch), ech) then return other end
   end
   return nil
 end
@@ -724,9 +727,11 @@ end
 
 -- ---------------------------------------------------------------- the messages
 local function matches(c, d, ch)
-  if c.ch ~= 0 and c.ch ~= ch then return false end
-  if c.dev == "ANY" then return not V.is_non_controller(d.name) end
-  return V.name_matches(c.dev, d.name)
+  -- M32: a mapping's own device or channel, else the top DEVICE and CHANNEL rows (S.eff_dev, S.eff_ch)
+  local ech, edev = S.eff_ch(c.ch), S.eff_dev(c.dev)
+  if ech ~= 0 and ech ~= ch then return false end
+  if edev == "ANY" then return not V.is_non_controller(d.name) end
+  return V.name_matches(edev, d.name)
 end
 
 local function astate(id)

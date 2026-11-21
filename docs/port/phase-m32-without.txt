@@ -1,0 +1,26 @@
+M32: the new and changed tests run against the OLD code (31c3a0d, the M30 state).
+=== midimap_global_test on the old code
+lua5.3: linux/tests/midimap_global_test.lua:65: attempt to call a nil value (field 'set_global')
+stack traceback:
+	linux/tests/midimap_global_test.lua:65: in local 'setup'
+	linux/tests/midimap_global_test.lua:94: in main chunk
+	[C]: in ?
+=== midimap_page_test on the old code
+FAIL the rows of the page: got PRESET,LEARN,E1,E2,E3,K1,K2,K3,A1,A2,A3,A4,ACTIONS,WATCH,ON CLASH,ARC KEYS,ARC DRAG,MIDI ACTIONS,SAVE AS, wanted DEVICE,CHANNEL,PRESET,LEARN,E1,E2,E3,K1,K2,K3,A1,A2,A3,A4,ACTIONS,WATCH,ON CLASH,ARC K
+FAIL the first rows are drawn
+FAIL the preset in use is shown
+FAIL E3 browses to PUSH 2
+FAIL K3 applies it: got nil, wanted 15
+FAIL the label is the preset: got NONE, wanted PUSH 2
+FAIL E1 shows CC15 now
+FAIL and its format
+FAIL E3 stops at the last preset
+FAIL and at the first
+FAIL K3 on LEARN starts a pick: got idle, wanted pick
+FAIL and what to do (click a control)
+FAIL and how to leave
+FAIL the banner names the target
+
+=== the same tests on the new code
+midimap global: all passed
+midimap page: all passed

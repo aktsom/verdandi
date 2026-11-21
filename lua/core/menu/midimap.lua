@@ -1,6 +1,6 @@
 -- SYSTEM > MIDI MAP (computers only, see core/menu/system.lua): which MIDI controls turn E1-E3 and press K1-K3. docs/port/midi-map-plan.md 2.6. the mappings live in core/midimap_settings.lua
 -- (file: midimap.conf in the norns home, presets in midimap-presets/), the layer that acts on messages and the learn flow are core/midimap.lua. every change is saved at once.
---   rows: PRESET, LEARN, E1 E2 E3 K1 K2 K3, ON CLASH, SAVE AS, and DELETE only while one of his own presets is in use
+--   rows: DEVICE and CHANNEL (M32: for every mapping with no device or channel of its own), PRESET, LEARN, E1 E2 E3 K1 K2 K3, ON CLASH, SAVE AS, and DELETE only while one of his own presets is in use
 --   E2 row, E3 change (PRESET: browse the presets, K3 applies), K3: LEARN starts a pick (click a control in the window, then move the controller), a control opens its view, SAVE AS asks for a name,
 --   DELETE asks once. K2 goes back (out of a learn, a view or the question, else to SYSTEM). a view has LEARN, NUMBER, DEVICE, CHANNEL, MODE and SENS (encoders), TYPE and THRESHOLD (keys), CLEAR
 -- while a learn is on the screen shows an inverted banner, the target row and the seconds left; the window rings the control (core/midimap.lua)
@@ -9,7 +9,7 @@ local S = require 'core/midimap_settings'
 local mm = require 'core/midimap'
 local V = require 'core/midimap_value'
 
-local m = {pos = 1, top = 1, mode = "rows", dpos = 1, dtop = 1, apos = 1, atop = 1, act = nil, ctl = nil, msg = nil, confirm = nil, browse = nil}
+local m = {pos = 3, top = 3, mode = "rows", dpos = 1, dtop = 1, apos = 1, atop = 1, act = nil, ctl = nil, msg = nil, confirm = nil, browse = nil}
 
 local VISIBLE = 5
 local CTLS = {"e1", "e2", "e3", "k1", "k2", "k3"}
@@ -20,7 +20,7 @@ local function is_knob(id) return id:sub(1, 1) ~= "k" end
 
 --- the rows of the page, in order (DELETE only for one of his own presets)
 function m.rows()
-  local r = {"PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "ACTIONS", "WATCH", "ON CLASH", "ARC KEYS", "ARC DRAG", "MIDI ACTIONS", "SAVE AS"}
+  local r = {"DEVICE", "CHANNEL", "PRESET", "LEARN", "E1", "E2", "E3", "K1", "K2", "K3", "A1", "A2", "A3", "A4", "ACTIONS", "WATCH", "ON CLASH", "ARC KEYS", "ARC DRAG", "MIDI ACTIONS", "SAVE AS"}
   local p = S.preset_by_name(S.state.preset)
   if p ~= nil and not p.builtin then r[#r + 1] = "DELETE" end
   return r
@@ -66,11 +66,22 @@ local function fit(s, w)
   return s:sub(1, 1)
 end
 
+--- like fit, but a name that is too wide loses its START (".." and the last characters), so that the port number at its end can still be read
+local function fit_end(s, w)
+  if screen.text_extents(s) <= w then return s end
+  local n = #s
+  while n > 1 do
+    n = n - 1
+    if screen.text_extents(".." .. s:sub(#s - n + 1)) <= w then return ".." .. s:sub(#s - n + 1) end
+  end
+  return s:sub(-1)
+end
+
 local function dbg(s) print("MIDI MAP page: " .. s) end
 
 -- ---------------------------------------------------------------- the devices
 --- the choices of a control's DEVICE row: ANY, every device by name, the name of an interface with several ports (`mio` for `mio 1`, `mio 2`), and a remembered name that is not there
-function m.device_choices()
+function m.device_choices(for_global)
   local names, seen = {}, {}
   for _, d in pairs(midi.devices or {}) do
     if d.name and not seen[d.name] then seen[d.name] = true; names[#names + 1] = d.name end
@@ -87,8 +98,15 @@ function m.device_choices()
   end
   table.sort(list, function(a, b) return a.value:lower() < b.value:lower() end)
   table.insert(list, 1, {value = "ANY", label = "ANY"})
-  local c = (m.mode == "aview" and m.act) and S.state.actions[m.act] or (m.ctl and S.state.ctl[m.ctl])
-  if c and c.dev ~= "ANY" and c.dev:sub(1, 1) == "=" then
+  -- M32: in the view of a control or an action the first choice is GLOBAL (stored as ANY: follow the top DEVICE row) and the second is ANY (stored as *: any device even when the top row names one)
+  if not for_global then
+    list[1] = {value = "ANY", label = "GLOBAL"}
+    table.insert(list, 2, {value = "*", label = "ANY"})
+  end
+  local c
+  if for_global then c = S.state.global
+  else c = (m.mode == "aview" and m.act) and S.state.actions[m.act] or (m.ctl and S.state.ctl[m.ctl]) end
+  if c and c.dev ~= "ANY" and c.dev ~= "*" and c.dev:sub(1, 1) == "=" then
     -- "=Name": the port LEARN stored when another listed device's name would also have matched: this port and no other
     local plain = c.dev:sub(2)
     local have = false
@@ -96,7 +114,7 @@ function m.device_choices()
       if V.norm_name(e.value) == V.norm_name(plain) then e.value, e.label, have = c.dev, plain:upper() .. " (THIS PORT ONLY)", true end
     end
     if not have then list[#list + 1] = {value = c.dev, label = plain:upper() .. " (THIS PORT ONLY, ABSENT)"} end
-  elseif c and c.dev ~= "ANY" then
+  elseif c and c.dev ~= "ANY" and c.dev ~= "*" then
     local have = false
     for _, e in ipairs(list) do if V.norm_name(e.value) == V.norm_name(c.dev) then have = true end end
     if not have then
@@ -114,6 +132,11 @@ local function device_index(list, c)
   for i, e in ipairs(list) do if V.norm_name(e.value) == V.norm_name(c.dev) then return i end end
   return 1
 end
+
+-- M32: the channel choices of a control's or an action's view: GLOBAL (0: follow the top CHANNEL row), ANY (17: any channel even when the top row names one), then 1 to 16
+local function ch_pos(ch) if ch == 0 then return 1 elseif ch == S.CH_ANY then return 2 else return ch + 2 end end
+local function ch_at(i) if i <= 1 then return 0 elseif i == 2 then return S.CH_ANY else return i - 2 end end
+local function ch_label(ch) if ch == 0 then return "GLOBAL" elseif ch == S.CH_ANY then return "ANY" else return tostring(ch) end end
 
 -- ---------------------------------------------------------------- texts
 local function clash_map()
@@ -158,7 +181,13 @@ local function preset_text()
 end
 
 local function row_text(row, clash)
-  if row == "PRESET" then return preset_text()
+  if row == "DEVICE" then
+    local list = m.device_choices(true)
+    return list[device_index(list, S.state.global)].label
+  elseif row == "CHANNEL" then
+    local g = S.state.global
+    return g.ch == 0 and "ANY" or tostring(g.ch)
+  elseif row == "PRESET" then return preset_text()
   elseif row == "LEARN" then return "CLICK A CONTROL"
   elseif row == "ON CLASH" then return S.state.on_clash == "both" and "BOTH" or "PARAMS MAP"
   elseif row == "WATCH" then return "WHAT DOES IT SEND?"
@@ -182,7 +211,7 @@ local function detail_text(row)
   elseif row == "DEVICE" then
     local list = m.device_choices()
     return list[device_index(list, c)].label
-  elseif row == "CHANNEL" then return c.ch == 0 and "ANY" or tostring(c.ch)
+  elseif row == "CHANNEL" then return ch_label(c.ch)
   elseif row == "MODE" then return mm.MODE_NAMES[c.mode] .. (mm.guess[id] and "?" or "")
   elseif row == "SENS" then return tostring(c.sens)
   elseif row == "GAIN" then return tostring(c.gain)
@@ -204,7 +233,7 @@ local function adetail_text(row)
   elseif row == "DEVICE" then
     local list = m.device_choices()
     return list[device_index(list, a)].label
-  elseif row == "CHANNEL" then return a.ch == 0 and "ANY" or tostring(a.ch)
+  elseif row == "CHANNEL" then return ch_label(a.ch)
   elseif row == "THRESHOLD" then return ">" .. a.threshold
   elseif row == "FORMAT" then return mm.MODE_NAMES[a.mode]
   elseif row == "DIRECTION" then return a.dir:upper()
@@ -371,7 +400,13 @@ local function key_rows(n)
   end
   if n ~= 3 then return end
   local row = m.rows()[m.pos]
-  if row == "PRESET" then
+  if row == "DEVICE" then
+    local list = m.device_choices(true)
+    local i = device_index(list, S.state.global) % #list + 1
+    S.set_global("dev", list[i].value)
+  elseif row == "CHANNEL" then
+    S.set_global("ch", (S.state.global.ch + 1) % 17)
+  elseif row == "PRESET" then
     local name = m.browse or S.state.preset
     if S.preset_by_name(name) and S.select_preset(name) then
       m.msg = "applied: " .. S.state.preset
@@ -566,7 +601,7 @@ enc_detail_raw = function(n, delta)
     local i = math.max(1, math.min(#list, device_index(list, c) + delta))
     S.set(id, "dev", list[i].value)
   elseif row == "CHANNEL" then
-    S.set(id, "ch", math.max(0, math.min(16, c.ch + delta)))
+    S.set(id, "ch", ch_at(math.max(1, math.min(18, ch_pos(c.ch) + delta))))
   elseif row == "MODE" then
     local mode = step_in(S.MODES, c.mode, delta)
     if mode ~= c.mode then S.set(id, "mode", mode); mm.guess[id] = nil end
@@ -615,7 +650,7 @@ enc_aview_raw = function(n, delta)
     local i = math.max(1, math.min(#list, device_index(list, a) + delta))
     S.set_action(id, "dev", list[i].value)
   elseif row == "CHANNEL" then
-    S.set_action(id, "ch", math.max(0, math.min(16, a.ch + delta)))
+    S.set_action(id, "ch", ch_at(math.max(1, math.min(18, ch_pos(a.ch) + delta))))
   elseif row == "THRESHOLD" then
     S.set_action(id, "threshold", math.max(0, math.min(126, a.threshold + delta)))
   elseif row == "FORMAT" then
@@ -658,7 +693,13 @@ local function enc_raw(n, delta)
     clamp_rows()
   elseif n == 3 and delta ~= 0 then
     local row = m.rows()[m.pos]
-    if row == "PRESET" then
+    if row == "DEVICE" then
+      local list = m.device_choices(true)
+      local i = math.max(1, math.min(#list, device_index(list, S.state.global) + delta))
+      S.set_global("dev", list[i].value)
+    elseif row == "CHANNEL" then
+      S.set_global("ch", math.max(0, math.min(16, S.state.global.ch + delta)))
+    elseif row == "PRESET" then
       local list = S.preset_list()
       local idx = 0
       for i, p in ipairs(list) do if p.name == (m.browse or S.state.preset) then idx = i end end
@@ -746,17 +787,16 @@ local function redraw_watch()
   screen.move(126, 8)
   screen.text_right("MIDI MAP")
   if w.cc ~= nil then
+    -- M32: the device name has the line to itself and is shown in full (the same text as the DEVICE rows); a name wider than the screen keeps its end, with the port number
     screen.level(15)
     screen.move(2, 22)
-    screen.text(fit(w.dev:upper(), 56))
-    screen.move(62, 22)
-    screen.text("CH " .. w.ch)
-    screen.move(96, 22)
-    screen.text("CC " .. w.cc)
+    screen.text(fit_end(w.dev:upper(), 124))
     screen.level(6)
     screen.move(2, 31)
     screen.text("LAST SIX")
     screen.level(15)
+    screen.move(126, 31)
+    screen.text_right("CH " .. w.ch .. "  CC " .. w.cc)
     for i, v in ipairs(w.values) do
       screen.move(2 + (i - 1) * 21, 42)
       screen.text(tostring(v))
