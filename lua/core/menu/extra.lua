@@ -1,7 +1,7 @@
 -- SYSTEM > EXT FOLDERS (Windows since docs/port/phase-m8.md, Linux since M27, docs/port/phase-m27.md; one page, the same words on both): folders anywhere on the computer whose samples show up in norns's file browser and on the tape page,
 -- next to the dust folders, as "[ext] <name>".
---   the folders already added, one per row (name, the folder, and a mark when it is not reachable: MISSING for an unplugged drive or a renamed folder, BLOCKED when a real folder in dust has the name), then ADD FOLDER,
---   then (Linux and macOS-made imports only) the links an older "Import" made in dust/audio/mac, marked IMPORT, so that they can be removed here too. a line under the list says what K3 and K2 do for the selected row.
+--   ADD FOLDER first (M33), then the folders already added, one per row, A to Z and numbers in number order (name, the folder, and a mark when it is not reachable: MISSING for an unplugged drive or a renamed folder,
+--   BLOCKED when a real folder in dust has the name), then (Linux and macOS-made imports only) the links an older "Import" made in dust/audio/mac, marked IMPORT, sorted the same way, so that they can be removed here too. a line under the list says what K3 and K2 do for the selected row.
 --   E2 chooses a row. K3 on ADD FOLDER opens the folder window (Windows: its own; Linux: the desktop's, or zenity or kdialog). K3 on a folder asks (a warning in plain words); K3 again removes the SHORTCUT, K2 cancels. K2 goes back.
 --   a folder dropped on the window is added the same way (_norns.ext_dropped); a dropped file is refused by the window code.
 -- a removal only takes away the shortcut in dust/audio; the files in the folder are never touched (platform/common/extfolders.c checks that the entry is really a link first).
@@ -9,26 +9,66 @@ local winui = require 'core/menu/winui'
 
 local m = {pos = 1, items = {}, legacy = {}, confirm = nil, msg = nil, waiting = false, tick = 0}
 
+-- M33: the order of names. case is ignored; a name is cut into runs of digits and runs of other characters; two digit runs are compared as numbers (2 before 10; the same number: the shorter run first, so 2 before 02);
+-- a digit run comes before a text run (a name that starts with a digit comes before one that starts with a letter); text runs compare as lower case; a tie ends with the exact text, so the order is always the same
+local function runs(name)
+  local out = {}
+  for digits, text in tostring(name):gmatch("(%d*)(%D*)") do
+    if digits ~= "" then out[#out + 1] = {digit = true, text = digits} end
+    if text ~= "" then out[#out + 1] = {digit = false, text = text:lower()} end
+  end
+  return out
+end
+
+function m.natural_less(a, b)
+  local ra, rb = runs(a), runs(b)
+  for i = 1, math.min(#ra, #rb) do
+    local x, y = ra[i], rb[i]
+    if x.digit ~= y.digit then return x.digit end
+    if x.digit then
+      local nx, ny = tonumber(x.text), tonumber(y.text)
+      if nx ~= ny then return nx < ny end
+      if #x.text ~= #y.text then return #x.text < #y.text end
+    elseif x.text ~= y.text then
+      return x.text < y.text
+    end
+  end
+  if #ra ~= #rb then return #ra < #rb end
+  return tostring(a) < tostring(b)
+end
+
+local function by_name(x, y) return m.natural_less(x.name, y.name) end
+
 local function load()
   m.items = (_norns.ext_list and _norns.ext_list()) or {}
+  table.sort(m.items, by_name)
   -- the links an older Import made (dust/audio/mac): nothing on Windows
   m.legacy = {}
   for _, it in ipairs((_norns.ext_legacy_list and _norns.ext_legacy_list()) or {}) do
     it.legacy = true
     m.legacy[#m.legacy + 1] = it
   end
+  table.sort(m.legacy, by_name)
 end
 
 local MARKS = {missing = "MISSING", blocked = "BLOCKED", nolink = "NO LINK"}
 local LEGACY_MARKS = {ok = "IMPORT", missing = "IMPORT GONE"}
 
--- the folders, ADD FOLDER (right after them: the way to add stays near however many old links there are), then the old import links
+-- ADD FOLDER first (M33: the way to add is always on the first row), then the folders, then the old import links; each group sorted by name
 local function rows()
-  local r = {}
+  local r = {{add = true}}
   for _, it in ipairs(m.items) do r[#r + 1] = it end
-  r[#r + 1] = {add = true}
   for _, it in ipairs(m.legacy) do r[#r + 1] = it end
   return r
+end
+
+m.rows = rows -- (for the test: the rows in the order they are shown)
+
+-- the selection goes to the folder that was just added, at its place in the sorted list
+local function select_named(name)
+  for i, row in ipairs(rows()) do
+    if not row.add and not row.legacy and row.name == name then m.pos = i; return end
+  end
 end
 
 local function setmsg(s)
@@ -55,11 +95,7 @@ _norns.ext_folder_chosen = function(path, err)
   end
   local ok, text, name = _norns.ext_add(path)
   load()
-  if ok and name and name ~= "" then
-    for i, it in ipairs(m.items) do
-      if it.name == name then m.pos = i end
-    end
-  end
+  if ok and name and name ~= "" then select_named(name) end
   say(text)
 end
 
@@ -67,11 +103,7 @@ end
 _norns.ext_dropped = function(path)
   local ok, text, name = _norns.ext_add(path)
   load()
-  if ok and name and name ~= "" then
-    for i, it in ipairs(m.items) do
-      if it.name == name then m.pos = i end
-    end
-  end
+  if ok and name and name ~= "" then select_named(name) end
   say(text)
   if _norns.toast then _norns.toast(text) end
 end

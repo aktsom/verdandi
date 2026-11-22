@@ -36,6 +36,9 @@ _norns = {
 local page = dofile("lua/core/menu/extra.lua")
 page.init(); page.redraw()
 local function all_text() return table.concat(drawn, "\n") end
+local function goto_row(n) for _ = 1, 12 do page.enc(2, -1) end for _ = 2, n do page.enc(2, 1) end page.redraw() end
+check(shown("K3 ADD A FOLDER  K2 BACK"), "M33: the page opens on ADD FOLDER (the first row)")
+goto_row(2)
 check(shown("K3 REMOVE  K2 BACK"), "the hint line: what K3 and K2 do for a folder row")
 check(shown("[ext] Drums") and shown("[ext") and shown("ADD FOLDER"), "both folders (the longer row cut to fit) and ADD FOLDER are listed")
 check(all_text():find("[ext] Loops", 1, true) ~= nil or all_text():find("[ext] Lo", 1, true) ~= nil or true, "(the second row's label may be cut: the info area shows it whole when it is selected)")
@@ -44,12 +47,12 @@ local joined = all_text():gsub("\n", " ")
 check(joined:find("[ext] Drums D:\\Samples\\D", 1, true) ~= nil and joined:find("rums", 1, true) ~= nil, "a row that was cut: the info area shows its whole text (name and folder) over two lines")
 -- a row whose text fits: the info area says what K3 does
 table.insert(list, 1, {name = "[ext] A", path = "D:\\A", state = "ok"})
-page.init(); page.redraw()
+page.init(); goto_row(2); page.redraw()
 joined = all_text():gsub("\n", " ")
 check(joined:find("Removing takes away", 1, true) ~= nil and joined:find("files stay", 1, true) ~= nil, "a row that fits: the info area says what a removal does")
 check(shown("K3 REMOVE  K2 BACK"), "the hint line stays when the info area shows other text")
 table.remove(list, 1)
-page.init(); page.redraw()
+page.init(); goto_row(2); page.redraw()
 -- K3 on a folder only asks
 page.key(3, 1); page.redraw()
 check(#removed == 0, "the first K3 removes nothing")
@@ -69,9 +72,8 @@ page.enc(2, 1)
 page.key(3, 1); page.enc(2, 1); page.key(2, 1)
 check(#removed == 1, "E2 while asking does nothing and K2 cancels")
 -- ADD FOLDER (E2 moves one row per turn)
-local function goto_row(n) for _ = 1, 12 do page.enc(2, -1) end for _ = 2, n do page.enc(2, 1) end end
-goto_row(2); page.redraw()
-check(shown("K3 ADD A FOLDER  K2 BACK"), "on ADD FOLDER the hint says K3 chooses (ADD FOLDER comes right after the folders)")
+goto_row(1)
+check(shown("K3 ADD A FOLDER  K2 BACK"), "on ADD FOLDER the hint says K3 chooses (M33: ADD FOLDER is the first row)")
 page.key(3, 1); page.key(3, 1)
 check(picked == 1, "K3 on ADD FOLDER opens the picker once (a second press while it is open does not open another)")
 _norns.ext_folder_chosen("F:\\New\\Folder"); page.redraw()
@@ -85,15 +87,15 @@ local seen_fail, seen_cancel = false, false
 for _ = 1, 40 do _menu.timer.event(); page.redraw(); if shown("0x80070057") then seen_fail = true end; if shown("cancelled") then seen_cancel = true end end
 check(seen_fail, "a failure shows its error code on the screen")
 check(not seen_cancel, "a failure never says cancelled")
--- the old import links: after ADD FOLDER, marked IMPORT, K3 twice removes only the link
-goto_row(4); page.redraw() -- (Loops, New, ADD FOLDER, then the links)
-check(shown("k.wav") and shown("IMPORT"), "an old import link is listed after ADD FOLDER and marked IMPORT")
+-- the old import links: after the folders, marked IMPORT, sorted (g.wav before k.wav), K3 twice removes only the link
+goto_row(5); page.redraw() -- (ADD FOLDER, Loops, New, then the links g.wav and k.wav)
+check(shown("k.wav") and shown("IMPORT"), "an old import link is listed after the folders and marked IMPORT")
 check(shown("K3 REMOVE  K2 BACK"), "the hint line on a legacy row")
 joined = all_text():gsub("\n", " ")
 check(joined:find("old import link", 1, true) ~= nil, "the info area says what an old import link is")
-goto_row(5); page.redraw()
-check(shown("IMPORT GONE"), "an import link whose file is gone is marked")
-goto_row(4)
+goto_row(4); page.redraw()
+check(shown("IMPORT GONE"), "an import link whose file is gone is marked (g.wav sorts before k.wav)")
+goto_row(5)
 page.key(3, 1); page.redraw()
 check(#legacy_removed == 0 and #removed == 1, "the first K3 on an import link removes nothing")
 joined = all_text():gsub("\n", " ")
@@ -111,6 +113,72 @@ check(not shown("IMPORT"), "no old import links: no such rows")
 -- K2 on the list goes back to SYSTEM
 page.key(2, 1)
 check(page_now == "SYSTEM", "K2 goes back")
+-- ---- M33: the order and the selection
+local function sorted(names) local t = {} for i, n in ipairs(names) do t[i] = n end table.sort(t, page.natural_less) return table.concat(t, "|") end
+check(sorted({"banana", "Apple", "cherry"}) == "Apple|banana|cherry", "M33 order: A to Z, upper and lower case ignored: " .. sorted({"banana", "Apple", "cherry"}))
+check(sorted({"b", "B", "a", "A"}) == "A|a|B|b" or sorted({"b", "B", "a", "A"}) == "a|A|b|B", "M33 order: the same letter in two cases stays together")
+check(sorted({"loops", "10 loops", "2 loops", "Zed"}) == "2 loops|10 loops|loops|Zed", "M33 order: a name that starts with a digit comes first, 2 before 10: " .. sorted({"loops", "10 loops", "2 loops", "Zed"}))
+check(sorted({"take 10", "take 9", "take 100", "Take 1"}) == "Take 1|take 9|take 10|take 100", "M33 order: numbers inside a name are in number order: " .. sorted({"take 10", "take 9", "take 100", "Take 1"}))
+check(sorted({"02", "2", "10"}) == "2|02|10", "M33 order: 2 before 02 before 10: " .. sorted({"02", "2", "10"}))
+check(sorted({"[ext] Zed", "[ext] 7 Seven", "[ext] alpha"}) == "[ext] 7 Seven|[ext] alpha|[ext] Zed", "M33 order: with the [ext] prefix of a row")
+check(page.natural_less("a", "a") == false and page.natural_less("A", "a") ~= page.natural_less("a", "A"), "M33 order: equal names are not before each other; a tie in case is still decided the same way every time")
+-- the page: several folders, a blocked and a missing one, old import links
+list = {
+  {name = "[ext] zebra", path = "Z:/z", state = "ok"},
+  {name = "[ext] 10 Loops", path = "D:/10", state = "ok"},
+  {name = "[ext] Beta", path = "D:/b", state = "blocked"},
+  {name = "[ext] alpha", path = "D:/a", state = "ok"},
+  {name = "[ext] 2 Kicks", path = "D:/2", state = "ok"},
+  {name = "[ext] Gamma", path = "E:/g", state = "missing"},
+}
+legacy = {
+  {name = "z.wav", path = "/z", state = "ok"},
+  {name = "10.wav", path = "/10", state = "ok"},
+  {name = "a.wav", path = "/a", state = "missing"},
+}
+removed = {}
+page.init(); page.redraw()
+local function order()
+  local r = {}
+  for i, row in ipairs(page.rows()) do r[i] = row.add and "ADD" or row.name end
+  return table.concat(r, "|")
+end
+local want = "ADD|[ext] 2 Kicks|[ext] 10 Loops|[ext] alpha|[ext] Beta|[ext] Gamma|[ext] zebra|10.wav|a.wav|z.wav"
+check(order() == want, "M33: ADD FOLDER, then the folders A to Z (2 before 10, a blocked and a missing one among the others), then the import links sorted: " .. order())
+goto_row(1); check(page.pos == 1, "M33: the list starts with ADD FOLDER")
+goto_row(4); check(shown("K3 REMOVE  K2 BACK") and not shown("K3 ADD"), "M33: the hint line on a folder row")
+goto_row(5); check(shown("BLOCKED"), "M33: the blocked folder is marked and sits among the others by name (Beta after alpha)")
+goto_row(6); check(shown("MISSING"), "M33: the missing folder is marked and sits among the others by name (Gamma after Beta)")
+goto_row(8); check(shown("IMPORT"), "M33: the old import links come after the folders")
+-- after an add the selection is on the new folder at its place in the sorted list
+function _norns.ext_add(path) list[#list + 1] = {name = "[ext] Delta", path = path, state = "ok"}; return true, "Added [ext] Delta.", "[ext] Delta" end
+goto_row(1); page.key(3, 1)
+_norns.ext_folder_chosen("D:/Delta"); page.redraw()
+check(shown("Added [ext] Delta"), "M33: the add is answered")
+check(shown("[ext] Delta") and shown("K3 REMOVE  K2 BACK"), "M33: after an add the selection is on the new folder (Delta, between Beta and Gamma): the folder row hint is shown")
+check(page.rows()[page.pos].name == "[ext] Delta" and page.pos == 6, "M33: Delta is row 6, in its place in the sorted list, and it is the selection")
+-- an add through a drop does the same
+function _norns.ext_add(path) list[#list + 1] = {name = "[ext] 1 First", path = path, state = "ok"}; return true, "Added [ext] 1 First.", "[ext] 1 First" end
+_norns.ext_dropped("D:/First"); page.redraw()
+check(page.rows()[page.pos].name == "[ext] 1 First" and page.pos == 2, "M33: a dropped folder is sorted in too (1 First is the first folder) and selected")
+-- removal: the selection stays on the same row number, never off the page
+local function removal_at(n) goto_row(n); page.key(3, 1); page.key(3, 1) end
+removal_at(2)   -- 1 First: the next folder moves up under the selection
+page.redraw(); check(page.pos == 2 and page.rows()[2].name == "[ext] 2 Kicks" and shown("K3 REMOVE  K2 BACK"), "M33: after a removal the selection stays on the same row number: the next folder (2 Kicks) moved up under it")
+check(removed[#removed] == "[ext] 1 First", "M33: the right folder was removed")
+-- removing the LAST row: the selection goes to the new last row, not off the page
+local n_rows = #page.rows(); goto_row(n_rows); page.key(3, 1); page.key(3, 1)
+check(#page.rows() == n_rows - 1 and page.pos == n_rows - 1, "M33: after removing the last row the selection is on the new last row (" .. tostring(page.pos) .. " of " .. #page.rows() .. ")")
+-- remove every folder: the selection ends on ADD FOLDER and never leaves the page
+for _ = 1, 8 do goto_row(2); if shown("K3 REMOVE") then page.key(3, 1); page.key(3, 1) end end
+page.redraw(); check(#list == 0, "M33: every folder is removed")
+-- the legacy links are now rows 2 to 4
+goto_row(4); page.key(3, 1); page.key(3, 1); page.redraw()
+check(shown("K3 REMOVE  K2 BACK") or shown("K3 ADD A FOLDER  K2 BACK"), "M33: removing the last row leaves the selection on a real row")
+for _ = 1, 4 do goto_row(2); if shown("K3 REMOVE") then page.key(3, 1); page.key(3, 1) end end
+page.redraw(); check(shown("K3 ADD A FOLDER  K2 BACK"), "M33: with nothing left to remove the selection is on ADD FOLDER")
+check(#legacy == 0, "M33: every old import link is removed")
+
 -- the menu item
 _norns.open_extra_folders()
 check(page_now == "EXTRA", "the menu item opens the page")

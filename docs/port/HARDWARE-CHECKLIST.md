@@ -751,3 +751,15 @@ Do one step at a time. The commit hash for Linux is in the report of this phase.
 5. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`. The same two rows are at the top of SYSTEM > MIDI MAP. Without a Push: map a control with LEARN from the virtual MIDI device (`virtual`), set DEVICE at the top to another device name: the virtual one no longer moves it; set it to `virtual`: it moves again.
 Results (copy and fill in): 1 [ ]  2 [ ] (names: ...)  3 [ ]  4 [ ]  5 [ ]; notes: ...
 Cannot be tested here: the real Push 2 and its two modes.
+
+## Windows and Linux 0.10.20 (M33: Ext folders order, a hint on ACTIONS, DEVICE and CHANNEL apply with K3) - nothing here touches the audio path
+Do one step at a time. The commit hash for Linux is in the report of this phase.
+**Windows**
+1. Update: close Verdandi, unzip the new Verdandi-windows-asio-latest.zip into the same folder (Unblock, Defender as always). The version line must say 0.10.20.
+2. SYSTEM > EXT FOLDERS: ADD FOLDER is the first row. Add three or four folders, one whose name starts with a number (and a 2 and a 10). They must be in A to Z order below ADD FOLDER (2 before 10, digits before letters). After an add the selection is on the new folder. Remove one: the selection stays on the same row (the next folder).
+3. SYSTEM > MIDI MAP > ACTIONS: the right of the title line says E3 > MORE. K3 on an action still learns. E3 right opens its page.
+4. MIDI MAP, the top DEVICE row: scroll through the devices with E3 while you play the Push: it must keep working while you scroll (the choice is in [brackets]). K3 applies it (the brackets go). K2 drops a choice. Try a control's DEVICE row too.
+**Linux laptop (the built copy in ~/verdandi-home/norns)**
+5. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`. Check the Ext folders order and the DEVICE row (without a Push, use the virtual MIDI device: map a control, set the top DEVICE to another device, check that scrolling alone changes nothing).
+Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]; notes: ...
+Cannot be tested here: the real window and the real Push 2.

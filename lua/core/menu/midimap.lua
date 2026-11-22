@@ -138,6 +138,89 @@ local function ch_pos(ch) if ch == 0 then return 1 elseif ch == S.CH_ANY then re
 local function ch_at(i) if i <= 1 then return 0 elseif i == 2 then return S.CH_ANY else return i - 2 end end
 local function ch_label(ch) if ch == 0 then return "GLOBAL" elseif ch == S.CH_ANY then return "ANY" else return tostring(ch) end end
 
+-- M33: a choice on a DEVICE or CHANNEL row (the top rows, a control's view, an action's view) is only SHOWN while E3 scrolls: it waits, in square brackets, until K3 applies it (saved at once, as a change was before).
+-- m.wait = {scope = "global" | "ctl" | "act", id = the control or action, field = "dev" | "ch", value = the choice}. nothing is applied or saved while it waits. it is dropped by K2, by moving to another row, leaving the view or the page
+local function wait_target()
+  if m.mode == "rows" then
+    local row = m.rows()[m.pos]
+    if row == "DEVICE" then return "global", nil, "dev" elseif row == "CHANNEL" then return "global", nil, "ch" end
+  elseif m.mode == "detail" and m.ctl then
+    local row = m.drows()[m.dpos]
+    if row == "DEVICE" then return "ctl", m.ctl, "dev" elseif row == "CHANNEL" then return "ctl", m.ctl, "ch" end
+  elseif m.mode == "aview" and m.act then
+    local row = m.adrows()[m.dpos]
+    if row == "DEVICE" then return "act", m.act, "dev" elseif row == "CHANNEL" then return "act", m.act, "ch" end
+  end
+  return nil
+end
+
+--- drop a waiting choice that does not belong to the row the selection is on now
+local function sync_wait()
+  if m.wait == nil then return end
+  local scope, id, field = wait_target()
+  if scope ~= m.wait.scope or id ~= m.wait.id or field ~= m.wait.field then m.wait = nil end
+end
+
+local function applied_value(scope, id, field)
+  if scope == "global" then return S.state.global[field] end
+  if scope == "ctl" then return S.state.ctl[id][field] end
+  return S.state.actions[id][field]
+end
+
+--- the choices of a DEVICE or CHANNEL row: a list of {value, label}
+local function wait_choices(scope, field)
+  if field == "dev" then return m.device_choices(scope == "global") end
+  local list = {}
+  if scope == "global" then
+    for v = 0, 16 do list[#list + 1] = {value = v, label = v == 0 and "ANY" or tostring(v)} end
+  else
+    for i = 1, 18 do local v = ch_at(i); list[#list + 1] = {value = v, label = ch_label(v)} end
+  end
+  return list
+end
+
+local function choice_index(list, field, value)
+  if field == "dev" then return device_index(list, {dev = value}) end
+  for i, e in ipairs(list) do if e.value == value then return i end end
+  return 1
+end
+
+--- the label a row shows: the value in use, or the waiting choice in square brackets
+local function choice_label(scope, id, field)
+  local list = wait_choices(scope, field)
+  local w = m.wait
+  if w ~= nil and w.scope == scope and w.id == id and w.field == field then
+    return "[" .. list[choice_index(list, field, w.value)].label .. "]"
+  end
+  return list[choice_index(list, field, applied_value(scope, id, field))].label
+end
+
+local function waiting_here()
+  sync_wait()
+  return m.wait ~= nil
+end
+
+--- E3 on a DEVICE or CHANNEL row: scroll the choices, apply nothing
+local function wait_step(scope, id, field, delta)
+  sync_wait()
+  local list = wait_choices(scope, field)
+  local cur = m.wait ~= nil and m.wait.value or applied_value(scope, id, field)
+  local i = math.max(1, math.min(#list, choice_index(list, field, cur) + delta))
+  if i == choice_index(list, field, applied_value(scope, id, field)) then m.wait = nil
+  else m.wait = {scope = scope, id = id, field = field, value = list[i].value} end
+end
+
+--- K3 on a DEVICE or CHANNEL row: apply the waiting choice (nothing waiting: nothing happens)
+local function wait_apply(scope, id, field)
+  sync_wait()
+  local w = m.wait
+  if w == nil then return end
+  m.wait = nil
+  if scope == "global" then S.set_global(field, w.value)
+  elseif scope == "ctl" then S.set(id, field, w.value); m.msg = mm.overlap_text(id)
+  else S.set_action(id, field, w.value); m.msg = mm.overlap_text(id) end
+end
+
 -- ---------------------------------------------------------------- texts
 local function clash_map()
   local out = {}
@@ -181,12 +264,8 @@ local function preset_text()
 end
 
 local function row_text(row, clash)
-  if row == "DEVICE" then
-    local list = m.device_choices(true)
-    return list[device_index(list, S.state.global)].label
-  elseif row == "CHANNEL" then
-    local g = S.state.global
-    return g.ch == 0 and "ANY" or tostring(g.ch)
+  if row == "DEVICE" then return choice_label("global", nil, "dev")
+  elseif row == "CHANNEL" then return choice_label("global", nil, "ch")
   elseif row == "PRESET" then return preset_text()
   elseif row == "LEARN" then return "CLICK A CONTROL"
   elseif row == "ON CLASH" then return S.state.on_clash == "both" and "BOTH" or "PARAMS MAP"
@@ -208,10 +287,8 @@ local function detail_text(row)
   elseif row == "NUMBER" then
     if c.num == nil then return "-" end
     return (c.type == "note" and "NOTE " or "CC ") .. c.num
-  elseif row == "DEVICE" then
-    local list = m.device_choices()
-    return list[device_index(list, c)].label
-  elseif row == "CHANNEL" then return ch_label(c.ch)
+  elseif row == "DEVICE" then return choice_label("ctl", id, "dev")
+  elseif row == "CHANNEL" then return choice_label("ctl", id, "ch")
   elseif row == "MODE" then return mm.MODE_NAMES[c.mode] .. (mm.guess[id] and "?" or "")
   elseif row == "SENS" then return tostring(c.sens)
   elseif row == "GAIN" then return tostring(c.gain)
@@ -230,10 +307,8 @@ local function adetail_text(row)
   elseif row == "NUMBER" then
     if a.num == nil then return "-" end
     return (a.type == "note" and "NOTE " or "CC ") .. a.num
-  elseif row == "DEVICE" then
-    local list = m.device_choices()
-    return list[device_index(list, a)].label
-  elseif row == "CHANNEL" then return ch_label(a.ch)
+  elseif row == "DEVICE" then return choice_label("act", id, "dev")
+  elseif row == "CHANNEL" then return choice_label("act", id, "ch")
   elseif row == "THRESHOLD" then return ">" .. a.threshold
   elseif row == "FORMAT" then return mm.MODE_NAMES[a.mode]
   elseif row == "DIRECTION" then return a.dir:upper()
@@ -281,11 +356,12 @@ end
 m.init = function()
   mm.load()
   mm.on_change = m.changed
-  m.mode, m.confirm, m.msg, m.browse, m.ctl = "rows", nil, nil, nil, nil
+  m.mode, m.confirm, m.msg, m.browse, m.ctl, m.wait = "rows", nil, nil, nil, nil, nil
   clamp_rows()
 end
 
 m.deinit = function()
+  m.wait = nil
   mm.leave()
   mm.on_change = nil
 end
@@ -400,12 +476,8 @@ local function key_rows(n)
   end
   if n ~= 3 then return end
   local row = m.rows()[m.pos]
-  if row == "DEVICE" then
-    local list = m.device_choices(true)
-    local i = device_index(list, S.state.global) % #list + 1
-    S.set_global("dev", list[i].value)
-  elseif row == "CHANNEL" then
-    S.set_global("ch", (S.state.global.ch + 1) % 17)
+  if row == "DEVICE" then wait_apply("global", nil, "dev")
+  elseif row == "CHANNEL" then wait_apply("global", nil, "ch")
   elseif row == "PRESET" then
     local name = m.browse or S.state.preset
     if S.preset_by_name(name) and S.select_preset(name) then
@@ -462,11 +534,8 @@ local function key_detail(n)
   elseif row == "CLEAR" then
     mm.clear(m.ctl)
     m.msg = m.ctl:upper() .. " CLEARED"
-  elseif row == "DEVICE" then
-    local list = m.device_choices()
-    local i = device_index(list, S.state.ctl[m.ctl]) % #list + 1
-    S.set(m.ctl, "dev", list[i].value)
-    m.msg = mm.overlap_text(m.ctl)
+  elseif row == "DEVICE" then wait_apply("ctl", m.ctl, "dev")
+  elseif row == "CHANNEL" then wait_apply("ctl", m.ctl, "ch")
   end
 end
 
@@ -504,11 +573,8 @@ local function key_aview(n)
   elseif row == "CLEAR" then
     mm.clear(m.act)
     m.msg = m.act:upper() .. " CLEARED"
-  elseif row == "DEVICE" then
-    local list = m.device_choices()
-    local i = device_index(list, a) % #list + 1
-    S.set_action(m.act, "dev", list[i].value)
-    m.msg = mm.overlap_text(m.act)
+  elseif row == "DEVICE" then wait_apply("act", m.act, "dev")
+  elseif row == "CHANNEL" then wait_apply("act", m.act, "ch")
   end
 end
 
@@ -524,6 +590,8 @@ local function key_raw(n, z)
   end
   m.msg = nil
   mm.learn.msg, mm.learn.warn, mm.learn.warn_short = nil, nil, nil
+  -- M33: K2 on a DEVICE or CHANNEL row with a choice waiting only drops the choice (the row shows the value in use again); the next K2 goes back
+  if n == 2 and (m.mode == "rows" or m.mode == "detail" or m.mode == "aview") and waiting_here() then m.wait = nil return end
   if m.mode == "watch" then
     if n == 2 then mm.watch_stop(); m.mode = "rows"; clamp_rows() end
     return
@@ -596,12 +664,8 @@ enc_detail_raw = function(n, delta)
   elseif row == "TYPE" then
     local t = step_in(is_enc(id) and {"none", "cc"} or TYPES, c.type, delta)
     if t ~= c.type then S.set(id, "type", t) end
-  elseif row == "DEVICE" then
-    local list = m.device_choices()
-    local i = math.max(1, math.min(#list, device_index(list, c) + delta))
-    S.set(id, "dev", list[i].value)
-  elseif row == "CHANNEL" then
-    S.set(id, "ch", ch_at(math.max(1, math.min(18, ch_pos(c.ch) + delta))))
+  elseif row == "DEVICE" then wait_step("ctl", id, "dev", delta)
+  elseif row == "CHANNEL" then wait_step("ctl", id, "ch", delta)
   elseif row == "MODE" then
     local mode = step_in(S.MODES, c.mode, delta)
     if mode ~= c.mode then S.set(id, "mode", mode); mm.guess[id] = nil end
@@ -645,12 +709,8 @@ enc_aview_raw = function(n, delta)
     else S.set_action(id, "type", t) end
   elseif row == "NUMBER" then
     S.set_action(id, "num", math.max(0, math.min(127, (a.num or -1) + delta)))
-  elseif row == "DEVICE" then
-    local list = m.device_choices()
-    local i = math.max(1, math.min(#list, device_index(list, a) + delta))
-    S.set_action(id, "dev", list[i].value)
-  elseif row == "CHANNEL" then
-    S.set_action(id, "ch", ch_at(math.max(1, math.min(18, ch_pos(a.ch) + delta))))
+  elseif row == "DEVICE" then wait_step("act", id, "dev", delta)
+  elseif row == "CHANNEL" then wait_step("act", id, "ch", delta)
   elseif row == "THRESHOLD" then
     S.set_action(id, "threshold", math.max(0, math.min(126, a.threshold + delta)))
   elseif row == "FORMAT" then
@@ -664,6 +724,7 @@ end
 
 local function enc_raw(n, delta)
   if learning() then return end
+  if n == 2 then m.wait = nil end -- M33: moving to another row drops a waiting choice
   m.msg = nil
   mm.learn.msg, mm.learn.warn, mm.learn.warn_short = nil, nil, nil
   if m.mode == "confirm" or m.mode == "watch" or m.mode == "turn" then return end
@@ -693,12 +754,8 @@ local function enc_raw(n, delta)
     clamp_rows()
   elseif n == 3 and delta ~= 0 then
     local row = m.rows()[m.pos]
-    if row == "DEVICE" then
-      local list = m.device_choices(true)
-      local i = math.max(1, math.min(#list, device_index(list, S.state.global) + delta))
-      S.set_global("dev", list[i].value)
-    elseif row == "CHANNEL" then
-      S.set_global("ch", math.max(0, math.min(16, S.state.global.ch + delta)))
+    if row == "DEVICE" then wait_step("global", nil, "dev", delta)
+    elseif row == "CHANNEL" then wait_step("global", nil, "ch", delta)
     elseif row == "PRESET" then
       local list = S.preset_list()
       local idx = 0
@@ -862,6 +919,7 @@ local function redraw_ask()
 end
 
 local function redraw_raw()
+  sync_wait() -- a choice that waits belongs to the row the selection is on, else it is dropped
   screen.clear()
   screen.aa(0)
   screen.font_face(1)
@@ -901,6 +959,14 @@ local function redraw_raw()
     screen.text("ACTIONS")
     banner()
     local rows = m.arows()
+    local on_action = rows[m.apos] ~= nil and S.state.actions[rows[m.apos]:lower()] ~= nil
+    if L.state == "idle" and on_action then
+      -- M33: E3 right opens the action's own page (DEVICE, CHANNEL ...): said at the right of the title, for a set action as well as an empty one
+      screen.level(3)
+      screen.move(126, 8)
+      screen.text_right("E3 > MORE")
+      screen.level(15)
+    end
     for i = 1, VISIBLE do
       local row = rows[m.atop + i - 1]
       if row then
@@ -920,7 +986,7 @@ local function redraw_raw()
     elseif a and a.type ~= "none" and a.num ~= nil and L.state == "idle" then
       -- the line under the list: which action has which message (a pad that opened the wrong thing: the name next to the message)
       hint(string.format("%s = %s%s", sel:upper(), (a.type == "note" and "NOTE " or "CC ") .. a.num, a.ch ~= 0 and (" CH " .. a.ch) or ""))
-    else hint("K3 LEARN  E3 < CLEAR  VIEW >") end
+    else hint(on_action and "K3 LEARN  E3 > MORE  < CLEAR" or "K3 LEARN  E3 < CLEAR  VIEW >") end
   elseif m.mode == "aview" then
     clamp_detail()
     screen.text(m.act:upper() .. " ACTION")
@@ -935,7 +1001,7 @@ local function redraw_raw()
       end
     end
     scrollbar(m.dtop, #rows)
-    hint("E2 row  E3 change  K3")
+    hint(m.wait ~= nil and "K3 APPLY  K2 DROP" or "E2 row  E3 change  K3")
   elseif m.mode == "detail" then
     clamp_detail()
     screen.text(m.ctl:upper() .. " MIDI")
@@ -950,7 +1016,7 @@ local function redraw_raw()
       end
     end
     scrollbar(m.dtop, #rows)
-    hint("E2 row  E3 change  K3")
+    hint(m.wait ~= nil and "K3 APPLY  K2 DROP" or "E2 row  E3 change  K3")
   else
     clamp_rows()
     screen.text("MIDI MAP")
@@ -972,7 +1038,7 @@ local function redraw_raw()
     local sel = rows[m.pos] and rows[m.pos]:lower()
     if rows[m.pos] == "PRESET" and p and p.unverified then hint("UNVERIFIED: USE LEARN")
     elseif sel and overlap[sel] then hint(string.format("CC%d ALSO %s", S.state.ctl[sel].num, overlap[sel]:upper()))
-    else hint("E2 row  E3 change  K3") end
+    else hint(m.wait ~= nil and "K3 APPLY  K2 DROP" or "E2 row  E3 change  K3") end
   end
   screen.update()
 end
@@ -981,7 +1047,7 @@ end
 -- is logged and leaves the page in a whole state (rows mode, its own handlers)
 local function recover(what, err)
   dbg(what .. " raised an error: " .. tostring(err))
-  m.mode, m.confirm = "rows", nil
+  m.mode, m.confirm, m.wait = "rows", nil, nil
   m.msg = "ERROR, SEE THE LOG"
   pcall(clamp_rows)
   reclaim()

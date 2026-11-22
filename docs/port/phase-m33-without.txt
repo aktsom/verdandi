@@ -1,0 +1,41 @@
+M33: the new and changed tests run against the OLD code (f9e1a0c, the M32 state).
+=== extra_folders_page_test on the old code
+FAIL M33: the page opens on ADD FOLDER (the first row)
+FAIL both folders (the longer row cut to fit) and ADD FOLDER are listed
+FAIL a row that was cut: the info area shows its whole text (name and folder) over two lines
+FAIL a row that fits: the info area says what a removal does
+FAIL K3 twice removes that shortcut
+FAIL on ADD FOLDER the hint says K3 chooses (M33: ADD FOLDER is the first row)
+FAIL K3 on ADD FOLDER opens the picker once (a second press while it is open does not open another)
+FAIL the first K3 on an import link removes nothing
+FAIL the warning names the link and says the file is NOT deleted
+FAIL K3 twice removes that import link (through ext_legacy_remove, not ext_remove)
+FAIL M33 order: the same letter in two cases stays together
+FAIL M33 order: a name that starts with a digit comes first, 2 before 10: 10 loops|2 loops|Zed|loops
+FAIL M33 order: numbers inside a name are in number order: Take 1|take 10|take 100|take 9
+FAIL M33 order: 2 before 02 before 10: 02|10|2
+FAIL M33 order: with the [ext] prefix of a row
+lua5.3: linux/tests/extra_folders_page_test.lua:124: attempt to call a nil value (field 'natural_less')
+(failures counted: 15)
+=== midimap_page_test on the old code
+FAIL E3 on DEVICE: GLOBAL, then ANY (K3 applies): got iii grid, wanted *
+FAIL E3 on DEVICE picks the next one (stays within the list): got virtual, wanted iii grid
+FAIL the mio: got ANY, wanted mio
+FAIL shown
+FAIL M32: E3 on DEVICE steps through the devices (M33: K3 applies): got mio, wanted iii grid
+FAIL M32: to the mio: got ANY, wanted mio
+FAIL M32: shown
+FAIL M32: and back to ANY (there is no GLOBAL in the top row: it is the setting): got iii grid, wanted ANY
+FAIL M32: E3 on CHANNEL: 1, K3 applies: got 2, wanted 1
+FAIL M32: 16 at most: got 0, wanted 16
+FAIL M32: 0 (any) at least: got 1, wanted 0
+FAIL M32: any is shown
+FAIL M33: the title line says E3 > MORE on an action row (it opens the action's own page)
+FAIL M33: the line under the list says what K3 and E3 do on an action with nothing set
+FAIL M33: a set action: the hint is there and the line under the list still names its message
+FAIL M33: the top DEVICE row shows the choice in square brackets: [MIO]
+(failures counted: 74)
+
+=== the same tests on the new code
+ext folders page: all passed
+midimap page: all passed
