@@ -763,3 +763,15 @@ Do one step at a time. The commit hash for Linux is in the report of this phase.
 5. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`. Check the Ext folders order and the DEVICE row (without a Push, use the virtual MIDI device: map a control, set the top DEVICE to another device, check that scrolling alone changes nothing).
 Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]; notes: ...
 Cannot be tested here: the real window and the real Push 2.
+
+## Windows and Linux 0.10.21 (M34: SCREENSAVER setting, default OFF) - nothing here touches the audio path
+Do one step at a time. The commit hash for Linux is in the report of this phase.
+**Windows**
+1. Update: close Verdandi, unzip the new Verdandi-windows-asio-latest.zip into the same folder (Unblock, Defender as always). The version line must say 0.10.21.
+2. SYSTEM > SCREEN: scroll down with E2 (past CONTRAST): the row SCREENSAVER shows OFF. (The page called DISPLAY in the code is not in this menu; BRIGHTNESS and CONTRAST are on SCREEN.)
+3. E3 right: ON. E3 left: OFF. Close and start Verdandi again: the choice is remembered.
+4. With OFF, leave Verdandi alone for 16 minutes: the screen stays lit. With ON, leave it for 16 minutes: the screen goes dark, any key lights it. (No faster way: the time is fixed at 15 minutes.)
+**Linux laptop (the built copy in ~/verdandi-home/norns)**
+5. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`. The same checks.
+Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ] (OFF stays lit / ON goes dark)  5 [ ]; notes: ...
+Cannot be tested here: waiting 15 minutes on a real window.

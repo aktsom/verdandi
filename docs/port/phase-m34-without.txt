@@ -1,0 +1,41 @@
+M34: the new and changed tests run against the OLD code (6441ac2, the M33 state).
+=== screensaver_test on the old code
+FAIL linux: with nothing saved the setting is OFF
+FAIL linux: and the automatic screensaver is off in screen.lua before anything is loaded
+FAIL linux: OFF: a key press starts no timer
+FAIL linux: OFF: there is no timer to fire
+FAIL linux: OFF: the screen is never darkened by the timer
+FAIL linux: OFF: a late timer event leaves Screen.update the real one and clears nothing
+FAIL linux: OFF: Screen.sleep() darkens the screen on purpose
+FAIL linux: OFF: and still starts no timer
+FAIL linux: there is no ui.set_screensaver (old code)
+lua5.3: linux/tests/screensaver_test.lua:125: attempt to call a nil value (field 'auto_sleep')
+stack traceback:
+	linux/tests/screensaver_test.lua:125: in main chunk
+	[C]: in ?
+(the old code has no set_auto_sleep: the run stops at the first call of the macOS section)
+=== ui_screen_test (linux) on the old code (the row and the key it expects are not there)
+FAIL saved as current: brightness=0.7
+FAIL the rows: PRESET,COLOUR,BRIGHTNESS,CONTRAST,SAVE
+FAIL DELETE appears for his own preset
+FAIL K3 then K3 deletes it, DELETE is gone
+=== ui_settings_test (linux) on the old code (the row and the key it expects are not there)
+FAIL the file: brightness=0.7
+ui_settings_test: 1 failed
+=== ui_keys_test (linux) on the old code (the row and the key it expects are not there)
+FAIL SCREENSAVER DOWN: one press moves one row (5 -> 5)
+FAIL SCREENSAVER RIGHT (K3) does not open a text entry
+FAIL SAVE DOWN: one press moves one row (6 -> 5)
+ui_keys_test: 3 failed
+
+=== the same tests on the new code
+screensaver_test: all 102 checks passed
+ui_screen_test linux: ui_screen_test: all passed
+ui_screen_test windows: ui_screen_test: all passed
+ui_screen_test macos: ui_screen_test: all passed
+ui_settings_test linux: ui_settings_test: all passed
+ui_settings_test windows: ui_settings_test: all passed
+ui_settings_test macos: ui_settings_test: all passed
+ui_keys_test linux: ui_keys_test: all passed
+ui_keys_test windows: ui_keys_test: all passed
+ui_keys_test macos: ui_keys_test: all passed

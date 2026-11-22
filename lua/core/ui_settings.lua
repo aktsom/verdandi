@@ -17,6 +17,10 @@
 
 local M = {}
 
+local PLATFORM = os.getenv("NORNS_PLATFORM")
+-- M34: the settings that exist on Windows and Linux only are not written on macOS (its ui.conf is not changed)
+local SCREENSAVER_HERE = PLATFORM == "windows" or PLATFORM == "linux"
+
 M.PATH = "/home/we/ui.conf"
 M.log = function(s) print("ui.conf: " .. s) end
 
@@ -146,6 +150,18 @@ local SETTINGS = {
     format = function(v) return v and "1" or "0" end,
     range = "0 or 1",
   },
+  {
+    -- M34: the automatic screensaver (15 minutes of no key or knob darkens the screen): 1 on, 0 off; a missing key is OFF. Windows and Linux only (macOS and the norns device keep it always on)
+    key = "screensaver", default = false, desktop_only = true,
+    parse = function(text)
+      text = tostring(text):lower()
+      if text == "1" or text == "on" or text == "true" then return true end
+      if text == "0" or text == "off" or text == "false" then return false end
+      return nil
+    end,
+    format = function(v) return v and "1" or "0" end,
+    range = "0 or 1",
+  },
 }
 local BY_KEY = {}
 for _, s in ipairs(SETTINGS) do BY_KEY[s.key] = s end
@@ -246,7 +262,7 @@ function M.save()
   end
   for _, s in ipairs(SETTINGS) do
     local v = M.state[s.key]
-    if v ~= nil then f:write(s.key .. "=" .. s.format(v) .. "\n") end
+    if v ~= nil and (not s.desktop_only or SCREENSAVER_HERE) then f:write(s.key .. "=" .. s.format(v) .. "\n") end
   end
   for _, line in ipairs(M.state.extra or {}) do f:write(line .. "\n") end
   f:close()
@@ -260,8 +276,17 @@ function M.tint()
   return 255, 255, 255
 end
 
+--- M34: tell the screen code whether the automatic screensaver is on (Windows and Linux; elsewhere screen.lua ignores it)
+local function apply_screensaver()
+  if not SCREENSAVER_HERE then return end
+  -- the global `screen` is core/screen.lua on a running norns (menu.lua calls screen.ping() the same way); a test without it has nothing to tell
+  local scr = rawget(_G, "screen")
+  if type(scr) == "table" and type(scr.set_auto_sleep) == "function" then scr.set_auto_sleep(M.state.screensaver == true) end
+end
+
 --- tell the window (Linux desktop only)
 function M.apply()
+  apply_screensaver()
   if _norns == nil or _norns.ui_look == nil then return end
   local r, g, b = M.tint()
   _norns.ui_look(M.state.brightness, r, g, b, M.gamma_of(M.state.contrast))
@@ -307,6 +332,12 @@ function M.step_contrast(d)
   d = math.floor((d or 0) + 0.5)
   if d == 0 then return end
   M.state.contrast = clamp(tenths(M.state.contrast + d * 0.1), 0, 1)
+  changed()
+end
+
+--- the automatic screensaver: on or off, applied and saved at once (Windows and Linux)
+function M.set_screensaver(on)
+  M.state.screensaver = on and true or false
   changed()
 end
 

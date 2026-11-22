@@ -1,6 +1,6 @@
 -- SYSTEM > SCREEN (computers only, see core/menu/system.lua): the look of the screen, laid out like SYSTEM > THEME (core/menu/box.lua). the values live in core/ui_settings.lua (file: ui.conf in the
 -- norns home, and one small file per saved colour in screen-presets/); every change is applied and saved at once. docs/port/ui-settings-plan.md.
---   rows: PRESET, COLOUR, BRIGHTNESS, CONTRAST, SAVE, and DELETE only while one of his own presets is in use
+--   rows: PRESET, COLOUR, BRIGHTNESS, CONTRAST, SCREENSAVER (M34: Windows and Linux only; OFF by default, E3 right ON = the 15 minute screensaver, saved in ui.conf), SAVE, and DELETE only while one of his own presets is in use
 --   a preset is the colour of the screen only: BRIGHTNESS and CONTRAST are separate rows and keep their values when a preset is chosen
 --   E2 row, E3 value (PRESET: the next or previous preset), K3: PRESET opens the list, COLOUR opens the colour picker (the same as THEME's colour rows), SAVE asks for a name, DELETE asks once.
 --   K2 goes back (out of the list or the question, else to SYSTEM)
@@ -12,6 +12,8 @@ local clipboard = require 'core/clipboard'
 local m = {pos = 1, top = 1, msg = nil, mode = "rows", lpos = 1, confirm = nil}
 
 local VISIBLE = 5 -- the strip of the 16 grey levels is below them
+local platform = os.getenv("NORNS_PLATFORM")
+local has_screensaver = platform == "windows" or platform == "linux" -- macOS keeps its screensaver always on: no row there
 
 local function in_use_preset()
   local p = ui.preset_by_name(ui.state.preset)
@@ -21,7 +23,9 @@ end
 
 --- the rows of the page, in order (DELETE only for one of his own presets)
 function m.rows()
-  local r = {"PRESET", "COLOUR", "BRIGHTNESS", "CONTRAST", "SAVE"}
+  local r = {"PRESET", "COLOUR", "BRIGHTNESS", "CONTRAST"}
+  if has_screensaver then r[#r + 1] = "SCREENSAVER" end
+  r[#r + 1] = "SAVE"
   local p = in_use_preset()
   if p ~= nil and not p.builtin then r[#r + 1] = "DELETE" end
   return r
@@ -50,6 +54,7 @@ local function value_text(row)
   elseif row == "COLOUR" then return "#" .. st.tint
   elseif row == "BRIGHTNESS" then return ui.format_brightness(st.brightness)
   elseif row == "CONTRAST" then return ui.format_contrast(st.contrast)
+  elseif row == "SCREENSAVER" then return st.screensaver and "ON" or "OFF"
   elseif row == "SAVE" then return "name..."
   else local p = in_use_preset() return p and ("* " .. p.name) or "" end
 end
@@ -248,7 +253,12 @@ local function enc_raw(n, delta)
     local row = m.rows()[m.pos]
     if row == "PRESET" then ui.step_preset(delta)
     elseif row == "BRIGHTNESS" then ui.step_brightness(delta)
-    elseif row == "CONTRAST" then ui.step_contrast(delta) end
+    elseif row == "CONTRAST" then ui.step_contrast(delta)
+    elseif row == "SCREENSAVER" then
+      -- E3 right: ON, left: OFF (a release of a key that arrives as 0 changes nothing); applied and saved at once
+      if delta > 0 and not ui.state.screensaver then ui.set_screensaver(true)
+      elseif delta < 0 and ui.state.screensaver then ui.set_screensaver(false) end
+    end
     clamp_rows()
   end
 end

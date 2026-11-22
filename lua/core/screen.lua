@@ -17,11 +17,22 @@ local contrast = loaded_settings.contrast or 127
 local gamma = loaded_settings.gamma or 1.0
 local module_just_loaded = true
 
-screensaver.event = function()
+-- M34 (docs/port/phase-m34.md): on Windows and Linux the AUTOMATIC screensaver can be switched off (SYSTEM > SCREEN > SCREENSAVER, ui.conf), and it is OFF by default. everywhere else (macOS, the norns device)
+-- it is always on and nothing here changes: auto_sleep stays true. Screen.sleep() (a script, SYSTEM > SLEEP) darkens the screen on purpose whatever the setting says.
+local platform = os.getenv("NORNS_PLATFORM")
+local switchable = platform == "windows" or platform == "linux"
+local auto_sleep = not switchable
+
+local function go_to_sleep()
   _norns.screen_clear()
   _norns.screen_update()
   sleeping = true
   Screen.update = function() end
+end
+
+-- the timer's event: the automatic screensaver (a timer that was started before the setting was switched off does nothing)
+screensaver.event = function()
+  if auto_sleep then go_to_sleep() end
 end
 screensaver.time = 900
 screensaver.count = 1
@@ -39,7 +50,7 @@ end
 
 --- restart screen saver timer
 Screen.ping = function()
-  screensaver:start()
+  if auto_sleep then screensaver:start() end
   if sleeping == true then
     Screen.update = Screen.update_default
   end
@@ -581,7 +592,28 @@ Screen.invert = function(i)
 end
 
 Screen.sleep = function()
-  screensaver:event()
+  go_to_sleep()
 end
+
+--- the automatic screensaver on (the 15 minute timer) or off (Windows and Linux only; elsewhere it is ignored: the screensaver is always on). OFF to ON starts the timer at once; ON to OFF stops it and wakes a dark screen
+Screen.set_auto_sleep = function(on)
+  if not switchable then return end
+  on = on and true or false
+  if on == auto_sleep then return end
+  auto_sleep = on
+  if on then
+    screensaver:start()
+  else
+    screensaver:stop()
+    if sleeping == true then
+      sleeping = false
+      Screen.update = Screen.update_default
+      Screen.update()
+    end
+  end
+end
+
+--- is the automatic screensaver on (for the page and the tests)
+Screen.auto_sleep = function() return auto_sleep end
 
 return Screen

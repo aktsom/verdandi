@@ -94,7 +94,7 @@ check(ui.select_preset("YELLOW"), "select YELLOW")
 check(ui.state.tint == "FFD000" and ui.state.preset == "YELLOW" and ui.state.brightness == 0.7 and ui.state.contrast == 0.7, "choosing a preset keeps brightness and contrast")
 check(#calls == 1 and calls[1][1] == 0.7 and calls[1][2] == 255 and calls[1][3] == 208 and calls[1][4] == 0, "applied live to the screen with the unchanged brightness")
 check(box_calls == 0, "a screen preset never touches the box look (no _norns.box_look call)")
-check(slurp("/home/we/ui.conf") == "brightness=0.7\npreset=YELLOW\ntint=FFD000\ncontrast=0.7\nfile_dialog=0\n", "saved as current: " .. tostring(slurp("/home/we/ui.conf")))
+check(slurp("/home/we/ui.conf") == "brightness=0.7\npreset=YELLOW\ntint=FFD000\ncontrast=0.7\nfile_dialog=0\n" .. ((os.getenv("NORNS_PLATFORM") == "linux" or os.getenv("NORNS_PLATFORM") == "windows") and "screensaver=0\n" or ""), "saved as current: " .. tostring(slurp("/home/we/ui.conf")))
 local before = {box.state.style, box.state.colours.box, box.state.preset}
 ui.select_preset("PINK")
 check(box.state.style == before[1] and box.state.colours.box == before[2] and box.state.preset == before[3], "the box style and the THEME colours are as they were")
@@ -190,7 +190,7 @@ check(ui.label() == "Amber" and not ui.is_modified(), "a saved preset in use is 
 
 -- ---------------------------------------------------------------- the page
 fresh()
-check(table.concat(page.rows(), ",") == "PRESET,COLOUR,BRIGHTNESS,CONTRAST,SAVE", "the rows: " .. table.concat(page.rows(), ","))
+check(table.concat(page.rows(), ",") == (os.getenv("NORNS_PLATFORM") == "macos" and "PRESET,COLOUR,BRIGHTNESS,CONTRAST,SAVE" or "PRESET,COLOUR,BRIGHTNESS,CONTRAST,SCREENSAVER,SAVE"), "the rows: " .. table.concat(page.rows(), ","))
 check(shown("PRESET") and shown("WHITE") and shown("COLOUR") and shown("#FFFFFF") and shown("BRIGHTNESS") and shown("1.0"), "the rows are drawn with their values")
 check(not shown("HEX") and not shown("GREYS"), "no separate HEX row")
 -- E2 row, E3 value
@@ -229,7 +229,7 @@ fresh(); page.pos = row("SAVE"); press(3)
 check(entry ~= nil and entry.heading:find("NAME", 1, true) and entry.opts and entry.opts.accept, "K3 on SAVE opens the name entry")
 check(not entry.opts.accept(("x"):rep(19)) and entry.opts.accept("Amber") and not entry.opts.accept("a/b"), "the entry takes only what a name may hold")
 ui.set_custom("445566"); entry.cb("Amber"); check(page.msg == "saved: Amber" and ui.label() == "Amber", "a name saves the preset")
-check(table.concat(page.rows(), ",") == "PRESET,COLOUR,BRIGHTNESS,CONTRAST,SAVE,DELETE", "DELETE appears for his own preset")
+check(table.concat(page.rows(), ",") == (os.getenv("NORNS_PLATFORM") == "macos" and "PRESET,COLOUR,BRIGHTNESS,CONTRAST,SAVE,DELETE" or "PRESET,COLOUR,BRIGHTNESS,CONTRAST,SCREENSAVER,SAVE,DELETE"), "DELETE appears for his own preset")
 page.pos = row("SAVE"); press(3); entry.cb("amber"); check(page.mode == "confirm", "an existing name asks before overwriting"); page.redraw(); check(shown("OVERWRITE Amber?"), "naming it")
 press(2); check(page.mode == "rows" and slurp("/home/we/screen-presets/amber.screen"):find("445566", 1, true), "K2: no")
 ui.set_custom("778899"); page.pos = row("SAVE"); press(3); entry.cb("amber"); press(3)
@@ -239,7 +239,7 @@ page.pos = row("SAVE"); press(3); entry.cb(nil); check(page.mode == "rows", "can
 -- DELETE
 page.pos = row("DELETE"); press(3); check(page.mode == "confirm", "K3 on DELETE asks once"); page.redraw(); check(shown("DELETE Amber?"), "naming the preset")
 press(2); check(slurp("/home/we/screen-presets/amber.screen") ~= nil and page.mode == "rows", "K2: kept")
-press(3); press(3); check(slurp("/home/we/screen-presets/amber.screen") == nil and page.mode == "rows" and #page.rows() == 5, "K3 then K3 deletes it, DELETE is gone")
+press(3); press(3); check(slurp("/home/we/screen-presets/amber.screen") == nil and page.mode == "rows" and #page.rows() == (os.getenv("NORNS_PLATFORM") == "macos" and 5 or 6), "K3 then K3 deletes it, DELETE is gone")
 fresh(); check(row("DELETE") == nil, "no DELETE for a built-in preset")
 -- the list marks his own
 ui.set_custom("101010"); ui.save_preset("Mine"); page.pos = 1; press(3); page.redraw()

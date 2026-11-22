@@ -137,7 +137,8 @@ check(not ok2 and type(msg) == "string" and s.tint == before, "a bad hex changes
 ui.state.brightness, ui.state.preset, ui.state.tint, ui.state.contrast = 0.7, "CUSTOM", "FF8800", 0.6
 ui.save()
 local text = slurp("/home/we/ui.conf")
-check(text == "brightness=0.7\npreset=CUSTOM\ntint=FF8800\ncontrast=0.6\nfile_dialog=0\n", "the file: " .. tostring(text))
+local ss_line = (os.getenv("NORNS_PLATFORM") == "linux" or os.getenv("NORNS_PLATFORM") == "windows") and "screensaver=0\n" or "" -- M34: Windows and Linux write the screensaver key, macOS does not
+check(text == "brightness=0.7\npreset=CUSTOM\ntint=FF8800\ncontrast=0.6\nfile_dialog=0\n" .. ss_line, "the file: " .. tostring(text))
 check(slurp("/home/we/ui.conf.tmp") == nil, "no temporary file is left")
 calls = {}
 package.loaded["core/ui_settings"] = nil

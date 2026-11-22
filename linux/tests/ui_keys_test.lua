@@ -55,6 +55,8 @@ function _menu.keychar(c) if _menu.keyboardchar then _menu.keyboardchar(c) end e
 local function code(name) for k, v in pairs(keyboard.codes) do if v == name then return k end end error("no code " .. name) end
 local function send(name, value) keyboard.process(1, code(name), value) end
 local ROWS = {"PRESET", "COLOUR", "BRIGHTNESS", "CONTRAST", "SAVE"}
+if os.getenv("NORNS_PLATFORM") == "linux" or os.getenv("NORNS_PLATFORM") == "windows" then ROWS = {"PRESET", "COLOUR", "BRIGHTNESS", "CONTRAST", "SCREENSAVER", "SAVE"} end -- M34: the row of Windows and Linux
+local SAVE_ROW = #ROWS
 local function snapshot() local s = ui.state; return string.format("row %s  brightness %s  colour %s  contrast %s", ROWS[page.pos], ui.format_brightness(s.brightness), s.preset, ui.format_contrast(s.contrast)) end
 local function reset(row)
   if te_kbd.code then send("ESC", 1); send("ESC", 0) end -- an entry left open by the previous case
@@ -76,7 +78,7 @@ local function step_of(row, name)
 end
 
 local tablelines = {}
-for _, row in ipairs({1, 2, 3, 4, 5}) do
+for row = 1, #ROWS do
   for _, name in ipairs({"EQUAL", "MINUS", "X", "Z", "UP", "DOWN", "LEFT", "RIGHT", "W", "A"}) do
     reset(row)
     local line = {string.format("%-10s %-5s", ROWS[row], name)}
@@ -113,15 +115,15 @@ for _, row in ipairs({1, 2, 3, 4, 5}) do
     if name == "UP" or name == "DOWN" then
       check(same(before, after_up), ROWS[row] .. " " .. name .. ": moving between rows changes no value")
       local d = name == "DOWN" and 1 or -1
-      check(pos_down == math.max(1, math.min(5, pos0 + d)), ROWS[row] .. " " .. name .. ": one press moves one row (" .. pos0 .. " -> " .. pos_down .. ")")
+      check(pos_down == math.max(1, math.min(#ROWS, pos0 + d)), ROWS[row] .. " " .. name .. ": one press moves one row (" .. pos0 .. " -> " .. pos_down .. ")")
     end
-    if row ~= 5 and (name == "UP" or name == "DOWN" or name == "LEFT" or name == "RIGHT" or name == "W" or name == "A") then
+    if row ~= SAVE_ROW and (name == "UP" or name == "DOWN" or name == "LEFT" or name == "RIGHT" or name == "W" or name == "A") then
       check(same(before, after_up), ROWS[row] .. " " .. name .. ": this key changes no value of the page")
     end
     if name == "LEFT" then
       check(pushed[#pushed] == "SYSTEM", ROWS[row] .. " LEFT is K2: back to SYSTEM")
     end
-    if name == "RIGHT" and row ~= 5 then
+    if name == "RIGHT" and row ~= SAVE_ROW then
       check(te_kbd.char == nil, ROWS[row] .. " RIGHT (K3) does not open a text entry")
     end
   end
