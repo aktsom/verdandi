@@ -1,0 +1,8 @@
+#!/bin/sh
+# Verdandi package, after the files are removed: the udev rules are read again. nothing else: ~/Verdandi (scripts, mods, presets, settings) and every other home folder are left exactly as they are,
+# also on purge (docs/port/phase-m36.md).
+set -e
+if { [ "$1" = remove ] || [ "$1" = purge ]; } && command -v udevadm > /dev/null 2>&1; then
+    udevadm control --reload-rules > /dev/null 2>&1 || true
+fi
+exit 0

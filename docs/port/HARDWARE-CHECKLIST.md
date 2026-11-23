@@ -783,3 +783,15 @@ Do one step at a time. The commit hash is in the report of this phase.
 3. emplaitress: enable the mod, load a script that uses it; sound comes from it (MiPlaits). fx_resonator: enable it; the effect is heard (MiRings).
 Results: 1 [ ]  2 [ ]  3 [ ]; notes: ...
 Cannot be tested here: the laptop's own SuperCollider and audio.
+
+## Linux M36: the one-click install (Verdandi-linux-latest.deb) - Linux laptop only
+Do one step at a time. The link to the file is in the report of this phase.
+1. Before the update: `dpkg -s verdandi | grep -E '^(Version|Status)'` and `head -n 3 ~/Verdandi/logs/launcher.log`. Write the version down (the old format looks like `0.1~git20261122.55.985caf98`).
+2. Download `Verdandi-linux-latest.deb` from the release page `linux-latest` with the browser (about 16 MB). Optional: `sha256sum -c Verdandi-linux-latest.deb.sha256` in the folder with both files.
+3. Close Verdandi. Double-click the file. The installer (GDebi or the Software Manager) shows the package and the old version; click Install or Upgrade, type your password. If it asks to replace the old version: yes.
+4. Start **Verdandi Linux** from the application menu. The HOME page of the norns window shows the build (for example `0.10.21 abc1234`) in the lower right; the first line of `~/Verdandi/logs/launcher.log` says `norns.sh: build ...`. Sound works, and `~/Verdandi/logs/sclang.log` has no FAIL.
+5. Data intact: your scripts and mods in `~/Verdandi/dust/code`, saved MIDI MAP presets, the EXT FOLDERS list, the settings are as before.
+6. The test copy still starts: `~/verdandi-home/norns/linux/norns.sh`.
+Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]; notes: ...
+Cannot be tested here: the real double-click installer on Linux Mint, real sound hardware, real grids and arcs, the owner's real old installed version.
+If the installer refuses: write down the message, run `sudo apt install ./Verdandi-linux-latest.deb` in the folder of the file (it prints the reason), and tell me the text. "Verdandi is running": close Verdandi and try again.

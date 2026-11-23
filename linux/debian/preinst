@@ -1,0 +1,22 @@
+#!/bin/sh
+# Verdandi package, before the files are unpacked (docs/port/phase-m36.md). an install or an upgrade replaces the files of the program under /opt/verdandi: while a norns, sclang or scsynth
+# of this installation is running that would change files under a running program, so it is refused with a plain message. nothing else happens here: this script reads /proc and nothing more,
+# and never writes, moves or deletes anything (and certainly nothing in a home folder).
+set -e
+PROC="${VERDANDI_PROC_DIR:-/proc}"
+running() {
+    for p in "$PROC"/[0-9]*; do
+        exe="$(readlink "$p/exe" 2> /dev/null)" || continue
+        case "$exe" in /opt/verdandi/*) return 0 ;; esac
+    done
+    return 1
+}
+case "$1" in
+    upgrade | install)
+        if running; then
+            echo "Verdandi is running. Close Verdandi (quit it from its window) and install again: its files cannot be replaced while it runs." >&2
+            exit 1
+        fi
+        ;;
+esac
+exit 0

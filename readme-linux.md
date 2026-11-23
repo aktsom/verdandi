@@ -9,8 +9,8 @@ In running text this page and the manual say just "Verdandi". An unofficial comm
 The macOS version is described in [readme-macos.md](readme-macos.md) and [readme.md](readme.md).
 
 - what is built and tested, installing, starting, the settings: the manual, `linux/manual/manual.html` (the MANUAL button of the window opens it)
-- the package (`.deb`, Ubuntu 24.04 and Linux Mint 22): `linux/package.sh`, `docs/port/packaging.md`
-- from source: `linux/setup-deps.sh`, `linux/build.sh`, `linux/norns.sh`
+- **install (one file):** on the Releases page of this repository open the release `linux-latest` and download `Verdandi-linux-latest.deb` (Ubuntu 24.04 and Linux Mint 22, 64-bit, about 16 MB). Double-click it, click Install, type your password: the installer (GDebi or the Software Manager) fetches everything it needs. Start **Verdandi Linux** from the application menu. To update, close Verdandi and double-click the newer file the same way; your folder `~/Verdandi` is not touched. The page also has the `.sha256` file and `BUILD.txt` (which build it is). How the package is built and tested: `linux/package.sh`, `.github/workflows/linux-package.yml`, `docs/port/phase-m36.md`, `docs/port/packaging.md`
+- from source (for development and testing, not for installing): `linux/setup-deps.sh`, `linux/build.sh`, `linux/norns.sh`; this makes a copy that runs from the checkout, separate from the installed program
 - what still needs real hardware: `docs/port/HARDWARE-CHECKLIST.md`
 
 The names of the project's parts do not change: the package and the command are `verdandi`, the program is in `/opt/verdandi`,

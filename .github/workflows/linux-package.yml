@@ -1,0 +1,152 @@
+name: linux-package
+
+# M36 (docs/port/phase-m36.md): builds the Linux package (the .deb, linux/package.sh) on an Ubuntu 24.04 runner, tests it in a CLEAN Ubuntu 24.04 container (install, start, upgrade over an older .deb
+# built from the previous commit, remove, the version numbers) and publishes ONE file for the owner: Verdandi-linux-latest.deb on the release linux-latest (+ sha256, BUILD.txt, a versioned copy).
+# it runs when a tag linux-v* is pushed or when started by hand, NEVER on a push: linux-tests.yml (the unit tests) is a different workflow and stays as it was. it does not touch any of the Windows
+# releases, and it has nothing to do with the Windows workflows.
+
+on:
+  push:
+    tags: ['linux-v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to the release linux-latest when the tests pass (false: build and test only)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-package
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: build and test the .deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0 # the build before this one (the "older" package of the upgrade test) is made from the previous commit
+      - name: "Build dependencies (linux/setup-deps.sh; the package builds maiden, the mi-UGens, PortedPlugins and NamAmp itself)"
+        timeout-minutes: 30
+        env:
+          NORNS_NO_MAIDEN: '1'
+        run: |
+          sudo apt-get update -qq
+          linux/setup-deps.sh
+      - name: Cache of the package build (SuperCollider, sc3-plugins, the packs)
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/package/cache
+            !build/package/cache/noble-minbase
+          key: linux-package-cache-${{ hashFiles('linux/package.sh', 'linux/*.pin', 'linux/mi-ugens-build.sh', 'linux/portedplugins-build.sh', 'linux/maiden-build.sh', 'linux/namamp/**') }}
+      - name: Build norns (linux/build.sh)
+        timeout-minutes: 30
+        env:
+          NORNS_NO_MAIDEN: '1'
+          NORNS_NO_PORTED: '1'
+          NORNS_NO_MI: '1'
+        run: linux/build.sh
+      - name: The package (linux/package.sh all) and what it cost
+        timeout-minutes: 90
+        run: |
+          mkdir -p "$RUNNER_TEMP/pkghome"
+          start=$(date +%s)
+          # a neutral HOME: the privacy scan of package.sh looks for the name of the account's home folder in the package
+          HOME="$RUNNER_TEMP/pkghome" linux/package.sh all
+          echo "package_seconds=$(( $(date +%s) - start ))" | tee -a "$GITHUB_ENV" >> "$RUNNER_TEMP/times.txt"
+          cp "$(ls -t build/package/verdandi_*.deb | head -n 1)" "$RUNNER_TEMP/new.deb"
+          ls -l "$RUNNER_TEMP/new.deb"
+      - name: The older package (the previous commit's own package.sh, built in a second checkout)
+        timeout-minutes: 60
+        run: |
+          start=$(date +%s)
+          old="$(git rev-parse HEAD~1)"
+          git clone -q "$GITHUB_WORKSPACE" "$RUNNER_TEMP/old"
+          (cd "$RUNNER_TEMP/old" && git checkout -q "$old" && git submodule update --init --recursive --depth 1 && NORNS_NO_MAIDEN=1 NORNS_NO_PORTED=1 NORNS_NO_MI=1 linux/build.sh)
+          # the same output folder (the cache has absolute paths in it), the older commit's own scripts
+          mkdir -p "$RUNNER_TEMP/pkghome"
+          (cd "$RUNNER_TEMP/old" && HOME="$RUNNER_TEMP/pkghome" PACKAGE_OUT="$GITHUB_WORKSPACE/build/package" linux/package.sh all)
+          ls -t build/package/verdandi_*.deb
+          cp "$(ls -t build/package/verdandi_*.deb | head -n 1)" "$RUNNER_TEMP/old.deb"
+          echo "old_seconds=$(( $(date +%s) - start ))" | tee -a "$GITHUB_ENV" >> "$RUNNER_TEMP/times.txt"
+          dpkg-deb -f "$RUNNER_TEMP/old.deb" Version
+      - name: "A fresh install of the new package in a clean Ubuntu 24.04 root (Depends only, no missing library, a headless start as a normal user, the packs seeded)"
+        timeout-minutes: 30
+        run: |
+          sudo apt-get install -y -q debootstrap
+          sudo -E env PATH="$PATH" linux/tests/package_test.sh "$RUNNER_TEMP/new.deb" 2>&1 | tee "$RUNNER_TEMP/deb-fresh.txt"
+          ! grep -q '^FAIL' "$RUNNER_TEMP/deb-fresh.txt" && grep -q '^PASS  nothing written' "$RUNNER_TEMP/deb-fresh.txt"
+      - name: "The checks in a clean ubuntu:24.04 container (install, start, upgrade, remove, versions)"
+        timeout-minutes: 40
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/work/linux/tests"
+          cp linux/tests/deb_upgrade_inner.sh linux/tests/twins_ugens.scd linux/tests/mi_ugens.scd "$RUNNER_TEMP/work/linux/tests/"
+          cp "$RUNNER_TEMP/old.deb" "$RUNNER_TEMP/work/old.deb"
+          cp "$RUNNER_TEMP/new.deb" "$RUNNER_TEMP/work/new.deb"
+          start=$(date +%s)
+          docker run --rm -v "$RUNNER_TEMP/work:/work" ubuntu:24.04 bash /work/linux/tests/deb_upgrade_inner.sh /work/old.deb /work/new.deb /work/linux/tests 2>&1 | tee "$RUNNER_TEMP/deb-tests.txt"
+          echo "test_seconds=$(( $(date +%s) - start ))" | tee -a "$GITHUB_ENV" >> "$RUNNER_TEMP/times.txt"
+      - name: The same fast tests as the unit test job (version numbers, maintainer scripts, publishing with a stand-in)
+        run: |
+          linux/tests/package_version_test.sh
+          linux/tests/deb_scripts_test.sh
+          linux/tests/linux_release_publish_test.sh
+      - name: The tests and the time, as a summary
+        if: always()
+        run: |
+          {
+            echo "### Verdandi Linux package"
+            echo "package build: ${package_seconds:-?} s, the older package: ${old_seconds:-?} s, the clean-container checks: ${test_seconds:-?} s"
+            echo '```'
+            grep -E '^(PASS|FAIL|==)' "$RUNNER_TEMP/deb-fresh.txt" "$RUNNER_TEMP/deb-tests.txt" 2>/dev/null | cut -c1-200 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the package for the release job
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: |
+            ${{ runner.temp }}/new.deb
+            ${{ runner.temp }}/deb-tests.txt
+            ${{ runner.temp }}/deb-fresh.txt
+            ${{ runner.temp }}/times.txt
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: publish Verdandi-linux-latest.deb
+    needs: package
+    if: ${{ github.event_name == 'push' || inputs.publish }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # the one permission the workflow's token needs for this: contents: write (releases and their tags)
+    permissions:
+      contents: write
+    concurrency:
+      group: linux-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-deb
+          path: linux-deb
+      - name: "Publish with linux/ci/publish-release.sh (only adds or replaces its own files, then reads the release back)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find linux-deb -type f
+          deb="$(find linux-deb -name new.deb | head -n 1)"
+          tests="$(cat "$(find linux-deb -name deb-fresh.txt | head -n 1)" "$(find linux-deb -name deb-tests.txt | head -n 1)" | grep -E '^PASS' | sed 's/^PASS  /- /' | cut -c1-220)"
+          times="$(tr '\n' ' ' < "$(find linux-deb -name times.txt | head -n 1)")"
+          export DEB="$deb"
+          export TESTS="$tests"$'\n\n'"Build times on the runner (seconds): $times"
+          linux/ci/publish-release.sh

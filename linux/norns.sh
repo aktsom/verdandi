@@ -77,6 +77,12 @@ else
     INSTALLED=0
 fi
 if [ "$INSTALLED" = 1 ]; then MODE=installed; else MODE=dev; fi
+# which build is this (the package has BUILD.txt, first line "<version> <hash>", the same as the Windows build): the version line on the home page of the norns window (VERDANDI_BUILD) and the first line
+# of the log. a checkout has no BUILD.txt and shows nothing, as before (docs/port/phase-m36.md)
+if [ -z "${VERDANDI_BUILD:-}" ] && [ -f "$REPO/BUILD.txt" ]; then
+    VERDANDI_BUILD="$(head -n 1 "$REPO/BUILD.txt" | tr -d '\r')"
+    export VERDANDI_BUILD VERDANDI_BUILD_SAY=1
+fi
 
 # the norns home and where it came from
 if [ -n "${NORNS_HOME:-}" ]; then
@@ -281,6 +287,7 @@ if [ "${NORNS_DECIDE_ONLY:-0}" = 1 ] || { [ "${NORNS_DECIDE_ONLY:-0}" = reexec ]
     fi
     echo "DECIDE-USERENV home=${NORNS_USER_HOME:-} cache=${NORNS_USER_XDG_CACHE_HOME-unset} config=${NORNS_USER_XDG_CONFIG_HOME-unset}"
     echo "DECIDE-RATE ${AUDIO_RATE:-}"
+    echo "DECIDE-BUILD ${VERDANDI_BUILD:-}"
     echo "DECIDE-QUANTUM ${QUANTUM}"
     exit 0
 fi
@@ -307,6 +314,8 @@ NORNS_LOGS="$NORNS_HOME/logs"
 if [ -z "${NORNS_HAVE_TTY:-}" ] && [ "$INSTALLED" = 1 ] && [ $TERMINAL -eq 0 ] && [ "${NORNS_LAUNCHER_LOG:-1}" != 0 ]; then
     exec >> "$NORNS_LOGS/launcher.log" 2>&1
 fi
+# the first line of the log names the build (set above; only the first run of this script says it, the re-run under pw-jack has VERDANDI_BUILD already)
+[ -n "${VERDANDI_BUILD_SAY:-}" ] && echo "norns.sh: build $VERDANDI_BUILD" && unset VERDANDI_BUILD_SAY
 case "$LINK_STATE" in
 conflict) fail "$LINK is a folder that is not this program ($REPO). Move it away, or choose another norns home (NORNS_HOME, or ~/.config/verdandi/home)." ;;
 repoint) echo "norns.sh: $LINK pointed at $(readlink "$LINK"), now at $REPO" ; ln -sfn "$REPO" "$LINK" ;;

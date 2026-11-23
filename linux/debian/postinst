@@ -1,0 +1,9 @@
+#!/bin/sh
+# Verdandi package, after the files are unpacked: the udev rule for monome devices takes effect for devices plugged in from now on; devices already plugged in are asked again.
+# nothing else: no home folder, no user setting, no kernel module is touched (docs/port/phase-m36.md).
+set -e
+if [ "$1" = configure ] && command -v udevadm > /dev/null 2>&1; then
+    udevadm control --reload-rules > /dev/null 2>&1 || true
+    udevadm trigger --subsystem-match=tty --action=add > /dev/null 2>&1 || true
+fi
+exit 0

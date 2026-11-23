@@ -106,6 +106,7 @@ H=/home/tester/Verdandi
 grep -aq startup_status.ok /home/tester/launcher.out && p "installed launcher boots norns as a normal user (headless)" || { f "norns did not boot"; tail -25 /home/tester/launcher.out | sed 's/^/   /'; tail -10 $H/logs/norns.log $H/logs/jackd.log 2>/dev/null | sed 's/^/   /'; }
 grep -a 'engines: \[' $H/logs/sclang.log | head -1 | grep -q PolyPerc && p "bundled SuperCollider lists the engines: $(grep -a 'engines: \[' $H/logs/sclang.log | head -1 | cut -c1-100)" || { f "no engine list"; tail -20 $H/logs/sclang.log | sed 's/^/   /'; }
 grep -aq 'PROBE-OK' /home/tester/launcher.out && p "the Lua prompt answers" || f "the Lua prompt does not answer"
+[ -f /opt/verdandi/BUILD.txt ] && grep -aqx "norns.sh: build $(head -n 1 /opt/verdandi/BUILD.txt)" /home/tester/launcher.out && p "BUILD.txt is in the package and the start says the build: $(head -n 1 /opt/verdandi/BUILD.txt)" || f "no BUILD.txt, or the start does not say the build"
 [ "$(readlink $H/norns)" = /opt/verdandi ] && p "~/Verdandi/norns leads to /opt/verdandi" || f "norns link: $(readlink $H/norns)"
 grep -q '/opt/verdandi/sc/core' /home/tester/.config/SuperCollider/sclang_conf.yaml 2>/dev/null || grep -q '/opt/verdandi/sc/core' $H/.config/SuperCollider/sclang_conf.yaml && p "sclang_conf.yaml names the installed program" || f "sclang_conf.yaml"
 grep -aq '200\|302\|301' /home/tester/maiden.http 2>/dev/null && p "maiden answers on 127.0.0.1:5000 ($(cat /home/tester/maiden.http | tr -d '\r'))" || { f "maiden does not answer"; tail -5 $H/logs/maiden.log; }

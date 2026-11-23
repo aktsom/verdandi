@@ -306,6 +306,8 @@ build_tree() {
     install -m 644 "$REPO/linux/brand.sh" "$T/linux/brand.sh"
     # the marker that makes linux/norns.sh use the installed layout (home in ~/Verdandi, program tree read-only)
     echo "installed by the verdandi package" > "$T/INSTALLED"
+    # which build this is (the same first line as the Windows BUILD.txt: "<version> <hash>"): norns.sh shows it as the version line and in its log
+    printf '%s %s\npackage %s\ncommit %s\nbuilt %s\n' "$UPSTREAM" "$HASH" "$VERSION" "$(git -C "$GIT_REPO" rev-parse HEAD)" "$(date -u -d "@$EPOCH" +%Y-%m-%d)" > "$T/BUILD.txt"
     # editors' and test leftovers
     find "$T" \( -name '*.orig' -o -name '*.rej' -o -name '.git*' -o -name '__pycache__' \) -prune -exec rm -rf {} + 2>/dev/null || true
     # reproducible modes: files readable by all, programs executable, nothing writable by group or others
@@ -404,12 +406,16 @@ SRC
 }
 
 # ---- the package ----
-# the version has to grow with every commit, or an update does not replace the installed one: dpkg compares the digit runs as numbers, so
-# date, then the number of commits up to this one (two commits on one day), then the hash (only the label, never decides). PACKAGE_GIT_REPO is for tests
+# the version (docs/port/phase-m36.md): <the Windows version number, the first line of windows/VERSION>-<the number of commits up to this one>. the first part is the number of the Windows build, so the
+# numbers match; the commit count after the dash grows with every build, so two builds under the same Windows number replace each other (dpkg compares the digit runs as numbers). the earlier packages
+# were 0.1~git<date>.<count>.<hash>: 0.10.x is higher than 0.1~git..., so no epoch is needed (tests/package_version_test.sh). the hash is only a label (BUILD.txt, the changelog), it never decides.
+# PACKAGE_GIT_REPO and PACKAGE_REVISION are for tests (a throw-away repository; an "older" package)
 GIT_REPO="${PACKAGE_GIT_REPO:-$REPO}"
 EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$GIT_REPO" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH="$EPOCH"
-VERSION="0.1~git$(date -u -d "@$EPOCH" +%Y%m%d).$(git -C "$GIT_REPO" rev-list --count HEAD).$(git -C "$GIT_REPO" rev-parse --short HEAD)"
+UPSTREAM="$(head -n 1 "${PACKAGE_VERSION_FILE:-$REPO/windows/VERSION}" | tr -d '\r ')"
+HASH="$(git -C "$GIT_REPO" rev-parse --short=7 HEAD)"
+VERSION="$UPSTREAM-${PACKAGE_REVISION:-$(git -C "$GIT_REPO" rev-list --count HEAD)}"
 ARCH="$(dpkg --print-architecture)"
 DEB="$OUT/verdandi_${VERSION}_${ARCH}.deb"
 
@@ -463,10 +469,8 @@ build_deb() {
         $bins 2>/dev/null | sed -n 's/^shlibs:Depends=//p')"
     [ -n "$SHL" ] || die "dpkg-shlibdeps found no dependencies"
     # sound server (the host's libjack: pw-jack works), a file dialog, the browser opener
-    DEPENDS="$SHL, pipewire-jack | jackd2, zenity | xdg-desktop-portal, xdg-utils"
-    # programs that scripts run through the shell: mx.samples downloads its sample packs with curl and unpacks them with unzip (docs/port/KNOWN-ISSUES.md item 22). recommended, not
-    # required: apt installs them with the package, norns starts without them
-    RECOMMENDS="curl, unzip"
+    # curl and unzip are in Depends too (M36): a double-click in GDebi or the Software Manager installs Depends, not Recommends, and scripts such as mx.samples need both
+    DEPENDS="$SHL, pipewire-jack | jackd2, zenity | xdg-desktop-portal, xdg-utils, curl, unzip"
     local size
     size="$(du -sk --exclude=DEBIAN "$STAGE" | cut -f1)"
     cat > "$D/control" <<CTL
@@ -476,30 +480,12 @@ Architecture: $ARCH
 Maintainer: $MAINTAINER
 Installed-Size: $size
 Depends: $DEPENDS
-Recommends: $RECOMMENDS
 Section: sound
 Priority: optional
 $(deb_description)
 CTL
-    cat > "$D/postinst" <<'POST'
-#!/bin/sh
-set -e
-# the udev rule for monome devices takes effect for devices plugged in from now on; devices already plugged in are asked again
-if [ "$1" = configure ] && command -v udevadm >/dev/null 2>&1; then
-    udevadm control --reload-rules >/dev/null 2>&1 || true
-    udevadm trigger --subsystem-match=tty --action=add >/dev/null 2>&1 || true
-fi
-exit 0
-POST
-    cat > "$D/postrm" <<'POST'
-#!/bin/sh
-set -e
-if { [ "$1" = remove ] || [ "$1" = purge ]; } && command -v udevadm >/dev/null 2>&1; then
-    udevadm control --reload-rules >/dev/null 2>&1 || true
-fi
-exit 0
-POST
-    chmod 755 "$D/postinst" "$D/postrm"
+    # the maintainer scripts are files (linux/debian/*, tested by tests/deb_scripts_test.sh): they only reload udev rules and refuse to replace the program while it runs, and never touch a home folder
+    for f in preinst postinst prerm postrm; do install -m 755 "$REPO/linux/debian/$f" "$D/$f"; done
     # opt-in examples for the ALSA raw MIDI route (Reaper): documentation only. a package does not load kernel modules or put MIDI ports into every DAW unasked, so nothing goes to /etc and the postinst does nothing about it
     install -D -m 644 "$REPO/linux/virmidi/verdandi-virmidi.modules-load.conf" "$doc/examples/verdandi-virmidi.modules-load.conf"
     install -D -m 644 "$REPO/linux/virmidi/verdandi-virmidi.modprobe.conf" "$doc/examples/verdandi-virmidi.modprobe.conf"

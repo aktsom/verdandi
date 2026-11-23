@@ -448,7 +448,11 @@ run "tidy:flatten apply and undo (refusals, backup, checks, rollback, interrupte
 run "tidy:disable and restore with a manifest, list, remove-older (and what it never touches), log rotation, caps, crash report pruning" linux/tests/tidy_test.sh
 CUH="$(mktemp -d)"
 run "lua:SYSTEM > CLEAN UP page (asks before any change, restore, the age row, nothing of yours touched)" env NORNS_HOME="$CUH" NORNS_TIDY="$REPO/linux/tidy.sh" lua5.3 linux/tests/cleanup_page_test.lua
-run "package:the .deb version grows with every commit (dpkg --compare-versions)" linux/tests/package_version_test.sh
+run "package:the .deb version is the Windows number and the commit count (newer than every earlier package, grows with every commit, no epoch)" linux/tests/package_version_test.sh
+run "package:the maintainer scripts (a running Verdandi stops an install, an upgrade and a removal with a plain message; nothing in a home folder is written, moved or deleted, purge included)" linux/tests/deb_scripts_test.sh
+run "package:the version line (BUILD.txt in the package, norns.sh gives it to the program as VERDANDI_BUILD and says it first; a checkout shows none)" linux/tests/build_line_test.sh
+run "release:the Linux package is published to linux-latest (only adds or replaces its own files, read back, the 403 workaround, never a Windows release) with a stand-in for gh" linux/tests/linux_release_publish_test.sh
+run "release:the workflow that builds and publishes the Linux package (tag or by hand only, timeouts, write permission only for the release job, nothing Windows)" linux/tests/linux_package_workflow_test.sh
 run "package:build output: status reads only, clean and clean cache, the newest 2 .deb kept" linux/tests/package_out_test.sh
 run "branding:display name Verdandi Linux (window title, menu entry, deb description, manual, README), internal names unchanged" linux/tests/display_name_test.sh
 run "window:MANUAL button (opens the page, or a note when it is missing)" linux/tests/manual_button_test.sh
@@ -1965,6 +1969,11 @@ if [ "${NORNS_PACKAGE_TEST:-auto}" = 0 ]; then
 else
     run "$pkg_name" pkg_cmd
 fi
+# M36: install, start, upgrade over an older .deb with the home untouched, remove, the version numbers (the workflow runs the same checks in a docker ubuntu:24.04). needs root, debootstrap, network and two .debs
+# (the newest two in build/package: linux/package.sh all, and the one before it); skipped without
+upg_name="package:upgrade over an older .deb in a clean root (home untouched, packs seeded once, a running Verdandi refuses, remove keeps the home, the version numbers agree)"
+upg_cmd() { "$REPO/linux/tests/deb_upgrade_test.sh"; local rc=$?; [ "$rc" -eq 77 ] && [ "${NORNS_PACKAGE_TEST:-auto}" = 1 ] && return 1; return "$rc"; }
+if [ "${NORNS_PACKAGE_TEST:-auto}" = 0 ]; then skip "$upg_name (NORNS_PACKAGE_TEST=0)"; else run "$upg_name" upg_cmd; fi
 # opt-in (about 10 minutes): the whole build in a fresh root, started like "sudo linux/package.sh clean-root" by an account that does not
 # exist in that root, then the install test on the result. NORNS_CLEAN_ROOT_TEST=1
 if [ "${NORNS_CLEAN_ROOT_TEST:-0}" = 1 ]; then
