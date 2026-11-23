@@ -126,7 +126,7 @@ fi
 SNAP1="$(snap)"
 # the new program also in terminal mode: the program's own version line (the string the home page of the norns window shows)
 runuser -u tester -- /home/tester/start.sh terminal && p "the new program boots in terminal mode" || f "no boot in terminal mode"
-runuser -u tester -- bash -c "echo 'print(\"VERSION-LINE=\" .. tostring(os.getenv(\"VERDANDI_BUILD\")))' > /tmp/vfifo"
+runuser -u tester -- timeout 10 bash -c "echo 'print(\"VERSION-LINE=\" .. tostring(os.getenv(\"VERDANDI_BUILD\")))' > /tmp/vfifo"
 sleep 3
 grep -a 'VERSION-LINE=' /tmp/launcher.out | head -1 | grep -q "VERSION-LINE=$UPV [0-9a-f]\{7\}\$" && p "the program's version line is '$UPV $(sed -n 's/^.* \([0-9a-f]\{7\}\)$/\1/p' /opt/verdandi/BUILD.txt | head -1)': the same number as the package ($NEWV) and BUILD.txt ($(head -n 1 /opt/verdandi/BUILD.txt))" || f "the program's version line: $(grep -a 'VERSION-LINE=' /tmp/launcher.out | head -1)"
 [ "$(head -n 1 /opt/verdandi/BUILD.txt | cut -d' ' -f1)" = "$UPV" ] && p "the version in the package ($NEWV), in BUILD.txt and in the program agree: $UPV" || f "version mismatch: package $NEWV, BUILD.txt $(head -n 1 /opt/verdandi/BUILD.txt)"

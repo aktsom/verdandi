@@ -1,0 +1,42 @@
+M36: each new test on the OLD code (the commit before M36, 4c1f7ad7) -- fast tests:
+=== package_version_test on the old code (4c1f7ad7, before M36)
+FAIL: unexpected form: 0.1~git20260105.1.3f2ffdf
+FAIL: after the Windows number went up: 0.1~git20260301.4.174ee24
+FAIL: 0.1~git20260105.1.3f2ffdf is not newer than the old package 0.1~git20260106.4.8317553
+FAIL: 0.1~git20260105.2.ee99d26 is not newer than the old package 0.1~git20260106.4.8317553
+FAIL: 0.1~git20260106.3.cc46b67 is not newer than the old package 0.1~git20260106.4.8317553
+FAIL: 0.1~git20260105.1.3f2ffdf is not newer than the old package 0.1~git20260301.5.c3917be
+rc=1
+=== package_recommends_test on the old code (4c1f7ad7, before M36)
+FAIL package.sh makes curl and unzip hard dependencies (M36: GDebi and the Software Manager install Depends, not Recommends)
+FAIL there is no Recommends line left that could hide them
+rc=1
+=== deb_scripts_test on the old code (4c1f7ad7, before M36)
+script preinst: FAIL /tmp/oldrepo/linux/debian/preinst is missing or not executable
+rc=1
+=== build_line_test on the old code (4c1f7ad7, before M36)
+FAIL with BUILD.txt the program is given the first line as its version line
+FAIL without BUILD.txt (a checkout) there is no version line
+FAIL a VERDANDI_BUILD that is already set is kept
+FAIL the output of a start says 'norns.sh: build 0.10.21 4c82066' once
+rc=4
+=== linux_release_publish_test on the old code (4c1f7ad7, before M36)
+FAIL it ends well
+FAIL the release of the commit is made: tag linux-4c82066, the versioned .deb, the commit as target, a prerelease
+FAIL linux-latest is made with the versioned .deb, the fixed .deb, its SHA-256 and BUILD.txt, and it is NOT marked as the latest release of the repository (that stays with the Windows page)
+FAIL it says what linux-latest has
+FAIL a rerun replaces: the release of the commit is deleted before it is made
+FAIL the oldest per-commit releases beyond 10 are removed (3 of 13), nothing else
+rc=1
+=== linux_package_workflow_test on the old code (4c1f7ad7, before M36)
+FAIL .github/workflows/linux-package.yml does not exist
+rc=1
+
+M36: the upgrade test on deliberately broken packages (linux/tests/deb_upgrade_broken_test.sh, old package 0.1~git20261122.55.985caf98, new package 0.10.21-57):
+ok   a package that deletes-data fails the upgrade test: FAIL  the upgrade changed something in the home or the test copy
+ok   a package that second-copy fails the upgrade test: FAIL  3 copies of MiPlaits.sc / AnalogChew.sc on the path
+ok   a package that no-guard fails the upgrade test: FAIL  install over a running Verdandi: rc=0 Unpacking verdandi (0.10.21-57) over (0.10.21-57) ...
+ok   a package that no-build-line fails the upgrade test: FAIL  no /opt/verdandi/BUILD.txt after the upgrade
+ok   the old package as the new one fails (not newer, no BUILD.txt)
+
+the upgrade test on the real new package: 39 PASS, 0 FAIL
