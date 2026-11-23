@@ -7,6 +7,8 @@
 # needs root, debootstrap, unshare, network (archive.ubuntu.com). the root is cached in build/package/cache/noble-minbase.
 # prints "PASS name" / "FAIL name" lines, exit 1 if any failed, exit 77 if it cannot run here (with the reason)
 set -u
+# a host folder that does not exist and cannot be made: if the root run leaks the host environment (the runner sets XDG_CONFIG_HOME to its own home), SuperCollider dies on it and the test fails
+export XDG_CONFIG_HOME=/nonexistent-host-folder/.config
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$REPO/build/package"
 DEB="${1:-$(ls -t "$OUT"/verdandi_*.deb 2>/dev/null | head -1)}"
@@ -144,10 +146,11 @@ grep -aq 'wrong ELF class\|not found\|duplicate Class' $H/logs/sclang.log && f "
 INNER
 chmod 755 "$R/root/inner.sh"
 
+# a clean environment inside the root: nothing of the host's (the runner sets XDG_CONFIG_HOME to its own home: SuperCollider then wrote there and died)
 unshare -m sh -c "
  mount -t proc proc '$R/proc' && mount --rbind /dev '$R/dev' && mount -t tmpfs tmpfs '$R/dev/shm' && mount -t tmpfs tmpfs '$R/tmp'
  cp /etc/resolv.conf '$R/etc/resolv.conf' 2>/dev/null
- chroot '$R' /usr/bin/env MIRROR='$MIRROR' http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' /bin/bash /root/inner.sh" > "$T/inner.out" 2>&1
+ chroot '$R' /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8 MIRROR='$MIRROR' http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' /bin/bash /root/inner.sh" > "$T/inner.out" 2>&1
 cat "$T/inner.out" | grep -E '^(PASS|FAIL|   |SKIP)' 
 grep -q '^FAIL' "$T/inner.out" && FAIL=1
 grep -q '^PASS  nothing written' "$T/inner.out" || { echo "FAIL  the run in the root did not finish"; tail -15 "$T/inner.out"; FAIL=1; }

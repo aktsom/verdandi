@@ -3,6 +3,8 @@
 # (the workflow runs the same inner script in the docker image ubuntu:24.04). NEW defaults to the newest build/package/verdandi_*.deb, OLD to the one before it. needs root, debootstrap, unshare, the network;
 # prints "SKIP ..." and exits 77 when it cannot run here (no two .debs: build the older one with PACKAGE_REVISION=1 linux/package.sh deb, or from an older commit).
 set -u
+# a host folder that does not exist and cannot be made: if the root run leaks the host environment (the runner sets XDG_CONFIG_HOME to its own home), SuperCollider dies on it and the test fails
+export XDG_CONFIG_HOME=/nonexistent-host-folder/.config
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$REPO/build/package"
 OLD="${1:-}"; NEW="${2:-}"
@@ -28,10 +30,11 @@ cp "$REPO/linux/tests/deb_upgrade_inner.sh" "$REPO/linux/tests/twins_ugens.scd" 
 cp "$OLD" "$R/debs/old.deb"; cp "$NEW" "$R/debs/new.deb"
 printf 'deb %s noble main universe\ndeb %s noble-updates main universe\n' "$MIRROR" "$MIRROR" > "$R/etc/apt/sources.list"
 rm -f "$R"/etc/apt/sources.list.d/*
+# a clean environment inside the root: nothing of the host's (the runner sets XDG_CONFIG_HOME to its own home: SuperCollider then wrote there and died)
 unshare -m sh -c "
  mount -t proc proc '$R/proc' && mount --rbind /dev '$R/dev' && mount -t tmpfs tmpfs '$R/dev/shm' && mount -t tmpfs tmpfs '$R/tmp'
  cp /etc/resolv.conf '$R/etc/resolv.conf' 2>/dev/null
- chroot '$R' /usr/bin/env http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' /bin/bash /work/linux/tests/deb_upgrade_inner.sh /debs/old.deb /debs/new.deb /work/linux/tests" > "$T/inner.out" 2>&1
+ chroot '$R' /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8 http_proxy='${http_proxy:-}' https_proxy='${https_proxy:-}' /bin/bash /work/linux/tests/deb_upgrade_inner.sh /debs/old.deb /debs/new.deb /work/linux/tests" > "$T/inner.out" 2>&1
 grep -E '^(PASS|FAIL|   |SKIP|==)' "$T/inner.out"
 if grep -q '^FAIL' "$T/inner.out"; then exit 1; fi
 grep -q '^== done: all passed' "$T/inner.out" || { echo "FAIL  the run in the root did not finish"; tail -15 "$T/inner.out"; exit 1; }

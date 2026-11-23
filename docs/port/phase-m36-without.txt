@@ -40,3 +40,5 @@ ok   a package that no-build-line fails the upgrade test: FAIL  no /opt/verdandi
 ok   the old package as the new one fails (not newer, no BUILD.txt)
 
 the upgrade test on the real new package: 39 PASS, 0 FAIL
+
+Run 2 on the runner (tag linux-v0.10.21-2): the fresh-install test failed in the chroot because the runner's XDG_CONFIG_HOME (its own home) leaked into the root: "filesystem error: cannot create directories: Permission denied [/home/runner/.config/SuperCollider]", norns did not boot, no engine list. Reproduced here with XDG_CONFIG_HOME=/home/runner/.config on the old test (FAIL  norns did not boot / FAIL  no engine list); after the fix (env -i inside the root) the same run has no FAIL. The tests now set a non-existent XDG_CONFIG_HOME themselves, so a leak fails everywhere.
