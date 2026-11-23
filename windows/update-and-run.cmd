@@ -41,13 +41,12 @@ cd /d "%TEMP%"
 if "%HERE:~-1%"=="\" set "HERE=%HERE:~0,-1%"
 for %%I in ("%HERE%\..") do set "PARENT=%%~fI"
 set "TAG=windows-latest"
-rem the ASIO build (FLAVOR.txt in its folder) updates to the ASIO build: its own zip and folder name
+rem M31: ONE zip for everyone. the new build gets the name of the folder this runs from (Verdandi, or Verdandi-asio from an earlier ASIO build, FLAVOR.txt in it): the path that a Defender exclusion was made for never changes
 set "ZIPNAME=Verdandi-windows-latest"
 set "NAMEPFX=Verdandi"
-if exist "%HERE%\FLAVOR.txt" (
-  set "ZIPNAME=Verdandi-windows-asio-latest"
-  set "NAMEPFX=Verdandi-asio"
-)
+for %%I in ("%HERE%") do set "LEAF=%%~nxI"
+if /i "%LEAF%"=="Verdandi-asio" set "NAMEPFX=Verdandi-asio"
+if exist "%HERE%\FLAVOR.txt" set "NAMEPFX=Verdandi-asio"
 set "CHOICE=choice.exe"
 if defined VERDANDI_CHOICE set "CHOICE=%VERDANDI_CHOICE%"
 set "DATA=%USERPROFILE%\Verdandi"

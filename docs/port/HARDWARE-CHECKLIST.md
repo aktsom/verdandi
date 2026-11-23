@@ -795,3 +795,16 @@ Do one step at a time. The link to the file is in the report of this phase.
 Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]; notes: ...
 Cannot be tested here: the real double-click installer on Linux Mint, real sound hardware, real grids and arcs, the owner's real old installed version.
 If the installer refuses: write down the message, run `sudo apt install ./Verdandi-linux-latest.deb` in the folder of the file (it prints the reason), and tell me the text. "Verdandi is running": close Verdandi and try again.
+
+## Windows 0.10.22 (M31: ONE zip, the ASIO build is the build) - the owner's PC (RME Fireface UC, ASIO, Ableton)
+Do one step at a time. The link: the Releases page of this repository, release `windows-latest`, file `Verdandi-windows-latest.zip` (the report of this phase has the exact address).
+1. Before: close Verdandi. Open `C:\Users\<name>\Downloads\Verdandi-windows-asio-latest\Verdandi-asio\BUILD.txt` and write down its first line (the build you have, for example `0.10.21 5201a5a`).
+2. Update with the routine you already have: double-click `update-and-run.cmd` in that folder. It fetches the new zip (the release keeps the old file name for exactly this) and puts it in the SAME folder name `Verdandi-asio`; the old build stays next to it as `Verdandi-asio.previous`. No new Defender question and no new exclusion are needed (the path is the same). Look for: the window of the routine says the new build is installed; `BUILD.txt` of `Verdandi-asio` now starts with `0.10.22`.
+3. Start Verdandi (the routine starts it). Look for: the home page shows `0.10.22` and the build hash; SYSTEM > AUDIO: DRIVER offers "low latency".
+4. Low latency: Ableton's audio closed (or its driver multi-client mode on), DRIVER low latency, OUTPUT the Fireface, apply. Listen: a script (awake) plays, no clicks; the page shows LATENCY about 5 to 12 ms and `u` and `x` stay 0 for a minute.
+5. Normal sound: DRIVER normal (WASAPI), apply. Listen: the same script, normal sound next to Ableton.
+6. A busy driver: start Ableton on the Fireface, then in Verdandi choose low latency. Look for: the note "ASIO driver ... is busy: another program has it ... Using WASAPI on ... instead" on the page and on the window, and sound on the normal path.
+7. A driver that vanishes (only if you are willing): while a script plays through low latency, switch the Fireface off or pull its USB cable. Look for: within a few seconds the window says `NO SOUND.` and the reason, Verdandi does not crash or freeze; switch it on or plug it in again: the sound comes back by itself within about 10 seconds and the note goes.
+8. The next update: run `update-and-run.cmd` again after a newer build exists: it must fetch `Verdandi-windows-latest.zip` (the logs line says which name) and still use the folder `Verdandi-asio`.
+Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ] (latency __ ms, u/x 0 [ ])  5 [ ]  6 [ ]  7 [ ]  8 [ ]; notes: ...
+Cannot be tested here: the real RME driver (shared with Ableton or not), a real unplug, Defender's reaction, double-clicking on your Windows.

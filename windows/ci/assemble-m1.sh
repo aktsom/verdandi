@@ -4,8 +4,8 @@
 # result (M22: STATIC names, so that the same excluded folder in Windows Defender serves every build): $OUT/Verdandi/ (the program folder as the user gets it: the zip has this one folder, named without a version)
 # and $OUT/Verdandi-windows-latest.zip; a copy of the same file with the version in its name, $OUT/Verdandi-windows-<version>-<short hash>.zip, is made too (older builds can be fetched). $OUT/ZIPNAME holds the static
 # file name, $OUT/VZIPNAME the versioned one, $OUT/BUILD.txt a copy of the zip's BUILD.txt. the version and the commit are in BUILD.txt and VERSION.txt inside the folder, in the log and on the home page.
-#   FLAVOR  "" (default: WASAPI only, no ASIO code in the zip) or "asio": the zip that has the ASIO build of PortAudio (ASIO_DIR: the output of build-portaudio-asio.sh: libportaudio-2.dll, source/, PA-ASIO-BUILD.txt) and the
-#           GPLv3 notices and sources that go with it (docs/port/asio-licence.md). its names: Verdandi-asio/ and Verdandi-windows-asio-latest.zip (and the versioned copy Verdandi-windows-asio-<version>-<hash>.zip)
+#   ASIO_DIR  (M31: required) the output of build-portaudio-asio.sh: libportaudio-2.dll, source/, PA-ASIO-BUILD.txt. THE zip is the ASIO build: its PortAudio has the ASIO host API and the GPLv3 notices and sources that go with it (docs/port/asio-licence.md)
+#           are in it. a PC with no ASIO driver, or with a busy one, runs on the normal Windows audio path (docs/port/phase-m31.md). there is no second zip and no build without ASIO any more.
 #   VERDANDI_VERSION  (default: the first line of windows/VERSION)   VERDANDI_HASH (default: the first 7 characters of git rev-parse HEAD)   VERDANDI_REPO (owner/name, for update-and-run; default $GITHUB_REPOSITORY)
 # shellcheck disable=SC2329
 set -u
@@ -20,15 +20,8 @@ VERSION="${VERDANDI_VERSION:-$(head -n 1 "$REPO/windows/VERSION" | tr -d '\r ')}
 HASH="${VERDANDI_HASH:-$(git -C "$REPO" rev-parse HEAD 2> /dev/null | cut -c1-7)}"
 [ -n "$HASH" ] || HASH=nohash # (the first 7 characters of the commit: the same rule as windows/ci/publish-release.sh, so that the names agree)
 BUILD="$VERSION $HASH"
-FLAVOR="${FLAVOR:-}"
-case "$FLAVOR" in
-    "") APPNAME="Verdandi"; ZIPNAME="Verdandi-windows-latest.zip"; VZIPNAME="Verdandi-windows-$VERSION-$HASH.zip" ;;
-    asio)
-        APPNAME="Verdandi-asio"; ZIPNAME="Verdandi-windows-asio-latest.zip"; VZIPNAME="Verdandi-windows-asio-$VERSION-$HASH.zip"
-        ASIO_DIR="${ASIO_DIR:?ASIO_DIR is not set (FLAVOR=asio)}"
-        ;;
-    *) echo "FLAVOR must be empty or asio"; exit 1 ;;
-esac
+APPNAME="Verdandi"; ZIPNAME="Verdandi-windows-latest.zip"; VZIPNAME="Verdandi-windows-$VERSION-$HASH.zip"
+ASIO_DIR="${ASIO_DIR:?ASIO_DIR is not set (the output of windows/ci/build-portaudio-asio.sh: the zip is the ASIO build)}"
 APP="$OUT/$APPNAME"
 
 unzip_to() { # zip dir
@@ -87,7 +80,7 @@ assemble() {
     fi
     [ -f "$APP/ws-wrapper.exe" ] && echo "found: ws-wrapper.exe" || echo "NOTE: no ws-wrapper.exe"
     # the ASIO build: its PortAudio takes the place of the MSYS2 one (the same file name, the loader goes by it), the licence text of the SDK, the notices and the sources
-    if [ "$FLAVOR" = asio ]; then
+    if true; then
         [ -f "$ASIO_DIR/libportaudio-2.dll" ] || { echo "no libportaudio-2.dll in $ASIO_DIR"; return 1; }
         # the loader goes by the name norns.exe IMPORTS. it is libportaudio.dll in the UCRT64 toolchain, not libportaudio-2.dll (the M3 build put the ASIO DLL under the second name, next to the real one, and it never ran: the owner's ASIO
         # build found no ASIO, M19). the name is read from norns.exe itself, and the DLL that is in the zip under it is replaced
@@ -102,19 +95,18 @@ assemble() {
         cp "$ASIO_DIR/source/portaudio-source.zip" "$ASIO_DIR/source/asio-sdk-source.zip" "$ASIO_DIR/PA-ASIO-BUILD.txt" "$APP/source/" || return 1
         cp "$REPO/windows/pack/ASIO-NOTICE.txt" "$APP/ASIO-NOTICE.txt" || return 1
         cp "$REPO/windows/pack/ASIO-NOTICE.txt" "$APP/licenses/ASIO-NOTICE.txt"
-        echo "asio" > "$APP/FLAVOR.txt"
     fi
     # which build this is: the launcher logs it and norns shows it; update-and-run compares it with the newest release
     {
         echo "$BUILD"
-        echo "flavor: ${FLAVOR:-wasapi}"
+        echo "asio: built in"
         echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "commit: $(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)"
         echo "message: $(git -C "$REPO" log -1 --format=%s 2> /dev/null || echo unknown)"
     } > "$APP/BUILD.txt"
     # the same in words for a person (M22: the folder and the zip have no version in their names any more): this file is in the zip next to Verdandi.exe
     {
-        echo "Verdandi for Windows, version $VERSION, build $HASH${FLAVOR:+ ($FLAVOR flavour: with ASIO)}"
+        echo "Verdandi for Windows, version $VERSION, build $HASH (with ASIO)"
         echo "commit: $(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)"
         echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "The folder and the zip keep the same names for every build on purpose: an exclusion you made in Windows Defender for this folder keeps working. This file and BUILD.txt tell which build it is."
@@ -152,7 +144,7 @@ assemble() {
     # the source offer (GPL-3.0 section 6): where the corresponding source of this exact build is
     {
         sed -e "s|@BUILD@|$BUILD|g" -e "s|@COMMIT@|$(git -C "$REPO" rev-parse HEAD 2> /dev/null || echo unknown)|g" -e "s|@REPO@|${VERDANDI_REPO:-${GITHUB_REPOSITORY:-unknown}}|g" "$REPO/windows/pack/SOURCE-OFFER.txt"
-        if [ "$FLAVOR" = asio ]; then
+        if true; then
             echo
             # shellcheck disable=SC2028
             echo "ASIO build: the source of PortAudio as it was built, and of the Steinberg ASIO SDK as it was used, are in this folder: source\\portaudio-source.zip, source\\asio-sdk-source.zip (build record: source\\PA-ASIO-BUILD.txt)."

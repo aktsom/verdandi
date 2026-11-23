@@ -183,15 +183,34 @@ run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(win
 mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
 ck "a file that is too small is refused as an error page, and the old build is untouched" "grep -q 'that is an error page' '$T/out.txt' && [ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ]"
 
-echo "== the ASIO build updates to the ASIO build (FLAVOR.txt): its own zip, its own folder name Verdandi-asio, the normal build next to it is not touched"
+echo "== M31: ONE zip. a folder of an earlier ASIO build (Verdandi-asio, FLAVOR.txt) updates from Verdandi-windows-latest.zip and KEEPS its folder name (the path of a Defender exclusion), the normal folder next to it is not touched"
 newroot 6
 mkbuild "$PAR/Verdandi-asio" 0.2.0 aaaaaaa; echo asio > "$PAR/Verdandi-asio/FLAVOR.txt"
-mv "$T/server/Verdandi-windows-latest.zip" "$T/server/zip.hidden"
-head -c 1200000 /dev/zero > "$T/server/Verdandi-windows-asio-latest.zip"
-run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_UNPACK=unpacked-asio&set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
-rm -f "$T/server/Verdandi-windows-asio-latest.zip"; mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
-ck "the ASIO zip is downloaded and put in Verdandi-asio (kept as Verdandi-asio.previous)" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ -f '$PAR/Verdandi-asio/FLAVOR.txt' ] && [ \"\$(first_line '$PAR/Verdandi-asio.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ]"
+run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+ck "the one zip is downloaded and put in Verdandi-asio (kept as Verdandi-asio.previous)" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ \"\$(first_line '$PAR/Verdandi-asio.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ ! -d '$PAR/Verdandi-asio/Verdandi' ]"
 ck "the normal build's folder is not touched by it (and not offered for removal)" "[ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && ! grep -q 'next to it.*Verdandi\\\$' '$T/out.txt'"
+echo "== the new folder has no FLAVOR.txt: its NEXT update still keeps the name Verdandi-asio (the name comes from the folder it runs from)"
+printf '0.4.0 ccccccc\n' > "$T/server/BUILD.txt"; printf '0.4.0 ccccccc\nbuilt: test\n' > "$T/server/unpacked/Verdandi/BUILD.txt"
+run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+ck "again Verdandi-asio, built 0.4.0, and no folder named Verdandi-asio-<something> or a second Verdandi appeared" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.4.0 ccccccc' ] && [ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ]"
+printf '0.3.0 bbbbbbb\n' > "$T/server/BUILD.txt"; printf '0.3.0 bbbbbbb\nbuilt: test\n' > "$T/server/unpacked/Verdandi/BUILD.txt"
+echo "== a copy of the folder with FLAVOR.txt under another name still updates into Verdandi-asio; a plain Verdandi stays Verdandi"
+newroot 7
+mkbuild "$PAR/mycopy" 0.2.0 aaaaaaa; echo asio > "$PAR/mycopy/FLAVOR.txt"
+run "$PAR/mycopy" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+ck "FLAVOR.txt in a folder with another name: the new build is put in Verdandi-asio" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.3.0 bbbbbbb' ]"
+newroot 9
+run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+ck "a plain folder named Verdandi stays Verdandi (the zip is the one zip)" "[ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ ! -d '$PAR/Verdandi-asio' ]"
+echo "== the update routine of the EARLIER ASIO build (0.10.21: it asks for Verdandi-windows-asio-latest.zip) works against the new release: the transition copy"
+newroot 10
+mkbuild "$PAR/Verdandi-asio" 0.2.0 aaaaaaa; echo asio > "$PAR/Verdandi-asio/FLAVOR.txt"
+cp linux/tests/fixtures/update-and-run-0.10.21.cmd "$PAR/Verdandi-asio/update-and-run.cmd"
+mv "$T/server/Verdandi-windows-latest.zip" "$T/server/zip.hidden"
+cp "$T/server/zip.hidden" "$T/server/Verdandi-windows-asio-latest.zip" # (the transition copy: the same bytes)
+run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
+rm -f "$T/server/Verdandi-windows-asio-latest.zip"; mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
+ck "the old routine downloads the old name, takes the folder Verdandi out of it and puts it in Verdandi-asio: the same path, built 0.3.0" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ \"\$(first_line '$PAR/Verdandi-asio.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ -f '$PAR/Verdandi-asio/update-and-run.cmd' ]"
 
 echo "== no address to download from"
 newroot 8

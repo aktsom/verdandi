@@ -577,6 +577,7 @@ if _norns.grid_conflict_text and _norns.set_warning then
       mi_note_update()
       class_note_update()
       alsa_note_update()
+      if _menu.audio_note_update then _menu.audio_note_update() end
       -- the note of the MAIDEN and MANUAL buttons goes after a few seconds
       if _menu.maiden_note and util.time() >= (_menu.maiden_note_until or 0) then
         _menu.maiden_note = nil
@@ -624,15 +625,38 @@ if _norns.audio_status and _norns.set_warning then
   end)
 end
 
--- Windows: when the sound card could not be opened (busy, gone) norns runs on null audio; say so on the window until the next start, in plain words (the page SYSTEM > AUDIO has the details)
-if _norns.audio_info and _norns.set_warning then
-  hook.system_post_startup:register("menu-audio-fallback", function()
-    local a = _norns.audio_info()
-    if a.mode == "fallback" or (a.mode == "device" and a.note ~= "") then
-      print("audio: " .. a.note)
-      _menu.audio_note = (a.mode == "fallback" and "NO SOUND. " or "AUDIO: ") .. a.note:gsub("^no sound: ", "")
+-- Windows: when the sound card could not be opened (busy, gone) norns runs on null audio; say so on the window in plain words (the page SYSTEM > AUDIO has the details). M31: this follows the audio state
+-- while the program runs, not only at the start: a driver that vanishes (cable pulled) says NO SOUND with the reason within 3 s (the poll of the notes calls this), and the note goes when the sound is back.
+-- the notes "the sound card was reopened" and "back on ..." only confirm that it works again: they are not shown as a standing note
+local audio_note_mine -- (the text this function put into _menu.audio_note: another note, set by menu-audio-warning above, is never cleared by it)
+_menu.audio_note_update = function()
+  if not (_norns.audio_info and _norns.set_warning) then return end
+  local a = _norns.audio_info()
+  local note = a.note or ""
+  local want
+  if a.mode == "fallback" then
+    want = "NO SOUND. " .. (note:gsub("^no sound: ", ""))
+  elseif a.mode == "device" and note ~= "" and not note:find("^the sound card was reopened") and not note:find("^back on") then
+    want = "AUDIO: " .. note
+  end
+  if want then
+    if _menu.audio_note ~= want then
+      print("audio: " .. note)
+      _menu.audio_note = want
+      audio_note_mine = want
       _menu.show_note()
     end
+  elseif audio_note_mine then
+    if _menu.audio_note == audio_note_mine then
+      _menu.audio_note = nil
+      _menu.show_note()
+    end
+    audio_note_mine = nil
+  end
+end
+if _norns.audio_info and _norns.set_warning then
+  hook.system_post_startup:register("menu-audio-fallback", function()
+    _menu.audio_note_update()
   end)
 end
 

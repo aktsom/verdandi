@@ -2,7 +2,7 @@
 update-and-run.ps1: get the newest Verdandi build, put it in the SAME folder name as before (M22: static names, so that a Windows Defender exclusion keeps working), start it. The PowerShell variant of update-and-run.cmd (the same steps; the cmd one is used when curl.exe and tar.exe exist).
 No administrator rights, no installation. Windows PowerShell 5.1 (Windows 10 and 11) is enough.
   1. reads which build this folder is (BUILD.txt) and which build is the newest (BUILD.txt of the GitHub release "windows-latest")
-  2. if the newest is not here yet: downloads the zip, checks its size and its SHA-256 when the release has one, unpacks it and puts it in the folder Verdandi (ASIO: Verdandi-asio) next to this folder's parent;
+  2. if the newest is not here yet: downloads the zip, checks its size and its SHA-256 when the release has one, unpacks it and puts it in the folder with the name this folder has (Verdandi, or Verdandi-asio from an earlier ASIO build) next to this folder's parent;
      the folder it replaces is kept beside it as Verdandi.previous
   3. closes a running Verdandi after asking, offers to remove older builds (default: no), starts the new Verdandi.exe
 Your files are in %USERPROFILE%\Verdandi and are never touched: only folders that hold Verdandi.exe and norns.exe can be removed.
@@ -28,10 +28,11 @@ $parent = Split-Path -Parent $here
 Set-Location -LiteralPath $env:TEMP   # (the folder this runs from is replaced: no current folder inside it, or Windows cannot rename it)
 $data = if ($env:VERDANDI_HOME) { $env:VERDANDI_HOME } else { Join-Path $env:USERPROFILE 'Verdandi' }
 $tag = 'windows-latest'
-# the ASIO build (FLAVOR.txt in its folder) updates to the ASIO build: its own zip and folder name
+# M31: ONE zip for everyone. the new build gets the name of the folder this runs from (Verdandi, or Verdandi-asio from an earlier ASIO build, FLAVOR.txt in it): the path that a Defender exclusion was made for never changes
 $zipName = 'Verdandi-windows-latest'
 $namePrefix = 'Verdandi'
-if (Test-Path (Join-Path $here 'FLAVOR.txt')) { $zipName = 'Verdandi-windows-asio-latest'; $namePrefix = 'Verdandi-asio' }
+if ((Split-Path -Leaf $here) -ieq 'Verdandi-asio') { $namePrefix = 'Verdandi-asio' }
+if (Test-Path (Join-Path $here 'FLAVOR.txt')) { $namePrefix = 'Verdandi-asio' }
 
 Say ''
 Say ' Verdandi: update and run'

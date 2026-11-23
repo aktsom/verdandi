@@ -179,70 +179,12 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  package:
-    name: Assemble, start headless, check
-    needs: [sc, norns, maiden, tools, plugins]
-    if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' }}
-    runs-on: ${{ inputs.runner || 'windows-2022' }}
-    timeout-minutes: 110
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: m1-out-sc
-          path: sc-artifact
-      - uses: actions/download-artifact@v4
-        with:
-          name: m1-norns-bin
-          path: m1-norns
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: m6-maiden
-          path: m6-maiden
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: m6-tools
-          path: m6-tools
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: m7-plugins
-          path: m7-plugins
-      - name: Assemble the folder and the zip
-        run: PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
-      - name: Start it headless and check
-        timeout-minutes: 100
-        run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 windows/ci/smoke-m1.sh
-      - name: What failed
-        if: always()
-        run: windows/ci/show-failures.sh
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: m1-out-package
-          path: m0-out
-          retention-days: 14
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: m1-zip
-          path: m1-stage/Verdandi-windows-latest.zip
-          retention-days: 30
-          if-no-files-found: warn
-
-  # M3: PortAudio with the ASIO host API (MSYS2, from source with Steinberg's SDK under its GPLv3 option: docs/port/asio-licence.md). NOT part of the default build: when this job or its package job fails the
-  # WASAPI-only zip is published as before and the release notes say that there is no ASIO zip.
+  # M3/M31: PortAudio with the ASIO host API (MSYS2, from source with Steinberg's SDK under its GPLv3 option: docs/port/asio-licence.md). THE zip is the ASIO build (docs/port/phase-m31.md): when this job
+  # fails there is no new zip, nothing is published, and windows-latest keeps the last good one.
   asio:
     name: PortAudio with ASIO (MSYS2 UCRT64)
     runs-on: ${{ inputs.runner || 'windows-2022' }}
     timeout-minutes: 20
-    continue-on-error: true
     defaults:
       run:
         shell: msys2 {0}
@@ -273,13 +215,14 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  package-asio:
-    name: 'ASIO build (assemble, start headless, check)'
+  # M31: ONE zip. it is assembled once (this job) and checked by two jobs at the same time on the same file: the long checks of the program (package, the limits of M2 to M22) and the cases with the stub ASIO
+  # driver (package-asio, the limits of M30). the release job publishes only a zip that both passed.
+  assemble:
+    name: Assemble the one zip
     needs: [sc, norns, asio, maiden, tools, plugins]
     if: ${{ always() && needs.sc.result == 'success' && needs.norns.result == 'success' && needs.asio.result == 'success' }}
     runs-on: ${{ inputs.runner || 'windows-2022' }}
-    timeout-minutes: 90
-    continue-on-error: true
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -315,47 +258,89 @@ jobs:
       - name: The ASIO DLL must exist
         run: test -f m3-asio/libportaudio-2.dll || { echo "the ASIO build of PortAudio did not make libportaudio-2.dll (see the job 'PortAudio with ASIO' and its step log)"; ls -l m3-asio; exit 1; }
       - name: Assemble the folder and the zip
-        run: FLAVOR=asio PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
-      - name: Start it headless and check (ASIO host API listed, fallback, input)
-        timeout-minutes: 75   # M30: was 30. the headless check took 23 min on 0.10.16 and ran into the limit on 0.10.18 (25cb7da): every check was then "not found", the gate failed and the ASIO zip was not published
-        run: ZIP="$PWD/m1-stage/$(cat m1-stage/ZIPNAME)" WORK="$RUNNER_TEMP/m3" SMOKE_SECONDS=60 SMOKE_CYCLES=3 EXPECT_ASIO=1 windows/ci/smoke-m1.sh
+        run: PLUGINS_DIR="$PWD/m7-plugins" MAIDEN_DIR="$PWD/m6-maiden" TOOLS_DIR="$PWD/m6-tools" ASIO_DIR="$PWD/m3-asio" NORNS_BIN="$PWD/m1-norns" SC_ZIP="$PWD/sc-artifact/sc-win64.zip" windows/ci/assemble-m1.sh
       - name: What failed
         if: always()
         run: windows/ci/show-failures.sh
-      # the zip is handed on to the release only when every check of this job passed
-      - name: Gate
-        id: gate
-        run: |
-          bad=0
-          failed="$(grep -l '^FAIL' m0-out/status/*.status 2> /dev/null || true)"
-          while read -r f; do
-            [ -n "$f" ] || continue
-            n="$(basename "$f" .status)"
-            case " $NONBLOCKING_CHECKS " in *" $n "*) echo "check $n failed (not blocking)";; *) echo "check $n failed"; bad=1;; esac
-          done <<< "$failed"
-          if [ "$bad" = 1 ]; then echo "a check of the ASIO build failed: its zip is not published"; exit 1; fi
-          echo "all checks of the ASIO build passed"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: m3-out-package-asio
+          name: m1-out-assemble
           path: m0-out
           retention-days: 14
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
-        if: ${{ steps.gate.outcome == 'success' }}
+        if: always()
         with:
-          name: m3-asio-zip
-          path: m1-stage/Verdandi-windows-asio-latest.zip
+          name: m1-zip
+          path: m1-stage/Verdandi-windows-latest.zip
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
+
+  package:
+    name: Start it headless and check (everything but the ASIO cases)
+    needs: [assemble]
+    if: ${{ always() && needs.assemble.result == 'success' }}
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 110
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-zip
+          path: m1-stage
+      - name: Start it headless and check
+        timeout-minutes: 100
+        run: ZIP="$PWD/m1-stage/Verdandi-windows-latest.zip" WORK="$RUNNER_TEMP/m1" SMOKE_SECONDS=90 SMOKE_PART=main windows/ci/smoke-m1.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-out-package
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
+
+  package-asio:
+    name: 'ASIO cases (no driver, a driver, busy, will not start, vanishes) on the same zip'
+    needs: [assemble]
+    if: ${{ always() && needs.assemble.result == 'success' }}
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 90   # M30: the limits of the ASIO job stay
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: m1-zip
+          path: m1-stage
+      - name: Start it headless and check (the ASIO cases with the stub driver)
+        timeout-minutes: 75   # M30: was 30. the headless check took 23 min on 0.10.16 and ran into the limit on 0.10.18 (25cb7da): every check was then "not found" and the zip was not published
+        run: ZIP="$PWD/m1-stage/Verdandi-windows-latest.zip" WORK="$RUNNER_TEMP/m3" SMOKE_SECONDS=60 SMOKE_CYCLES=3 SMOKE_PART=asio windows/ci/smoke-m1.sh
+      - name: What failed
+        if: always()
+        run: windows/ci/show-failures.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m1-out-asio
+          path: m0-out
+          retention-days: 14
+          if-no-files-found: warn
 
   # a successful run on linux-port publishes its zip to GitHub Releases: windows-<short hash> for every commit (kept: the newest 20) and windows-latest (replaced each time, only when no check failed).
   # the workflow's own token, the one permission this job needs: contents: write (create and delete releases and their tags). nothing else in the workflow gets write access.
   release:
     name: Publish the zip to GitHub Releases
-    needs: [package, report, package-asio]
-    if: ${{ always() && github.ref == 'refs/heads/linux-port' && needs.package.result == 'success' && needs.report.result == 'success' }}
+    needs: [assemble, package, package-asio, report]
+    if: ${{ always() && github.ref == 'refs/heads/linux-port' && needs.assemble.result == 'success' && needs.package.result == 'success' && needs.package-asio.result == 'success' && needs.report.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -374,23 +359,16 @@ jobs:
         with:
           name: verdandi-windows-m1
           path: release-report
-      # the ASIO zip, only when its own checks passed (the artifact is not there otherwise)
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: m3-asio-zip
-          path: release-zip-asio
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           ZIP_DIR: release-zip
-          ASIO_ZIP_DIR: release-zip-asio
           STATUS_DIR: release-report/status
         run: windows/ci/publish-release.sh
 
   report:
     name: Report and artifact
-    needs: [sc, norns, package]
+    needs: [sc, norns, assemble, package, package-asio]
     if: always()
     runs-on: ${{ inputs.runner || 'windows-2022' }}
     timeout-minutes: 15

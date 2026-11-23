@@ -1,5 +1,7 @@
 # ASIO and the licence of a GPL-3.0 program (milestone M3)
 
+> **M31 update (docs/port/phase-m31.md).** The recommendation below (two zips, WASAPI-only as the default) is superseded: there is **one zip**, and it is the ASIO build. Reason: the SDK's own `LICENSE.txt` (read in full in phase-m31.md section 1.1, from the mirror the CI clones; Steinberg's own repository is not public) offers the GPL version 3 option, Verdandi is GPL-3.0 (no "or later" in its files), both are exactly version 3, and the zip already carried everything GPLv3 asks for (licence text, notices, corresponding source). What stays as written: the proprietary option must not be accepted, the notices and sources travel in the zip, no ASIO logo is used, and the open points about Steinberg's trademark guidelines (not readable from the sandbox) are still open. File and folder names no longer contain "asio" (the old zip name is kept as a temporary copy for the update routine of earlier builds).
+
 Question: what does Steinberg's ASIO SDK licence mean for Verdandi, a GPL-3.0 program that would ship a PortAudio built with the ASIO host API?
 
 ## What was read, and what was not (please read this first)
@@ -31,7 +33,7 @@ The build clones the SDK and prints the head of its `LICENSE.txt` into the step 
 |---|---|
 | Repository | this note; `docs/port/DEPS.md` (PortAudio with ASIO, the SDK, licences, trademark); `windows/ci/build-portaudio-asio.sh` and `windows/ci/asio-sdk.env` (what is built from which commit); `windows/pack/ASIO-NOTICE.txt` and `windows/pack/SOURCE-OFFER.txt` (the texts that go into the zips). **No SDK file is committed** (the licence would allow it; not doing it keeps the repository free of code that is not ours and the licence question in one place). |
 | Both zips | `SOURCE-OFFER.txt` (the repository, the commit, the other sources), `licenses\Verdandi-GPL-3.0.txt`, `licenses\SuperCollider-GPL.txt` |
-| ASIO zip only | `licenses\ASIO-SDK-LICENSE.txt` (verbatim), `ASIO-NOTICE.txt` (also in `licenses\`; says: ASIO is a trademark and software of Steinberg Media Technologies GmbH, GPLv3 option, no endorsement), `source\portaudio-source.zip`, `source\asio-sdk-source.zip`, `source\PA-ASIO-BUILD.txt` (the commits), `FLAVOR.txt` |
+| The zip (M31: the only one) | `licenses\ASIO-SDK-LICENSE.txt` (verbatim), `ASIO-NOTICE.txt` (also in `licenses\`; says: ASIO is a trademark and software of Steinberg Media Technologies GmbH, GPLv3 option, no endorsement), `source\portaudio-source.zip`, `source\asio-sdk-source.zip`, `source\PA-ASIO-BUILD.txt` (the commits), `FLAVOR.txt` |
 | Release notes | which zip is the default, a pointer to the notice |
 | The program | the word "ASIO" appears on the AUDIO page only to name the driver interface; **no ASIO logo is used anywhere** |
 

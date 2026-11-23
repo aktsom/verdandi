@@ -188,7 +188,9 @@ run "windows:showing a frame never makes the norns thread wait for the SDL threa
 run "windows:metros that are stopped right after their start (and restarted ones) stop for good (metro.cc with NORNS_WINDOWS against a fake event queue: the thread learns its start from its argument, not from a counter that a later stop has moved)" bash linux/tests/metro_win_test.sh
 dedupe_ok() { gcc -std=gnu11 -Wall -o "$T/dedupe_test" linux/tests/dedupe_test.c && "$T/dedupe_test"; }
 run "windows:the same error message again and again is written once and counted (msg_dedupe.h)" dedupe_ok
-run "windows:assembling the two flavours (default WASAPI-only zip has no ASIO file; the ASIO zip has its PortAudio, the SDK licence text, the notice, the source offer and the sources, its own names and FLAVOR.txt)" bash linux/tests/assemble_flavor_test.sh
+run "windows:the Windows workflow makes and publishes ONE zip (jobs, needs, M30 limits kept, no second zip, no FLAVOR or EXPECT_ASIO left)" bash linux/tests/windows_one_zip_workflow_test.sh
+run "windows:the window note follows the audio state while the program runs (a driver that vanishes says NO SOUND with the reason, the note goes when it is back)" lua5.3 linux/tests/audio_note_poll_test.lua
+run "windows:assembling THE zip (M31: the ASIO build is the build: its PortAudio, the SDK licence, the notice, the sources, static names without asio, no FLAVOR.txt, stops without the ASIO build output)" bash linux/tests/assemble_flavor_test.sh
 if command -v actionlint > /dev/null 2>&1 || [ -x "$HOME/go/bin/actionlint" ]; then
     run "windows:the workflows pass actionlint" bash -c 'PATH="$PATH:$HOME/go/bin" actionlint .github/workflows/windows-m0.yml .github/workflows/windows-m1.yml'
 fi

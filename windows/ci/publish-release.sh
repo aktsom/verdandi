@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # windows/ci/publish-release.sh: publish the zip of a successful run to GitHub Releases, with the token of the workflow (contents: write).
-#   - a release per commit, tag windows-<short hash>: Verdandi-windows-<version>-<short hash>.zip (kept; the newest 20 are kept, older ones are removed). M3: the ASIO build, when the run made one that passed its
-#     own checks (ASIO_ZIP_DIR holds Verdandi-windows-asio-<version>-<short hash>.zip), goes into the same releases as a second zip; the WASAPI-only zip stays the default (the fixed name Verdandi-windows-latest.zip)
-#   - the release windows-latest, updated each time (only when no check of the run failed, except the ones in NONBLOCKING_CHECKS; updated in place: files replaced, the tag moved): the same zip, a copy named Verdandi-windows-latest.zip (a fixed address for update-and-run), its SHA-256 and BUILD.txt
+# M31: THERE IS ONE ZIP (the ASIO build is the build: docs/port/phase-m31.md).
+#   - a release per commit, tag windows-<short hash>: Verdandi-windows-<version>-<short hash>.zip (kept; the newest 20 are kept, older ones are removed)
+#   - the release windows-latest, updated each time (only when no check of the run failed, except the ones in NONBLOCKING_CHECKS; updated in place: files replaced, the tag moved): the same zip, a copy named
+#     Verdandi-windows-latest.zip (a fixed address for update-and-run), its SHA-256 and BUILD.txt. THE TRANSITION COPY: Verdandi-windows-asio-latest.zip and its SHA-256 (the name inside says the asio name) are made from
+#     the same file, byte for byte, so that an update routine of an earlier build, which asks for that name, keeps working and installs the one zip. nothing retires it here: a separate change does, when the owner says so.
+#   - this job ONLY ADDS OR REPLACES: it never deletes a file of the release that it did not make (M30). the only files it removes are the versioned copies of older builds of THE zip (Verdandi-windows-<version>-<hash>.zip,
+#     replaced by the new one); the versioned ASIO zips of earlier builds, the fixed names and everything else stay. afterwards the release is READ BACK and the job fails with the names when a file is missing:
+#     windows-latest must always have a working download, the new zip is on it before anything else changes.
 # inputs (environment): GH_TOKEN (the workflow's token, read by gh), GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID;
-#   ZIP_DIR (folder with the zip of the run), ASIO_ZIP_DIR (optional: folder with the ASIO zip), STATUS_DIR (the status files of the report), KEEP (per-commit releases to keep, default 20), GH (the program that is called, default gh: the test uses a stand-in)
+#   ZIP_DIR (folder with the zip of the run), STATUS_DIR (the status files of the report), KEEP (per-commit releases to keep, default 20), GH (the program that is called, default gh: the test uses a stand-in)
 set -eu
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$HERE/../.." && pwd)"
@@ -16,7 +21,7 @@ ZIP_DIR="${ZIP_DIR:?ZIP_DIR is not set}"
 VERSION="$(head -n 1 "$REPO_DIR/windows/VERSION" | tr -d '\r ')"
 SHORT="$(printf '%s' "$SHA" | cut -c1-7)"
 NAME="Verdandi-windows-$VERSION-$SHORT.zip"
-# M22: the zips are built with the STATIC names (Verdandi-windows-latest.zip, Verdandi-windows-asio-latest.zip; the folder inside has a fixed name too); the copy with the version in its name is made here
+# M22: the zip is built with the STATIC name (Verdandi-windows-latest.zip; the folder inside has a fixed name too); the copy with the version in its name is made here
 STATIC="Verdandi-windows-latest.zip"
 [ -f "$ZIP_DIR/$STATIC" ] || { echo "the zip $STATIC is not in $ZIP_DIR (found: $(ls "$ZIP_DIR" 2> /dev/null | tr '\n' ' '))"; exit 1; }
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/$REPO/actions/runs/${GITHUB_RUN_ID:-0}"
@@ -25,21 +30,10 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 cp "$ZIP_DIR/$STATIC" "$WORK/$NAME"
 cp "$ZIP_DIR/$STATIC" "$WORK/Verdandi-windows-latest.zip"
-# the ASIO build (optional)
-ASIO_NAME="Verdandi-windows-asio-$VERSION-$SHORT.zip"
-HAVE_ASIO=0
-EXTRA=()
-if [ -n "${ASIO_ZIP_DIR:-}" ] && [ -f "$ASIO_ZIP_DIR/Verdandi-windows-asio-latest.zip" ]; then
-    HAVE_ASIO=1
-    cp "$ASIO_ZIP_DIR/Verdandi-windows-asio-latest.zip" "$WORK/$ASIO_NAME"
-    cp "$ASIO_ZIP_DIR/Verdandi-windows-asio-latest.zip" "$WORK/Verdandi-windows-asio-latest.zip"
-    (cd "$WORK" && printf '%s  Verdandi-windows-asio-latest.zip\n' "$(sha256sum "$ASIO_NAME" | cut -d' ' -f1)" > Verdandi-windows-asio-latest.zip.sha256)
-    EXTRA=("$WORK/$ASIO_NAME")
-    echo "the ASIO build is part of this release: $ASIO_NAME"
-else
-    echo "no ASIO build in this release (the WASAPI-only zip is the whole release)"
-fi
-export HAVE_ASIO
+# the transition copy: the same bytes under the name the update routine of an earlier build asks for
+OLDNAME="Verdandi-windows-asio-latest.zip"
+cp "$ZIP_DIR/$STATIC" "$WORK/$OLDNAME"
+(cd "$WORK" && printf '%s  %s\n' "$(sha256sum "$NAME" | cut -d' ' -f1)" "$OLDNAME" > "$OLDNAME.sha256")
 HASH="$(cd "$WORK" && sha256sum "$NAME" | cut -d' ' -f1)"
 printf '%s  Verdandi-windows-latest.zip\n' "$HASH" > "$WORK/Verdandi-windows-latest.zip.sha256"
 printf '%s %s\n' "$VERSION" "$SHORT" > "$WORK/BUILD.txt"
@@ -65,7 +59,7 @@ TITLE="Verdandi for Windows $VERSION ($SHORT)"
 TAG="windows-$SHORT"
 "$GH" release delete "$TAG" --cleanup-tag --yes --repo "$REPO" 2> /dev/null || true
 REF_BLOCKED=0
-if "$GH" release create "$TAG" "$WORK/$NAME" "${EXTRA[@]}" --repo "$REPO" --target "$SHA" --title "$TITLE" --notes-file "$WORK/notes.md" --prerelease; then
+if "$GH" release create "$TAG" "$WORK/$NAME" --repo "$REPO" --target "$SHA" --title "$TITLE" --notes-file "$WORK/notes.md" --prerelease; then
     echo "published $TAG"
 else
     # M22: the workflow's token may not make a tag (HTTP 403 "Resource not accessible by integration"; the answer asked for contents=write AND workflows=write, which GITHUB_TOKEN cannot have) at a commit whose history changes
@@ -79,52 +73,42 @@ fi
 # the release that has a fixed address. it is UPDATED in place, never deleted first: if the run is cancelled half way (a newer push cancels the run) the release is still there, with old or new files
 if [ "$failed" -eq 0 ]; then
     LATEST_TITLE="Verdandi for Windows: the newest build ($VERSION, $SHORT)"
-    ASSETS=("$WORK/$NAME" "$WORK/Verdandi-windows-latest.zip" "$WORK/Verdandi-windows-latest.zip.sha256" "$WORK/BUILD.txt")
-    if [ "$HAVE_ASIO" -eq 1 ]; then ASSETS+=("$WORK/$ASIO_NAME" "$WORK/Verdandi-windows-asio-latest.zip" "$WORK/Verdandi-windows-asio-latest.zip.sha256"); fi
+    ASSETS=("$WORK/$NAME" "$WORK/Verdandi-windows-latest.zip" "$WORK/Verdandi-windows-latest.zip.sha256" "$WORK/BUILD.txt" "$WORK/$OLDNAME" "$WORK/$OLDNAME.sha256")
     if "$GH" release view windows-latest --repo "$REPO" > /dev/null 2>&1; then
+        # the new files go on first (replacing the ones with the same names); only then is anything of an older build removed
         "$GH" release upload windows-latest "${ASSETS[@]}" --repo "$REPO" --clobber
-        # the tag moves to this commit; the files of older builds (another version or hash in the name) are removed
+        # the tag moves to this commit
         if [ "$REF_BLOCKED" -eq 0 ]; then
             "$GH" api -X PATCH "repos/$REPO/git/refs/tags/windows-latest" -f sha="$SHA" -F force=true > /dev/null
         else
-            printf '\n> **Note:** GitHub did not let the workflow move the tag `windows-latest` to this build (a tag at a commit that changes workflow files needs a permission the workflow token cannot have). The files above ARE this build (version %s, commit `%s`); the tag may still point at an older commit.\n' "$VERSION" "$SHA" >> "$WORK/notes.md"
+            printf '\n> **Note:** GitHub did not let the workflow move the tag `windows-latest` to this build (a tag at a commit that changes workflow files needs a permission the workflow token cannot have). The files above ARE this build (version %s, commit %s).\n' "$VERSION" "$SHORT" >> "$WORK/notes.md"
         fi
-        # M30: this job only ever adds or replaces. the files of older builds (another version or hash in the name) are removed, but NEVER the ASIO files when this run has no ASIO zip (its ASIO job failed
-        # or was too slow, as on 25cb7da: the old code removed them and the release lost the ASIO zip). with an ASIO zip in this run the ASIO files of older builds are replaced.
-        OLD_ASIO=""
+        # M30/M31: this job only ever adds or replaces. the one kind of file it removes: the versioned copy of an OLDER build of the zip (Verdandi-windows-<version>-<hash>.zip, replaced by the new one).
+        # the versioned ASIO zips of earlier builds, the fixed names, BUILD.txt and every other file stay
         "$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null | while read -r asset; do
             case "$asset" in
-                "$NAME" | Verdandi-windows-latest.zip | Verdandi-windows-latest.zip.sha256 | BUILD.txt) ;;
-                "$ASIO_NAME" | Verdandi-windows-asio-latest.zip | Verdandi-windows-asio-latest.zip.sha256) ;;
-                Verdandi-windows-asio-*.zip) [ "$HAVE_ASIO" -eq 1 ] && { "$GH" release delete-asset windows-latest "$asset" --repo "$REPO" --yes || true; } ;;
-                *) "$GH" release delete-asset windows-latest "$asset" --repo "$REPO" --yes || true ;;
+                "$NAME") ;;
+                Verdandi-windows-asio-*) ;;
+                Verdandi-windows-[0-9]*.zip) "$GH" release delete-asset windows-latest "$asset" --repo "$REPO" --yes || true ;;
+                *) ;;
             esac
         done
-        if [ "$HAVE_ASIO" -eq 0 ]; then
-            OLD_ASIO="$("$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null | sed -n 's/^Verdandi-windows-asio-\(.*\)\.zip$/\1/p' | grep -v '^latest$' | head -n 1)"
-            if [ -n "$OLD_ASIO" ]; then
-                printf '\n> **Note:** the ASIO build of this commit was not made (its job failed or ran out of time), so `Verdandi-windows-asio-latest.zip` on this page is the one of the older build `%s`. It was kept, not removed.\n' "$OLD_ASIO" >> "$WORK/notes.md"
-            else
-                printf '\n> **Note:** the ASIO build of this commit was not made (its job failed or ran out of time) and there is no older ASIO zip on this page.\n' >> "$WORK/notes.md"
-            fi
-            echo "::warning::the ASIO zip of this commit was not made; windows-latest keeps the ASIO zip of ${OLD_ASIO:-no build}"
-        fi
         "$GH" release edit windows-latest --repo "$REPO" --title "$LATEST_TITLE" --notes-file "$WORK/notes.md" --latest
     else
         "$GH" release create windows-latest "${ASSETS[@]}" --repo "$REPO" --target "$SHA" --title "$LATEST_TITLE" --notes-file "$WORK/notes.md" --latest
     fi
     echo "published windows-latest"
-    # M30: the release must end with both static zips, their SHA-256 files and BUILD.txt, whatever order the jobs finished in: look at the release itself, not at what this script meant to upload
+    # M30: the release must end with the zip, its SHA-256 file and BUILD.txt, whatever happened: look at the release itself, not at what this script meant to upload. M31: and the transition copy and its SHA-256
     GOT="$("$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null || true)"
     missing=""
-    for need in Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 Verdandi-windows-asio-latest.zip Verdandi-windows-asio-latest.zip.sha256 BUILD.txt; do
+    for need in Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 "$NAME" "$OLDNAME" "$OLDNAME.sha256" BUILD.txt; do
         printf '%s\n' "$GOT" | grep -qx "$need" || missing="$missing $need"
     done
     if [ -n "$missing" ]; then
         echo "ERROR: the release windows-latest is missing:$missing (it has: $(printf '%s' "$GOT" | tr '\n' ' '))"
         PUBLISH_INCOMPLETE=1
     else
-        echo "windows-latest has both zips, both SHA-256 files and BUILD.txt"
+        echo "windows-latest has the zip, its versioned copy, the transition copy, both SHA-256 files and BUILD.txt"
     fi
 else
     echo "checks failed: windows-latest is left as it was"

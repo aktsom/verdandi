@@ -8,7 +8,8 @@
  * more of the environment (M20): VERDANDI_STUB_RATE the card's clock when the driver is first loaded (44100 or 48000, default 48000); VERDANDI_STUB_HOLD another program has the card: "refuse" (ASIOSetSampleRate says no)
  * or "silent" (it says yes and changes nothing); VERDANDI_STUB_REAL the rate the card REALLY runs at, when it is not the one it reports (a driver that lies: for the mismatch warning); VERDANDI_STUB_LOG a file that gets one
  * line for every create / set_rate / init / release / start / stop the driver sees ("stop peak=... callbacks=... size=..." says how loud the host's output was: sound or silence); VERDANDI_STUB_BUFMAX the
- * largest buffer it offers (default 2048); VERDANDI_STUB_CTL a file that can be made and removed WHILE the program runs: if it contains "ratefail" the driver cannot say which rate the card runs at (ASIOGetSampleRate fails). its channels are called Analog 1, Analog 2, SPDIF L, SPDIF R (as an interface names them).
+ * largest buffer it offers (default 2048); VERDANDI_STUB_CTL a file that can be made and removed WHILE the program runs: if it contains "ratefail" the driver cannot say which rate the card runs at (ASIOGetSampleRate fails);
+ * if it contains "vanish" (M31) the card is gone, as when the cable is pulled: the callbacks stop (ASIOStart had said yes, the buffers just never come) and every init fails ("the device is not there") until the file is removed again. its channels are called Analog 1, Analog 2, SPDIF L, SPDIF R (as an interface names them).
  * windows/ci/register_asio_stub.sh registers it (HKLM\SOFTWARE\ASIO\Verdandi Test ASIO and its CLSID), the CI removes it again.
  */
 #include <windows.h>
@@ -133,8 +134,14 @@ static ULONG STDMETHODCALLTYPE d_release(Driver *d) {
     }
     return (ULONG)r;
 }
+static int ctl_has(const char *word);
 static long STDMETHODCALLTYPE d_init(Driver *d, void *sys) {
     (void)sys;
+    if (ctl_has("vanish")) {
+        snprintf(d->err, sizeof d->err, "Verdandi Test ASIO: the device is not there (the cable is pulled)");
+        logev("init refused: vanished");
+        return 0;
+    }
     if (!strcmp(mode(), "busy")) {
         snprintf(d->err, sizeof d->err, "Verdandi Test ASIO: the device is in use by another program");
         return 0;
@@ -166,6 +173,7 @@ static DWORD WINAPI pump(LPVOID arg) {
     QueryPerformanceFrequency(&f);
     QueryPerformanceCounter(&t0);
     double n = 0;
+    int vanished = 0;
     while (d->running) {
         n += 1;
         double due = n * d->buffer_size / rate; /* seconds since the start */
@@ -177,6 +185,8 @@ static DWORD WINAPI pump(LPVOID arg) {
             Sleep(ms > 1 ? ms - 1 : 0);
         }
         if (!d->running) break;
+        if ((long)n % 16 == 0) vanished = ctl_has("vanish"); /* (M31: the card is gone: the clock goes on, but no buffer comes and the host is not told) */
+        if (vanished) continue;
         d->position += d->buffer_size;
         d->cb->bufferSwitch(index, 1);
         /* what the host put in the first output buffer it was given: the loudest sample, for the test that asks "sound or silence" */

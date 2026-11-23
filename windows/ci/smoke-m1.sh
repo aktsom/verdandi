@@ -99,8 +99,7 @@ chk_audio() {
         && has "$LOGS/norns.log" "^audio: output chosen: .*input: .*block " "the choice (output, input, rate, block) is in the log" \
         && has "$LOGS/norns.log" "^audio: input is OFF at the start" "the input is OFF at the start (no feedback)" \
         && has "$LOGS/norns.log" "VERDANDI_SMOKE_AUDIO .*input=off" "norns reports the input as off" \
-        && { [ "${EXPECT_ASIO:-0}" != 1 ] || { grep -a -q "ASIO" "$APP/$(cat "$APP/PORTAUDIO-DLL.txt" 2> /dev/null || echo libportaudio-2.dll)" && echo "found: this is the ASIO build: the PortAudio DLL that norns.exe imports ($(cat "$APP/PORTAUDIO-DLL.txt" 2> /dev/null)) contains the ASIO host API (PortAudio lists it in the log only when an ASIO driver is installed: a runner has none)" && has "$LOGS/norns.log" "the ASIO host API is built into this file" "the PortAudio that RUNS is the ASIO build (M19: the DLL of the zip was once not the one that was loaded)"; }; } \
-        && { [ "${EXPECT_ASIO:-0}" = 1 ] || ! grep -q -E "^audio: PortAudio .*host APIs:.*ASIO\\(" "$LOGS/norns.log" 2> /dev/null || { echo "NOT EXPECTED: ASIO in the WASAPI-only build"; false; }; } \
+        && { { grep -a -q "ASIO" "$APP/$(cat "$APP/PORTAUDIO-DLL.txt" 2> /dev/null || echo libportaudio-2.dll)" && echo "found: this is the ASIO build: the PortAudio DLL that norns.exe imports ($(cat "$APP/PORTAUDIO-DLL.txt" 2> /dev/null)) contains the ASIO host API (PortAudio lists it in the log only when an ASIO driver is installed: a runner has none)" && has "$LOGS/norns.log" "the ASIO host API is built into this file" "the PortAudio that RUNS is the ASIO build (M19: the DLL of the zip was once not the one that was loaded)"; }; } \
         && has "$LOGS/norns.log" "^audio: (device '|null audio|.*null audio is used)" "the audio decision (device or null audio) is in the log" \
         && has "$LOGS/norns.log" "^audio bridge: '.*' ready" "norns.exe made the audio bridge" \
         && has "$LOGS/sclang.log" "SC_BridgeAudioDriver: the first block was computed" "scsynth computed its first block from the bridge" \
@@ -354,7 +353,6 @@ write_engine_fixtures() { # home
     printf 'Engine_Orgn : CroneEngine {\n    alloc {\n        this.addCommand(\\noteTrig, "iffff", { arg msg;\n            Routine {\n                0.01.yield;\n            }.play;\n        });\n        this.addCommand(\\noteOff, "i", { arg msg;\n            Routine {\n                msg[1].yield;\n            }.play;\n        });\n    }\n    free { }\n}\n' > "$H/dust/code/orgn/lib/Engine_Orgn.sc"
 }
 run_engine_guard() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local mode out H
     for mode in ok dup; do
         H="$WORK/user home engines $mode"; out="$M0_OUT/engine-guard-$mode"
@@ -376,7 +374,6 @@ run_engine_guard() {
     return 0
 }
 chk_engine_guard() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 L="$M0_OUT/engine-guard-ok/logs" D="$M0_OUT/engine-guard-dup/logs"
     echo "--- glut, mangl and orgn engines as the owner has them:"
     grep -a -E "duplicate" "$L/launcher.log" 2> /dev/null | head -3
@@ -532,7 +529,6 @@ ST
     return 0
 }
 run_twins_engine() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     : > "$TW_RESULTS"
     twins_scenario all
     # what the owner's PC may have that the first run has not: other server rates and sample formats (44.1 and 96 kHz, 24 bit, a long sample), and the sample as a file with a long name under an [ext] link
@@ -550,7 +546,6 @@ run_twins_engine() {
     return 0
 }
 chk_twins_engine() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     cat "$TW_RESULTS" 2> /dev/null
     local bad=0 sc
     for sc in all rate44 rate96 extlong; do
@@ -562,7 +557,6 @@ chk_twins_engine() {
 KILL_HOME="$WORK/user home kill"
 SKILL_HOME="$WORK/user home sclang kill"
 run_server_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/server-kill"
     rm -rf "$KILL_HOME" "$out"; mkdir -p "$out"
     seed_home "$KILL_HOME"
@@ -580,7 +574,6 @@ run_server_kill() {
     return 0
 }
 chk_server_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/server-kill" bad=0 want
     echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
     echo "--- launcher.log (the lines about the server):"; grep -a -i "scsynth\|round\|restart" "$KILL_HOME/logs/launcher.log" 2> /dev/null | head -40
@@ -590,7 +583,6 @@ chk_server_kill() {
     return "$bad"
 }
 run_sclang_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/sclang-kill"
     rm -rf "$SKILL_HOME" "$out"; mkdir -p "$out"
     seed_home "$SKILL_HOME"
@@ -608,7 +600,6 @@ run_sclang_kill() {
     return 0
 }
 chk_sclang_kill() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/sclang-kill" bad=0 want
     echo "--- the probe:"; cat "$out/probe.txt" 2> /dev/null
     echo "--- launcher.log (the lines about the server):"; grep -a -i "sclang\|round\|restart" "$SKILL_HOME/logs/launcher.log" 2> /dev/null | head -40
@@ -620,7 +611,6 @@ chk_sclang_kill() {
 # M21: a second copy of Verdandi must not touch the logs of the running one (it used to rotate launcher.log before it found out it was the second copy)
 TWO_HOME="$WORK/user home two copies"
 run_two_copies() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/two-copies"
     rm -rf "$TWO_HOME" "$out"; mkdir -p "$out" "$TWO_HOME/logs"
     seed_home "$TWO_HOME"
@@ -643,7 +633,6 @@ run_two_copies() {
     return 0
 }
 chk_two_copies() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local out="$M0_OUT/two-copies" L="$M0_OUT/two-copies/logs" bad=0
     cat "$out/second.code" 2> /dev/null
     echo "--- the logs, before and after the second copy:"; cat "$out/before.txt" "$out/after.txt" 2> /dev/null
@@ -676,13 +665,11 @@ run_tape_case() { # mode
     cp "$H/dust/audio/tape/m21.wav" "$out/m21.wav" 2> /dev/null || true
 }
 run_tape() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local m
     for m in restart quit shutdown launcher; do run_tape_case "$m"; done
     return 0
 }
 chk_tape() { # mode
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local mode="$1" out="$M0_OUT/${TAPE_SUB:-tape}/$1" bad=0
     echo "=== tape, ended by: $mode"
     cat "$out/probe.txt" 2> /dev/null
@@ -693,7 +680,6 @@ chk_tape() { # mode
 }
 # M10: a long file name under an [ext] link (the probe of the scenario 'all' made it): matron's audio.file_info and crone's Tape Reader open it; the log has no 'cannot open sndfile'
 chk_longpath() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local bad=0 t="$M0_OUT/twins-all"
     has "$t/probe.txt" "PROBE twins-ext-add ok" "a folder with a long name was linked as [ext]" || bad=1
     has "$t/probe.txt" "PROBE twins-longpath-info ok" "audio.file_info opens a file whose whole path is over 260 characters, under an [ext] link" || bad=1
@@ -709,7 +695,6 @@ chk_menu_pages() {
 # M11: a fast turning of the drawn encoder knobs, measured in the real window code (headless: SDL's dummy video driver, so a draw is cheaper than on a screen): the throttled way (the program as shipped) and the old
 # way (VERDANDI_ENC_THROTTLE=0: one draw per turn). the line "enc display: ..." of norns.log says how long a turn waited in the queue and how long after the first turn the last draw was
 run_enc_burst() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local mode H out
     for mode in throttled oldway; do
         H="$WORK/user home burst $mode"; out="$M0_OUT/enc-burst-$mode"
@@ -733,7 +718,6 @@ run_enc_burst() {
     return 0
 }
 chk_enc_burst() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     local bad=0 mode line
     for mode in throttled oldway; do
         echo "--- $mode: $(cat "$M0_OUT/enc-burst-$mode/probe.txt" 2> /dev/null | tr '\n' ' ')"
@@ -772,7 +756,6 @@ chk_audio_shot() {
 # M13: the virtual arc in the real program (windows/ci/maiden_probe.py, VERDANDI_PROBE=arc; the program runs with VERDANDI_TEST_HOOKS=1): the arc window opens like the ARC button opens it, a picture of it with the LEDs off, a small script
 # (windows/ci/arcprobe.lua) draws on the rings and counts the deltas and keys, a wheel notch, a drag, a ring press and mapped turns are sent through the functions the mouse events call, a picture with the LEDs lit, the window is closed and opened again
 run_arc_probe() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home arc" out="$M0_OUT/arc"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -794,7 +777,6 @@ run_arc_probe() {
     return 0
 }
 chk_arc() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/arc" f p
     cat "$out/probe.txt" 2> /dev/null
     for p in arc-up arc-open arc-device arc-shot-dark arc-script arc-input-sent arc-wheel arc-drag arc-press arc-mapped arc-ud-sent arc-ud-up arc-ud-down arc-ud-shift arc-ud-ctrl arc-shot-lit arc-close arc-reopen; do
@@ -820,7 +802,6 @@ chk_arc() {
 # the old check (io.open only) reproduces the owner's failure (the script's own fail_state-nb screen is loaded inside the load, then "MISSING INCLUDE: lib/cc_pattern_time"), the real one loads the script,
 # and maiden.log says what the install did. needs the network (the catalog and GitHub): without it the check says SKIP
 run_cc2_probe() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home cc2" out="$M0_OUT/cc2"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -837,7 +818,6 @@ run_cc2_probe() {
     return 0
 }
 chk_cc2() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/cc2" p L="$M0_OUT/cc2/logs/norns.log" M="$M0_OUT/cc2/logs/maiden.log"
     cat "$out/probe.txt" 2> /dev/null
     if grep -a -q "PROBE cc2-network SKIP" "$out/probe.txt" 2> /dev/null; then echo "SKIP: no network on the runner: the cheat codes 2 check was not made"; return 77; fi
@@ -862,7 +842,6 @@ chk_cc2() {
 # M16: the PIN button (always on top) in the real program with REAL windows (no --headless: the runner has a desktop), windows/ci/maiden_probe.py VERDANDI_PROBE=pin. the program runs with VERDANDI_TEST_HOOKS=1 and writes "pin report N: ..." lines to norns.log:
 # for every window the flag SDL has and the topmost style Windows has. main, arc and detached screen window, on, off, a window closed and opened again, and the MIDI action learned from a note
 run_pin_probe() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home pin" out="$M0_OUT/pin"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -882,7 +861,6 @@ run_pin_probe() {
     return 0
 }
 chk_pin() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/pin" p
     cat "$out/probe.txt" 2> /dev/null
     cat "$out/pin_report.log" 2> /dev/null | head -20
@@ -895,7 +873,6 @@ chk_pin() {
 # M27 (docs/port/phase-m27.md): a folder dropped on the window is added as an ext folder, a dropped file is refused and nothing is imported or copied, removing takes away only the link (windows/ci/maiden_probe.py
 # VERDANDI_PROBE=extdrop; the program runs headless with VERDANDI_TEST_HOOKS=1, _norns.test_drop posts the event the window system sends)
 run_extdrop() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local H="$WORK/user home extdrop" out="$M0_OUT/extdrop"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -914,7 +891,6 @@ run_extdrop() {
     return 0
 }
 chk_extdrop() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local bad=0 out="$M0_OUT/extdrop" p
     cat "$out/probe.txt" 2> /dev/null
     for p in extdrop-up extdrop-registered extdrop-folder-added extdrop-junction extdrop-file-refused extdrop-removed; do
@@ -926,7 +902,6 @@ chk_extdrop() {
 # way per run: the SLEEP row, the Quit event (menu and window close), the launcher's own stop, a restart, and a busy port; the devices record every message they get. the last message of each must be an "all off", and the end must come in time.
 # (the console close of the launcher and a kill from the Task Manager cannot be driven here: they are said in docs/port/phase-m17.md)
 run_quit_grid() { # mode exit-after overall-timeout
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local mode="$1" after="$2" tmo="$3" H="$WORK/user home qg $1" out="$M0_OUT/quitgrid/$1"
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
@@ -955,7 +930,6 @@ run_quit_grid() { # mode exit-after overall-timeout
     return 0
 }
 chk_quit_grid() { # mode
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, checked in the other job"; return 77; }
     local mode="$1" bad=0 out="$M0_OUT/quitgrid/$1" p f
     echo "=== quit path: $mode"
     if [ "$mode" = sleepmodfast-old ]; then
@@ -1013,7 +987,7 @@ build_asio_stub() {
     "$gcc_bin" -std=gnu11 -Wall -shared -o "$(native "$WORK/asio_stub.dll")" "$(native "$HERE/asio_stub.c")" -Wl,--kill-at -lole32 -luuid -lwinmm || { echo "the stub ASIO driver did not compile"; return 1; }
 }
 run_asio_case() { # mode
-    local mode="$1" H="$WORK/user home asio $1" out="$M0_OUT/asio/$1" stubenv="" srate="" shold="" sreal=""
+    local mode="$1" H="$WORK/user home asio $1" out="$M0_OUT/asio/$1" stubenv="" srate="" shold="" sreal="" exit_after=85
     rm -rf "$H" "$out"; mkdir -p "$out"
     seed_home "$H"
     case "$mode" in
@@ -1027,26 +1001,22 @@ run_asio_case() { # mode
         rate44) srate=44100 ;;
         hold) srate=44100; shold=refuse ;;
         lie) srate=48000; sreal=44100 ;;
+        vanish) exit_after=140; export VERDANDI_STUB_CTL="$(native "$out/stub.ctl")" ;; # (M31: the driver vanishes and comes back while the program runs: the control file is made and removed by the probe)
     esac
     VERDANDI_PROBE=asio VERDANDI_ASIO_MODE="$mode" "$PYTHON" "$(native "$HERE/maiden_probe.py")" "$(native "$H")" "$(native "$out/probe.txt")" > "$out/probe.log" 2>&1 &
     local probe_pid=$!
     export VERDANDI_STUB_ASIO="$stubenv" VERDANDI_STUB_RATE="$srate" VERDANDI_STUB_HOLD="$shold" VERDANDI_STUB_REAL="$sreal" VERDANDI_STUB_LOG="$(native "$out/stub.log")"
     if command -v timeout > /dev/null 2>&1; then
-        timeout -k 10 200 "$APP/Verdandi$EXE" --headless --exit-after=85 --home="$(native "$H")"
+        timeout -k 10 260 "$APP/Verdandi$EXE" --headless --exit-after=$exit_after --home="$(native "$H")"
     else
-        "$APP/Verdandi$EXE" --headless --exit-after=85 --home="$(native "$H")"
+        "$APP/Verdandi$EXE" --headless --exit-after=$exit_after --home="$(native "$H")"
     fi
-    unset VERDANDI_STUB_ASIO VERDANDI_STUB_RATE VERDANDI_STUB_HOLD VERDANDI_STUB_REAL VERDANDI_STUB_LOG
+    unset VERDANDI_STUB_ASIO VERDANDI_STUB_RATE VERDANDI_STUB_HOLD VERDANDI_STUB_REAL VERDANDI_STUB_LOG VERDANDI_STUB_CTL
     wait "$probe_pid" 2> /dev/null
     if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
     cp -r "$H/logs" "$out/logs" 2> /dev/null || true
 }
 run_asio() {
-    if [ "${EXPECT_ASIO:-}" != 1 ]; then
-        # the normal build: the same probe, no stub (its PortAudio has no ASIO)
-        run_asio_case normal
-        return 0
-    fi
     build_asio_stub || return 1
     run_asio_case none
     local dll
@@ -1060,12 +1030,45 @@ run_asio() {
     run_asio_case rate44
     run_asio_case hold
     run_asio_case lie
+    run_asio_case vanish
     bash "$HERE/register_asio_stub.sh" remove
     return 0
 }
 nolog() { # file pattern what: the pattern must NOT be in the file
     if grep -a -q -E "$2" "$1" 2> /dev/null; then echo "FOUND (must not be): $3: $(grep -a -E "$2" "$1" | head -2 | cut -c1-200)"; return 1; fi
     echo "not found, as it should be: $3"
+}
+# M31: the one zip, run from the places the owner keeps it: a folder under Downloads whose name has spaces (what "Extract All" makes of a zip) and the layout of his current setup
+# (Downloads\Verdandi-windows-asio-latest\Verdandi-asio, a folder name that differs from the one in the zip). the program starts, the script runs, and the PortAudio that RUNS is the ASIO build
+run_download_paths() {
+    local i=0 sub H D out
+    for sub in "Verdandi windows latest/Verdandi" "Verdandi-windows-asio-latest/Verdandi-asio"; do
+        i=$((i + 1))
+        D="$WORK/Users/test user/Downloads/$sub"; H="$WORK/Users/test user/home $i"; out="$M0_OUT/downloads-$i"
+        rm -rf "$WORK/Users" "$out" 2> /dev/null; mkdir -p "$(dirname "$D")" "$out"
+        cp -r "$APP" "$D" || return 1
+        seed_home "$H"
+        if command -v timeout > /dev/null 2>&1; then
+            timeout -k 10 200 "$D/Verdandi$EXE" --headless --exit-after=45 --home="$(native "$H")"
+        else
+            "$D/Verdandi$EXE" --headless --exit-after=45 --home="$(native "$H")"
+        fi
+        if command -v taskkill > /dev/null 2>&1; then taskkill //F //IM norns.exe //IM sclang.exe //IM scsynth.exe > /dev/null 2>&1 || true; fi
+        cp -r "$H/logs" "$out/logs" 2> /dev/null || true
+        echo "$sub" > "$out/path.txt"
+    done
+    return 0
+}
+chk_download_paths() {
+    local i bad=0 out
+    for i in 1 2; do
+        out="$M0_OUT/downloads-$i"
+        [ -d "$out" ] || { echo "NOT FOUND: the run $i"; bad=1; continue; }
+        echo "=== from: Downloads/$(cat "$out/path.txt")"
+        has "$out/logs/norns.log" "VERDANDI_SMOKE_OK" "norns started and the script ran from this path" || bad=1
+        has "$out/logs/norns.log" "the ASIO host API is built into this file" "the PortAudio that runs is the ASIO build" || bad=1
+    done
+    return "$bad"
 }
 chk_asio_case() { # mode: what the log and the probe found
     local mode="$1" bad=0 out="$M0_OUT/asio/$1" L p
@@ -1075,9 +1078,6 @@ chk_asio_case() { # mode: what the log and the probe found
     cat "$out/probe.txt" 2> /dev/null
     grep -a -E "audio: PortAudio is|asio:|audio: ASIO|no ASIO host API|opened but would not start|audio: device '|UNDERRUN" "$L" 2> /dev/null | cut -c1-330 | head -14
     case "$mode" in
-        normal)
-            has "$out/probe.txt" "PROBE asio-normal ok" "the normal build says it has no ASIO and its page does not mention it" || bad=1
-            has "$L" "ASIO host API is NOT in this file" "the log says this PortAudio has no ASIO" || bad=1 ;;
         none)
             has "$L" "ASIO host API is built into this file" "the ASIO build's PortAudio has the ASIO host API" || bad=1
             has "$L" "no ASIO driver is registered on this PC" "the log says no driver is registered" || bad=1
@@ -1111,6 +1111,12 @@ chk_asio_case() { # mode: what the log and the probe found
         lie)
             has "$out/probe.txt" "PROBE asio-lie-detected ok" "a card that delivers 44100 Hz under an engine at 48000 Hz is detected" || bad=1
             has "$L" "audio: WARNING at [0-9:.]*: the card really delivers about 44[0-9][0-9][0-9] Hz of sound, but the engine, softcut and tape run at 48000 Hz" "the log has the warning with both rates" || bad=1 ;;
+        vanish)
+            for p in asio-vanish-start asio-vanish-alive asio-vanish-reason asio-vanish-window asio-vanish-back asio-vanish-note-gone; do has "$out/probe.txt" "PROBE $p ok" "the ASIO probe '$p'" || bad=1; done
+            has "$L" "audio: the card has not called back for 2 seconds: reopening it" "the log says the card stopped calling back" || bad=1
+            has "$L" "audio: no sound: audio device '[^']*Verdandi Test ASIO' .*null audio is used, the device is tried again every 3 s" "the log says there is no sound, which device, and that it is tried again" || bad=1
+            has "$L" "audio: the sound card was reopened|audio: .*(answers again|reopened)" "the log says when the driver was back" || bad=1
+            nolog "$L" "Assertion|Segmentation|crash" "no crash" || bad=1 ;;
         busy)
             has "$L" "NOT usable: the driver refused to start: \"Verdandi Test ASIO: the device is in use by another program\"" "the log names the driver and its own message" || bad=1
             has "$L" "no ASIO host API: 1 ASIO driver found but none starts" "the log says why there is no ASIO host API" || bad=1
@@ -1312,7 +1318,6 @@ na_use() {
     LOGS="$HOMEDIR/logs"
 }
 run_nonascii() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     ORIG_APP="$APP"
     na_use
     rm -rf "$NA_PARENT" "$HOMEDIR"
@@ -1321,7 +1326,7 @@ run_nonascii() {
     seed_home "$HOMEDIR"
     run_program
 }
-na_chk() { [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }; na_use; "$@"; } # the same check as for the ASCII folders, on the folders with the odd names
+na_chk() { na_use; "$@"; } # the same check as for the ASCII folders, on the folders with the odd names
 chk_nonascii_utf8() {
     local bad=0 w
     for w in data-file file-exists scandir-data script-list rename remove sample-info pset; do
@@ -1335,12 +1340,10 @@ chk_nonascii_utf8() {
     return "$bad"
 }
 run_nonascii_tape() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     na_use
     TAPE_HOME_BASE="$WORK/user $NA_NAME tape" TAPE_SUB=tape-nonascii run_tape_case quit
 }
 chk_nonascii_tape() {
-    [ "${EXPECT_ASIO:-}" = 1 ] && { echo "skipped in the ASIO job: the same program, measured in the other job"; return 77; }
     TAPE_SUB=tape-nonascii chk_tape quit
 }
 chk_utf8_manifests() {
@@ -1352,130 +1355,141 @@ chk_utf8_manifests() {
     done
     return "$bad"
 }
-m0_run m1-unpack unpack || exit 0
+# (M31: the two parts have their own step names, so that the report of one never hides a failure of the other)
+if [ "${SMOKE_PART:-all}" = asio ]; then m0_run m31-unpack-asio unpack || exit 0; else m0_run m1-unpack unpack || exit 0; fi
 # M22: the download and the folder inside it have fixed names (no version): the same Defender exclusion serves every build
 chk_static_names() {
-    local want_zip="Verdandi-windows-latest.zip" want_dir="Verdandi"
-    [ "${EXPECT_ASIO:-}" = 1 ] && want_zip="Verdandi-windows-asio-latest.zip" want_dir="Verdandi-asio"
+    local want_zip="Verdandi-windows-latest.zip" want_dir="Verdandi" # (M31: ONE zip, the ASIO build; no "asio" in its names)
     "$PYTHON" "$(native "$HERE/check-static-names.py")" "$(native "$ZIP")" "$want_zip" "$want_dir" || return 1
     has "$APP/VERSION.txt" "^Verdandi for Windows, version [0-9][0-9.]*, build [0-9a-f]*" "VERSION.txt names the version and the build" || return 1
     [ "$(basename "$APP")" = "$want_dir" ] && echo "found: the folder after unpacking is called $want_dir" || { echo "NOT FOUND: the unpacked folder is $(basename "$APP"), wanted $want_dir"; return 1; }
 }
 set_app
-m0_run m22-static-names chk_static_names
-m0_run m22-utf8-manifests chk_utf8_manifests
-m0_run m1-seed seed
-m0_run m1-run run_program
-collect > /dev/null 2>&1
-m0_run m1-check-launcher chk_launcher
-m0_run m1-check-lua chk_lua
-# M10 diagnostics: what sclang.log says around a stop of its server (and its first lines), printed whatever happens
-chk_sclang_context() {
-    local l="$LOGS/sclang.log"
-    echo "--- sclang.log: $(wc -l < "$l" 2> /dev/null) lines; the lines around 'exited with exit code':"
-    grep -a -n -B14 -A4 "exited with exit code" "$l" 2> /dev/null | cut -c1-240 | head -50
-    echo "--- the first 25 lines:"; head -n 25 "$l" 2> /dev/null | cut -c1-200
-    echo "--- the last 12 lines:"; tail -n 12 "$l" 2> /dev/null | cut -c1-200
-    return 0
-}
-m0_run m10-sclang-context chk_sclang_context
-m0_run m2-list-audio list_audio
-m0_run m2-check-audio chk_audio
-m0_run m2-audio-numbers chk_audio_numbers
-m0_run m2-run-fallback run_fallback
-m0_run m2-check-fallback chk_fallback
-m0_run m3-run-input run_input
-m0_run m3-check-input chk_input
-m0_run m4-check-midi chk_midi
-m0_run m6-check-maiden chk_maiden
-m0_run m6-check-repl chk_repl
-m0_run m6-check-tools chk_tools
-m0_run m6-check-heal chk_heal
-m0_run m7-check-packs chk_packs
-m0_run m9-check-twins chk_twins
-m0_run m11-check-menu-pages chk_menu_pages
-m0_run m12-check-audio-shot chk_audio_shot
-m0_run m13-run-arc-probe run_arc_probe
-m0_run m13-check-arc chk_arc
-m0_run m16-run-pin-probe run_pin_probe
-m0_run m16-check-pin chk_pin
-m0_run m27-run-extdrop run_extdrop
-m0_run m27-check-extdrop chk_extdrop
-m0_run m19-run-asio run_asio
-m0_run m19-check-asio-normal chk_asio_case normal
-m0_run m19-check-asio-none chk_asio_case none
-m0_run m19-check-asio-ok chk_asio_case ok
-m0_run m19-check-asio-busy chk_asio_case busy
-m0_run m19-check-asio-nostart chk_asio_case nostart
-m0_run m20-check-asio-reopen chk_asio_case reopen
-m0_run m20-check-asio-fromnull chk_asio_case fromnull
-m0_run m20-check-asio-rate44 chk_asio_case rate44
-m0_run m20-check-asio-hold chk_asio_case hold
-m0_run m20-check-asio-lie chk_asio_case lie
-m0_run m17-run-quit-sleep run_quit_grid sleep 400 300
-m0_run m17-check-quit-sleep chk_quit_grid sleep
-m0_run m17-run-quit-sleepmod run_quit_grid sleepmod 400 300
-m0_run m17-check-quit-sleepmod chk_quit_grid sleepmod
-m0_run m17-run-quit-fast run_quit_grid sleepmodfast 400 300
-m0_run m17-check-quit-fast chk_quit_grid sleepmodfast
-m0_run m17-run-quit-old run_quit_grid sleepmodfast-old 400 300
-m0_run m17-check-quit-old chk_quit_grid sleepmodfast-old
-m0_run m17-run-quit-event run_quit_grid event 400 300
-m0_run m17-check-quit-event chk_quit_grid event
-m0_run m17-run-quit-launcher run_quit_grid launcher 130 300
-m0_run m17-check-quit-launcher chk_quit_grid launcher
-m0_run m17-run-quit-restart run_quit_grid restart 110 200
-m0_run m17-check-quit-restart chk_quit_grid restart
-m0_run m17-run-quit-stall run_quit_grid stall 400 300
-m0_run m17-check-quit-stall chk_quit_grid stall
-m0_run m15-run-cc2-probe run_cc2_probe
-m0_run m15-check-cc2 chk_cc2
-m0_run m10-run-twins-engine run_twins_engine
-m0_run m10-check-twins-engine chk_twins_engine
-m0_run m10-check-longpath chk_longpath
-m0_run m11-run-enc-burst run_enc_burst
-m0_run m11-check-enc-burst chk_enc_burst
-m0_run m10-run-server-kill run_server_kill
-m0_run m10-check-server-kill chk_server_kill
-m0_run m21-run-sclang-kill run_sclang_kill
-m0_run m21-check-sclang-kill chk_sclang_kill
-m0_run m22-run-busy-ports run_busy_ports
-m0_run m22-check-busy-ports chk_busy_ports
-m0_run m21-run-two-copies run_two_copies
-m0_run m21-check-two-copies chk_two_copies
-m0_run m21-run-tape run_tape
-m0_run m21-check-tape-restart chk_tape restart
-m0_run m21-check-tape-quit chk_tape quit
-m0_run m21-check-tape-shutdown chk_tape shutdown
-m0_run m21-check-tape-launcher chk_tape launcher
-m0_run m22-run-nonascii run_nonascii
-m0_run m22-check-nonascii-launcher na_chk chk_launcher
-m0_run m22-check-nonascii-lua na_chk chk_lua
-m0_run m22-check-nonascii-script na_chk chk_script
-m0_run m22-check-nonascii-utf8 na_chk chk_nonascii_utf8
-m0_run m22-check-nonascii-sclang na_chk chk_sclang_context
-m0_run m22-check-nonascii-audio na_chk chk_audio
-m0_run m22-check-nonascii-noise na_chk chk_noise
-m0_run m22-run-nonascii-tape run_nonascii_tape
-m0_run m22-check-nonascii-tape chk_nonascii_tape
-m0_run m7-run-plugin-load run_plugin_load
-m0_run m7-check-plugin-load chk_plugin_load
-m0_run m7-check-plugins-server chk_plugins_server
-m0_run m7-check-maiden-stale chk_maiden_stale
-m0_run m7-check-win-paths run_win_paths
-m0_run m8-check-extfolders run_extfolders
-m0_run m8-check-picker run_picker
-m0_run m7-run-failing run_failing
-m0_run m7-check-failing chk_failing
-m0_run m18-run-engine-guard run_engine_guard
-m0_run m18-check-engine-guard chk_engine_guard
-m0_run m2-run-cycles run_cycles
-m0_run m2-check-cycles chk_cycles
-m0_run m1-check-keyboard chk_keyboard
-m0_run m1-check-noise chk_noise
-m0_run m1-check-sclang chk_sclang
-m0_run m1-check-script chk_script
-m0_run m1-check-screen chk_png
-m0_run m1-check-crash chk_crash
-m0_run m1-check-diagnostics chk_diagnostics
+if [ "${SMOKE_PART:-all}" != asio ]; then
+    m0_run m22-static-names chk_static_names
+    m0_run m22-utf8-manifests chk_utf8_manifests
+fi
+# M31: ONE zip, checked by two jobs at the same time on the same file (the checks are long): SMOKE_PART=main (everything but the ASIO cases) and SMOKE_PART=asio (the ASIO cases with the stub driver). no SMOKE_PART: all, one after the other
+if [ "${SMOKE_PART:-all}" != asio ]; then
+    m0_run m1-seed seed
+    m0_run m1-run run_program
+    collect > /dev/null 2>&1
+    m0_run m1-check-launcher chk_launcher
+    m0_run m1-check-lua chk_lua
+    # M10 diagnostics: what sclang.log says around a stop of its server (and its first lines), printed whatever happens
+    chk_sclang_context() {
+        local l="$LOGS/sclang.log"
+        echo "--- sclang.log: $(wc -l < "$l" 2> /dev/null) lines; the lines around 'exited with exit code':"
+        grep -a -n -B14 -A4 "exited with exit code" "$l" 2> /dev/null | cut -c1-240 | head -50
+        echo "--- the first 25 lines:"; head -n 25 "$l" 2> /dev/null | cut -c1-200
+        echo "--- the last 12 lines:"; tail -n 12 "$l" 2> /dev/null | cut -c1-200
+        return 0
+    }
+    m0_run m10-sclang-context chk_sclang_context
+    m0_run m2-list-audio list_audio
+    m0_run m2-check-audio chk_audio
+    m0_run m2-audio-numbers chk_audio_numbers
+    m0_run m2-run-fallback run_fallback
+    m0_run m2-check-fallback chk_fallback
+    m0_run m3-run-input run_input
+    m0_run m3-check-input chk_input
+    m0_run m4-check-midi chk_midi
+    m0_run m6-check-maiden chk_maiden
+    m0_run m6-check-repl chk_repl
+    m0_run m6-check-tools chk_tools
+    m0_run m6-check-heal chk_heal
+    m0_run m7-check-packs chk_packs
+    m0_run m9-check-twins chk_twins
+    m0_run m11-check-menu-pages chk_menu_pages
+    m0_run m12-check-audio-shot chk_audio_shot
+    m0_run m13-run-arc-probe run_arc_probe
+    m0_run m13-check-arc chk_arc
+    m0_run m16-run-pin-probe run_pin_probe
+    m0_run m16-check-pin chk_pin
+    m0_run m27-run-extdrop run_extdrop
+    m0_run m27-check-extdrop chk_extdrop
+    m0_run m31-run-download-paths run_download_paths
+    m0_run m31-check-download-paths chk_download_paths
+fi
+if [ "${SMOKE_PART:-all}" != main ]; then
+    m0_run m19-run-asio run_asio
+    m0_run m19-check-asio-none chk_asio_case none
+    m0_run m19-check-asio-ok chk_asio_case ok
+    m0_run m19-check-asio-busy chk_asio_case busy
+    m0_run m19-check-asio-nostart chk_asio_case nostart
+    m0_run m20-check-asio-reopen chk_asio_case reopen
+    m0_run m20-check-asio-fromnull chk_asio_case fromnull
+    m0_run m20-check-asio-rate44 chk_asio_case rate44
+    m0_run m20-check-asio-hold chk_asio_case hold
+    m0_run m20-check-asio-lie chk_asio_case lie
+    m0_run m31-check-asio-vanish chk_asio_case vanish
+fi
+if [ "${SMOKE_PART:-all}" != asio ]; then
+    m0_run m17-run-quit-sleep run_quit_grid sleep 400 300
+    m0_run m17-check-quit-sleep chk_quit_grid sleep
+    m0_run m17-run-quit-sleepmod run_quit_grid sleepmod 400 300
+    m0_run m17-check-quit-sleepmod chk_quit_grid sleepmod
+    m0_run m17-run-quit-fast run_quit_grid sleepmodfast 400 300
+    m0_run m17-check-quit-fast chk_quit_grid sleepmodfast
+    m0_run m17-run-quit-old run_quit_grid sleepmodfast-old 400 300
+    m0_run m17-check-quit-old chk_quit_grid sleepmodfast-old
+    m0_run m17-run-quit-event run_quit_grid event 400 300
+    m0_run m17-check-quit-event chk_quit_grid event
+    m0_run m17-run-quit-launcher run_quit_grid launcher 130 300
+    m0_run m17-check-quit-launcher chk_quit_grid launcher
+    m0_run m17-run-quit-restart run_quit_grid restart 110 200
+    m0_run m17-check-quit-restart chk_quit_grid restart
+    m0_run m17-run-quit-stall run_quit_grid stall 400 300
+    m0_run m17-check-quit-stall chk_quit_grid stall
+    m0_run m15-run-cc2-probe run_cc2_probe
+    m0_run m15-check-cc2 chk_cc2
+    m0_run m10-run-twins-engine run_twins_engine
+    m0_run m10-check-twins-engine chk_twins_engine
+    m0_run m10-check-longpath chk_longpath
+    m0_run m11-run-enc-burst run_enc_burst
+    m0_run m11-check-enc-burst chk_enc_burst
+    m0_run m10-run-server-kill run_server_kill
+    m0_run m10-check-server-kill chk_server_kill
+    m0_run m21-run-sclang-kill run_sclang_kill
+    m0_run m21-check-sclang-kill chk_sclang_kill
+    m0_run m22-run-busy-ports run_busy_ports
+    m0_run m22-check-busy-ports chk_busy_ports
+    m0_run m21-run-two-copies run_two_copies
+    m0_run m21-check-two-copies chk_two_copies
+    m0_run m21-run-tape run_tape
+    m0_run m21-check-tape-restart chk_tape restart
+    m0_run m21-check-tape-quit chk_tape quit
+    m0_run m21-check-tape-shutdown chk_tape shutdown
+    m0_run m21-check-tape-launcher chk_tape launcher
+    m0_run m22-run-nonascii run_nonascii
+    m0_run m22-check-nonascii-launcher na_chk chk_launcher
+    m0_run m22-check-nonascii-lua na_chk chk_lua
+    m0_run m22-check-nonascii-script na_chk chk_script
+    m0_run m22-check-nonascii-utf8 na_chk chk_nonascii_utf8
+    m0_run m22-check-nonascii-sclang na_chk chk_sclang_context
+    m0_run m22-check-nonascii-audio na_chk chk_audio
+    m0_run m22-check-nonascii-noise na_chk chk_noise
+    m0_run m22-run-nonascii-tape run_nonascii_tape
+    m0_run m22-check-nonascii-tape chk_nonascii_tape
+    m0_run m7-run-plugin-load run_plugin_load
+    m0_run m7-check-plugin-load chk_plugin_load
+    m0_run m7-check-plugins-server chk_plugins_server
+    m0_run m7-check-maiden-stale chk_maiden_stale
+    m0_run m7-check-win-paths run_win_paths
+    m0_run m8-check-extfolders run_extfolders
+    m0_run m8-check-picker run_picker
+    m0_run m7-run-failing run_failing
+    m0_run m7-check-failing chk_failing
+    m0_run m18-run-engine-guard run_engine_guard
+    m0_run m18-check-engine-guard chk_engine_guard
+    m0_run m2-run-cycles run_cycles
+    m0_run m2-check-cycles chk_cycles
+    m0_run m1-check-keyboard chk_keyboard
+    m0_run m1-check-noise chk_noise
+    m0_run m1-check-sclang chk_sclang
+    m0_run m1-check-script chk_script
+    m0_run m1-check-screen chk_png
+    m0_run m1-check-crash chk_crash
+    m0_run m1-check-diagnostics chk_diagnostics
+fi
 exit 0

@@ -1,0 +1,35 @@
+M31: the new tests on the OLD code (0b1298ac, before M31); each must fail there
+
+=== assemble_flavor_test.sh
+FAIL the PortAudio DLL of the ASIO build is in the zip under the name norns.exe imports (libportaudio.dll: M19), and PORTAUDIO-DLL.txt says which
+FAIL licence text of the SDK, notice, source offer, sources and build record travel with it
+FAIL no FLAVOR.txt (the updater keeps the name of the folder it runs from); BUILD.txt says asio is built in and its first line stays 'version hash'
+FAIL the notice says GPLv3 and names the trademark
+FAIL without the ASIO build output it stops with a message (the zip is the ASIO build)
+(exit code 1)
+
+=== release_publish_test.sh
+FAIL it ends well
+(exit code 1)
+
+=== windows_one_zip_workflow_test.sh
+FAIL job missing: assemble
+FAIL the ASIO PortAudio job must not be continue-on-error: the zip is the ASIO build
+FAIL assemble must need the asio job
+FAIL package must need exactly assemble (both check the same zip)
+FAIL package-asio must need exactly assemble (both check the same zip)
+FAIL package-asio must not be continue-on-error: a failed check holds the zip back
+FAIL release must wait for assemble
+FAIL release only when assemble succeeded
+(exit code 5)
+
+=== audio_note_poll_test.lua
+FAIL the function exists
+lua5.3: linux/tests/audio_note_poll_test.lua:18: attempt to call a nil value (field 'audio_note_update')
+stack traceback:
+	linux/tests/audio_note_poll_test.lua:18: in main chunk
+
+=== the Wine and Windows parts (no Wine and no Windows runner in this container: shown by CI)
+- update_and_run_test.sh (Wine): the new cases (a folder of an earlier ASIO build keeps its name Verdandi-asio, a copy with FLAVOR.txt under another name goes to Verdandi-asio, a plain Verdandi stays Verdandi, the 0.10.21 routine from linux/tests/fixtures/update-and-run-0.10.21.cmd works against the transition copy) cannot pass on the old update-and-run.cmd: it asks for Verdandi-windows-asio-latest.zip only when FLAVOR.txt is there and never keeps the name of its folder. Wine crashes in this container ("free(): invalid pointer"), so the first real run is the linux-tests job on the runner.
+- the Windows runner cases (none, busy, nostart, vanish, download-paths) run in windows-m1; the old code has no case `vanish` and no `m31-*` steps, and the old ASIO job only checked a subset of the default checks.
+- the 0.10.21 routine against the transition copy: the old routine (fixture) asks for the old name; without the transition copy on the release it would find no file. publish-release.sh makes that copy and the read-back FAILS when it is missing (release_publish_test: "a release without the transition copy fails").

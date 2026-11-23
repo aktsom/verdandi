@@ -817,6 +817,31 @@ if os.environ.get("VERDANDI_PROBE") == "asio":
             rc_, msg_ = apply_conf(1, 0)
             ri = rate_info()
             result("asio-hold-refused", rc_ != "0" and ri["mode"] != "device" and "44100 Hz" in msg_ and "48000 Hz" in msg_ and "does not change" in msg_, "the card is at 44100 Hz (another program has it), the engine at 48000: not opened, the reason in plain words: rc=%s msg=[%s]" % (rc_, msg_[:300]))
+        elif amode == "vanish":
+            # M31: the driver vanishes while the program runs (the stub stops calling back and refuses init: the cable is pulled), then comes back
+            def note_info():
+                ok_, t_ = run("local a = _norns.audio_info() print('VT_NOTE ' .. tostring(a.mode) .. '|' .. tostring(a.note) .. '|' .. tostring(_menu.audio_note))\n", "VT_NOTE", 20)
+                for l_ in t_.splitlines():
+                    if "VT_NOTE " in l_:
+                        g_ = l_[l_.index("VT_NOTE ") + 8:].split("|") + ["", "", ""]
+                        return g_[0], g_[1], "|".join(g_[2:])
+                return "?", "", ""
+            ctl = os.environ.get("VERDANDI_STUB_CTL", "")
+            ri = rate_info()
+            result("asio-vanish-start", ri["mode"] == "device" and ri["api"].startswith("ASIO") and bool(ctl), "it runs on the stub ASIO driver: %s %s (control file %s)" % (ri["mode"], ri["api"], ctl))
+            with open(ctl, "w") as f_:
+                f_.write("vanish")
+            time.sleep(18)  # (2 s without a callback, the reopen that fails, the 3 s poll of the notes)
+            mode_n, note_n, win_n = note_info()
+            result("asio-vanish-alive", mode_n in ("fallback", "null"), "the program is alive and says it has no sound: mode=%s" % mode_n)
+            result("asio-vanish-reason", "not there" in note_n or "stopped answering" in note_n or "no sound" in note_n, "the AUDIO page has the reason: %s" % note_n[:200])
+            result("asio-vanish-window", win_n.startswith("NO SOUND"), "the note on the norns window says NO SOUND: %s" % win_n[:200])
+            os.remove(ctl)
+            time.sleep(14)  # (the retry every 3 s opens the driver again, then the note poll)
+            ri = rate_info()
+            mode_b, note_b, win_b = note_info()
+            result("asio-vanish-back", ri["mode"] == "device" and ri["api"].startswith("ASIO"), "the driver is back and the sound with it: %s %s" % (ri["mode"], ri["api"]))
+            result("asio-vanish-note-gone", win_b in ("", "nil"), "and the note on the window is gone: [%s]" % win_b[:120])
         elif amode == "lie":
             time.sleep(12)
             ri = rate_info()
