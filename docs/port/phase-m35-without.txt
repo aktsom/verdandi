@@ -1,0 +1,24 @@
+script: FAIL /home/user/verdandi/linux/mi-ugens-build.sh is missing (the checkout build of the mi-UGens pack)
+mi exit: FAIL rc=127 linux/tests/tools_hint_test.sh: line 28: /home/user/verdandi/linux/mi-ugens-build.sh: No such file or directory
+mi command: FAIL linux/tests/tools_hint_test.sh: line 28: /home/user/verdandi/linux/mi-ugens-build.sh: No such file or directory
+mi text: FAIL linux/tests/tools_hint_test.sh: line 28: /home/user/verdandi/linux/mi-ugens-build.sh: No such file or directory
+...and builds nothing: ok
+ported: FAIL rc=0 portedplugins: WARNING: c++ is not installed, so twins' libraries were not built (linux/setup-deps.sh installs it); norns works without them
+ninja only: FAIL portedplugins: WARNING: ninja is not installed, so twins' libraries were not built (linux/setup-deps.sh installs it); norns works without them
+maiden, go missing: 'sudo apt install golang-go': ok
+main: FAIL rc=1 linux/build.sh: waf not found, run linux/setup-deps.sh
+linux/tests/tools_hint_test.sh: line 56: /home/user/verdandi/linux/tools-hint.sh: No such file or directory
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+linux/tests/tools_hint_test.sh: line 59: tool_package: command not found
+every package the messages name is in the apt list of linux/setup-deps.sh: ok

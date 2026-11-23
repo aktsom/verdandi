@@ -36,7 +36,8 @@ if [ "${MAIDEN_FORCE:-0}" != 1 ] && [ -x "$M/maiden" ] && [ "$(cat "$STAMP" 2>/d
     exit 0
 fi
 
-command -v go >/dev/null || { echo "maiden-build: go not found (sudo apt install golang-go; linux/setup-deps.sh does it)"; exit 1; }
+. "$(dirname "$0")/tools-hint.sh"
+missing_tools_warning "maiden (the web editor and script catalog)" git curl tar xz sha256sum go || exit 1
 case "$(uname -m)" in
     x86_64) NODE_ARCH=x64 ;;
     aarch64) NODE_ARCH=arm64 ;;

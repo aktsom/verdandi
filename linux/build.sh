@@ -5,6 +5,11 @@
 set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 . "$(dirname "$0")/waf-path.sh"
+. "$(dirname "$0")/tools-hint.sh"
+# the tools of the main build: without them nothing can be built, so this one stops (the optional parts below only warn)
+if ! missing_tools_warning "Verdandi itself" git python3 pkg-config c++ cc; then
+    exit 1
+fi
 WAF="$(find_waf)"
 [ -n "$WAF" ] || { echo "linux/build.sh: waf not found, run linux/setup-deps.sh"; exit 1; }
 [ -w "$(dirname "$WAF")" ] || {
@@ -32,5 +37,11 @@ fi
 # before sclang starts, so that twins' installer finds them (docs/port/phase-m29.md). a failure is a warning: norns works without it. NORNS_NO_PORTED=1 skips this step
 if [ "${NORNS_NO_PORTED:-0}" != 1 ]; then
     "$REPO/linux/portedplugins-build.sh" checkout "$REPO" || echo "linux/build.sh: WARNING: the PortedPlugins pack was not built (see above); the script twins will say that libraries are missing"
+fi
+# the x86_64 mi-UGens pack (MiPlaits, MiRings, MiBeads, ...: the mods emplaitress and fx_resonator, Terrarium and others need it), built the same way for this checkout against the headers of the
+# installed SuperCollider with the recipe of linux/package.sh (linux/mi-ugens-build.sh, pin linux/mi-ugens.pin): about 20 seconds and 4 MB, once (again only when the pin or SuperCollider changes),
+# needs the network once. norns.sh copies the pack into the SuperCollider extension folder before sclang starts. a failure is a warning: norns starts without it. NORNS_NO_MI=1 skips this step
+if [ "${NORNS_NO_MI:-0}" != 1 ]; then
+    "$REPO/linux/mi-ugens-build.sh" checkout "$REPO" || echo "linux/build.sh: WARNING: the mi-UGens pack was not built (see above); the scripts and mods that use MiPlaits, MiRings, ... will not find them"
 fi
 echo "linux/build.sh: $REPO/build/norns/norns"

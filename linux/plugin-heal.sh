@@ -29,7 +29,7 @@ replaced() {
         NamAmp.so)
             if ! is_off "${NORNS_NAMAMP:-}" && [ -f "${NORNS_NAMAMP_PACK:-$HERE/../namamp/NamAmp}/NamAmp.so" ]; then any=0; else all=1; fi ;;
         Mi[A-Z]*.so | Mi[A-Z]*.scx)
-            if ! is_off "${NORNS_MI_UGENS:-}" && [ -f "${NORNS_MI_PACK:-$HERE/../mi-ugens/mi-UGens}/.verdandi-stamp" ]; then any=0; else all=1; fi ;;
+            if ! is_off "${NORNS_MI_UGENS:-}" && [ -f "${NORNS_MI_PACK:-$( [ -d "$HERE/../mi-ugens/mi-UGens" ] && echo "$HERE/../mi-ugens/mi-UGens" || echo "$HERE/../build/linux/mi-ugens/mi-ugens-pack/mi-UGens")}/.verdandi-stamp" ]; then any=0; else all=1; fi ;;
         *) all=1 ;;
         esac
     done <<EOF

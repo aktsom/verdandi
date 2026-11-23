@@ -10,6 +10,8 @@
 #       searched for *.sc) is taken out of the pack and listed: sclang stops at a duplicate class.
 #   portedplugins-build.sh headers <dir> [<SuperCollider tag>]
 #       the SuperCollider headers only (include/ and common/, a sparse shallow clone: seconds) in <dir>; the tag defaults to the version of the installed scsynth, else 3.14.1
+#   portedplugins-build.sh sc-tag
+#       the tag of the installed SuperCollider (Version-3.13.0), the one cmd_headers takes by default; linux/mi-ugens-build.sh uses it too
 #   portedplugins-build.sh checkout [<repo dir>]
 #       what linux/build.sh runs for a checkout: headers + build into <repo>/build/linux/portedplugins (the pack is <that>/PortedPlugins, where norns.sh looks); nothing is done when the
 #       pack there is up to date (same serial and commit, same SuperCollider version). a failure is a warning and exit 0: norns does not need twins to start.
@@ -19,6 +21,7 @@ set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_DEFAULT="$(cd "$HERE/.." && pwd)"
 . "$HERE/portedplugins.pin"
+. "$HERE/tools-hint.sh"
 
 say() { echo "portedplugins: $*"; }
 die() { echo "portedplugins: $*" >&2; exit 1; }
@@ -147,9 +150,7 @@ cmd_checkout() {
         say "up to date ($want)"
         return 0
     fi
-    for t in git cmake ninja c++; do
-        command -v "$t" > /dev/null 2>&1 || { echo "portedplugins: WARNING: $t is not installed, so twins' libraries were not built (linux/setup-deps.sh installs it); norns works without them"; return 0; }
-    done
+    missing_tools_warning "the PortedPlugins pack (the libraries the script twins asks for)" git cmake ninja c++ strip || return 0
     sc="$work/sc-headers"
     (
         cmd_headers "$sc" "$tag"
@@ -165,6 +166,7 @@ cmd_checkout() {
 
 case "${1:-}" in
     headers) shift; cmd_headers "$@" ;;
+    sc-tag) sc_tag_of_installed ;;
     build) shift; cmd_build "$@" ;;
     checkout) shift; cmd_checkout "$@" ;;
     *) echo "usage: $0 build <work> <sc source> [--other-classes dir]... | headers <dir> [tag] | checkout [repo]" >&2; exit 2 ;;

@@ -447,7 +447,14 @@ export NORNS_PLUGIN_CHECK
 # and the other scripts that want it find it and never download the Raspberry Pi build. NORNS_MI_UGENS=0 or mi_ugens=0 in audio.conf turns that off
 NORNS_MI_UGENS="${NORNS_MI_UGENS:-$(conf_get mi_ugens)}"
 export NORNS_MI_UGENS
-NORNS_MI_PACK="${NORNS_MI_PACK:-$REPO/mi-ugens/mi-UGens}"
+# (the .deb has it in $REPO/mi-ugens; a checkout has the one that linux/build.sh built, build/linux/mi-ugens: docs/port/phase-m35.md)
+if [ -z "${NORNS_MI_PACK:-}" ]; then
+    if [ -d "$REPO/mi-ugens/mi-UGens" ]; then
+        NORNS_MI_PACK="$REPO/mi-ugens/mi-UGens"
+    else
+        NORNS_MI_PACK="$REPO/build/linux/mi-ugens/mi-ugens-pack/mi-UGens"
+    fi
+fi
 # a script's download of the Raspberry Pi mi-UGens next to Verdandi's own (intact) pack is moved aside into disabled/ before sclang starts, with a manifest
 # line and one window note; with the own pack missing or changed nothing is moved. NORNS_MI_UGENS_HEAL=0 or mi_ugens_heal=0 in audio.conf turns it off,
 # also for the check while norns runs (it then only shows a note, the move is always a confirmation in SYSTEM > CLEAN UP)

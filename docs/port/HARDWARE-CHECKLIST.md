@@ -775,3 +775,11 @@ Do one step at a time. The commit hash for Linux is in the report of this phase.
 5. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh`, start `~/verdandi-home/norns/linux/norns.sh`. The same checks.
 Results (copy and fill in): 1 [ ]  2 [ ]  3 [ ]  4 [ ] (OFF stays lit / ON goes dark)  5 [ ]; notes: ...
 Cannot be tested here: waiting 15 minutes on a real window.
+
+## Linux 0.10.22 (M35 part A: the checkout build makes the mi-UGens pack) - Linux laptop only
+Do one step at a time. The commit hash is in the report of this phase.
+1. `cd ~/verdandi-home/norns && git fetch origin && git checkout <hash> && linux/build.sh` (network needed once; about a minute more than before). It ends with a line `mi-ugens: pack ...: 13 plug-ins`.
+2. Start `~/verdandi-home/norns/linux/norns.sh`. Then quit, and move the two mods back: `mv ~/emplaitress-aside ~/verdandi-home/dust/code/emplaitress` and `mv ~/fx_resonator-aside ~/verdandi-home/dust/code/fx_resonator`. Start again: SuperCollider starts with no FAIL message in the log.
+3. emplaitress: enable the mod, load a script that uses it; sound comes from it (MiPlaits). fx_resonator: enable it; the effect is heard (MiRings).
+Results: 1 [ ]  2 [ ]  3 [ ]; notes: ...
+Cannot be tested here: the laptop's own SuperCollider and audio.

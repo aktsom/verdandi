@@ -122,36 +122,9 @@ build_sc() {
 # $CACHE/mi-ugens-pack/mi-UGens (stamped, the folder the tests use); build_tree copies it into the program tree. nothing is downloaded at run time
 build_mi() {
     . "$REPO/linux/mi-ugens.pin"
-    say "mi-UGens $MI_UGENS_TAG + pull request $MI_UGENS_PR ($MI_UGENS_PR_COMMIT)"
-    local src="$CACHE/mi-ugens" pack="$CACHE/mi-ugens-pack/mi-UGens" b="$CACHE/mi-ugens-build"
     [ -d "$CACHE/supercollider/include" ] || die "mi-UGens: the SuperCollider source is missing in $CACHE/supercollider (run '$0 sc' first)"
-    if [ ! -d "$src/.git" ]; then
-        git clone -q "$MI_UGENS_REPO" "$src"
-    fi
-    git -C "$src" fetch -q origin "$MI_UGENS_COMMIT" 2>/dev/null || git -C "$src" fetch -q --tags origin
-    git -C "$src" fetch -q origin "pull/$MI_UGENS_PR/head" 2>/dev/null || true
-    git -C "$src" checkout -q -f "$MI_UGENS_COMMIT"
-    [ "$(git -C "$src" rev-parse HEAD)" = "$MI_UGENS_COMMIT" ] || die "mi-UGens: $MI_UGENS_COMMIT is not what $MI_UGENS_TAG points to"
-    git -C "$src" cat-file -e "$MI_UGENS_PR_COMMIT^{commit}" 2>/dev/null || die "mi-UGens: pull request $MI_UGENS_PR head $MI_UGENS_PR_COMMIT not fetched"
-    git -C "$src" -c user.name=build -c user.email=build@localhost -c commit.gpgsign=false merge -q --no-edit "$MI_UGENS_PR_COMMIT" > /dev/null
-    git -C "$src" submodule update -q --init --recursive
-    rm -rf "$b" "$CACHE/mi-ugens-install" "$CACHE/mi-ugens-pack"
-    cmake -S "$src" -B "$b" -G Ninja -DSC_PATH="$CACHE/supercollider" -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$CACHE/mi-ugens-install" -DCMAKE_C_FLAGS="$MAP" -DCMAKE_CXX_FLAGS="-std=c++17 $MAP"
-    # the libsamplerate that MiBraids links has to exist first (a parallel build races on it)
-    cmake --build "$b" --target samplerate
-    cmake --build "$b" -j "$JOBS"
-    cmake --install "$b"
-    mkdir -p "$CACHE/mi-ugens-pack"
-    cp -a "$CACHE/mi-ugens-install/mi-UGens" "$pack"
-    for f in "$pack"/*.so; do [ -f "$f" ] || continue; strip --strip-unneeded "$f" 2>/dev/null || true; done
-    [ -f "$pack/MiPlaits.so" ] && [ -f "$pack/MiBeads.so" ] && [ -f "$pack/Classes/MiBeads.sc" ] || die "mi-UGens: the build did not make MiPlaits.so, MiBeads.so and the classes"
-    # help files are most of the size and unused at runtime
-    rm -rf "$pack/HelpSource"
-    cp "$src/gpl-3.0.md" "$CACHE/mi-ugens-pack/LICENSE-GPL-3.0.md"
-    cp "$src/eurorack/LICENSE.txt" "$CACHE/mi-ugens-pack/LICENSE-eurorack-MIT.txt"
-    cp "$src/projects/MiBraids/libsamplerate/COPYING" "$CACHE/mi-ugens-pack/LICENSE-libsamplerate-BSD-2.txt"
-    mi_stamp "$pack"
+    # the recipe is linux/mi-ugens-build.sh, the same one linux/build.sh runs for a checkout (there against the headers of the installed SuperCollider)
+    SOURCE_DATE_EPOCH="$EPOCH" "$REPO/linux/mi-ugens-build.sh" build "$CACHE" "$CACHE/supercollider" --version "$VERSION" --map "$MAP"
 }
 # the stamp and the file list of a pack folder (after the last change to its files: the list holds their hashes)
 mi_stamp() {
