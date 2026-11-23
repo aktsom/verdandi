@@ -47,3 +47,5 @@ Run 3 on the runner (tag linux-v0.10.21-3): everything passed up to the docker c
   old preinst: old-preinst-rc=0
   new preinst (also reads the command line, which anyone may read): "Verdandi is running..." and rc=1.
 deb_scripts_test.sh now has cases with no exe link and a readable command line (norns itself; a shell running norns.sh; an editor with a file of the program open must NOT stop it): they fail on the old scripts.
+
+Run 4 on the runner (tag linux-v0.10.21-4): the fresh install in a clean root and the clean-container checks (install, start, upgrade from the old format, guard, remove, versions) all PASSED. The step after them failed: deb_scripts_test.sh looked at "the newest .deb in build/package", which on the runner is the OLDER package (built last): "package scripts: FAIL found 2 of 4". The test now takes the package as an argument and the workflow gives it the new one. Shown here: the test passes for the new package and fails for the old-format package (found 2 of 4), which is what it must do.

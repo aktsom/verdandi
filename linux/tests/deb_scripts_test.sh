@@ -4,7 +4,7 @@
 #   - with nothing running they pass, and the udev scripts pass without udevadm
 #   - none of them writes, moves or deletes anything: a fake home and the whole temporary tree are the same before and after, also on purge
 #   - the built package (when there is one) has all four scripts, and no script mentions a home folder
-# prints "name: ok" / "name: FAIL ...", exit 1 on a failure
+# usage: deb_scripts_test.sh [FILE.deb]. prints "name: ok" / "name: FAIL ...", exit 1 on a failure
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 D="$REPO/linux/debian"
@@ -67,7 +67,8 @@ else
     ok "no script has a command that writes, moves or deletes a file, and none names a home folder"
 fi
 # the built package carries them
-deb="$(ls -t "$REPO"/build/package/verdandi_*.deb 2> /dev/null | head -n 1)"
+# the package to look at: the first argument (the workflow gives the new one: the newest file in build/package is the OLDER package there, built last), else the newest built .deb
+deb="${1:-$(ls -t "$REPO"/build/package/verdandi_*.deb 2> /dev/null | head -n 1)}"
 if [ -n "$deb" ]; then
     n="$(dpkg-deb -I "$deb" | grep -cE '^ +[0-9]+ bytes, +[0-9]+ lines +\*? +(preinst|prerm|postinst|postrm) ')"
     [ "$n" = 4 ] && ok "the built package ($(basename "$deb")) has preinst, prerm, postinst and postrm" || bad "package scripts" "found $n of 4 in $deb"

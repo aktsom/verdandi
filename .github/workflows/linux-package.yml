@@ -104,7 +104,7 @@ jobs:
       - name: The same fast tests as the unit test job (version numbers, maintainer scripts, publishing with a stand-in)
         run: |
           linux/tests/package_version_test.sh
-          linux/tests/deb_scripts_test.sh
+          linux/tests/deb_scripts_test.sh "$RUNNER_TEMP/new.deb"
           linux/tests/linux_release_publish_test.sh
       - name: The tests and the time, as a summary
         if: always()
