@@ -15,10 +15,15 @@ ok() { echo "$1: ok"; }
 bad() { echo "$1: FAIL $2"; FAIL=1; }
 for s in preinst prerm postinst postrm; do [ -x "$D/$s" ] || { bad "script $s" "$D/$s is missing or not executable"; exit 1; }; done
 
-mkdir -p "$T/proc-idle/1" "$T/proc-run/1" "$T/proc-run/2" "$T/proc-other/1" "$T/home/Verdandi/dust/code/mine"
+mkdir -p "$T/proc-cmd/1" "$T/proc-cmd/2" "$T/proc-cmd/3" "$T/proc-idle/1" "$T/proc-run/1" "$T/proc-run/2" "$T/proc-other/1" "$T/home/Verdandi/dust/code/mine"
 ln -s /usr/bin/bash "$T/proc-idle/1/exe"
 ln -s /usr/bin/bash "$T/proc-run/1/exe"; ln -s /opt/verdandi/build/norns/norns "$T/proc-run/2/exe"
 ln -s /opt/verdandi-other/thing "$T/proc-other/1/exe"
+# processes whose exe link cannot be read (a container without CAP_SYS_PTRACE: no exe file at all) but whose command line can: the program itself, the launcher script run by a shell, and an editor that only has a file of the program open
+printf '/opt/verdandi/build/norns/norns\0--terminal\0' > "$T/proc-cmd/1/cmdline"
+printf '/bin/bash\0/opt/verdandi/linux/norns.sh\0' > "$T/proc-cmd/2/cmdline"
+printf 'vim\0/opt/verdandi/linux/norns.sh\0' > "$T/proc-cmd/3/cmdline"
+mkdir -p "$T/proc-vim/1"; printf 'vim\0/opt/verdandi/linux/norns.sh\0' > "$T/proc-vim/1/cmdline"
 echo "a script of the owner" > "$T/home/Verdandi/dust/code/mine/mine.lua"
 echo "midimap" > "$T/home/Verdandi/midimap.conf"
 ln -s /opt/verdandi "$T/home/Verdandi/norns"
@@ -35,6 +40,9 @@ for a in "install" "upgrade 0.1~git20261122.55.985caf98"; do
     run "$T/proc-idle" preinst $a; rc=$?
     [ $rc = 0 ] && ok "preinst $a: passes when nothing of the program runs" || bad "preinst idle $a" "rc=$rc"
 done
+for a in "install" "upgrade 1"; do run "$T/proc-cmd" preinst $a; [ $? = 1 ] && ok "preinst $a: refused when the exe link cannot be read but the command line names the program (norns, or a shell running norns.sh)" || bad "preinst cmdline $a" "$(cat "$T/out.txt")"; done
+run "$T/proc-cmd" prerm remove; [ $? = 1 ] && ok "prerm remove: refused on the command line too" || bad "prerm cmdline" ""
+run "$T/proc-vim" preinst upgrade 1; [ $? = 0 ] && ok "an editor that only has a file of the program open does not stop it" || bad "vim" "$(cat "$T/out.txt")"
 run "$T/proc-other" preinst upgrade 1; [ $? = 0 ] && ok "a process of another program (a folder that only starts with /opt/verdandi) does not stop it" || bad "other" "$(cat "$T/out.txt")"
 for a in remove upgrade; do
     run "$T/proc-run" prerm $a; rc=$?

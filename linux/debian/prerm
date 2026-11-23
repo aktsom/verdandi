@@ -2,10 +2,17 @@
 # Verdandi package, before the files are removed (docs/port/phase-m36.md): refused while a program of this installation runs (see preinst). nothing is written, moved or deleted here.
 set -e
 PROC="${VERDANDI_PROC_DIR:-/proc}"
+# a program of this installation runs when the file it was started from is under /opt/verdandi (its exe link) or, where that link cannot be read (another user's process without the right to look: a container without CAP_SYS_PTRACE), the
+# program (or the script a shell runs) in its command line, which anyone may read. nothing but reading is done here.
 running() {
     for p in "$PROC"/[0-9]*; do
-        exe="$(readlink "$p/exe" 2> /dev/null)" || continue
+        exe="$(readlink "$p/exe" 2> /dev/null)" || exe=""
         case "$exe" in /opt/verdandi/*) return 0 ;; esac
+        args="$(tr '\0' '\n' < "$p/cmdline" 2> /dev/null | head -n 2)" || args=""
+        first="$(printf '%s\n' "$args" | sed -n 1p)"
+        second="$(printf '%s\n' "$args" | sed -n 2p)"
+        case "$first" in /opt/verdandi/*) return 0 ;; esac
+        case "$first" in */sh | */bash | */dash) case "$second" in /opt/verdandi/*) return 0 ;; esac ;; esac
     done
     return 1
 }

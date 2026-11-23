@@ -42,3 +42,8 @@ ok   the old package as the new one fails (not newer, no BUILD.txt)
 the upgrade test on the real new package: 39 PASS, 0 FAIL
 
 Run 2 on the runner (tag linux-v0.10.21-2): the fresh-install test failed in the chroot because the runner's XDG_CONFIG_HOME (its own home) leaked into the root: "filesystem error: cannot create directories: Permission denied [/home/runner/.config/SuperCollider]", norns did not boot, no engine list. Reproduced here with XDG_CONFIG_HOME=/home/runner/.config on the old test (FAIL  norns did not boot / FAIL  no engine list); after the fix (env -i inside the root) the same run has no FAIL. The tests now set a non-existent XDG_CONFIG_HOME themselves, so a leak fails everywhere.
+
+Run 3 on the runner (tag linux-v0.10.21-3): everything passed up to the docker container checks, where two checks failed: "install over a running Verdandi" and "remove while running" were NOT refused (rc=0). Cause: in a docker container root has no CAP_SYS_PTRACE, so the exe link of another user's process (/proc/PID/exe) cannot be read and the guard saw nothing. Reproduced here with a program of another user running as /opt/verdandi/linux/norns.sh and the guard run without CAP_SYS_PTRACE (setpriv --bounding-set=-sys_ptrace):
+  old preinst: old-preinst-rc=0
+  new preinst (also reads the command line, which anyone may read): "Verdandi is running..." and rc=1.
+deb_scripts_test.sh now has cases with no exe link and a readable command line (norns itself; a shell running norns.sh; an editor with a file of the program open must NOT stop it): they fail on the old scripts.
