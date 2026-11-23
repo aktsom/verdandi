@@ -31,6 +31,9 @@ if 'deb_upgrade_inner.sh' not in str(pk): bad.append('the clean-container checks
 print('\n'.join('FAIL ' + b for b in bad) if bad else 'ok   triggers, permissions, timeouts, cache, clean container, publish script')
 sys.exit(1 if bad else 0)
 PY
+ck "the second checkout gets the real origin address (a local path would be taken as identity words by the privacy scan: the first run failed on that)" 'grep -q "remote set-url origin" "$W"'
+ck "the root install test and the package build use a neutral HOME (the name of the runner account would be an identity word)" 'grep -q "HOME=/root PATH" "$W" && grep -q "HOME=\"\$RUNNER_TEMP/pkghome\" linux/package.sh all" "$W"'
+ck "linux/ci/upgrade-from.txt names a commit that exists in this history, and the workflow reads it" 'h="$(grep -v "^#" linux/ci/upgrade-from.txt | head -n 1 | tr -d " ")"; git cat-file -e "$h^{commit}" 2>/dev/null && grep -q "upgrade-from.txt" "$W"'
 ck "nothing in the workflow names a Windows release, tag or zip" '! grep -qiE "windows-latest|windows-[0-9a-f]{7}|Verdandi-windows" "$W"'
 ck "the unit test workflow does not build or publish the package" '! grep -qE "package.sh|publish-release|linux-latest" .github/workflows/linux-tests.yml'
 ck "the Windows workflows do not mention the Linux package" '! grep -qE "linux-latest|linux-package|linux/ci/" .github/workflows/windows-m0.yml .github/workflows/windows-m1.yml'

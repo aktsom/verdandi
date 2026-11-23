@@ -67,8 +67,14 @@ jobs:
         timeout-minutes: 60
         run: |
           start=$(date +%s)
-          old="$(git rev-parse HEAD~1)"
+          # the build to upgrade from: linux/ci/upgrade-from.txt names a commit (the first release uses the last commit with the old package format, like the owner's installed one); without it, the previous commit
+          old="$(grep -v '^#' linux/ci/upgrade-from.txt 2>/dev/null | head -n 1 | tr -d ' \r')"
+          [ -n "$old" ] || old="$(git rev-parse HEAD~1)"
+          old="$(git rev-parse "$old")"
+          echo "the older package is built from $old"
           git clone -q "$GITHUB_WORKSPACE" "$RUNNER_TEMP/old"
+          # the clone's origin must be the real one, not the runner's folder: the privacy scan of package.sh takes the words of the origin address as identity words
+          git -C "$RUNNER_TEMP/old" remote set-url origin "$(git remote get-url origin)"
           (cd "$RUNNER_TEMP/old" && git checkout -q "$old" && git submodule update --init --recursive --depth 1 && NORNS_NO_MAIDEN=1 NORNS_NO_PORTED=1 NORNS_NO_MI=1 linux/build.sh)
           # the same output folder (the cache has absolute paths in it), the older commit's own scripts
           mkdir -p "$RUNNER_TEMP/pkghome"
@@ -81,7 +87,8 @@ jobs:
         timeout-minutes: 30
         run: |
           sudo apt-get install -y -q debootstrap
-          sudo -E env PATH="$PATH" linux/tests/package_test.sh "$RUNNER_TEMP/new.deb" 2>&1 | tee "$RUNNER_TEMP/deb-fresh.txt"
+          # a neutral HOME (the privacy scan takes the name of the home folder as an identity word)
+          sudo env HOME=/root PATH="$PATH" linux/tests/package_test.sh "$RUNNER_TEMP/new.deb" 2>&1 | tee "$RUNNER_TEMP/deb-fresh.txt"
           ! grep -q '^FAIL' "$RUNNER_TEMP/deb-fresh.txt" && grep -q '^PASS  nothing written' "$RUNNER_TEMP/deb-fresh.txt"
       - name: "The checks in a clean ubuntu:24.04 container (install, start, upgrade, remove, versions)"
         timeout-minutes: 40

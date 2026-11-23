@@ -1,0 +1,3 @@
+# the commit whose own package.sh builds the "older" .deb of the upgrade test in .github/workflows/linux-package.yml (one hash). empty: the previous commit.
+# 4c1f7ad7 is the last commit before M36: its package has the old version format (0.1~git...), like the one installed on the owner's laptop.
+4c1f7ad7

@@ -28,7 +28,7 @@ apt-get update -q > /tmp/apt-update.log 2>&1 || { f "apt-get update"; tail -3 /t
 
 # 1. the old package, from the clean base
 if apt-get install -y -q /tmp/deb/old.deb > /tmp/apt-old.log 2>&1; then p "apt installs the old package ($OLDV) in the clean root with its Depends only ($(grep -c '^Setting up' /tmp/apt-old.log) packages set up)"; else f "apt could not install the old package"; tail -8 /tmp/apt-old.log; exit 1; fi
-apt-get install -y -q xvfb xauth jackd2 x11-apps > /tmp/apt-tools.log 2>&1 || { f "test tools (xvfb, jackd2)"; exit 1; }
+apt-get install -y -q xvfb xauth jackd2 x11-apps procps > /tmp/apt-tools.log 2>&1 || { f "test tools (xvfb, jackd2)"; exit 1; }
 useradd -m -s /bin/bash tester 2> /dev/null
 mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 (Xvfb :99 -screen 0 1280x800x24 > /tmp/xvfb.log 2>&1 &)
