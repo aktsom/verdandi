@@ -190,6 +190,7 @@ dedupe_ok() { gcc -std=gnu11 -Wall -o "$T/dedupe_test" linux/tests/dedupe_test.c
 run "windows:the same error message again and again is written once and counted (msg_dedupe.h)" dedupe_ok
 run "windows:the Windows workflow makes and publishes ONE zip (jobs, needs, M30 limits kept, no second zip, no FLAVOR or EXPECT_ASIO left)" bash linux/tests/windows_one_zip_workflow_test.sh
 run "windows:the window note follows the audio state while the program runs (a driver that vanishes says NO SOUND with the reason, the note goes when it is back)" lua5.3 linux/tests/audio_note_poll_test.lua
+run "windows:the vanish probe reads the window note exactly (no padding bars: nil means the note is gone)" python3 linux/tests/vt_note_parse_test.py
 run "windows:assembling THE zip (M31: the ASIO build is the build: its PortAudio, the SDK licence, the notice, the sources, static names without asio, no FLAVOR.txt, stops without the ASIO build output)" bash linux/tests/assemble_flavor_test.sh
 if command -v actionlint > /dev/null 2>&1 || [ -x "$HOME/go/bin/actionlint" ]; then
     run "windows:the workflows pass actionlint" bash -c 'PATH="$PATH:$HOME/go/bin" actionlint .github/workflows/windows-m0.yml .github/workflows/windows-m1.yml'

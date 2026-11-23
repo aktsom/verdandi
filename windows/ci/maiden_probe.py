@@ -8,6 +8,13 @@ import base64, http.server, json, os, socket, sys, threading, time, urllib.reque
 HOME, OUT = sys.argv[1], sys.argv[2]
 PORT = int(os.environ.get("NORNS_MAIDEN_PORT", "5000"))
 lines = []
+def parse_vt_note(line):
+    """M31: 'VT_NOTE mode|note|window note' -> (mode, note, window note); the window note may hold '|' and is never padded."""
+    g = line[line.index("VT_NOTE ") + 8:].strip().split("|", 2)
+    g += [""] * (3 - len(g))
+    return g[0], g[1], g[2]
+
+
 def result(name, ok, what=""):
     lines.append("PROBE %s %s %s" % (name, "ok" if ok else "FAIL", what))
     with open(OUT, "w", encoding="utf-8") as f:
@@ -823,8 +830,7 @@ if os.environ.get("VERDANDI_PROBE") == "asio":
                 ok_, t_ = run("local a = _norns.audio_info() print('VT_NOTE ' .. tostring(a.mode) .. '|' .. tostring(a.note) .. '|' .. tostring(_menu.audio_note))\n", "VT_NOTE", 20)
                 for l_ in t_.splitlines():
                     if "VT_NOTE " in l_:
-                        g_ = l_[l_.index("VT_NOTE ") + 8:].split("|") + ["", "", ""]
-                        return g_[0], g_[1], "|".join(g_[2:])
+                        return parse_vt_note(l_)
                 return "?", "", ""
             ctl = os.environ.get("VERDANDI_STUB_CTL", "")
             ri = rate_info()
