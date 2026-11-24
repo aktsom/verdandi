@@ -31,9 +31,11 @@ print("PROBE page", _menu.page)
 -- removing one old import link: the link goes, the original stays; a copy is refused
 print("PROBE legacy refuse copy", select(1, _norns.ext_legacy_remove("copy.wav")), select(2, _norns.ext_legacy_remove("copy.wav")))
 print("PROBE legacy remove", select(1, _norns.ext_legacy_remove("old.wav")))
+#sleep 2
 #sh [ ! -e "$NORNS_HOME/dust/audio/mac/old.wav" ] && [ ! -L "$NORNS_HOME/dust/audio/mac/old.wav" ] && echo "legacy_link_gone=yes" >> "$MARKS"; [ -f "$NORNS_HOME/old-originals/old.wav" ] && echo "legacy_original_stays=yes" >> "$MARKS"; [ -f "$NORNS_HOME/dust/audio/mac/copy.wav" ] && echo "copy_stays=yes" >> "$MARKS"
 -- removing the ext folder: the link only
 print("PROBE ext remove", select(1, _norns.ext_remove("[ext] Drops Samples")))
+#sleep 2
 #sh [ ! -e "$NORNS_HOME/dust/audio/[ext] Drops Samples" ] && echo "ext_link_gone=yes" >> "$MARKS"; [ -f "$NORNS_HOME/ext-src/Drops Samples/kick.wav" ] && echo "ext_files_stay=yes" >> "$MARKS"; [ ! -e "$NORNS_HOME/dust/audio/dropped-file.wav" ] && echo "file_not_imported=yes" >> "$MARKS"
 -- no folder chooser (NORNS_PICKER=none): a plain sentence, nothing else
 _norns.ext_folder_chosen = function(p, e) print("PROBE pick answer", p == "", e) end
