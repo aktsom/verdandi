@@ -1,0 +1,18 @@
+M31b: the old-name copy Verdandi-windows-asio-latest.zip (+ .sha256) is no longer made and is retired from windows-latest by the publish step.
+
+=== release_publish_test.sh run against the OLD windows/ci/publish-release.sh (HEAD before this change): these checks FAIL (the old script makes the copy and never removes it)
+FAIL it ends well and says that the old-name copy is gone
+FAIL NO copy under the old name is made or uploaded (nothing is sent to GitHub under Verdandi-windows-asio-latest*)
+FAIL the two old-name files ARE removed from windows-latest, each by its exact name
+FAIL the removal comes AFTER the upload of the new files (a working zip is on the release first)
+FAIL nothing else is removed: the versioned ASIO zip of the earlier build, the fixed names and BUILD.txt stay; only the versioned zip of the OLD build of the one zip is r
+FAIL the release ends with exactly: the one zip, its SHA-256, BUILD.txt, the versioned copy and the earlier ASIO versioned zip
+FAIL and the old-name files are NOT removed from it (no moment without a working zip)
+FAIL the step fails
+FAIL it names the retired files that are still there
+
+=== with the new script: 0 FAIL (release_publish_test.sh), windows_one_zip_workflow_test.sh all passed.
+
+=== not provable here
+- the real removal with the workflow token on the real release (this session may not delete release assets: HTTP 403): the first run of windows-m1 after this commit does it; its job log says `retiring ...`, then `windows-latest has the zip, ... the old-name copy is gone`.
+- update_and_run_test.sh (Wine): the 0.10.21 routine against a release without the old name changes nothing; Wine crashes in this container, so linux-tests on the runner is the first run.

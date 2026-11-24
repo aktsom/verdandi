@@ -3,10 +3,10 @@
 # M31: THERE IS ONE ZIP (the ASIO build is the build: docs/port/phase-m31.md).
 #   - a release per commit, tag windows-<short hash>: Verdandi-windows-<version>-<short hash>.zip (kept; the newest 20 are kept, older ones are removed)
 #   - the release windows-latest, updated each time (only when no check of the run failed, except the ones in NONBLOCKING_CHECKS; updated in place: files replaced, the tag moved): the same zip, a copy named
-#     Verdandi-windows-latest.zip (a fixed address for update-and-run), its SHA-256 and BUILD.txt. THE TRANSITION COPY: Verdandi-windows-asio-latest.zip and its SHA-256 (the name inside says the asio name) are made from
-#     the same file, byte for byte, so that an update routine of an earlier build, which asks for that name, keeps working and installs the one zip. nothing retires it here: a separate change does, when the owner says so.
+#     Verdandi-windows-latest.zip (a fixed address for update-and-run), its SHA-256 and BUILD.txt. (M31 had a transition copy under the old name Verdandi-windows-asio-latest.zip; the owner has updated with the new
+#     routine and said to remove it: it is no longer made, and the two old-name files are RETIRED below, explicitly, by name.)
 #   - this job ONLY ADDS OR REPLACES: it never deletes a file of the release that it did not make (M30). the only files it removes are the versioned copies of older builds of THE zip (Verdandi-windows-<version>-<hash>.zip,
-#     replaced by the new one); the versioned ASIO zips of earlier builds, the fixed names and everything else stay. afterwards the release is READ BACK and the job fails with the names when a file is missing:
+#     replaced by the new one) and, once, the two RETIRED_ASSETS below (exact names, after the new files are on the release and read back); the versioned ASIO zips of earlier builds, the fixed names and everything else stay. afterwards the release is READ BACK and the job fails with the names when a file is missing:
 #     windows-latest must always have a working download, the new zip is on it before anything else changes.
 # inputs (environment): GH_TOKEN (the workflow's token, read by gh), GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID;
 #   ZIP_DIR (folder with the zip of the run), STATUS_DIR (the status files of the report), KEEP (per-commit releases to keep, default 20), GH (the program that is called, default gh: the test uses a stand-in)
@@ -30,10 +30,8 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 cp "$ZIP_DIR/$STATIC" "$WORK/$NAME"
 cp "$ZIP_DIR/$STATIC" "$WORK/Verdandi-windows-latest.zip"
-# the transition copy: the same bytes under the name the update routine of an earlier build asks for
-OLDNAME="Verdandi-windows-asio-latest.zip"
-cp "$ZIP_DIR/$STATIC" "$WORK/$OLDNAME"
-(cd "$WORK" && printf '%s  %s\n' "$(sha256sum "$NAME" | cut -d' ' -f1)" "$OLDNAME" > "$OLDNAME.sha256")
+# M31b: the files that are RETIRED from windows-latest: the old-name copy of the transition, by exact name (no pattern). they are no longer made; they are removed only after the new files are on the release and read back
+RETIRED_ASSETS=("Verdandi-windows-asio-latest.zip" "Verdandi-windows-asio-latest.zip.sha256")
 HASH="$(cd "$WORK" && sha256sum "$NAME" | cut -d' ' -f1)"
 printf '%s  Verdandi-windows-latest.zip\n' "$HASH" > "$WORK/Verdandi-windows-latest.zip.sha256"
 printf '%s %s\n' "$VERSION" "$SHORT" > "$WORK/BUILD.txt"
@@ -73,7 +71,7 @@ fi
 # the release that has a fixed address. it is UPDATED in place, never deleted first: if the run is cancelled half way (a newer push cancels the run) the release is still there, with old or new files
 if [ "$failed" -eq 0 ]; then
     LATEST_TITLE="Verdandi for Windows: the newest build ($VERSION, $SHORT)"
-    ASSETS=("$WORK/$NAME" "$WORK/Verdandi-windows-latest.zip" "$WORK/Verdandi-windows-latest.zip.sha256" "$WORK/BUILD.txt" "$WORK/$OLDNAME" "$WORK/$OLDNAME.sha256")
+    ASSETS=("$WORK/$NAME" "$WORK/Verdandi-windows-latest.zip" "$WORK/Verdandi-windows-latest.zip.sha256" "$WORK/BUILD.txt")
     if "$GH" release view windows-latest --repo "$REPO" > /dev/null 2>&1; then
         # the new files go on first (replacing the ones with the same names); only then is anything of an older build removed
         "$GH" release upload windows-latest "${ASSETS[@]}" --repo "$REPO" --clobber
@@ -98,17 +96,37 @@ if [ "$failed" -eq 0 ]; then
         "$GH" release create windows-latest "${ASSETS[@]}" --repo "$REPO" --target "$SHA" --title "$LATEST_TITLE" --notes-file "$WORK/notes.md" --latest
     fi
     echo "published windows-latest"
-    # M30: the release must end with the zip, its SHA-256 file and BUILD.txt, whatever happened: look at the release itself, not at what this script meant to upload. M31: and the transition copy and its SHA-256
-    GOT="$("$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null || true)"
+    # M30: the release must end with the zip, its SHA-256 file and BUILD.txt, whatever happened: look at the release itself, not at what this script meant to upload
+    read_back() { "$GH" release view windows-latest --repo "$REPO" --json assets --jq '.assets[].name' 2> /dev/null || true; }
+    GOT="$(read_back)"
     missing=""
-    for need in Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 "$NAME" "$OLDNAME" "$OLDNAME.sha256" BUILD.txt; do
+    for need in Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 "$NAME" BUILD.txt; do
         printf '%s\n' "$GOT" | grep -qx "$need" || missing="$missing $need"
     done
     if [ -n "$missing" ]; then
-        echo "ERROR: the release windows-latest is missing:$missing (it has: $(printf '%s' "$GOT" | tr '\n' ' '))"
+        echo "ERROR: the release windows-latest is missing:$missing (it has: $(printf '%s' "$GOT" | tr '\n' ' ')); nothing is retired from it"
         PUBLISH_INCOMPLETE=1
     else
-        echo "windows-latest has the zip, its versioned copy, the transition copy, both SHA-256 files and BUILD.txt"
+        # M31b: the retirement of the old-name copy: only now that a working zip, its SHA-256 and BUILD.txt are on the release; only the two names of RETIRED_ASSETS; never anything else
+        for gone in "${RETIRED_ASSETS[@]}"; do
+            if printf '%s\n' "$GOT" | grep -qx "$gone"; then
+                echo "retiring $gone from windows-latest"
+                "$GH" release delete-asset windows-latest "$gone" --repo "$REPO" --yes || echo "could not remove $gone"
+            fi
+        done
+        GOT="$(read_back)"
+        for gone in "${RETIRED_ASSETS[@]}"; do
+            if printf '%s\n' "$GOT" | grep -qx "$gone"; then
+                echo "ERROR: the release windows-latest still has the retired file $gone"
+                PUBLISH_INCOMPLETE=1
+            fi
+        done
+        for need in Verdandi-windows-latest.zip Verdandi-windows-latest.zip.sha256 "$NAME" BUILD.txt; do
+            printf '%s\n' "$GOT" | grep -qx "$need" || { echo "ERROR: after the retirement the release windows-latest is missing $need"; PUBLISH_INCOMPLETE=1; }
+        done
+        others="$(printf '%s\n' "$GOT" | grep -vx -e Verdandi-windows-latest.zip -e Verdandi-windows-latest.zip.sha256 -e "$NAME" -e BUILD.txt | tr '\n' ' ')"
+        [ -n "$others" ] && echo "also on the release windows-latest (not made by this job, kept): $others"
+        [ "${PUBLISH_INCOMPLETE:-0}" -eq 0 ] && echo "windows-latest has the zip, its versioned copy, its SHA-256 file and BUILD.txt; the old-name copy is gone"
     fi
 else
     echo "checks failed: windows-latest is left as it was"

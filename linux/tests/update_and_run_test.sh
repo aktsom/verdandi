@@ -202,15 +202,13 @@ ck "FLAVOR.txt in a folder with another name: the new build is put in Verdandi-a
 newroot 9
 run "$OLD" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
 ck "a plain folder named Verdandi stays Verdandi (the zip is the one zip)" "[ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ ! -d '$PAR/Verdandi-asio' ]"
-echo "== the update routine of the EARLIER ASIO build (0.10.21: it asks for Verdandi-windows-asio-latest.zip) works against the new release: the transition copy"
+echo "== the update routine of the EARLIER ASIO build (0.10.21: it asks for Verdandi-windows-asio-latest.zip) against the release WITHOUT the old name (M31b: the old-name copy is retired)"
 newroot 10
 mkbuild "$PAR/Verdandi-asio" 0.2.0 aaaaaaa; echo asio > "$PAR/Verdandi-asio/FLAVOR.txt"
 cp linux/tests/fixtures/update-and-run-0.10.21.cmd "$PAR/Verdandi-asio/update-and-run.cmd"
-mv "$T/server/Verdandi-windows-latest.zip" "$T/server/zip.hidden"
-cp "$T/server/zip.hidden" "$T/server/Verdandi-windows-asio-latest.zip" # (the transition copy: the same bytes)
+rm -f "$T/server/Verdandi-windows-asio-latest.zip" "$T/server/Verdandi-windows-asio-latest.zip.sha256"
 run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
-rm -f "$T/server/Verdandi-windows-asio-latest.zip"; mv "$T/server/zip.hidden" "$T/server/Verdandi-windows-latest.zip"
-ck "the old routine downloads the old name, takes the folder Verdandi out of it and puts it in Verdandi-asio: the same path, built 0.3.0" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.3.0 bbbbbbb' ] && [ \"\$(first_line '$PAR/Verdandi-asio.previous/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ -f '$PAR/Verdandi-asio/update-and-run.cmd' ]"
+ck "the old routine finds no zip under the old name, says the download failed and CHANGES NOTHING: the folder keeps its build 0.2.0 and no .previous is made" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ ! -d '$PAR/Verdandi-asio.previous' ] && [ ! -d '$PAR/Verdandi' ] && tr -d '\\r' < '$T/out.txt' | grep -qi 'download'"
 
 echo "== no address to download from"
 newroot 8

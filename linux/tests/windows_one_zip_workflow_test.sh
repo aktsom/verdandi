@@ -1,7 +1,7 @@
 #!/bin/bash
 # M31 (docs/port/phase-m31.md): the Windows workflow makes and publishes ONE zip. structure only (nothing runs here): the ASIO build of PortAudio is required for the zip (no continue-on-error), the zip is assembled once
 # and checked by two jobs on the same file with the M30 limits (the ASIO cases job 90 minutes / 75 for its step; the long checks 110 / 100), the release waits for all of them and publishes only that zip, there is no
-# second zip, no FLAVOR, no ASIO_ZIP_DIR any more, and the transition copy is made by the publish script from the same bytes.
+# second zip, no FLAVOR, no ASIO_ZIP_DIR any more, and the publish script retires the old-name copy (exact names, after the new files are read back).
 cd "$(dirname "$0")/../.." || exit 1
 W=.github/workflows/windows-m1.yml
 fails=0
@@ -36,7 +36,7 @@ if 'permissions' not in rel or rel['permissions'].get('contents') != 'write': ba
 print('\n'.join('FAIL ' + b for b in bad) if bad else 'ok   jobs, needs, limits, release condition, no second zip')
 sys.exit(1 if bad else 0)
 PY
-ck "the publish script has no ASIO zip input and makes the transition copy from the one zip" '! grep -q "ASIO_ZIP_DIR\|HAVE_ASIO" windows/ci/publish-release.sh && grep -q "OLDNAME=\"Verdandi-windows-asio-latest.zip\"" windows/ci/publish-release.sh'
+ck "the publish script has no ASIO zip input, makes NO copy under the old name, and names the two retired files exactly (no pattern)" '! grep -q "ASIO_ZIP_DIR\|HAVE_ASIO\|OLDNAME" windows/ci/publish-release.sh && grep -q "^RETIRED_ASSETS=(\"Verdandi-windows-asio-latest.zip\" \"Verdandi-windows-asio-latest.zip.sha256\")$" windows/ci/publish-release.sh && [ "$(grep -c "RETIRED_ASSETS\[@\]" windows/ci/publish-release.sh)" -eq 2 ]'
 ck "assemble-m1.sh has no FLAVOR any more" '! grep -q "FLAVOR" windows/ci/assemble-m1.sh'
 ck "the smoke test has no EXPECT_ASIO (the zip is the ASIO build) and knows the two parts and the vanish case" '! grep -q EXPECT_ASIO windows/ci/smoke-m1.sh && grep -q "SMOKE_PART" windows/ci/smoke-m1.sh && grep -q "m31-check-asio-vanish" windows/ci/smoke-m1.sh'
 ck "the update routines name the one zip" 'grep -q "Verdandi-windows-latest" windows/update-and-run.cmd windows/update-and-run.ps1 && ! grep -q "windows-asio-latest" windows/update-and-run.cmd windows/update-and-run.ps1'

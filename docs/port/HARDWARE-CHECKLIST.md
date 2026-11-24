@@ -808,3 +808,7 @@ Do one step at a time. The link: the Releases page of this repository, release `
 8. The next update: run `update-and-run.cmd` again after a newer build exists: it must fetch `Verdandi-windows-latest.zip` (the logs line says which name) and still use the folder `Verdandi-asio`.
 Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ] (latency __ ms, u/x 0 [ ])  5 [ ]  6 [ ]  7 [ ]  8 [ ]; notes: ...
 Cannot be tested here: the real RME driver (shared with Ableton or not), a real unplug, Defender's reaction, double-clicking on your Windows.
+
+## M31b: the old-name copy is gone from windows-latest (no new program; the build number changes, 0.10.22 with a new hash)
+1. Run `update-and-run.cmd` from your `Verdandi-asio` or `Verdandi` folder. It sees a new build (same version, new hash), downloads `Verdandi-windows-latest.zip`, and puts the build in the same folder name; the folder it replaced is kept next to it as `Verdandi.previous` (or `Verdandi-asio.previous`), in the PARENT folder of the one you ran it from. Look for: "This folder holds build: 0.10.22 f322aa9", "The newest build is: 0.10.22 <new hash>", the path and the Defender exclusion unchanged.
+2. Open https://github.com/aktsom/verdandi/releases/tag/windows-latest: it has `Verdandi-windows-latest.zip`, its `.sha256`, `BUILD.txt`, `Verdandi-windows-0.10.22-<hash>.zip` and the old `Verdandi-windows-asio-0.10.21-5201a5a.zip`, and nothing named `Verdandi-windows-asio-latest*`.
