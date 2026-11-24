@@ -208,7 +208,7 @@ mkbuild "$PAR/Verdandi-asio" 0.2.0 aaaaaaa; echo asio > "$PAR/Verdandi-asio/FLAV
 cp linux/tests/fixtures/update-and-run-0.10.21.cmd "$PAR/Verdandi-asio/update-and-run.cmd"
 rm -f "$T/server/Verdandi-windows-asio-latest.zip" "$T/server/Verdandi-windows-asio-latest.zip.sha256"
 run "$PAR/Verdandi-asio" "/NOSTART" "set VERDANDI_TEST_CHOICE=N&set VERDANDI_UPDATE_BASE=$(winpath "$T/server")"
-ck "the old routine finds no zip under the old name, says the download failed and CHANGES NOTHING: the folder keeps its build 0.2.0 and no .previous is made" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ ! -d '$PAR/Verdandi-asio.previous' ] && [ ! -d '$PAR/Verdandi' ] && tr -d '\\r' < '$T/out.txt' | grep -qi 'download'"
+ck "the old routine finds no zip under the old name, says the download failed and CHANGES NOTHING: the folder keeps its build 0.2.0 and no .previous is made" "[ \"\$(first_line '$PAR/Verdandi-asio/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ ! -d '$PAR/Verdandi-asio.previous' ] && [ \"\$(first_line '$PAR/Verdandi/BUILD.txt')\" = '0.2.0 aaaaaaa' ] && [ ! -d '$PAR/Verdandi.previous' ] && tr -d '\\r' < '$T/out.txt' | grep -qi 'download'"
 
 echo "== no address to download from"
 newroot 8

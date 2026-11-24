@@ -16,3 +16,7 @@ FAIL it names the retired files that are still there
 === not provable here
 - the real removal with the workflow token on the real release (this session may not delete release assets: HTTP 403): the first run of windows-m1 after this commit does it; its job log says `retiring ...`, then `windows-latest has the zip, ... the old-name copy is gone`.
 - update_and_run_test.sh (Wine): the 0.10.21 routine against a release without the old name changes nothing; Wine crashes in this container, so linux-tests on the runner is the first run.
+
+=== found by the first linux-tests run on 6b77c4c (shard windows-1, the Wine test of update-and-run.cmd on the runner)
+- every other case passed; the new case "the 0.10.21 routine against a release without the old name" FAILED because my check said "no folder named Verdandi next to it", but the test root always has the normal build folder Verdandi (the case of the normal build next to the ASIO one). The routine itself did what was meant (download failed, nothing changed): the check was wrong. Fixed: the normal folder keeps its build 0.2.0 and no .previous exists.
+- this case documents the consequence of retiring the old name for old routines; it checks the old routine of 0.10.21 (a fixture), not new production code, so it cannot "fail on old code": the production change is proven by release_publish_test.sh (above).
