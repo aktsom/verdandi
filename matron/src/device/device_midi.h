@@ -39,6 +39,8 @@ struct dev_midi {
     // waiting for a udev event that may never come, and a new device of the same node replaces it (docs/port/KNOWN-ISSUES.md 36)
     unsigned int port_index;
     volatile int gone;
+    // M37: when a write that was dropped was last said in the log (a device that takes no data is said once in a while, not at every message)
+    double last_drop_say;
 #ifdef NORNS_WINDOWS
     // the Windows MIDI layer (platform/windows/midi): the port pair of this device (midi_port.h)
     void *win_port;
@@ -54,6 +56,10 @@ extern unsigned int dev_midi_port_count(const char *path);
 extern int dev_midi_node_present(const char *path);
 #endif
 
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+// why the last dev_midi_init of this thread failed: 1 = the port is busy (another program has it open), 0 = another reason; the sentence goes to `why` (the device list says it once)
+extern int dev_midi_open_failure(char *why, size_t n);
+#endif
 extern int dev_midi_init(void *self, unsigned int port_index, bool multiport_device);
 extern int dev_midi_virtual_init(void *self);
 

@@ -38,7 +38,21 @@ local function midi_held_count()
   for _ in tostring(_norns.midi_status()):gmatch("\nnote=") do n = n + 1 end
   return n
 end
+-- Linux desktop (docs/port/phase-m37.md): the MIDI ports that another program holds (Reaper has the raw port open): skipped, tried again by themselves. the names, and how many
+local function midi_busy()
+  if not (_norns and _norns.midi_skipped) then return 0, {} end
+  local n, text = _norns.midi_skipped()
+  local names = {}
+  for line in tostring(text or ""):gmatch("[^\n]+") do
+    names[#names + 1] = line:match("^(.-): ") or line
+  end
+  return n or 0, names
+end
 local function list_label(name)
+  if name == "midi" and not is_windows() then
+    local n = midi_busy()
+    if n > 0 then return "midi: " .. n .. " busy" end
+  end
   if is_windows() and name == "midi routes" then
     local n = midi_held_count()
     if n > 0 then return "midi: " .. n .. " held" end
@@ -545,6 +559,16 @@ m.redraw = function()
     screen.move(0,10)
     screen.level(4)
     screen.text(string.upper(m.section))
+    -- Linux: a port that another program holds is skipped (and added by itself when it is free): said at the right of the title
+    if m.section == "midi" then
+      local n, names = midi_busy()
+      if n > 0 then
+        screen.move(127, 10)
+        screen.level(15)
+        screen.text_right(clip("BUSY: " .. table.concat(names, ", "), 100))
+        screen.move(0, 10)
+      end
+    end
     -- Linux: the optional MIDI auto-connect (audio.conf midi_in_from=), under the title of the MIDI list
     if m.section == "midi" and _norns.midi_in_status then
       local on, count, names = _norns.midi_in_status()

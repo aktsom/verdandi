@@ -812,3 +812,15 @@ Cannot be tested here: the real RME driver (shared with Ableton or not), a real 
 ## M31b: the old-name copy is gone from windows-latest (no new program; the build number changes, 0.10.22 with a new hash)
 1. Run `update-and-run.cmd` from your `Verdandi-asio` or `Verdandi` folder. It sees a new build (same version, new hash), downloads `Verdandi-windows-latest.zip`, and puts the build in the same folder name; the folder it replaced is kept next to it as `Verdandi.previous` (or `Verdandi-asio.previous`), in the PARENT folder of the one you ran it from. Look for: "This folder holds build: 0.10.22 f322aa9", "The newest build is: 0.10.22 <new hash>", the path and the Defender exclusion unchanged.
 2. Open the Releases page of the repository, tag `windows-latest`: it has `Verdandi-windows-latest.zip`, its `.sha256`, `BUILD.txt`, `Verdandi-windows-0.10.22-<hash>.zip` and the old `Verdandi-windows-asio-0.10.21-5201a5a.zip`, and nothing named `Verdandi-windows-asio-latest*`.
+
+## M37: a busy MIDI device does not freeze start-up - the owner's Linux Mint laptop (Reaper, the interface "mio")
+Do one step at a time.
+1. Start Reaper first, with the MIDI input and output of mio enabled (so Reaper holds `/dev/snd/midiC1D0`). Leave it open.
+2. Start Verdandi (the new build). Look for: it reaches the HOME screen, with sound, in a few seconds, not a black window.
+3. Look at the terminal or the log: one line like `midi: skipped mio ... busy: another program has it open`, once, not every 3 seconds.
+4. Open SYSTEM > DEVICES. Look for: the MIDI entry says `midi: 1 busy`, and on the MIDI list the title row says `BUSY: mio`.
+5. Close Reaper. Wait up to 5 seconds, no restart. Look for: a log line that mio is free and added, the BUSY row is gone, and a controller on mio sends notes to a script.
+6. The old order: close Verdandi, start Verdandi first, then Reaper: as before (Reaper may find mio busy because Verdandi holds it; that is the old limit, no change).
+7. Other devices (a USB controller, a grid) still appear at start-up with Reaper open.
+Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
+Cannot be tested here: a real busy port in a real kernel, Reaper, mio.

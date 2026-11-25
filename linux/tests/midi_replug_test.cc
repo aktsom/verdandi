@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <condition_variable>
+#include <thread>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -32,6 +33,14 @@ extern "C" {
 // the device code as it was before the fix (to show the failing state): it has none of the new calls
 extern "C" int dev_list_midi_ports_listed(const char *) { return -1; }
 extern "C" void dev_monitor_watch_tick(double *) {}
+#endif
+
+#ifdef M37_OLD_CODE
+// the device code as it was before M37 (to show the failing state, docs/port/phase-m37-without.txt): it has no list of skipped ports
+extern "C" int dev_list_midi_skipped_text(char *buf, size_t n) {
+    if (buf != NULL && n > 0) buf[0] = '\0';
+    return 0;
+}
 #endif
 
 // ------------------------------------------------------------------------------------------------------ fake udev
@@ -102,6 +111,10 @@ struct _snd_rawmidi {
     bool is_in;
     bool dead = false;
     std::deque<unsigned char> in;
+    bool nonblock = false; // opened with SND_RAWMIDI_NONBLOCK (and not switched back by snd_rawmidi_nonblock)
+    bool held_by_other = false; // another program's handle (a DAW): keeps the subdevice busy until released
+    bool stuck = false;         // an output that takes no data (its buffer is full and does not drain)
+    size_t written = 0;
 };
 struct _snd_rawmidi_status { int dummy; };
 struct _snd_ctl { int card; };
@@ -116,7 +129,11 @@ struct FakeCard {
 };
 static std::map<int, FakeCard> cards;
 static std::set<_snd_rawmidi *> open_handles;
+static std::set<int> no_input_cards; // cards whose raw port has no input stream (an output only synth): opening the input answers -ENXIO
 static int open_fail_count = 0; // the next N opens fail with -EBUSY
+static int open_delay_ms = 0;   // every open takes this long (the window in which a second thread can start the same open)
+static int open_calls = 0;
+static bool scan_block = false; // jack_midi_in_start() waits for ever (a device client that does not answer)
 
 // the nodes /dev/snd/midiC<n>D<m> exist when the fake card is there (device_list.cc asks access(); the link has --wrap=access)
 extern "C" int __real_access(const char *, int);
@@ -133,6 +150,9 @@ static void alsa_reset() {
     std::lock_guard<std::mutex> l(amtx);
     cards.clear();
     open_fail_count = 0;
+    open_delay_ms = 0;
+    open_calls = 0;
+    scan_block = false;
     for (auto *h : open_handles) delete h;
     open_handles.clear();
 }
@@ -145,6 +165,23 @@ static void alsa_unplug(int card) { // the device goes: every handle on it answe
     cards[card].present = false;
     for (auto *h : open_handles) if (h->card == card) h->dead = true;
     acv.notify_all();
+}
+// what a DAW does: it holds the raw port (the input, the output, or both) of a subdevice until it lets go. a program that opens the port meanwhile finds it busy
+static void alsa_hold(int card, int sub, bool in = true, bool out = true) {
+    std::lock_guard<std::mutex> l(amtx);
+    if (in) { auto *h = new _snd_rawmidi{card, 0, sub, true}; h->held_by_other = true; open_handles.insert(h); }
+    if (out) { auto *h = new _snd_rawmidi{card, 0, sub, false}; h->held_by_other = true; open_handles.insert(h); }
+}
+static void alsa_release_others(int card) {
+    std::lock_guard<std::mutex> l(amtx);
+    for (auto it = open_handles.begin(); it != open_handles.end();) {
+        if ((*it)->card == card && (*it)->held_by_other) { delete *it; it = open_handles.erase(it); } else ++it;
+    }
+    acv.notify_all();
+}
+static void alsa_out_stuck(int card, bool on) {
+    std::lock_guard<std::mutex> l(amtx);
+    for (auto *h : open_handles) if (h->card == card && !h->is_in && !h->held_by_other) h->stuck = on;
 }
 static void alsa_feed(int card, int sub, std::vector<unsigned char> bytes) {
     std::lock_guard<std::mutex> l(amtx);
@@ -179,19 +216,37 @@ int snd_ctl_rawmidi_info(snd_ctl_t *c, snd_rawmidi_info_t *i) {
     return 0;
 }
 unsigned int snd_rawmidi_info_get_subdevices_count(const snd_rawmidi_info_t *i) { return (unsigned)((_snd_rawmidi_info *)i)->dummy_ports; }
-int snd_rawmidi_open(snd_rawmidi_t **in, snd_rawmidi_t **out, const char *name, int) {
+int snd_rawmidi_open(snd_rawmidi_t **in, snd_rawmidi_t **out, const char *name, int mode) {
     int card, dev, sub;
     if (sscanf(name, "hw:%d,%d,%d", &card, &dev, &sub) != 3) return -ENOENT;
-    std::lock_guard<std::mutex> l(amtx);
-    if (!cards.count(card) || !cards[card].present) return -ENOENT;
-    if (open_fail_count > 0) { open_fail_count--; return -EBUSY; }
-    // a subdevice is exclusive, per direction: a handle that is still open on it (also one of a device that is gone) keeps it busy
-    for (auto *h : open_handles)
-        if (h->card == card && h->dev == dev && h->sub == sub && ((in && h->is_in) || (out && !h->is_in))) return -EBUSY;
-    if (in) { auto *h = new _snd_rawmidi{card, dev, sub, true}; open_handles.insert(h); *in = (snd_rawmidi_t *)h; }
-    if (out) { auto *h = new _snd_rawmidi{card, dev, sub, false}; open_handles.insert(h); *out = (snd_rawmidi_t *)h; }
+    std::unique_lock<std::mutex> l(amtx);
+    open_calls++;
+    if (open_delay_ms > 0) { l.unlock(); usleep(open_delay_ms * 1000); l.lock(); }
+    for (;;) {
+        if (!cards.count(card) || !cards[card].present) return -ENOENT;
+        if (in && no_input_cards.count(card)) return -ENXIO;
+        if (open_fail_count > 0) { open_fail_count--; return -EBUSY; }
+        // a subdevice is exclusive, per direction: a handle that is still open on it (also one of a device that is gone) keeps it busy
+        bool busy = false;
+        for (auto *h : open_handles)
+            if (h->card == card && h->dev == dev && h->sub == sub && ((in && h->is_in) || (out && !h->is_in))) busy = true;
+        if (!busy) break;
+        // the kernel: a non-blocking open of a busy port answers -EBUSY; a BLOCKING open sleeps until the other program lets go (snd_rawmidi_open waits for the card's open queue)
+        if (mode & SND_RAWMIDI_NONBLOCK) return -EBUSY;
+        pthread_testcancel();
+        acv.wait_for(l, std::chrono::milliseconds(20));
+        pthread_testcancel();
+    }
+    if (in) { auto *h = new _snd_rawmidi{card, dev, sub, true}; h->nonblock = (mode & SND_RAWMIDI_NONBLOCK) != 0; open_handles.insert(h); *in = (snd_rawmidi_t *)h; }
+    if (out) { auto *h = new _snd_rawmidi{card, dev, sub, false}; h->nonblock = (mode & SND_RAWMIDI_NONBLOCK) != 0; open_handles.insert(h); *out = (snd_rawmidi_t *)h; }
     return 0;
 }
+int snd_rawmidi_nonblock(snd_rawmidi_t *m, int nonblock) {
+    std::lock_guard<std::mutex> l(amtx);
+    ((_snd_rawmidi *)m)->nonblock = nonblock != 0;
+    return 0;
+}
+const char *snd_strerror(int e) { return strerror(e < 0 ? -e : e); }
 int snd_rawmidi_close(snd_rawmidi_t *m) {
     std::lock_guard<std::mutex> l(amtx);
     open_handles.erase((_snd_rawmidi *)m);
@@ -208,12 +263,24 @@ ssize_t snd_rawmidi_read(snd_rawmidi_t *m, void *buf, size_t n) {
             while (k < n && !h->in.empty()) { ((unsigned char *)buf)[k++] = h->in.front(); h->in.pop_front(); }
             return (ssize_t)k;
         }
+        if (h->nonblock) return -EAGAIN;
         pthread_testcancel();
         acv.wait_for(l, std::chrono::milliseconds(20));
         pthread_testcancel();
     }
 }
-ssize_t snd_rawmidi_write(snd_rawmidi_t *, const void *, size_t n) { return (ssize_t)n; }
+ssize_t snd_rawmidi_write(snd_rawmidi_t *m, const void *, size_t n) {
+    _snd_rawmidi *h = (_snd_rawmidi *)m;
+    std::unique_lock<std::mutex> l(amtx);
+    for (;;) {
+        if (h->dead) return -ENODEV;
+        if (!h->stuck) { h->written += n; return (ssize_t)n; }
+        if (h->nonblock) return -EAGAIN; // the output is full: a non-blocking write says so, a blocking write waits for the device to drain (for ever, here)
+        pthread_testcancel();
+        acv.wait_for(l, std::chrono::milliseconds(20));
+        pthread_testcancel();
+    }
+}
 int snd_rawmidi_status_malloc(snd_rawmidi_status_t **p) { *p = (snd_rawmidi_status_t *)new _snd_rawmidi_status{0}; return 0; }
 void snd_rawmidi_status_free(snd_rawmidi_status_t *p) { delete (_snd_rawmidi_status *)p; }
 int snd_rawmidi_status(snd_rawmidi_t *, snd_rawmidi_status_t *) { return 0; }
@@ -237,8 +304,13 @@ int dev_crow_init(void *) { return -1; }
 int dev_serial_init(void *, lua_State *) { return -1; }
 void dev_monome_all_led(struct dev_monome *, int8_t, bool) {}
 void dev_monome_refresh(struct dev_monome *) {}
+int dev_monome_leds_off(struct dev_monome *) { return 0; } // M37: device_list.cc calls these two (the test did not link without them since the monome quit code was added)
+void dev_monome_freeze(void) {}
 int monome_led_all(monome_t *, unsigned int) { return 0; }
-int jack_midi_in_start(void) { return -1; }
+int jack_midi_in_start(void) {
+    while (scan_block) pause(); // a client that does not answer: the first look at the devices cannot finish
+    return -1;
+}
 int aseq_out_start(void) { return -1; }
 }
 
@@ -280,6 +352,7 @@ static void lua_world() {
 }
 static void lua_call_midi(const char *fn, int nargs_before) { (void)fn; (void)nargs_before; }
 
+static std::vector<union dev *> seen_devs; // every device the main loop was told about (a test sends data to them)
 // the main loop, as event_loop / w_handle_midi_*: drain what the device threads and the monitor posted
 static void drain() {
     for (;;) {
@@ -295,6 +368,7 @@ static void drain() {
         switch (e->type) {
         case EVENT_MIDI_ADD: {
             struct dev_common *base = (struct dev_common *)e->midi_add.dev;
+            seen_devs.push_back((union dev *)e->midi_add.dev);
             lua_getfield(L, -1, "add");
             lua_pushinteger(L, base->id + 1);
             lua_pushstring(L, base->name);
@@ -454,7 +528,7 @@ static int count_of(const std::string &hay, const std::string &needle) {
 static int daw_open(int card) {
     snd_rawmidi_t *in = NULL;
     std::string name = "hw:" + std::to_string(card) + ",0,0";
-    int rc = snd_rawmidi_open(&in, NULL, name.c_str(), 0);
+    int rc = snd_rawmidi_open(&in, NULL, name.c_str(), SND_RAWMIDI_NONBLOCK); // Reaper opens non-blocking: "could not be opened" at once
     if (rc == 0) snd_rawmidi_close(in);
     return rc;
 }
@@ -496,6 +570,7 @@ static int failures;
         fflush(stdout);                                                                                              \
         pid_t pid_ = fork();                                                                                         \
         if (pid_ == 0) {                                                                                             \
+            alarm(30);                                                                                               \
             world(name);                                                                                             \
             __VA_ARGS__;                                                                                             \
             fflush(stdout);                                                                                          \
@@ -690,7 +765,7 @@ int main(int argc, char **argv) {
         EXPECT_EQ(check_state({2}), "", "state");
     });
     CASE("a port that was busy when the add came is added by the check, without doubling the port that worked", {
-        { std::lock_guard<std::mutex> l(amtx); open_fail_count = 3; }
+        { std::lock_guard<std::mutex> l(amtx); open_fail_count = 1; } // M37: a busy answer ends the try of that port (it is no longer tried as output only and input only)
         alsa_plug(2, 2);
         udev_add(2); settle();
         EXPECT_EQ(device_names(), "Arturia BeatStep Pro 2", "port 1 failed (busy), port 2 is there");
@@ -705,6 +780,122 @@ int main(int argc, char **argv) {
         EXPECT_EQ(device_names(), "", "gone");
         plug(2, 1);
         EXPECT_EQ(device_names(), "Arturia BeatStep Pro", "back");
+    });
+
+    // ---- M37 (docs/port/phase-m37.md): a MIDI port that another program holds must never hold Verdandi. the fake ALSA answers like the kernel: a BLOCKING open of a busy port sleeps until the other
+    // program lets go, a non-blocking open answers -EBUSY. every case runs under an alarm: a hang is a failure
+    CASE("M37: a port that another program holds when the card is added: the add returns, the free port and the other card work, one log line says why, the page can say it", {
+        capture_log();
+        alsa_plug(2, 2);
+        alsa_hold(2, 0); // the DAW has port 1 (input and output), as Reaper had mio
+        udev_add(2);     // would not return before the DAW lets go, with a blocking open
+        settle();
+        EXPECT_EQ(device_names(), "Arturia BeatStep Pro 2", "the free port is listed, the busy one is skipped");
+        char text[512]; int n = dev_list_midi_skipped_text(text, sizeof text);
+        EXPECT(n == 1, "one skipped port");
+        EXPECT_EQ(text, "Arturia BeatStep Pro 1: busy: another program has it open (its input)\n", "the page text names the device and the reason");
+        std::string log = log_text();
+        EXPECT(count_of(log, "midi: skipped Arturia BeatStep Pro 1 (/dev/snd/midiC2D0 port 0): busy: another program has it open") == 1, "one clear log line");
+        for (int i = 0; i < 5; i++) tick();
+        EXPECT(count_of(log_text(), "midi: skipped") == 1, "the periodic check does not repeat it");
+        EXPECT(count_of(log_text(), "midi: could not add") == 0, "and no second kind of line");
+        plug(3);
+        EXPECT(dev_list_midi_ports_listed("/dev/snd/midiC3D0") == 2, "a second card is not held up");
+    });
+    CASE("M37: the other program lets go: the port is added by the periodic check, without a restart, and the log says so once", {
+        capture_log();
+        alsa_plug(2, 2);
+        alsa_hold(2, 0);
+        udev_add(2); settle();
+        EXPECT_EQ(device_names(), "Arturia BeatStep Pro 2", "port 1 skipped");
+        alsa_release_others(2);
+        tick();
+        EXPECT_EQ(device_names(), TWO, "the check added the port by itself");
+        char text[256]; EXPECT(dev_list_midi_skipped_text(text, sizeof text) == 0, "nothing is skipped any more");
+        EXPECT(count_of(log_text(), "midi: Arturia BeatStep Pro 1 (/dev/snd/midiC2D0 port 0) is free now: added") == 1, "one line when it is finally added");
+        tick(); tick();
+        EXPECT(count_of(log_text(), "is free now") == 1, "not repeated");
+        EXPECT_EQ(check_state({2}), "", "state");
+    });
+    CASE("M37: a device that is busy at start-up (one port, Reaper holds the output only): skipped as a whole, not half-opened; picked up when it is free", {
+        capture_log();
+        alsa_plug(2, 1);
+        alsa_hold(2, 0, false, true); // only the output is held: the input is free, but a half-open device would never get its output later
+        udev_add(2); settle();
+        EXPECT_EQ(device_names(), "", "nothing listed");
+        EXPECT(handles(2) == 1, "only the other program's handle is open: the free input was closed again");
+        char text[256]; dev_list_midi_skipped_text(text, sizeof text);
+        EXPECT(std::string(text).find("busy: another program has it open (its output)") != std::string::npos, "the reason names the output");
+        alsa_release_others(2);
+        tick();
+        EXPECT_EQ(device_names(), "Arturia BeatStep Pro", "added");
+        EXPECT(handles(2) == 2, "input and output");
+    });
+    CASE("M37: the card is unplugged while a port is skipped: the skip is forgotten, and the card is listed whole when it comes back", {
+        capture_log();
+        alsa_plug(2, 2);
+        alsa_hold(2, 0);
+        udev_add(2); settle();
+        char text[256];
+        EXPECT(dev_list_midi_skipped_text(text, sizeof text) == 1, "skipped");
+        alsa_release_others(2);
+        unplug(2);
+        EXPECT(dev_list_midi_skipped_text(text, sizeof text) == 0, "forgotten with the card");
+        plug(2);
+        EXPECT_EQ(device_names(), TWO, "listed whole");
+    });
+    CASE("M37: the start-up scan and the periodic check add the same card at the same time: every port is opened once (a second open of a port that Verdandi holds itself never returns)", {
+        capture_log();
+        alsa_plug(2, 2);
+        know_enum(2);
+        udev_device *d = card_device(2);
+        { std::lock_guard<std::mutex> l(amtx); open_delay_ms = 40; }
+        std::thread a([&] { add_dev(d, DEV_FILE_SOUND); });
+        std::thread b([&] { add_dev(d, DEV_FILE_SOUND); });
+        a.join(); b.join();
+        settle(200);
+        EXPECT_EQ(device_names(), TWO, "both ports, once");
+        EXPECT_EQ(check_state({2}), "", "state: 2 ports listed, 4 handles");
+    });
+    CASE("M37: the first look at the devices does not hold the start-up when a device does not answer: it goes on after the time-out and says so", {
+        capture_log();
+        setenv("NORNS_SCAN_WAIT_MS", "300", 1);
+        scan_block = true;
+        struct timespec t0, t1; clock_gettime(CLOCK_MONOTONIC, &t0);
+        dev_monitor_scan();
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        double ms = (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) / 1e6;
+        EXPECT(ms >= 250 && ms < 2500, "it returned after about the time-out");
+        EXPECT(count_of(log_text(), "has not finished after 300 ms") == 1, "and said so");
+        scan_block = false;
+    });
+    CASE("M37: a write to a device that takes no data does not hold the sender: it gives up after about a quarter of a second, drops the rest, says so once; other devices and later writes are not affected", {
+        capture_log();
+        plug(2, 1);
+        EXPECT(!seen_devs.empty(), "the device is known");
+        union dev *dv = seen_devs.back();
+        uint8_t msg[3] = {0x90, 60, 100};
+        EXPECT(dev_midi_send(dv, msg, 3) == 3, "a normal write is complete");
+        alsa_out_stuck(2, true);
+        struct timespec t0, t1; clock_gettime(CLOCK_MONOTONIC, &t0);
+        ssize_t r = dev_midi_send(dv, msg, 3);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        double ms = (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) / 1e6;
+        EXPECT(r < 0, "the write says it did not go");
+        EXPECT(ms >= 200 && ms < 1500, "after about a quarter of a second");
+        dev_midi_send(dv, msg, 3);
+        EXPECT(count_of(log_text(), "does not take data") == 1, "said once in a while, not at every message");
+        alsa_out_stuck(2, false);
+        EXPECT(dev_midi_send(dv, msg, 3) == 3, "the device takes data again: writes work again");
+    });
+    CASE("M37: a device that has no input (an output only synth): opened for output as before, not skipped", {
+        capture_log();
+        alsa_plug(2, 1);
+        { std::lock_guard<std::mutex> l(amtx); no_input_cards.insert(2); }
+        udev_add(2); settle();
+        EXPECT_EQ(device_names(), "Arturia BeatStep Pro", "listed");
+        EXPECT(count_of(log_text(), "only output ports") == 1, "as an output only device");
+        char text[256]; EXPECT(dev_list_midi_skipped_text(text, sizeof text) == 0, "nothing skipped");
     });
 
     // random plug and unplug sequences: udev removes, silent vanishes, late removes, repeated adds, checks, in any order, two cards of the same product

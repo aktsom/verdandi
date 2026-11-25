@@ -441,6 +441,9 @@ static int _plugin_note_text(lua_State *l);
 static int _mi_foreign_note_text(lua_State *l);
 static int _mi_foreign_fix_text(lua_State *l);
 static int _midi_in_status(lua_State *l);
+#ifndef NORNS_WINDOWS
+static int _midi_skipped(lua_State *l);
+#endif
 static int _alsa_midi_link(lua_State *l);
 static int _set_warning(lua_State *l);
 #endif
@@ -829,6 +832,9 @@ void w_init(void) {
     lua_register_norns("mi_foreign_note_text", &_mi_foreign_note_text);
     lua_register_norns("mi_foreign_fix_text", &_mi_foreign_fix_text);
     lua_register_norns("midi_in_status", &_midi_in_status);
+#ifndef NORNS_WINDOWS
+    lua_register_norns("midi_skipped", &_midi_skipped);
+#endif
     lua_register_norns("alsa_midi_link", &_alsa_midi_link);
 #endif
 #ifdef NORNS_LINUX_DESKTOP
@@ -4807,6 +4813,22 @@ int _midi_in_status(lua_State *l) {
     lua_pushstring(l, names);
     return 3;
 }
+
+#ifndef NORNS_WINDOWS
+/***
+ * Linux desktop (M37): the MIDI ports that could not be opened because another program has them (SYSTEM > DEVICES). they are tried again by themselves
+ * @function midi_skipped
+ * @treturn integer how many
+ * @treturn string one line "name: reason" for each
+ */
+int _midi_skipped(lua_State *l) {
+    char text[1024];
+    int count = dev_list_midi_skipped_text(text, sizeof(text));
+    lua_pushinteger(l, count);
+    lua_pushstring(l, text);
+    return 2;
+}
+#endif
 
 #endif
 

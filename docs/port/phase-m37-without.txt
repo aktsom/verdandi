@@ -1,0 +1,35 @@
+M37 proof: the new tests against the code as it was before M37 (HEAD 7182d251 device code and devices.lua).
+Made with: linux/tests/midi_replug_test.cc built with -DM37_OLD_CODE against the old matron/src/device files (each hang ends by the 30 s alarm, signal 14).
+
+== midi_replug_test, old device code ==
+ok:   a snd-virmidi card appears: not opened, not listed, one log line, the periodic check adds nothing; a DAW can open its raw port
+ok:   the card is found by its /proc/asound names when the id and the driver say nothing (renamed id, no driver)
+ok:   the setting midi_ignore replaces the default list: with another list the virtual card is listed again, and a named controller is skipped
+ok:   the target of alsa_midi_out_to is a card a DAW reads: skipped too
+ok:   a virtual card that was opened before (the list changed, or the module came while an older norns ran): the next sweep releases it, Lua is told, a DAW can open it
+ok:   a clean unplug (udev remove) and the same node again: listed again, same names, same vports, the mapped events flow
+ok:   a new node (the card number changed): the old entries are gone, the new ones are listed under the old names
+ok:   no udev remove at all: the device that vanished leaves the list by itself (its read thread says so), and the replug of the same node is listed under the same names
+ok:   no udev remove, and the udev add of the new device comes first (the entries are stale when it arrives): they are replaced, not suffixed
+ok:   a remove that comes after the plug-in again is a late event: the new device stays
+ok:   the card does not answer when the udev add comes (not ready): nothing is listed, the periodic check lists it when it does
+ok:   a udev add that never came: the periodic check finds the card
+ok:   a repeated udev add is skipped as a duplicate: no second set of entries
+  FAIL: port 1 failed (busy), port 2 is there: got [Arturia BeatStep Pro 1|Arturia BeatStep Pro 2], wanted [Arturia BeatStep Pro 2]
+FAIL: a port that was busy when the add came is added by the check, without doubling the port that worked (exit 2)
+ok:   a single-port device (a keyboard) unplugged without a remove and plugged in again
+FAIL: M37: a port that another program holds when the card is added: the add returns, the free port and the other card work, one log line says why, the page can say it (signal 14)
+FAIL: M37: the other program lets go: the port is added by the periodic check, without a restart, and the log says so once (signal 14)
+FAIL: M37: a device that is busy at start-up (one port, Reaper holds the output only): skipped as a whole, not half-opened; picked up when it is free (signal 14)
+FAIL: M37: the card is unplugged while a port is skipped: the skip is forgotten, and the card is listed whole when it comes back (signal 14)
+FAIL: M37: the start-up scan and the periodic check add the same card at the same time: every port is opened once (a second open of a port that Verdandi holds itself never returns) (signal 14)
+FAIL: M37: the first look at the devices does not hold the start-up when a device does not answer: it goes on after the time-out and says so (signal 14)
+FAIL: M37: a write to a device that takes no data does not hold the sender: it gives up after about a quarter of a second, drops the rest, says so once; other devices and later writes are not affected
+ok:   M37: a device that has no input (an output only synth): opened for output as before, not skipped
+midi_replug_test: 8 failed
+
+== devices_midi_busy_test.lua, old lua/core/menu/devices.lua ==
+FAIL	one port skipped: the list entry says so (without opening the page)
+FAIL	the MIDI list says which device is skipped
+FAIL	two ports: both named
+3 failures

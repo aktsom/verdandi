@@ -14,6 +14,7 @@
 #include "device_midi.h"
 #ifdef NORNS_LINUX_DESKTOP
 #include <errno.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "device_monitor.h"
@@ -23,6 +24,81 @@
 #endif
 
 #define DEV_MIDI_INPUT_BUFFER_SIZE 128
+
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS) && !defined(__APPLE__)
+// M37 (docs/port/phase-m37.md): the raw port is opened WITHOUT waiting. a blocking snd_rawmidi_open on a port that another program holds does not answer "busy": the kernel puts the caller to
+// sleep until the other program lets go, and the caller was the start-up (or the thread that looks at the cards). why the last open failed is kept per thread for the device list, which says it once
+static __thread int last_open_busy;
+static __thread char last_open_why[160];
+
+extern "C" int dev_midi_open_failure(char *why, size_t n) {
+    if (why != NULL && n > 0) {
+        snprintf(why, n, "%s", last_open_why);
+    }
+    return last_open_busy;
+}
+
+static void open_failed(int busy, const char *what, int err) {
+    last_open_busy = busy;
+    if (busy) {
+        snprintf(last_open_why, sizeof last_open_why, "busy: another program has it open%s%s", what != NULL && what[0] ? " (its " : "", what != NULL && what[0] ? what : "");
+        if (what != NULL && what[0]) {
+            size_t l = strlen(last_open_why);
+            snprintf(last_open_why + l, sizeof last_open_why - l, ")");
+        }
+    } else {
+        snprintf(last_open_why, sizeof last_open_why, "could not be opened: %s", snd_strerror(err));
+    }
+}
+
+static double midi_now_s(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
+static bool open_is_busy(int err) {
+    return err == -EBUSY || err == -EAGAIN;
+}
+
+// the input and the output are opened one after the other, both non-blocking. 0: at least one is open (the other may be missing: a device with no input or no output, as before)
+// -1: busy or not openable (what was opened is closed again, last_open_* says why)
+static int rawmidi_open_pair(snd_rawmidi_t **in, snd_rawmidi_t **out, const char *name) {
+    *in = NULL;
+    *out = NULL;
+    last_open_busy = 0;
+    last_open_why[0] = '\0';
+    int ein = snd_rawmidi_open(in, NULL, name, SND_RAWMIDI_NONBLOCK);
+    if (ein < 0) {
+        *in = NULL;
+    }
+    int eout = snd_rawmidi_open(NULL, out, name, SND_RAWMIDI_NONBLOCK);
+    if (eout < 0) {
+        *out = NULL;
+    }
+    if (open_is_busy(ein) || open_is_busy(eout)) {
+        if (*in != NULL) {
+            snd_rawmidi_close(*in);
+            *in = NULL;
+        }
+        if (*out != NULL) {
+            snd_rawmidi_close(*out);
+            *out = NULL;
+        }
+        open_failed(1, open_is_busy(ein) ? "input" : "output", 0);
+        return -1;
+    }
+    if (ein < 0 && eout < 0) {
+        open_failed(0, NULL, ein);
+        return -1;
+    }
+    if (*in != NULL) {
+        // the reader thread waits in snd_rawmidi_read: that handle is blocking again (it has a file of its own: the output stays non-blocking)
+        snd_rawmidi_nonblock(*in, 0);
+    }
+    return 0;
+}
+#endif
 
 #if !defined(__APPLE__) && !defined(NORNS_WINDOWS)
 unsigned int dev_midi_port_count(const char *path) {
@@ -114,6 +190,20 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
         return -1;
     }
 
+#ifdef NORNS_LINUX_DESKTOP
+    if (rawmidi_open_pair(&midi->handle_in, &midi->handle_out, alsa_name) < 0) {
+        free(alsa_name);
+        return -1;
+    }
+    if (midi->handle_in != NULL && midi->handle_out != NULL) {
+        fprintf(stderr, "device opened (bidirectional)\n");
+    } else if (midi->handle_in != NULL) {
+        fprintf(stderr, "device opened OK, only input ports\n");
+    } else {
+        fprintf(stderr, "device opened OK, only output ports\n");
+    }
+    free(alsa_name);
+#else
     if (snd_rawmidi_open(&midi->handle_in, &midi->handle_out, alsa_name, 0) < 0) {
         if (snd_rawmidi_open(NULL, &midi->handle_out, alsa_name, 0) < 0) {
             if (snd_rawmidi_open(&midi->handle_in, NULL, alsa_name, 0) < 0) {
@@ -129,6 +219,7 @@ int dev_midi_init(void *self, unsigned int port_index, bool multiport_device) {
     } else {
         fprintf(stderr, "device opened (bidirectional)\n");
     }
+#endif
     // fprintf(stderr, "input handle  : %p\n", midi->handle_in);
     // fprintf(stderr, "output handle : %p\n", midi->handle_out);
 
@@ -455,8 +546,36 @@ ssize_t dev_midi_send(void *self, uint8_t *data, size_t n) {
 #endif
     if (midi->handle_out == NULL) {
         return -1;
-    } else {
-        return snd_rawmidi_write(midi->handle_out, data, n);
     }
+#ifdef NORNS_LINUX_DESKTOP
+    // the output handle is non-blocking (M37): a device that takes nothing (its buffer is full: not draining, a driver that stalled) answers -EAGAIN, and this function runs on the thread of the
+    // script. it waits for a device that is slow but takes data (a long sysex to a DIN port), and gives up on one that takes nothing for 250 ms (5 s at most in all): the rest is dropped, said once
+    size_t done = 0;
+    double begin = midi_now_s(), last_progress = begin;
+    while (done < n) {
+        ssize_t r = snd_rawmidi_write(midi->handle_out, data + done, n - done);
+        if (r > 0) {
+            done += (size_t)r;
+            last_progress = midi_now_s();
+            continue;
+        }
+        if (r != -EAGAIN) {
+            return done > 0 ? (ssize_t)done : r;
+        }
+        double now = midi_now_s();
+        if (now - last_progress > 0.25 || now - begin > 5.0) {
+            if (now - midi->last_drop_say > 5.0) {
+                midi->last_drop_say = now;
+                fprintf(stderr, "midi: %s does not take data (its output is full): %u of %u bytes dropped\n", ((struct dev_common *)self)->name != NULL ? ((struct dev_common *)self)->name : "?",
+                        (unsigned)(n - done), (unsigned)n);
+            }
+            return done > 0 ? (ssize_t)done : -EAGAIN;
+        }
+        usleep(1000);
+    }
+    return (ssize_t)done;
+#else
+    return snd_rawmidi_write(midi->handle_out, data, n);
+#endif
 }
 #endif // __APPLE__ / NORNS_WINDOWS / ALSA

@@ -144,7 +144,76 @@ void dev_monitor_deinit(void) {
     }
 }
 
+#ifdef NORNS_LINUX_DESKTOP
+static int dev_monitor_scan_now(void);
+
+// M37 (docs/port/phase-m37.md): the first look at the devices runs on a thread of its own, and the start-up waits for it at most NORNS_SCAN_WAIT_MS (default 3000). a MIDI port is opened without
+// waiting now, but a device node that does not answer (a tty, an input node, the JACK or sequencer clients) can still hold a call for ever: that must never be the start-up. when the time is
+// up the start-up goes on and says so; the scan finishes when the device answers (what it adds then reaches Lua as any device that is plugged in later)
+struct scan_job {
+    pthread_mutex_t m;
+    pthread_cond_t c;
+    bool done;
+    int result;
+};
+
+static void *scan_thread(void *arg) {
+    struct scan_job *job = (struct scan_job *)arg;
+    int r = dev_monitor_scan_now();
+    pthread_mutex_lock(&job->m);
+    job->result = r;
+    job->done = true;
+    pthread_cond_signal(&job->c);
+    pthread_mutex_unlock(&job->m);
+    return NULL;
+}
+
 int dev_monitor_scan(void) {
+    long wait_ms = 3000;
+    const char *w = getenv("NORNS_SCAN_WAIT_MS");
+    if (w != NULL && atol(w) > 0) {
+        wait_ms = atol(w);
+    }
+    // heap memory that the thread owns after a time-out (the caller has gone on)
+    struct scan_job *job = (struct scan_job *)calloc(1, sizeof *job);
+    if (job == NULL) {
+        return dev_monitor_scan_now();
+    }
+    pthread_mutex_init(&job->m, NULL);
+    pthread_cond_init(&job->c, NULL);
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, scan_thread, job) != 0) {
+        free(job);
+        return dev_monitor_scan_now();
+    }
+    pthread_detach(tid);
+    struct timespec until;
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_sec += wait_ms / 1000;
+    until.tv_nsec += (wait_ms % 1000) * 1000000L;
+    if (until.tv_nsec >= 1000000000L) {
+        until.tv_sec++;
+        until.tv_nsec -= 1000000000L;
+    }
+    pthread_mutex_lock(&job->m);
+    int rc = 0;
+    while (!job->done && rc == 0) {
+        rc = pthread_cond_timedwait(&job->c, &job->m, &until);
+    }
+    bool finished = job->done;
+    int result = job->result;
+    pthread_mutex_unlock(&job->m);
+    if (!finished) {
+        fprintf(stderr, "dev_monitor: the first look at the devices has not finished after %ld ms (a device does not answer); start-up goes on, the look finishes when the device answers\n", wait_ms);
+        return 0;
+    }
+    return result;
+}
+
+static int dev_monitor_scan_now(void) {
+#else
+int dev_monitor_scan(void) {
+#endif
     struct udev *udev;
     struct udev_device *dev;
 

@@ -93,6 +93,8 @@ known() { # name, command...: a failure is expected and recorded
 }
 
 run "lua:devices midi status" lua5.3 linux/tests/devices_midi_test.lua
+run "lua:devices midi busy (M37: a MIDI port that another program holds is said on SYSTEM > DEVICES: the list entry and the title row; nothing when none; no error without the function)" lua5.3 linux/tests/devices_midi_busy_test.lua
+run "midi:busy port guard (M37: the skip list, the non-blocking open and the bounded scan are Linux desktop only: the device build, macOS and Windows keep their code)" bash linux/tests/midi_busy_guard_test.sh
 run "lua:input monitor per mode" lua5.3 linux/tests/input_monitor_test.lua
 run "lua:device window notes" lua5.3 linux/tests/grid_note_test.lua
 for t in menu_pages input_modes fileselect_finder output_fader; do
@@ -217,7 +219,7 @@ run "midi:VIRMIDI page load with a fake pkexec (running, then loaded by itself; 
 g++ -std=gnu++14 -D_GNU_SOURCE -DNORNS_LINUX_DESKTOP -I matron/src -I matron/src/device -I matron/src/platform/linux -I matron/src/platform/macos \
     $(pkg-config --cflags lua5.3 libevdev alsa 2>/dev/null) -I/usr/include/libevdev-1.0 linux/tests/midi_replug_test.cc matron/src/device/device_list.cc matron/src/device/device.cc matron/src/device/device_midi.cc \
     -Wl,--wrap=access -o "$T/midi_replug_test" $(pkg-config --libs lua5.3 libevdev) -lpthread -ldl 2> "$T/midi_replug_build.log" \
-    && run "c:midi unplug and replug (device monitor, list, read threads with a fake udev and ALSA; no remove, late remove, not ready, busy, duplicates, the virtual MIDI card skipped and released; 30 random sequences)" "$T/midi_replug_test" 30 1 \
+    && run "c:midi unplug and replug (device monitor, list, read threads with a fake udev and ALSA that answers like the kernel; no remove, late remove, not ready, busy, duplicates, the virtual MIDI card skipped and released; M37: a port that another program holds is skipped, said once, added by itself when it is free, two threads adding the same port, a scan that blocks, a write that is not taken; 30 random sequences)" "$T/midi_replug_test" 30 1 \
     || run "c:midi unplug and replug does not build" bash -c 'tail -5 "$0"; exit 1' "$T/midi_replug_build.log"
 run "linux:crash report (signal, thread name, backtrace in the log and crash-report.txt; the default action and the core dump kept)" linux/tests/crash_report_test.sh
 cc $CFLAGS -I "$P" linux/tests/ui_look_test.c "$P/ui_look.c" "$P/gif_writer.c" -o "$T/ulk" -lm 2> "$T/ulk.err" || cat "$T/ulk.err"

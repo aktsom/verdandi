@@ -22,6 +22,10 @@ extern bool dev_list_has_monome(struct dev_monome *md);
 extern int dev_list_midi_sweep(void);
 // how many ports of this node are in the list
 extern int dev_list_midi_ports_listed(const char *node);
+#ifndef NORNS_WINDOWS
+// M37: the ports that could not be opened (busy: another program has the raw port open), one line "name: reason" each. returns how many
+extern int dev_list_midi_skipped_text(char *buf, size_t n);
+#endif
 #ifdef NORNS_WINDOWS
 #include <stddef.h>
 #include "device.h"

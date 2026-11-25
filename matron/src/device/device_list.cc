@@ -84,6 +84,72 @@ static void midi_add_worked(const char *path) {
         failed_path[0] = '\0';
     }
 }
+
+#ifndef NORNS_WINDOWS
+// M37 (docs/port/phase-m37.md): the ports that could not be opened (busy: another program has the raw port open, or an error), by node and port. a skip is said ONCE in the log (the check that
+// runs every few seconds finds the port again and again and stays silent), it is shown on the DEVICES page, and when the port opens it is said once that it was added. a card that goes forgets its skips
+#include <map>
+#include <string>
+struct midi_skip {
+    std::string name, reason;
+};
+static std::map<std::string, midi_skip> skips;
+static pthread_mutex_t skip_lock = PTHREAD_MUTEX_INITIALIZER;
+// one add of a rawmidi port at a time: the check "is this port listed", the open and the insert are one step (two threads, the start-up scan and the periodic check, could open the same port; the
+// second open of a port that Verdandi holds itself can never succeed)
+static pthread_mutex_t add_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static std::string skip_key(const char *node, unsigned port) {
+    return std::string(node != NULL ? node : "") + "#" + std::to_string(port);
+}
+static void midi_skip_set(const char *node, unsigned port, const char *name, const char *reason) {
+    std::string key = skip_key(node, port);
+    bool say = false;
+    pthread_mutex_lock(&skip_lock);
+    auto it = skips.find(key);
+    if (it == skips.end() || it->second.reason != reason) {
+        say = true;
+    }
+    skips[key] = midi_skip{name != NULL ? name : "?", reason};
+    pthread_mutex_unlock(&skip_lock);
+    if (say) {
+        fprintf(stderr, "midi: skipped %s (%s port %u): %s; it is tried again every few seconds, and added when it is free\n", name != NULL ? name : "?", node, port, reason);
+    }
+}
+// true when this port was skipped before
+static bool midi_skip_clear(const char *node, unsigned port) {
+    pthread_mutex_lock(&skip_lock);
+    bool had = skips.erase(skip_key(node, port)) > 0;
+    pthread_mutex_unlock(&skip_lock);
+    return had;
+}
+static void midi_skip_clear_node(const char *node) {
+    std::string prefix = std::string(node != NULL ? node : "") + "#";
+    pthread_mutex_lock(&skip_lock);
+    for (auto it = skips.begin(); it != skips.end();) {
+        if (it->first.compare(0, prefix.size(), prefix) == 0) {
+            it = skips.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    pthread_mutex_unlock(&skip_lock);
+}
+extern "C" int dev_list_midi_skipped_text(char *buf, size_t n) {
+    std::string out;
+    int count = 0;
+    pthread_mutex_lock(&skip_lock);
+    for (auto &kv : skips) {
+        out += kv.second.name + ": " + kv.second.reason + "\n";
+        count++;
+    }
+    pthread_mutex_unlock(&skip_lock);
+    if (buf != NULL && n > 0) {
+        snprintf(buf, n, "%s", out.c_str());
+    }
+    return count;
+}
+#endif
 #endif
 
 void dev_list_init(void) {
@@ -164,6 +230,9 @@ void dev_list_add(device_t type, const char *path, const char *name, lua_State *
             }
             bool name_used = false;
             int added = 0, failed = 0;
+#ifndef NORNS_WINDOWS
+            pthread_mutex_lock(&add_lock);
+#endif
             for (unsigned int pidx = 0; pidx < midi_port_count; pidx++) {
                 bool listed = false;
                 pthread_mutex_lock(&lock);
@@ -181,7 +250,20 @@ void dev_list_add(device_t type, const char *path, const char *name, lua_State *
                 d = dev_new(type, path, name, midi_port_count > 1, pidx, NULL);
                 if (d == NULL) {
                     failed++;
+#ifndef NORNS_WINDOWS
+                    {
+                        // busy (another program has the raw port open) or another reason: skipped, said once, tried again by the periodic check
+                        char why[160];
+                        dev_midi_open_failure(why, sizeof why);
+                        std::string shown = name != NULL ? name : "?";
+                        if (midi_port_count > 1) {
+                            shown += " " + std::to_string(pidx + 1);
+                        }
+                        midi_skip_set(path, pidx, shown.c_str(), why[0] ? why : "the port could not be opened");
+                    }
+#else
                     midi_add_failed(path, "the port could not be opened");
+#endif
                     continue;
                 }
                 if (midi_port_count <= 1) {
@@ -190,11 +272,19 @@ void dev_list_add(device_t type, const char *path, const char *name, lua_State *
                 ev = post_add_event(d, EVENT_MIDI_ADD);
                 if (ev != NULL) {
                     fprintf(stderr, "midi: added %s (%s port %u)\n", d->base.name != NULL ? d->base.name : "?", path, pidx);
+#ifndef NORNS_WINDOWS
+                    if (midi_skip_clear(path, pidx)) {
+                        fprintf(stderr, "midi: %s (%s port %u) is free now: added\n", d->base.name != NULL ? d->base.name : "?", path, pidx);
+                    }
+#endif
                     ev->midi_add.dev = d;
                     event_post(ev);
                     added++;
                 }
             }
+#ifndef NORNS_WINDOWS
+            pthread_mutex_unlock(&add_lock);
+#endif
             if (failed == 0) {
                 midi_add_worked(path);
             }
@@ -270,6 +360,11 @@ static void dev_list_remove_node(struct dev_node *dn, union event_data *event_re
 }
 
 void dev_list_remove(device_t type, const char *node) {
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+    if (type == DEV_TYPE_MIDI && is_alsa_midi_path(node)) {
+        midi_skip_clear_node(node); // a card that is gone has no skipped ports any more
+    }
+#endif
     pthread_mutex_lock(&lock);
     struct dev_node *dn = dev_lookup_path(node, NULL);
     if (dn == NULL) {
