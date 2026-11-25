@@ -33,6 +33,7 @@
 #include "platform/linux/aseq_out.h"
 #include "platform/linux/jack_midi_in.h"
 #include "platform/linux/midi_ignore.h"
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -79,6 +80,10 @@ static int is_dev_crow(struct udev_device *dev);
 static void *watch_loop(void *data);
 #ifdef NORNS_LINUX_DESKTOP
 static void add_dev_sound(struct udev_device *dev);
+// M37b: the nodes whose "adding midi device" line was said and that are not whole yet (a port is held by another program): the periodic check does not say it again at every retry
+static std::set<std::string> adding_said;
+static pthread_mutex_t adding_lock = PTHREAD_MUTEX_INITIALIZER;
+static __thread bool adding_from_check = false;
 #endif
 
 // try to get MIDI device name from ALSA
@@ -385,6 +390,7 @@ void dev_monitor_midi_check(void) {
     udev_enumerate_add_match_subsystem(ue, "sound");
     udev_enumerate_scan_devices(ue);
     struct udev_list_entry *entry;
+    std::set<std::string> seen_nodes;
     for (entry = udev_enumerate_get_list_entry(ue); entry != NULL; entry = udev_list_entry_get_next(entry)) {
         const char *syspath = udev_list_entry_get_name(entry);
         if (syspath == NULL) {
@@ -396,13 +402,16 @@ void dev_monitor_midi_check(void) {
         }
         const char *node = get_alsa_midi_node(dev);
         if (node != NULL) {
+            seen_nodes.insert(node);
             std::string what;
             if (midi_card_ignored(dev, node, &what)) {
                 midi_card_skip(node, what);
             } else {
                 int listed = dev_list_midi_ports_listed(node);
                 if (listed == 0 || (unsigned int)listed < dev_midi_port_count(node)) {
+                    adding_from_check = true;
                     add_dev_sound(dev);
+                    adding_from_check = false;
                 }
             }
             free((void *)node);
@@ -410,6 +419,12 @@ void dev_monitor_midi_check(void) {
         udev_device_unref(dev);
     }
     udev_enumerate_unref(ue);
+    // a card that is not there any more forgets that it was said (it may say it again when it comes back)
+    pthread_mutex_lock(&adding_lock);
+    for (auto it = adding_said.begin(); it != adding_said.end();) {
+        it = seen_nodes.count(*it) ? std::next(it) : adding_said.erase(it);
+    }
+    pthread_mutex_unlock(&adding_lock);
 }
 
 // the watch loop calls this about every 100 ms: the MIDI check runs every 3 seconds, and at once after a poke
@@ -603,8 +618,35 @@ void add_dev_sound(struct udev_device *dev) {
             free((void *)alsa_node);
             return;
         }
+#ifdef NORNS_LINUX_DESKTOP
+        // M37b: "adding" is said once per node while it is not whole. the periodic check comes back every 3 seconds for a card with a port that another program holds: those retries are silent (the skip is
+        // said once by the list, "free now: added" when it works). a udev event, or a card that went and came back, says it again
+        std::string key = std::string(alsa_node);
+        bool say = true;
+        pthread_mutex_lock(&adding_lock);
+        if (adding_from_check) {
+            say = adding_said.insert(key).second;
+        } else {
+            adding_said.insert(key);
+        }
+        pthread_mutex_unlock(&adding_lock);
+        if (say) {
+            fprintf(stderr, "dev_monitor: adding midi device %s\n", name);
+        }
+        char *node_copy = strdup(alsa_node);
+        dev_list_add(DEV_TYPE_MIDI, alsa_node, name, NULL);
+        // whole now (every port listed)? then the next time it is added is a new state
+        unsigned int want = dev_midi_port_count(node_copy);
+        if (want > 0 && (unsigned int)dev_list_midi_ports_listed(node_copy) >= want) {
+            pthread_mutex_lock(&adding_lock);
+            adding_said.erase(key);
+            pthread_mutex_unlock(&adding_lock);
+        }
+        free(node_copy);
+#else
         fprintf(stderr, "dev_monitor: adding midi device %s\n", name);
         dev_list_add(DEV_TYPE_MIDI, alsa_node, name, NULL);
+#endif
     }
 }
 

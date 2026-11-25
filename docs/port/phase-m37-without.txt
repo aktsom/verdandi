@@ -33,3 +33,8 @@ FAIL	one port skipped: the list entry says so (without opening the page)
 FAIL	the MIDI list says which device is skipped
 FAIL	two ports: both named
 3 failures
+
+== M37b (log noise): the new cases against the code of b936290c (M37 without the noise fix) ==
+FAIL: M37b: a port that stays busy over many retries ... (the 'adding midi device' line came at every retry)
+FAIL: M37b: two cards that do not answer ... (one shared slot: the two cards said 'could not add' in turns at every check)
+midi_replug_test: 2 failed

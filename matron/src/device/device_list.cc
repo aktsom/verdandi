@@ -71,18 +71,41 @@ static bool midi_node_present(const char *p) {
 #endif
 }
 
-// one line in the log for a node that could not be added, said once until it works (the periodic check tries again every few seconds)
-static char failed_path[256];
+// M37b: a line for a state is said ONCE, not at every retry. the periodic check (every 3 seconds) tries a card again and again while it is not whole (a port is held by another program, the card does not
+// answer yet); each of these lines is kept in a set until the state ends (the card works, or goes), so a retry is silent. "could not add" is said once per node (before: one slot for all nodes, two failing
+// cards said their line at every check), "port N is listed already" once per port
+#include <set>
+#include <string>
+static std::set<std::string> said_lines;
+static pthread_mutex_t said_lock = PTHREAD_MUTEX_INITIALIZER;
+// true the first time this key is asked, until it is forgotten
+static bool said_first(const std::string &key) {
+    pthread_mutex_lock(&said_lock);
+    bool first = said_lines.insert(key).second;
+    pthread_mutex_unlock(&said_lock);
+    return first;
+}
+static void said_forget_node(const char *node) {
+    std::string n = node != NULL ? node : "";
+    pthread_mutex_lock(&said_lock);
+    for (auto it = said_lines.begin(); it != said_lines.end();) {
+        if (it->compare(0, n.size() + 1, n + "#") == 0 || it->compare(0, n.size() + 1, n + "!") == 0) {
+            it = said_lines.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    pthread_mutex_unlock(&said_lock);
+}
 static void midi_add_failed(const char *path, const char *why) {
-    if (strncmp(failed_path, path, sizeof failed_path) != 0) {
-        snprintf(failed_path, sizeof failed_path, "%s", path);
+    if (said_first(std::string(path) + "!failed")) {
         fprintf(stderr, "midi: could not add %s: %s; it is tried again every few seconds\n", path, why);
     }
 }
 static void midi_add_worked(const char *path) {
-    if (strncmp(failed_path, path, sizeof failed_path) == 0) {
-        failed_path[0] = '\0';
-    }
+    pthread_mutex_lock(&said_lock);
+    said_lines.erase(std::string(path) + "!failed");
+    pthread_mutex_unlock(&said_lock);
 }
 
 #ifndef NORNS_WINDOWS
@@ -244,7 +267,9 @@ void dev_list_add(device_t type, const char *path, const char *name, lua_State *
                 }
                 pthread_mutex_unlock(&lock);
                 if (listed) {
-                    fprintf(stderr, "midi: %s port %u is listed already, not added again\n", path, pidx);
+                    if (said_first(std::string(path) + "#listed" + std::to_string(pidx))) {
+                        fprintf(stderr, "midi: %s port %u is listed already, not added again\n", path, pidx);
+                    }
                     continue;
                 }
                 d = dev_new(type, path, name, midi_port_count > 1, pidx, NULL);
@@ -363,6 +388,11 @@ void dev_list_remove(device_t type, const char *node) {
 #if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
     if (type == DEV_TYPE_MIDI && is_alsa_midi_path(node)) {
         midi_skip_clear_node(node); // a card that is gone has no skipped ports any more
+        said_forget_node(node);     // and a card that comes back may say its lines again
+    }
+#elif defined(NORNS_WINDOWS)
+    if (type == DEV_TYPE_MIDI) {
+        said_forget_node(node); // a device that comes back may say its lines again
     }
 #endif
     pthread_mutex_lock(&lock);
@@ -462,6 +492,7 @@ int dev_list_midi_sweep(void) {
                 ev->midi_remove.id = dn->d->base.id;
                 fprintf(stderr, "midi: removed %s (%s): %s, no udev remove came\n", dn->d->base.name != NULL ? dn->d->base.name : "?", dn->d->base.path,
                         dn->d->midi.gone ? "the device vanished" : "the node is gone");
+                said_forget_node(dn->d->base.path);
                 dev_list_remove_node(dn, ev);
                 removed++;
             }
@@ -479,6 +510,7 @@ int dev_list_midi_release(const char *node) {
         union event_data *ev = event_data_new(EVENT_MIDI_REMOVE);
         ev->midi_remove.id = dn->d->base.id;
         fprintf(stderr, "midi: released %s (%s)\n", dn->d->base.name != NULL ? dn->d->base.name : "?", node);
+        said_forget_node(node);
         dev_list_remove_node(dn, ev);
         n++;
     }

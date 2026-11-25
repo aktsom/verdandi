@@ -817,6 +817,43 @@ int main(int argc, char **argv) {
         EXPECT(count_of(log_text(), "is free now") == 1, "not repeated");
         EXPECT_EQ(check_state({2}), "", "state");
     });
+    CASE("M37b: a port that stays busy over many retries: 'adding midi device' once, 'skipped' once, 'listed already' once; the final 'added' once; nothing else repeats", {
+        capture_log();
+        alsa_plug(2, 2);
+        alsa_hold(2, 0);
+        udev_add(2); settle();
+        for (int i = 0; i < 8; i++) tick();
+        std::string log = log_text();
+        EXPECT(count_of(log, "dev_monitor: adding midi device") == 1, "one 'adding' line over nine tries (it was about every 3 seconds, a hundred lines in a few minutes)");
+        EXPECT(count_of(log, "midi: skipped") == 1, "one 'skipped' line");
+        EXPECT(count_of(log, "is listed already, not added again") <= 1, "the port that works is not announced again at every retry");
+        EXPECT(count_of(log, "midi: could not add") == 0, "no other line");
+        alsa_release_others(2);
+        tick();
+        EXPECT_EQ(device_names(), TWO, "added by itself");
+        for (int i = 0; i < 3; i++) tick();
+        log = log_text();
+        EXPECT(count_of(log, "dev_monitor: adding midi device") == 1, "still one 'adding' line");
+        EXPECT(count_of(log, "is free now: added") == 1, "one 'added' line when it is free");
+        EXPECT(count_of(log, "midi: skipped") == 1, "still one 'skipped' line");
+        // the card goes and comes back, busy again: the new state says its lines again, once
+        unplug(2);
+        alsa_plug(2, 2);
+        alsa_hold(2, 0);
+        udev_add(2); settle();
+        for (int i = 0; i < 4; i++) tick();
+        log = log_text();
+        EXPECT(count_of(log, "midi: skipped") == 2, "a new busy state says its skip line once more");
+        EXPECT(count_of(log, "dev_monitor: adding midi device") == 2, "and its 'adding' line once more");
+    });
+    CASE("M37b: two cards that do not answer: each says 'could not add' once, not at every check (one shared slot made them take turns)", {
+        capture_log();
+        { std::lock_guard<std::mutex> l(amtx); cards[2].present = true; cards[2].ports = 2; cards[2].ctl_ready = false; cards[3].present = true; cards[3].ports = 2; cards[3].ctl_ready = false; }
+        udev_add(2); udev_add(3); settle();
+        for (int i = 0; i < 6; i++) tick();
+        EXPECT(count_of(log_text(), "midi: could not add /dev/snd/midiC2D0") == 1, "card 2: once");
+        EXPECT(count_of(log_text(), "midi: could not add /dev/snd/midiC3D0") == 1, "card 3: once");
+    });
     CASE("M37: a device that is busy at start-up (one port, Reaper holds the output only): skipped as a whole, not half-opened; picked up when it is free", {
         capture_log();
         alsa_plug(2, 1);

@@ -817,7 +817,7 @@ Cannot be tested here: the real RME driver (shared with Ableton or not), a real 
 Do one step at a time.
 1. Start Reaper first, with the MIDI input and output of mio enabled (so Reaper holds `/dev/snd/midiC1D0`). Leave it open.
 2. Start Verdandi (the new build). Look for: it reaches the HOME screen, with sound, in a few seconds, not a black window.
-3. Look at the terminal or the log: one line like `midi: skipped mio ... busy: another program has it open`, once, not every 3 seconds.
+3. Look at the terminal or the log: one line like `midi: skipped mio ... busy: another program has it open`, once, not every 3 seconds. M37b: with Reaper left open for 2 or 3 minutes `dev_monitor: adding midi device mio` appears ONCE (count: `grep -c 'adding midi device mio' norns.log`), not about every 3 seconds.
 4. Open SYSTEM > DEVICES. Look for: the MIDI entry says `midi: 1 busy`, and on the MIDI list the title row says `BUSY: mio`.
 5. Close Reaper. Wait up to 5 seconds, no restart. Look for: a log line that mio is free and added, the BUSY row is gone, and a controller on mio sends notes to a script.
 6. The old order: close Verdandi, start Verdandi first, then Reaper: as before (Reaper may find mio busy because Verdandi holds it; that is the old limit, no change).

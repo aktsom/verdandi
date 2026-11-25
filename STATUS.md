@@ -1,3 +1,8 @@
+## M37b (Linux, Windows checked): log noise of a busy MIDI device
+- Base b936290c. "dev_monitor: adding midi device mio" came every 3 s while Reaper held mio. Now said once per not-whole card (a udev event or a returning card says it again); "port N is listed already" once per port; "could not add" once per node (one shared slot made two cards say it in turns), also on Windows (shared `device_list.cc`). Windows `midi_monitor.cc` was already quiet. No behaviour change.
+- Tests: two new cases in `midi_replug_test` (fail on b936290c, `docs/port/phase-m37-without.txt`). Write-up in `docs/port/phase-m37.md`, section M37b.
+- Not tested here: the owner's laptop with Reaper (the log count over a few minutes; `docs/port/HARDWARE-CHECKLIST.md` M37 step 3).
+
 ## M37 (Linux, Windows checked): a busy MIDI device can no longer freeze start-up
 - Base 7182d251. Write-up `docs/port/phase-m37.md`, proof against the old code `docs/port/phase-m37-without.txt`.
 - Cause (from the code; the owner's logs were not available): `device_midi.cc` opened the raw MIDI port in blocking mode. A port that another program (Reaper) holds then sleeps in the kernel until that program lets go, on the start-up scan in the main thread (`main.cc`, before "handling pending events..."), or in the monitor thread. That is why the two runs stopped at two places: in run 1 the scan got past the first port and the second opener of the same port (monitor thread racing the scan) sat in the open; in run 2 the first open sat there.

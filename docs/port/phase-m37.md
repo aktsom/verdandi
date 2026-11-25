@@ -38,6 +38,20 @@ WinMM answers a busy port at once (`midiInOpen` returns `MMSYSERR_ALLOCATED`, `m
 
 The fake ALSA now behaves like the kernel: an open that finds the port busy waits until it is free, unless the open is non-blocking, which answers `-EBUSY`. New cases: a port held by another program at start (the add returns, one log line, the other ports and cards work), the other program lets go (the port is added by itself, one log line), a port that Verdandi holds itself and a second thread adding at the same time, a start-up scan that blocks (a blocking stand-in), a write to a device that takes nothing, the note text for the page, the log not flooded over many checks. They fail on the code before the change (`docs/port/phase-m37-without.txt`).
 
+## M37b: log noise (the owner's laptop, norns.log)
+
+With Reaper holding mio, `dev_monitor: adding midi device mio` came about every 3 seconds (about 100 lines in a few minutes), although the skip itself was said once. Cause: `add_dev_sound` (`device_monitor.cc`) said "adding" before every call of `dev_list_add`, and the periodic check calls it for every card that is not whole. No behaviour change, only lines.
+
+All the places that repeat at the periodic retry (every 3 s), looked at one by one:
+- `dev_monitor: adding midi device <name>` (`device_monitor.cc`, `add_dev_sound`): FIXED. Said once per node while it is not whole; a udev event, or a card that went and came back, says it again. The state ends when every port is listed or the card is not enumerated any more.
+- `midi: <node> port N is listed already, not added again` (`device_list.cc`): said at every retry for each port that works while another port is busy. FIXED: once per port, forgotten when the card goes.
+- `midi: could not add <node>: ...` (`device_list.cc`): "said once" used ONE slot (`failed_path`) for all nodes, so two cards that fail said their line in turns at every check. FIXED: once per node (a set), also on Windows (the file is shared; the Windows add path uses it).
+- `midi: skipped ...` and `... is free now: added`: already once (M37). Unchanged.
+- Windows `midi_monitor.cc`: "found" is said for a new device only, the note line (`vmidi_note_set`) only when its text changes, "skipped ... midi_ignore" once per device (`IGNORE_TOLD`). Nothing repeats there. Its retry goes through the shared `dev_list_add`, so the two lines above are fixed for Windows too.
+- Not retried, not changed: `dev_monitor: vendor=... model=...` (udev events only), the first-scan time-out line (once per start).
+
+Tests (`midi_replug_test.cc`): the busy port over nine tries says "adding", "skipped" and "listed already" once each and "added" once when it is free, and says them again once for a new busy state after unplug; two cards that do not answer say "could not add" once each. Both new cases fail on the code of b936290c (`phase-m37-without.txt`).
+
 ## Not changed
 
 How devices are read (no ALSA sequencer). Not tried here: a real `mio`, Reaper, a real kernel (no ALSA hardware in the test container); the owner's checks are in `HARDWARE-CHECKLIST.md`.
