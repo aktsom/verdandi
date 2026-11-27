@@ -27,13 +27,13 @@ print("PROBE mark clicked-r0")
 print("PROBE mark rotated-to-1")
 -- 3. the size switch while turned (64: an 8 x 8, 128 again): the rotation stays
 #sh $VP button 16 8 1 1
-#sleep 1
-#sleep 1
+#sleep 3
+#sleep 3
 #sh $VP shape s64
 #sh $VP key 8 8 1 2 3
 #sh $VP button 8 8 1 2
-#sleep 1
-#sleep 1
+#sleep 3
+#sleep 3
 #sh $VP shape s128
 #sh $VP key 16 8 1 5 1
 -- 4. shift multi-press at rotation 1: collect four keys (two clicks and a drag), nothing is sent; shift up: four key-downs
@@ -48,11 +48,11 @@ print("PROBE mark rotated-to-1")
 print("PROBE mark before-shift-up")
 #sleep 0.5
 #sh $VP shift up
-#sleep 1
+#sleep 3
 print("PROBE mark after-shift-up")
 -- the keys stay held: Esc lets them go in one burst
 #sh $VP esc
-#sleep 1
+#sleep 3
 print("PROBE mark after-esc")
 -- 5. a chord that the next plain click lets go
 #sh $VP shift down

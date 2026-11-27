@@ -1226,6 +1226,60 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
     }
     pin_bringup_scenario
     run "window:oled pixels" window_pixels
+    # M41 (docs/port/phase-m41.md): the virtual grid window itself, on Xvfb with the real mouse and keyboard (xdotool): ROTATE at all four positions (the window changes shape, a click at the turned place reaches the
+    # script at the right key), the rotation saved and put back at the next start (a bad file is 0), a size change while turned, shift multi-press (nothing sent while shift is held, the burst in order when it is
+    # let go, Esc lets the keys go, a plain click lets them go, keys pending when the focus goes are never sent), plain clicks and drags as before. the script prints grid keys 1-based: device key (1,0) is "2,1"
+    vgrid_view_scenario() {
+        VH="$(mktemp -d)"
+        ln -s "$REPO" "$VH/norns"
+        mkdir -p "$VH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/window_probe.lua" "$VH/dust/code/probe/"
+        VLOG="$T/vgrid-view.log"
+        VP="$REPO/linux/tests/vgrid_pane_check.sh" NORNS_HOME="$VH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_vgrid_view.lua" "$VLOG" > /dev/null 2>&1
+        cp "$VH/probe.marks" "$T/vgrid-view.marks" 2> /dev/null
+        # the second start: the saved rotation (1) is put back
+        VLOG2="$T/vgrid-view2.log"
+        rm -f "$VH/probe.marks"
+        VP="$REPO/linux/tests/vgrid_pane_check.sh" VP_ROT=1 NORNS_HOME="$VH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_vgrid_view2.lua" "$VLOG2" > /dev/null 2>&1
+        cp "$VH/probe.marks" "$T/vgrid-view2.marks" 2> /dev/null
+        # the third start: a bad file is 0
+        VLOG3="$T/vgrid-view3.log"
+        rm -f "$VH/probe.marks"
+        printf 'zzz\n' > "$VH/.vgrid-rotation"
+        VP="$REPO/linux/tests/vgrid_pane_check.sh" VP_ROT=0 NORNS_HOME="$VH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_vgrid_view2.lua" "$VLOG3" > /dev/null 2>&1
+        cp "$VH/probe.marks" "$T/vgrid-view3.marks" 2> /dev/null
+    }
+    vgrid_view_scenario
+    # the keys and the marks of a log, in order, one line: "2,1,1 2,1,0 mark clicked-r0 ..."
+    vgrid_seq() { sed 's/\x1b\[[0-9;]*m//g' "$1" | awk -F'\t' '/^PROBE gridkey\t/ { printf "%s,%s,%s ", $2, $3, $4 } /^PROBE mark / { sub(/^PROBE mark /, ""); printf "[%s] ", $0 }'; }
+    vgrid_view_ok() {
+        local bad=0 M="$T/vgrid-view.marks" got want
+        mk() { sed -n "s/^$1=//p" "$2" | tail -1; }
+        wide() { local s; s="$(mk "$1" "$M")"; [ -n "$s" ] && [ "${s%x*}" -gt "${s#*x}" ]; }
+        tall() { local s; s="$(mk "$1" "$M")"; [ -n "$s" ] && [ "${s%x*}" -lt "${s#*x}" ]; }
+        [ "$(mk n_open "$M")" = 1 ] || { echo "the grid window did not open (or opened twice)"; bad=1; }
+        wide r0 || { echo "rotation 0: the 128 window is not wide: $(mk r0 "$M")"; bad=1; }
+        [ -z "$(mk r0_rot "$M")" ] || { echo "a file was written before ROTATE was pressed"; bad=1; }
+        tall r1 && [ "$(mk r1_rot "$M")" = 1 ] || { echo "ROTATE once: the window is not tall or the file is not 1: $(mk r1 "$M") $(mk r1_rot "$M")"; bad=1; }
+        wide r2 && [ "$(mk r2_rot "$M")" = 2 ] || { echo "ROTATE twice: the window is not wide or the file is not 2: $(mk r2 "$M") $(mk r2_rot "$M")"; bad=1; }
+        tall r3 && [ "$(mk r3_rot "$M")" = 3 ] || { echo "ROTATE three times: not tall or the file is not 3: $(mk r3 "$M") $(mk r3_rot "$M")"; bad=1; }
+        wide r0b && [ "$(mk r0b_rot "$M")" = 0 ] || { echo "ROTATE four times: not wide or the file is not 0: $(mk r0b "$M") $(mk r0b_rot "$M")"; bad=1; }
+        tall r1b && [ "$(mk r1b_rot "$M")" = 1 ] || { echo "ROTATE a fifth time: not tall or the file is not 1"; bad=1; }
+        [ "$(mk s64_rot "$M")" = 1 ] && [ "$(mk s128_rot "$M")" = 1 ] && [ "$(mk end_rot "$M")" = 1 ] || { echo "the rotation did not survive the size switch"; bad=1; }
+        got="$(vgrid_seq "$VLOG")"
+        want="2,1,1 2,1,0 [clicked-r0] 4,3,1 4,3,0 13,6,1 13,6,0 8,7,1 8,7,0 1,8,1 1,8,0 [rotated-to-1] 3,4,1 3,4,0 6,2,1 6,2,0 [before-shift-up] 3,3,1 4,3,1 5,3,1 6,3,1 [after-shift-up] 3,3,0 4,3,0 5,3,0 6,3,0 [after-esc] 2,2,1 3,2,1 [chord-2] 2,2,0 3,2,0 8,8,1 8,8,0 [after-plain-click] [after-focus-lost] 9,5,1 9,5,0 10,5,1 10,5,0 [after-plain-drag] "
+        [ "$got" = "$want" ] || { echo "the keys the script saw are not what was clicked"; echo "  got:  $got"; echo "  want: $want"; bad=1; }
+        grep -aq "PROBE vgrid view done" "$VLOG" || { echo "the probe did not finish"; bad=1; }
+        # the next start
+        M="$T/vgrid-view2.marks"
+        tall b0 || { echo "the next start: the saved rotation 1 is not put back (window $(mk b0 "$M"))"; bad=1; }
+        [ "$(vgrid_seq "$VLOG2")" = "2,1,1 2,1,0 " ] || { echo "the next start: the click at the turned place did not reach key (1,0): $(vgrid_seq "$VLOG2")"; bad=1; }
+        M="$T/vgrid-view3.marks"
+        wide b0 || { echo "a bad rotation file: the window is not the plain one (window $(mk b0 "$M"))"; bad=1; }
+        [ "$(vgrid_seq "$VLOG3")" = "2,1,1 2,1,0 " ] || { echo "a bad rotation file: the click did not reach key (1,0): $(vgrid_seq "$VLOG3")"; bad=1; }
+        return $bad
+    }
+    run "window:virtual grid ROTATE and shift multi-press (the window turns and keeps its rotation, the keys the script sees are the ones clicked, shift collects and its release sends, Esc and a plain click let go, focus lost sends nothing, a bad file is 0)" vgrid_view_ok
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
     # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend
     run "window:PIN says it cannot when the video driver is not x11 (Wayland has no always-on-top request: state off, button dark, one plain sentence in the log)" linux/tests/pin_unavailable_test.sh
