@@ -125,6 +125,9 @@ extern "C" int pin_native_topmost(SDL_Window *w);
 #endif
 #include "vgrid_device.h"
 #include "vgrid_skin.h"
+#ifdef VGRID_ROTATE
+#include "../linux/vgrid_view.h"
+#endif
 #include "vkeys_skin.h"
 #include "window_keys.h"
 
@@ -1427,6 +1430,12 @@ static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
 static int grid_size = 0;                        // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
 static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
 static int grid_pending = 0;
+#ifdef VGRID_ROTATE
+// M41 (docs/port/phase-m41.md): the device turned in the window (0-3 x 90 degrees clockwise; scripts do not see it) and shift multi-press (vgrid_view.h)
+static int grid_rot = 0;
+static bool grid_rot_loaded = false;
+static vgv_t grid_multi;
+#endif
 
 // device thread: leds changed; one redraw request at a time
 static void grid_changed(void *ctx) {
@@ -1451,9 +1460,15 @@ static void grid_redraw(void) {
         return;
     }
     int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1];
+#ifdef VGRID_ROTATE
+    if (resized || grid_geom.cols != cols || grid_geom.rows != rows || grid_geom.rot != grid_rot) {
+        vgrid_skin_geom_rot(grid_pane.w, grid_pane.h, cols, rows, grid_rot, &grid_geom);
+    }
+#else
     if (resized || grid_geom.cols != cols || grid_geom.rows != rows) {
         vgrid_skin_geom(grid_pane.w, grid_pane.h, cols, rows, &grid_geom);
     }
+#endif
     uint8_t level[VGRID_MAX][VGRID_MAX];
     int intensity;
     vgrid_levels(vgrid, level, &intensity);
@@ -1492,6 +1507,69 @@ static void grid_save_size(void) {
     }
 }
 
+#ifdef VGRID_ROTATE
+// the rotation, in the norns home next to .vgrid-size (norns.sh sets HOME): one number 0-3; a missing or bad file is 0
+static void grid_rot_path(char *buf, size_t n) {
+    const char *home = getenv("HOME");
+    snprintf(buf, n, "%s/.vgrid-rotation", home ? home : ".");
+}
+
+static void grid_load_rot(void) {
+    char path[1024];
+    grid_rot_path(path, sizeof path);
+    grid_rot = vgv_load_rot(path);
+    grid_rot_loaded = true;
+}
+
+static void grid_save_rot(void) {
+    char path[1024];
+    grid_rot_path(path, sizeof path);
+    if (vgv_save_rot(path, grid_rot) != 0) {
+        fprintf(stderr, "sdl_bridge: the virtual grid's rotation could not be saved (%s)\n", path);
+    }
+}
+
+// the white outline of the pending keys is a flag of the drawing
+static void grid_sync_pending(void) {
+    for (int r = 0; r < VGRID_MAX; r++) {
+        for (int c = 0; c < VGRID_MAX; c++) {
+            if (vgv_is_pending(&grid_multi, c, r)) {
+                grid_held[r][c] |= VGRID_HELD_PENDING;
+            } else {
+                grid_held[r][c] &= ~VGRID_HELD_PENDING;
+            }
+        }
+    }
+}
+
+static void grid_press(int c, int r);
+
+// what the state machine says: hold a key (down, and it stays like a latched key) or let it go (up, unless the mouse or a latch of its own still holds it)
+static void grid_do(const vgv_act_t *acts, int n) {
+    if (vgrid == NULL) {
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        int c = acts[i].x, r = acts[i].y;
+        if (acts[i].down) {
+            grid_press(c, r);
+            grid_held[r][c] |= VGRID_HELD_LATCH;
+        } else if (grid_held[r][c] & VGRID_HELD_LATCH) {
+            grid_held[r][c] &= ~VGRID_HELD_LATCH;
+            if ((grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH)) == 0) {
+                vgrid_key(vgrid, c, r, 0);
+            }
+        }
+    }
+}
+
+// the pending set and the chord are not kept across a replug, a close or (the pending set) a turn
+static void grid_after_multi(void) {
+    grid_sync_pending();
+    grid_redraw();
+}
+#endif
+
 static void toggle_grid(void);
 
 // a new size: the grid is unplugged and plugged in again at that size, where it was
@@ -1506,6 +1584,62 @@ static void grid_set_size(int size) {
         toggle_grid();
     }
 }
+
+#ifdef VGRID_ROTATE
+// ROTATE: the device is turned 90 degrees clockwise in the window. nothing is plugged out (the script keeps its device, its keys and its leds); the window changes shape when the plate does (a 16 x 8
+// stands up). it keeps its place (its top left corner) and its scale, and is moved back into the screen if the new shape would leave it. pending keys are thrown away without sending (the keys the
+// user meant are not where they were); held keys stay (they are device keys)
+static void grid_rotate(void) {
+    grid_rot = (grid_rot + 1) & 3;
+    grid_save_rot();
+    vgv_rotation_changed(&grid_multi);
+    grid_sync_pending();
+    if (grid_pane.window != NULL && vgrid != NULL) {
+        int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1], uw, uh;
+        vgrid_skin_units_rot(cols, rows, grid_rot, &uw, &uh);
+        int ww = 1, wh = 1, wx = 0, wy = 0;
+        SDL_GetWindowSize(grid_pane.window, &ww, &wh);
+        SDL_GetWindowPosition(grid_pane.window, &wx, &wy);
+        // the scale the window had (window points per layout unit), the same for the new shape
+        double k = grid_pane.uw > 0 ? (double)ww / grid_pane.uw : 1.0;
+        if (grid_pane.uh > 0 && (double)wh / grid_pane.uh < k) {
+            k = (double)wh / grid_pane.uh;
+        }
+        SDL_Rect u;
+        if (usable_bounds(&u)) {
+            int room_h = u.h - title_height(grid_pane.window), room_w = u.w;
+            if (uh * k > room_h) {
+                k = (double)room_h / uh;
+            }
+            if (uw * k > room_w) {
+                k = (double)room_w / uw;
+            }
+        }
+        int nw = (int)(uw * k + 0.5), nh = (int)(uh * k + 0.5);
+        grid_pane.uw = uw;
+        grid_pane.uh = uh;
+        SDL_SetWindowMinimumSize(grid_pane.window, uw / 3, uh / 3);
+        SDL_SetWindowSize(grid_pane.window, nw, nh);
+        if (usable_bounds(&u)) {
+            int top = title_height(grid_pane.window);
+            if (wx + nw > u.x + u.w) {
+                wx = u.x + u.w - nw;
+            }
+            if (wy + nh > u.y + u.h) {
+                wy = u.y + u.h - nh;
+            }
+            if (wx < u.x) {
+                wx = u.x;
+            }
+            if (wy < u.y + top) {
+                wy = u.y + top;
+            }
+            SDL_SetWindowPosition(grid_pane.window, wx, wy);
+        }
+    }
+    grid_redraw();
+}
+#endif
 
 // macOS: devices are added and removed on the CoreMIDI/IOKit runloop thread. linux: the device
 // list has its own lock, any thread will do
@@ -1538,6 +1672,9 @@ static void toggle_grid(void) {
         vgrid = NULL;
         pane_close(&grid_pane);
         memset(grid_held, 0, sizeof grid_held);
+#ifdef VGRID_ROTATE
+        vgv_device_gone(&grid_multi); // pending keys were never sent and held ones go with the device: nothing to send
+#endif
         grid_mouse_c = grid_mouse_r = -1;
         skin.grid_open = 0;
         arrange_windows();
@@ -1547,6 +1684,12 @@ static void toggle_grid(void) {
     if (grid_size == 0) {
         grid_load_size();
     }
+#ifdef VGRID_ROTATE
+    if (!grid_rot_loaded) {
+        grid_load_rot();
+        vgv_reset(&grid_multi);
+    }
+#endif
     int cols = vgrid_sizes[grid_size][0], rows = vgrid_sizes[grid_size][1];
     vgrid = vgrid_open("virtual grid", cols, rows, grid_changed, NULL);
     if (vgrid == NULL) {
@@ -1558,7 +1701,11 @@ static void toggle_grid(void) {
     }
     // one unit per point; arrange_windows fits the windows on the screen
     int uw, uh;
+#ifdef VGRID_ROTATE
+    vgrid_skin_units_rot(cols, rows, grid_rot, &uw, &uh);
+#else
     vgrid_skin_units(cols, rows, &uw, &uh);
+#endif
     if (pane_open(&grid_pane, "grid", uw, uh) != NULL) {
         arrange_windows();
     }
@@ -1593,6 +1740,12 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
         double px, py;
         pane_pixels(&grid_pane, b->x, b->y, &px, &py);
         int size = vgrid_skin_hit_size(&grid_geom, px, py);
+#ifdef VGRID_ROTATE
+        if (size == 4) {
+            grid_rotate();
+            return;
+        }
+#endif
         if (size != 0) {
             grid_set_size(size);
             return;
@@ -1601,6 +1754,32 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
     int c, r;
     bool hit = grid_key_at(b->x, b->y, &c, &r);
     bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
+#ifdef VGRID_ROTATE
+    // shift multi-press (vgrid_view.h). the shift state comes from the shift key events and is asked again here with every click, so a shift key-up that did not reach this window is found at once
+    if (b->button == SDL_BUTTON_LEFT) {
+        vgv_act_t acts[VGV_MAXACT];
+        bool shift_now = (SDL_GetModState() & KMOD_SHIFT) != 0;
+        if (b->type == SDL_MOUSEBUTTONDOWN) {
+            if (grid_mouse_c < 0 && hit && !ctrl) {
+                int consumed = 0;
+                int n = vgv_mouse_down(&grid_multi, c, r, shift_now, acts, &consumed);
+                grid_do(acts, n);
+                if (consumed) {
+                    grid_after_multi();
+                    return; // a collecting click: the key is not pressed
+                }
+                grid_sync_pending();
+            } else {
+                grid_do(acts, vgv_shift(&grid_multi, shift_now, acts));
+                grid_sync_pending();
+            }
+        } else {
+            int n = vgv_mouse_up(&grid_multi, acts);
+            grid_do(acts, n);
+            grid_after_multi();
+        }
+    }
+#endif
     if (b->button == SDL_BUTTON_LEFT && !ctrl) {
         if (b->type == SDL_MOUSEBUTTONDOWN) {
             if (!hit || grid_mouse_c >= 0) {
@@ -1629,8 +1808,58 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
     grid_redraw();
 }
 
+#ifdef VGRID_ROTATE
+// a key of the grid window. true = taken (Esc that let keys go). the shift keys are told to the multi-press and go on (nothing else in the window uses them: the arc window's shift is the arc window's)
+static bool grid_key_event(const SDL_KeyboardEvent *k) {
+    vgv_act_t acts[VGV_MAXACT];
+    if (k->keysym.scancode == SDL_SCANCODE_LSHIFT || k->keysym.scancode == SDL_SCANCODE_RSHIFT) {
+        if (k->repeat == 0) {
+            int n = vgv_shift(&grid_multi, (SDL_GetModState() & KMOD_SHIFT) != 0, acts);
+            grid_do(acts, n);
+            grid_after_multi();
+        }
+        return false;
+    }
+    if (k->type == SDL_KEYDOWN && k->keysym.scancode == SDL_SCANCODE_ESCAPE) {
+        int used = 0;
+        int n = vgv_esc(&grid_multi, acts, &used);
+        grid_do(acts, n);
+        if (used) {
+            grid_after_multi();
+            return true;
+        }
+    }
+    return false;
+}
+
+// the grid window lost the focus: pending keys are thrown away (nothing sent), held keys stay
+static void grid_focus_lost(void) {
+    vgv_focus_lost(&grid_multi);
+    grid_sync_pending();
+    grid_redraw();
+}
+#endif
+
 static void grid_motion(const SDL_MouseMotionEvent *m) {
     int c, r;
+#ifdef VGRID_ROTATE
+    {
+        vgv_act_t acts[VGV_MAXACT];
+        int n = vgv_shift(&grid_multi, (SDL_GetModState() & KMOD_SHIFT) != 0, acts);
+        grid_do(acts, n);
+        if (n > 0) {
+            grid_after_multi();
+        }
+        // a collecting drag (shift and the left button): the keys it crosses join the pending set, nothing is pressed
+        if (grid_key_at(m->x, m->y, &c, &r) && vgv_motion(&grid_multi, c, r)) {
+            grid_after_multi();
+            return;
+        }
+        if (grid_multi.mouse) {
+            return; // collecting, the pointer is off the keys
+        }
+    }
+#endif
     if (grid_mouse_c < 0 || !grid_key_at(m->x, m->y, &c, &r) || (c == grid_mouse_c && r == grid_mouse_r)) {
         return;
     }
@@ -4154,6 +4383,13 @@ void sdl_bridge_run(void) {
             break;
         case SDL_KEYDOWN:
         case SDL_KEYUP:
+#ifdef VGRID_ROTATE
+            // the grid window: the shift keys tell the multi-press when shift is let go (SDL_GetModState is asked as well, with every mouse event), Esc lets the held keys go. a key the window
+            // took is not passed on; every other key (and Esc with nothing to let go) goes on as before
+            if (is_pane(&grid_pane, ev.key.windowID) && vgrid != NULL && grid_key_event(&ev.key)) {
+                break;
+            }
+#endif
             handle_key(&ev.key);
             break;
         case SDL_DROPFILE:
@@ -4205,6 +4441,10 @@ void sdl_bridge_run(void) {
             if (is_pane(&grid_pane, id)) {
                 if (e == SDL_WINDOWEVENT_CLOSE) {
                     toggle_grid();
+#ifdef VGRID_ROTATE
+                } else if (e == SDL_WINDOWEVENT_FOCUS_LOST) {
+                    grid_focus_lost();
+#endif
                 } else if (repaint) {
                     grid_redraw();
                 }
