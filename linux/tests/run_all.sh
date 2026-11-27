@@ -138,7 +138,7 @@ cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local
 # M41 (docs/port/phase-m41.md): the virtual grid window's ROTATE (the device turned in the window: mapping, saved file, drawing, hit test, the fourth button) and shift multi-press (the state machine);
 # the Mac build's picture is the old one; the same through the real libmonome for every size, script rotation and turn of the window
 cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/vgrid_view_test.c -o "$T/vgv" && run "c:vgrid view (M41: the turn of the plate for 4 rotations and 3 sizes, the saved rotation file also when bad, shift multi-press as event tables)" "$T/vgv"
-cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I "$P" $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c "$P/vgrid_skin.c" -lm $(pkg-config --libs cairo) -o "$T/vsr_l" \
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -DEXPECT_ROTATE -I "$P" $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c "$P/vgrid_skin.c" -lm $(pkg-config --libs cairo) -o "$T/vsr_l" \
     && run "c:vgrid skin turned (M41: units, hit test, drawing at 4 rotations and 3 sizes, the fourth button, the white outline of a pending key, the old picture at rotation 0)" "$T/vsr_l"
 cc -std=gnu11 -Wall -Wextra -I "$P" $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c "$P/vgrid_skin.c" -lm $(pkg-config --libs cairo) -o "$T/vsr_m" \
     && run "c:vgrid skin as the Mac builds it (M41: the picture is the old one, three buttons, no ROTATE)" "$T/vsr_m"
@@ -1249,7 +1249,8 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         VP="$REPO/linux/tests/vgrid_pane_check.sh" VP_ROT=0 NORNS_HOME="$VH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_vgrid_view2.lua" "$VLOG3" > /dev/null 2>&1
         cp "$VH/probe.marks" "$T/vgrid-view3.marks" 2> /dev/null
     }
-    vgrid_view_scenario
+    VGNAME="window:virtual grid ROTATE and shift multi-press (the window turns and keeps its rotation, the keys the script sees are the ones clicked, shift collects and its release sends, Esc and a plain click let go, focus lost sends nothing, a bad file is 0)"
+    ! wanted "$VGNAME" || vgrid_view_scenario
     # the keys and the marks of a log, in order, one line: "2,1,1 2,1,0 mark clicked-r0 ..."
     vgrid_seq() { sed 's/\x1b\[[0-9;]*m//g' "$1" | awk -F'\t' '/^PROBE gridkey\t/ { printf "%s,%s,%s ", $2, $3, $4 } /^PROBE mark / { sub(/^PROBE mark /, ""); printf "[%s] ", $0 }'; }
     vgrid_view_ok() {
@@ -1279,7 +1280,7 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         [ "$(vgrid_seq "$VLOG3")" = "2,1,1 2,1,0 " ] || { echo "a bad rotation file: the click did not reach key (1,0): $(vgrid_seq "$VLOG3")"; bad=1; }
         return $bad
     }
-    run "window:virtual grid ROTATE and shift multi-press (the window turns and keeps its rotation, the keys the script sees are the ones clicked, shift collects and its release sends, Esc and a plain click let go, focus lost sends nothing, a bad file is 0)" vgrid_view_ok
+    run "$VGNAME" vgrid_view_ok
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
     # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend
     run "window:PIN says it cannot when the video driver is not x11 (Wayland has no always-on-top request: state off, button dark, one plain sentence in the log)" linux/tests/pin_unavailable_test.sh

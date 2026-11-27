@@ -2,7 +2,7 @@
  * vgrid_skin_rot_test.c (M41, docs/port/phase-m41.md): the drawing and the hit test of the virtual grid window with the device turned, and the proof that the Mac picture is the old one.
  * built twice by run_all.sh: with -DNORNS_LINUX_DESKTOP (ROTATE and the pending outline are there) and without (what the macOS build compiles: nothing new may show).
  *
- *   cc -std=gnu11 -Wall -Wextra [-DNORNS_LINUX_DESKTOP] -I matron/src/platform/macos $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c \
+ *   cc -std=gnu11 -Wall -Wextra [-DNORNS_LINUX_DESKTOP -DEXPECT_ROTATE] -I matron/src/platform/macos $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c \
  *      matron/src/platform/macos/vgrid_skin.c -lm $(pkg-config --libs cairo) -o /tmp/vsr && /tmp/vsr
  */
 #include <cairo.h>
@@ -12,6 +12,9 @@
 #include <string.h>
 
 #include "vgrid_skin.h"
+#if defined(EXPECT_ROTATE) && !defined(VGRID_ROTATE)
+#error "the Linux desktop build has no ROTATE (VGRID_ROTATE is not defined by vgrid_skin.h)"
+#endif
 #ifdef VGRID_ROTATE
 #include "../linux/vgrid_view.h"
 #endif
