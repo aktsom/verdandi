@@ -843,3 +843,16 @@ Cannot be tested here: your locale's `ls` order, the Windows listing.
 7. Off: add the line `midi_in_from=` to audio.conf and restart: no link (and the old way, `pw-link` by hand, works as before).
 Results: 2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
 Cannot be tested here: Reaper, PipeWire's real port names, a real clock.
+
+## M41 (Linux): the virtual grid: ROTATE and shift multi-press - the owner's Linux Mint laptop
+Use any script that lights keys and shows held keys. The window probe script `linux/tests/scripts/window_probe.lua` prints `PROBE gridkey x y z` for every key (copy it to `~/dust/code/probe/` and load it, then watch the log with `tail -f ~/verdandi-home/logs/norns.log`, or use a script of your own that draws held keys: for example any script that shows a pressed key as a lit key).
+1. Open the grid (GRID button or F6). Look for four buttons under the keys: 64, 128, 256 and ROT 0.
+2. Press ROT: it says ROT 90 and the plate turns a quarter turn clockwise (the top left key goes to the top right). The window changes shape (the 128 stands up). Press on to ROT 180, ROT 270, ROT 0. Do it at 64, 128 and 256.
+3. At each position light keys from the script and press keys: a lit key and the key you press at that spot are the same key (a key you press at the top left LED reports the key the script lit). Scripts that call `g:rotation(1)` themselves still work: the picture turns on top of the window's turn.
+4. Change the size while turned (64 then 256): the rotation stays. Close and open the window (F6 twice): the rotation stays. Quit Verdandi and start it again, open the grid: the rotation is the one you left (the file is `~/verdandi-home/.vgrid-rotation`; `echo zzz > ` it and restart: the plain position 0 comes back).
+5. Shift: hold Shift and click or drag over several keys: white outlines, the script sees nothing yet. Let go of Shift: all those keys go down at once (the script prints their key-downs together) and stay held (orange outline). Press Esc in the grid window: all go up. Collect keys again, then click a key without Shift: the held keys go up first, then your click presses its key.
+6. Focus: hold Shift, collect two keys, click another window (or Alt+Tab) and let go of Shift there: nothing is sent when you come back; no key is stuck. Also: collect keys and press ROT or change the size: the collected keys are dropped, nothing is sent.
+7. Normal clicks: click a key (down and up), drag across keys (they play one after the other), right-click or Ctrl+click a key (latched: stays down until clicked again): all as before.
+8. Shift+click on a button or the plate edge does what a plain click does.
+Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]  8 [ ]; notes: ...
+Cannot be tested here: a real window manager (does the first click on a just-opened window get through?), a touch screen, the owner's own scripts.

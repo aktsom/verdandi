@@ -1,3 +1,10 @@
+## M41 (Linux desktop only): the virtual grid: ROTATE and shift multi-press (stages 1 and 2 of the M40 plan)
+- Note `docs/port/phase-m41.md`, proof on the old code `docs/port/phase-m41-without.txt`. macOS unchanged (all new code behind `VGRID_ROTATE` = `NORNS_LINUX_DESKTOP` and not `NORNS_WINDOWS`; the Mac build's picture is byte-for-byte the old one, tested), Windows virtual grid still off.
+- ROTATE: a fourth button "ROT 0/90/180/270" turns the DEVICE in the window (scripts see nothing new, a script's own `g:rotation` adds on top), saved in `$HOME/.vgrid-rotation`, the window changes shape without unplugging. Measured through libmonome: leds, hit test and presses agree for 3 sizes x 4 script rotations x 4 turns; the 16 x 16 quad offsets are right.
+- Shift multi-press: shift collects (white outline, nothing sent), shift up sends the burst in order, the keys stay held until a plain click or Esc; focus lost / rotation change while pending drops them unsent.
+- Tests: `vgrid_view_test.c`, `vgrid_skin_rot_test.c` (Linux and Mac build), `vgrid_rot_e2e_test.c`, `vgrid_view_guard_test.sh`, and a headless window test with xdotool (`probe_vgrid_view.lua`) that found a real bug (the pending flag counted as held). Manual updated.
+- Not tested here: a real window manager, touch, the owner's scripts; `docs/port/HARDWARE-CHECKLIST.md`.
+
 ## M40 (plan only, no code): the virtual grid: ROTATE, pressing several keys, Windows, look
 - `docs/port/phase-m40-virtual-grid-plan.md` (investigation from the code and one measurement of libmonome's rotation through the repository's virtual grid). Findings: the virtual grid is `platform/macos/vgrid_*` + `sdl_bridge.cc:1422-1646`, shared with macOS; Windows has it switched off on purpose (`vgrid_device_win.c:232`), the arc already runs there on a pipe; rotation is libmonome's (scripts own it, nothing saved); a latch (right click, Ctrl+click) already exists. Recommended: ROTATE turns the device in the window (scripts unchanged, saved in `$HOME/.vgrid-rotation`), shift collects and applies on shift release, then Windows, then colours. Waiting for the owner's decisions (section F of the note). No code changed.
 
