@@ -13,6 +13,8 @@ cmd="${1:-}"
 shift
 gid() { xdotool search --name '^grid$' 2> /dev/null | head -n 1; }
 geo() { eval "$(xdotool getwindowgeometry --shell "$1" 2> /dev/null)"; }
+# a window that was made while the pointer rested over its place does not get the first click of a pointer that did not move (SDL has seen no motion in it yet): a person moves the mouse, so does the test
+jiggle() { xdotool mousemove --window "$1" $(($2 + 7)) $(($3 + 7)); sleep 0.15; xdotool mousemove --window "$1" "$2" "$3"; sleep 0.15; }
 xy() { python3 -I "$HERE/vgrid_pane_xy.py" "$@"; }
 case "$cmd" in
 shape)
@@ -29,15 +31,14 @@ key | down | up | move)
     case "$cmd" in
     key)
         if [ "${6:-}" = shift ]; then xdotool keydown shift; sleep 0.15; fi
-        xdotool mousemove --window "$id" "$x" "$y"
-        sleep 0.15
+        jiggle "$id" "$x" "$y"
         xdotool mousedown 1
         sleep 0.2
         xdotool mouseup 1
         sleep 0.2
         [ "${6:-}" = shift ] && { sleep 0.1; xdotool keyup shift; sleep 0.3; }
         ;;
-    down) xdotool mousemove --window "$id" "$x" "$y" mousedown 1 ;;
+    down) jiggle "$id" "$x" "$y"; xdotool mousedown 1 ;;
     up) xdotool mousemove --window "$id" "$x" "$y" mouseup 1 ;;
     move) xdotool mousemove --window "$id" "$x" "$y" ;;
     esac
@@ -47,8 +48,7 @@ button)
     [ -n "$id" ] || exit 0
     geo "$id"
     read -r x y <<< "$(xy button "$1" "$2" "$3" "$4" "$WIDTH" "$HEIGHT")"
-    xdotool mousemove --window "$id" "$x" "$y"
-    sleep 0.15
+    jiggle "$id" "$x" "$y"
     xdotool mousedown 1
     sleep 0.2
     xdotool mouseup 1
