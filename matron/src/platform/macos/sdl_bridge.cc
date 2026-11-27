@@ -1721,8 +1721,11 @@ static bool grid_key_at(int x, int y, int *c, int *r) {
     return vgrid_skin_hit(&grid_geom, px, py, c, r);
 }
 
+// the flags that hold a key down (the white outline of a pending key, a flag of the drawing only, does not)
+#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH))
+
 static void grid_press(int c, int r) {
-    if (grid_held[r][c] == 0) {
+    if (GRID_DOWN_FLAGS(r, c) == 0) {
         vgrid_key(vgrid, c, r, 1);
     }
 }
@@ -1730,7 +1733,7 @@ static void grid_press(int c, int r) {
 // the left button lets go of c,r: up unless it is latched
 static void grid_let_go(int c, int r) {
     grid_held[r][c] &= ~VGRID_HELD_MOUSE;
-    if (grid_held[r][c] == 0) {
+    if (GRID_DOWN_FLAGS(r, c) == 0) {
         vgrid_key(vgrid, c, r, 0);
     }
 }
@@ -1797,7 +1800,7 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
     } else if ((b->button == SDL_BUTTON_RIGHT || ctrl) && b->type == SDL_MOUSEBUTTONDOWN && hit) {
         if (grid_held[r][c] & VGRID_HELD_LATCH) {
             grid_held[r][c] &= ~VGRID_HELD_LATCH;
-            if (grid_held[r][c] == 0) {
+            if (GRID_DOWN_FLAGS(r, c) == 0) {
                 vgrid_key(vgrid, c, r, 0);
             }
         } else {

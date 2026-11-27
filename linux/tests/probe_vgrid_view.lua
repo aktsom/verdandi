@@ -28,9 +28,11 @@ print("PROBE mark rotated-to-1")
 -- 3. the size switch while turned (64: an 8 x 8, 128 again): the rotation stays
 #sh $VP button 16 8 1 1
 #sleep 1
+#sleep 1
 #sh $VP shape s64
 #sh $VP key 8 8 1 2 3
 #sh $VP button 8 8 1 2
+#sleep 1
 #sleep 1
 #sh $VP shape s128
 #sh $VP key 16 8 1 5 1
