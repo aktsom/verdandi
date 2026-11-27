@@ -1,0 +1,10 @@
+M39 proof, against the code before M39 (linux/norns.sh and crone/src/MidiRoute.h of the commit before).
+
+== jackd scenario "default" (no midi_in_from anywhere; a fake client "Midi-Bridge" with the port "Client-128:(capture_0) Virtual RawMIDI") with the old linux/norns.sh ==
+start: Verdandi:midi_in is linked to: [nothing]   (wanted: Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI)
+back (after the program restarted as Client-131): [nothing]
+"midi: connected" lines in the log: 0
+-> the test (midi_default_ok in run_all.sh) fails on its first check.
+
+== tests/crone/test_midi_route.cpp against the old MidiRoute.h ==
+compile errors: 8 (defaultInFrom, inputNever, chooseOne, vanished do not exist)

@@ -429,7 +429,18 @@ export NORNS_AUDIO_SERVER_MODE="$SERVER"
 NORNS_SYS_MONITOR="${NORNS_SYS_MONITOR:-$(conf_get sys_monitor)}"
 export NORNS_SYS_MONITOR
 # the optional MIDI auto-connect: JACK MIDI output port name prefixes (";" between) to link to Verdandi:midi_in (midi_in_from), and JACK MIDI input port prefixes Verdandi:midi_out is linked to (midi_out_to). both off by default
-NORNS_MIDI_IN_FROM="${NORNS_MIDI_IN_FROM:-$(conf_get midi_in_from)}"
+# M39: the default of midi_in_from is another program's virtual MIDI output (Reaper's "virtual": the port "Virtual RawMIDI"), linked to Verdandi:midi_in by itself, one source at a time (docs/port/phase-m39.md).
+# a line midi_in_from=<list> in audio.conf replaces it, an empty line "midi_in_from=" turns it off, NORNS_MIDI_IN_FROM in the environment beats the file (as before)
+unset NORNS_MIDI_IN_FROM_DEFAULT
+if [ -z "${NORNS_MIDI_IN_FROM:-}" ]; then
+    if grep -q '^midi_in_from=' "$NORNS_HOME/audio.conf" 2> /dev/null; then
+        NORNS_MIDI_IN_FROM="$(conf_get midi_in_from)"
+    else
+        NORNS_MIDI_IN_FROM="Midi-Bridge:Client-*Virtual RawMIDI"
+        NORNS_MIDI_IN_FROM_DEFAULT=1
+        export NORNS_MIDI_IN_FROM_DEFAULT
+    fi
+fi
 export NORNS_MIDI_IN_FROM
 NORNS_MIDI_OUT_TO="${NORNS_MIDI_OUT_TO:-$(conf_get midi_out_to)}"
 export NORNS_MIDI_OUT_TO

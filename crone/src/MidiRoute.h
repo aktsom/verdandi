@@ -176,6 +176,74 @@ inline std::vector<std::string> wantedSinks(const std::vector<MidiPort> &ports, 
     return out;
 }
 
+// M39: what midi_in_from= is when audio.conf does not say: another program's virtual MIDI output (Reaper's "virtual" output: an ALSA sequencer client "Client-<n>", port "Virtual RawMIDI"; in PipeWire's JACK
+// layer "Midi-Bridge:Client-<n>:(capture_0) Virtual RawMIDI" or, in older versions, "Midi-Bridge:Client-<n> Virtual RawMIDI:(capture_0)": the '*' stands for the number and for either order). a hardware interface is
+// "Midi-Bridge:<its name>:(capture_0) ..." (no "Client-"), the kernel's virtual MIDI card is "VirMIDI"/"Virtual Raw MIDI" (with a space), Verdandi's own ports are never linked (wanted() and inputNever()).
+inline const char *defaultInFrom() {
+    return "Midi-Bridge:Client-*Virtual RawMIDI";
+}
+
+// names that the input side never links, on top of norns' own clients and "Midi Through": the kernel's virtual MIDI card (snd-virmidi: Verdandi writes to it, alsa_midi_out_to=) and the target of
+// alsa_midi_out_to= itself, wherever it appears in the name
+inline std::vector<std::string> inputNever(const std::string &alsaMidiOutTo) {
+    std::vector<std::string> out = {"VirMIDI", "Virtual Raw MIDI"};
+    for (const auto &p : parsePrefixes(alsaMidiOutTo)) {
+        out.push_back(p);
+    }
+    return out;
+}
+
+// the default links ONE source (two programs that both send clock into the one device "virtual" would double every tick): the one that is linked already stays; else the first by name. the rest is returned in `others`
+inline std::vector<std::string> chooseOne(const std::vector<std::string> &want, const std::vector<std::string> &linked,
+                                          std::vector<std::string> *others = nullptr) {
+    std::string pick;
+    for (const auto &w : want) {
+        for (const auto &l : linked) {
+            if (w == l && (pick.empty() || w < pick)) {
+                pick = w;
+            }
+        }
+    }
+    if (pick.empty()) {
+        for (const auto &w : want) {
+            if (pick.empty() || w < pick) {
+                pick = w;
+            }
+        }
+    }
+    std::vector<std::string> out;
+    if (!pick.empty()) {
+        out.push_back(pick);
+    }
+    if (others != nullptr) {
+        others->clear();
+        for (const auto &w : want) {
+            if (w != pick) {
+                others->push_back(w);
+            }
+        }
+    }
+    return out;
+}
+
+// the ports in `was` that are not in the port list any more (the program that owned them quit)
+inline std::vector<std::string> vanished(const std::set<std::string> &was, const std::vector<MidiPort> &ports) {
+    std::vector<std::string> gone;
+    for (const auto &w : was) {
+        bool there = false;
+        for (const auto &p : ports) {
+            if (p.name == w) {
+                there = true;
+                break;
+            }
+        }
+        if (!there) {
+            gone.push_back(w);
+        }
+    }
+    return gone;
+}
+
 inline std::vector<std::string> missingFrom(const std::vector<std::string> &want, const std::vector<std::string> &linked) {
     std::vector<std::string> m;
     for (const auto &w : want) {

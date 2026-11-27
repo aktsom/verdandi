@@ -191,3 +191,55 @@ TEST_CASE("ownAlsaNames finds the client the thread that made it belongs to norn
     CHECK(std::find(names.begin(), names.end(), "Verdandi") != names.end());
     CHECK(std::find(names.begin(), names.end(), "Reaper") == names.end());
 }
+
+// ---- M39: the default of midi_in_from (docs/port/phase-m39.md): another program's virtual MIDI output, one source, never hardware, never the VirMIDI card, never Verdandi's own ports
+TEST_CASE("M39 default: Reaper's virtual port is wanted in both name orders of PipeWire's JACK layer") {
+    auto pre = parsePrefixes(defaultInFrom());
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI"), out("Midi-Bridge:Client-20 Virtual RawMIDI:(capture_0)")};
+    CHECK(wanted(ports, pre).size() == 2);
+}
+
+TEST_CASE("M39 default: hardware interfaces, Midi Through, the VirMIDI card and a plain JACK client are not wanted") {
+    auto pre = parsePrefixes(defaultInFrom());
+    std::vector<MidiPort> ports = {out("Midi-Bridge:mio:(capture_0) mio MIDI 1"), out("Midi-Bridge:Midi Through:(capture_0) Midi Through Port-0"),
+                                   out("Midi-Bridge:VirMIDI 1-0:(capture_0) VirMIDI 1-0"), out("Midi-Bridge:Virtual Raw MIDI 1-0:(capture_0) Virtual Raw MIDI 1-0"),
+                                   out("Fake DAW:out"), out("Midi-Bridge:Arturia BeatStep Pro:(capture_0) Arturia BeatStep Pro MIDI 1")};
+    CHECK(wanted(ports, pre, inputNever("")).empty());
+}
+
+TEST_CASE("M39 default: Verdandi's own virtual RawMIDI client and its own JACK client are never wanted (no feedback loop)") {
+    auto pre = parsePrefixes(defaultInFrom());
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Client-130:(capture_0) Virtual RawMIDI"), out("Verdandi:midi_out"), out("Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI")};
+    auto w = wanted(ports, pre, {"Client-130"});
+    REQUIRE(w.size() == 1);
+    CHECK(w[0] == "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI");
+}
+
+TEST_CASE("M39 default: the target of alsa_midi_out_to is never linked, wherever it is in the name") {
+    auto never = inputNever("Reaper Bridge;Foo");
+    CHECK(never.size() == 4);
+    std::vector<MidiPort> ports = {out("Midi-Bridge:Client-9:(capture_0) Reaper Bridge Virtual RawMIDI")};
+    CHECK(wanted(ports, parsePrefixes(defaultInFrom()), never).empty());
+}
+
+TEST_CASE("M39 default: with two matching sources one is linked: the linked one stays, else the first by name, the rest is reported") {
+    std::vector<std::string> want = {"Midi-Bridge:Client-129:(capture_0) Virtual RawMIDI", "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI"};
+    std::vector<std::string> others;
+    auto c = chooseOne(want, {}, &others);
+    REQUIRE(c.size() == 1);
+    CHECK(c[0] == "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI");
+    CHECK(others.size() == 1);
+    c = chooseOne(want, {"Midi-Bridge:Client-129:(capture_0) Virtual RawMIDI"}, &others);
+    REQUIRE(c.size() == 1);
+    CHECK(c[0] == "Midi-Bridge:Client-129:(capture_0) Virtual RawMIDI"); // already linked: it stays
+    CHECK(chooseOne({}, {}).empty()); // none: nothing
+}
+
+TEST_CASE("M39: a linked port that is not in the port list any more is reported as gone") {
+    std::set<std::string> was = {"Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI", "Fake:out"};
+    std::vector<MidiPort> ports = {out("Fake:out")};
+    auto g = vanished(was, ports);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0] == "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI");
+    CHECK(vanished({}, ports).empty());
+}

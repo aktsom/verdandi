@@ -132,6 +132,16 @@ static std::vector<std::string> own_alsa_clients(void) {
     return ownAlsaNames(clients, own_ids());
 }
 
+// M39: the default (audio.conf has no midi_in_from=, norns.sh sets NORNS_MIDI_IN_FROM_DEFAULT=1) links one source and never the virtual MIDI card; a list the user wrote links every match, as before
+static bool default_mode(void) {
+    const char *d = getenv("NORNS_MIDI_IN_FROM_DEFAULT");
+    return d != NULL && strcmp(d, "1") == 0;
+}
+static std::set<std::string> was_linked;    // ports linked by this worker that were in the port list at the last look
+static std::set<std::string> said_others;   // the extra sources of the default, said once
+static std::set<std::string> announce_next; // a port that was said to be gone: its next connection is said at once
+static Throttle throttle_gone;
+
 static void apply(jack_client_t *c) {
     std::vector<MidiPort> ports;
     const char **names = jack_get_ports(c, NULL, JACK_DEFAULT_MIDI_TYPE, 0);
@@ -188,7 +198,32 @@ static void apply(jack_client_t *c) {
         jack_free(conns);
     }
 
-    std::vector<std::string> want = wanted(ports, prefixes_now, own_clients);
+    // a program that was linked and has gone (its port is not in the list any more): one line
+    for (const auto &g : vanished(was_linked, ports)) {
+        was_linked.erase(g);
+        if (throttle_gone.allow(g, now_s())) {
+            fprintf(stderr, "midi: %s is gone (it was linked to %s); it is linked again when it comes back\n", g.c_str(), MIDI_IN);
+            announce_next.insert(g);
+        }
+    }
+    const bool dflt = default_mode();
+    std::vector<std::string> in_never = own_clients;
+    {
+        const char *vo = getenv("NORNS_ALSA_MIDI_OUT_TO");
+        for (const auto &n : inputNever(vo != NULL ? vo : "")) {
+            in_never.push_back(n);
+        }
+    }
+    std::vector<std::string> want = wanted(ports, prefixes_now, in_never);
+    if (dflt) {
+        std::vector<std::string> others;
+        want = chooseOne(want, linked, &others);
+        for (const auto &o : others) {
+            if (said_others.insert(o).second) {
+                fprintf(stderr, "midi: also found %s: not linked (the default links one source; midi_in_from= in audio.conf links several)\n", o.c_str());
+            }
+        }
+    }
     for (const auto &w : missingFrom(want, linked)) {
         int err = jack_connect(c, w.c_str(), MIDI_IN);
         if (err != 0 && err != EEXIST) {
@@ -196,11 +231,20 @@ static void apply(jack_client_t *c) {
         }
         bool again = ever_linked.count(w) > 0;
         ever_linked.insert(w);
-        // the first link is always said; a link made again at most once a minute per port (a flapping link)
-        if (!again || throttle.allow(w, now_s())) {
+        was_linked.insert(w);
+        bool say_now = announce_next.erase(w) > 0;
+        // the first link is always said, and the one after a "gone" line; a link made again at most once a minute per port (a flapping link)
+        if (!again || say_now || throttle.allow(w, now_s())) {
             fprintf(stderr, "midi: %s %s to %s\n", again ? "reconnected" : "connected", w.c_str(), MIDI_IN);
         }
         linked.push_back(w);
+    }
+    for (const auto &w : want) {
+        for (const auto &l : linked) {
+            if (l == w) {
+                was_linked.insert(w); // linked already (by an earlier run or by hand): its going away is said too
+            }
+        }
     }
     std::string names_out;
     int n = 0;
@@ -238,7 +282,9 @@ static int start_worker(void) {
     }
     jack_client_t *c = input_route_client();
     if (c == NULL) {
-        fprintf(stderr, "midi: no JACK server, auto-connect is off\n");
+        if (!default_mode()) { // (the default is on for everyone: no line for a start without JACK)
+            fprintf(stderr, "midi: no JACK server, auto-connect is off\n");
+        }
         return 0;
     }
     sem_init(&wake, 0, 0);
@@ -260,7 +306,11 @@ int midi_autoconnect_start(const char *prefix_list) {
         prefixes = p;
     }
     started = true;
-    fprintf(stderr, "midi: auto-connect to %s from %s\n", MIDI_IN, prefix_list);
+    if (default_mode()) {
+        fprintf(stderr, "midi: auto-connect to %s from %s (the default: one program's virtual MIDI output; midi_in_from= in audio.conf changes it, an empty midi_in_from= turns it off)\n", MIDI_IN, prefix_list);
+    } else {
+        fprintf(stderr, "midi: auto-connect to %s from %s\n", MIDI_IN, prefix_list);
+    }
     sem_post(&wake);
     return 1;
 }

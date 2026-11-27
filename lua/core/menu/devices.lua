@@ -572,7 +572,8 @@ m.redraw = function()
     -- Linux: the optional MIDI auto-connect (audio.conf midi_in_from=), under the title of the MIDI list
     if m.section == "midi" and _norns.midi_in_status then
       local on, count, names = _norns.midi_in_status()
-      if on then
+      -- M39: the default (nothing in audio.conf) is on for everyone: its row shows only while a program is linked, "none yet" is for a list the user wrote
+      if on and (count > 0 or os.getenv("NORNS_MIDI_IN_FROM_DEFAULT") ~= "1") then
         screen.move(0,20)
         screen.level(3)
         screen.text(clip("AUTO-LINK: " .. (count > 0 and (count .. " linked") or "none yet"), 127))

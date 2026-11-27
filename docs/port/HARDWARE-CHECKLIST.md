@@ -824,3 +824,22 @@ Do one step at a time.
 7. Other devices (a USB controller, a grid) still appear at start-up with Reaper open.
 Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
 Cannot be tested here: a real busy port in a real kernel, Reaper, mio.
+
+## M38 (Linux and Windows): ext folders sorted by their real name
+1. In SYSTEM > EXT FOLDERS add a folder called `bass` (any folder, it only needs a name that sorts into the middle: your dust/audio has normal folders such as `a...`, `c...`, `e...`).
+2. Open a script's file browser that lists dust/audio (for example the tape page's load, or a sample picker). Look for: `[ext] bass` sits between the folders `a...` and `c...` as if it were called `bass`, NOT among the `e...` folders. The mark `[ext]` is still in the text.
+3. Add a second ext folder whose name is also the name of a normal folder in dust/audio (not possible if Verdandi says BLOCKED; then skip). Look for: the normal folder first, the ext entry right behind it.
+4. SYSTEM > EXT FOLDERS: unchanged (ADD FOLDER first, then A to Z). Windows: the same on the Windows PC (the order there is by bytes: capitals before small letters, as before).
+Results: 2 [ ]  3 [ ]  4 [ ]; notes: ...
+Cannot be tested here: your locale's `ls` order, the Windows listing.
+
+## M39 (Linux): the clock of Reaper is linked by itself
+1. Reaper: MIDI Outputs preferences, "virtual" enabled, Clock on. Start Reaper, then Verdandi. No `pw-link` by hand.
+2. `grep 'auto-connect\|midi: connected\|midi: .*gone' ~/verdandi-home/norns.log` (the log of your install). Look for: the start line of the default, then `midi: connected Midi-Bridge:Client-<n>:(capture_0) Virtual RawMIDI to Verdandi:midi_in`, once. `pw-link -l | grep -A1 midi_in` shows the link. SYSTEM > DEVICES > MIDI shows `AUTO-LINK: 1 linked`.
+3. PARAMS > CLOCK > midi clock in = "virtual". Press play in Reaper: Verdandi follows the tempo, start and stop.
+4. Quit Reaper while Verdandi runs: one log line `... is gone`. Start Reaper again: it is linked again by itself (the client number may change), one `connected` line. Play: Verdandi follows again.
+5. Quit both. Start Verdandi first, then Reaper: it connects when Reaper's port appears (within about 2 seconds).
+6. Your interface (mio) and the VirMIDI card are not linked: `pw-link -l | grep -B1 -A1 midi_in` lists only Reaper's virtual port.
+7. Off: add the line `midi_in_from=` to audio.conf and restart: no link (and the old way, `pw-link` by hand, works as before).
+Results: 2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
+Cannot be tested here: Reaper, PipeWire's real port names, a real clock.

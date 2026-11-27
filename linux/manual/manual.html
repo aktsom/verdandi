@@ -275,7 +275,7 @@
 <tr><td><code>in_ports</code>, <code>out_ports</code></td><td>the sound card, as the start of its JACK client name (<code>NORNS_IN_PORTS</code>, <code>NORNS_OUT_PORTS</code>)</td></tr>
 <tr><td><code>input</code>, <code>output</code>, <code>rate</code>, <code>period</code></td><td>devices, sample rate and period of norns&rsquo;s own jackd; written by SYSTEM &gt; AUDIO (defaults 48000 and 1024)</td></tr>
 <tr><td><code>sys_monitor</code></td><td><code>1</code> adds an input that hears everything the card plays, norns included (it can feed back)</td></tr>
-<tr><td><code>midi_in_from</code></td><td>MIDI ports to link to <code>Verdandi:midi_in</code></td></tr>
+<tr><td><code>midi_in_from</code></td><td>MIDI ports to link to <code>Verdandi:midi_in</code>. Without this line Verdandi links another program&rsquo;s virtual MIDI output (Reaper&rsquo;s &ldquo;virtual&rdquo; output, the port &ldquo;Virtual RawMIDI&rdquo;) by itself, one at a time, never a MIDI interface; <code>midi_in_from=</code> alone turns that off, a list replaces it</td></tr>
 <tr><td><code>midi_out_to</code></td><td>MIDI input ports to link <code>Verdandi:midi_out</code> to</td></tr>
 <tr><td><code>alsa_midi</code></td><td><code>0</code> turns off the ALSA MIDI port &ldquo;Verdandi out&rdquo; (on by default; <code>NORNS_ALSA_MIDI</code>)</td></tr>
 <tr><td><code>alsa_midi_out_to</code></td><td>the start of the name of an ALSA MIDI port that &ldquo;Verdandi out&rdquo; is connected to, for Reaper <code>VirMIDI</code> (off by default; <code>NORNS_ALSA_MIDI_OUT_TO</code>)</td></tr>

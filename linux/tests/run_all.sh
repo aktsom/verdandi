@@ -1033,6 +1033,37 @@ if command -v jackd > /dev/null; then
         }
         run "midi:auto-connect to Verdandi:midi_in, repaired when cut ($sc)" midilink_ok
     done
+    # M39 (docs/port/phase-m39.md): the default, with no midi_in_from anywhere: another program's virtual MIDI port ("Virtual RawMIDI") is linked by itself, when Verdandi starts, when it comes later, and after a
+    # restart of that program (one line "connected", one "gone"); two such programs: one is linked; hardware (mio), the VirMIDI card and a plain client are never linked
+    GLOG="$T/midilink-default.log"
+    MIDI_SCENARIO=default "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
+    midi_default_ok() {
+        local bad=0
+        has() { peers "$GLOG.$1" Verdandi:midi_in | grep -qx "$2"; }
+        has start "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI" || { echo "start: Reaper's virtual port is not linked by itself"; bad=1; }
+        has start "Other:out" && { echo "start: Other:out is linked"; bad=1; }
+        has gone "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI" && { echo "gone: still linked?"; bad=1; }
+        has back "Midi-Bridge:Client-131:(capture_0) Virtual RawMIDI" || { echo "back: the restarted program is not linked again"; bad=1; }
+        grep -aq "midi: auto-connect to Verdandi:midi_in from Midi-Bridge:Client-\*Virtual RawMIDI (the default" "$GLOG" || { echo "the start line of the default is missing"; bad=1; }
+        [ "$(grep -ac "midi: connected Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI to Verdandi:midi_in" "$GLOG")" = 1 ] || { echo "not exactly one 'connected' line for the first link"; bad=1; }
+        [ "$(grep -ac "midi: Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI is gone" "$GLOG")" = 1 ] || { echo "not exactly one 'gone' line"; bad=1; }
+        [ "$(grep -ac "midi: connected Midi-Bridge:Client-131:(capture_0) Virtual RawMIDI to Verdandi:midi_in" "$GLOG")" = 1 ] || { echo "not exactly one 'connected' line after the restart"; bad=1; }
+        [ "$(grep -ac "midi: .*Virtual RawMIDI" "$GLOG")" -le 6 ] || { echo "too many midi lines about the port (a flood)"; bad=1; }
+        return $bad
+    }
+    run "midi:default auto-connect of another program's virtual MIDI port (at start, after it was gone, one line each, nothing else linked)" midi_default_ok
+    GLOG="$T/midilink-default2.log"
+    MIDI_SCENARIO=default2 "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
+    midi_default2_ok() {
+        local bad=0 n
+        n="$(peers "$GLOG.later" Verdandi:midi_in | grep -c "Virtual RawMIDI")"
+        [ "$n" = 1 ] || { echo "two sources: $n linked, one expected"; bad=1; }
+        peers "$GLOG.later" Verdandi:midi_in | grep -q "Client-128" || { echo "the first by name is not the one linked"; bad=1; }
+        peers "$GLOG.later" Verdandi:midi_in | grep -q "mio\|VirMIDI" && { echo "hardware or the VirMIDI card is linked"; bad=1; }
+        [ "$(grep -ac "midi: also found Midi-Bridge:Client-129" "$GLOG")" = 1 ] || { echo "the second source is not said exactly once"; bad=1; }
+        return $bad
+    }
+    run "midi:default auto-connect with two sources links one, never hardware or the VirMIDI card" midi_default2_ok
 fi
 
 # the virtual MIDI device as an ALSA sequencer port (client "Verdandi", port "Verdandi out"): the sequencer output logic with a fake sequencer (always), the real client without a kernel sequencer (says no, no crash) and,
