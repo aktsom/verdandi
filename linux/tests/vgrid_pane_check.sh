@@ -13,8 +13,18 @@ cmd="${1:-}"
 shift
 gid() { xdotool search --name '^grid$' 2> /dev/null | head -n 1; }
 geo() { eval "$(xdotool getwindowgeometry --shell "$1" 2> /dev/null)"; }
-# a window that was made while the pointer rested over its place does not get the first click of a pointer that did not move (SDL has seen no motion in it yet): a person moves the mouse, so does the test
-jiggle() { xdotool mousemove --window "$1" $(($2 + 7)) $(($3 + 7)); sleep 0.15; xdotool mousemove --window "$1" "$2" "$3"; sleep 0.15; }
+# the first click that a window gets from a pointer that came from another window is lost when there is no window manager (SDL has seen no motion and no focus in it yet; the test is the only place
+# without one). a person moves the mouse and clicks: so does the test, with a click on the dead corner of the window (no key, no button) before the real one
+jiggle() {
+    xdotool mousemove --window "$1" 3 3
+    sleep 0.15
+    xdotool mousedown 1
+    sleep 0.1
+    xdotool mouseup 1
+    sleep 0.15
+    xdotool mousemove --window "$1" "$2" "$3"
+    sleep 0.15
+}
 xy() { python3 -I "$HERE/vgrid_pane_xy.py" "$@"; }
 case "$cmd" in
 shape)
