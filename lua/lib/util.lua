@@ -25,14 +25,109 @@ end
 util.scandir = function(directory)
   local i, t = 0, {}
   if _norns.listdir then -- Windows build: a native listing, same shape as `ls -p` (folders first, "/" after a folder name, no hidden names)
-    return _norns.listdir(directory) or t
+    return util.ext_place(_norns.listdir(directory) or t)
   end
   local text = _norns.execute('ls -pL --group-directories-first "'..directory..'"')
     for filename in text:gmatch("[^\r\n]+") do
     i = i + 1
     t[i] = filename
   end
-  return t
+  return util.ext_place(t)
+end
+
+--- M38: the real name of an ext folder entry ("[ext] bass/" -> "bass"), nil for any other entry.
+-- the link name in dust/audio is "[ext] <name>" (platform/common/extfolders.h); a folder shows with a "/" after it.
+util.ext_real_name = function(entry)
+  return type(entry) == "string" and entry:match("^%[ext%] (.+)/$") or nil
+end
+
+--- M38: how the platform orders the names of a folder: a function less(a, b) for names without the "/".
+-- Windows: the native listing sorts the bytes of the names (uppercase before lowercase), so the same here.
+-- Linux: `ls` sorts with the locale of the user (case, accents, punctuation); the same `sort` program with the same environment gives the same order, one call for all the names given.
+-- when it cannot be asked, the names are compared by the lower case text and then the bytes.
+-- @tparam table names every name the order is needed for
+util.dir_less = function(names)
+  if _norns and _norns.listdir then
+    return function(a, b) return a < b end
+  end
+  local rank
+  local tmp = os.tmpname()
+  local f = tmp and io.open(tmp, "wb")
+  if f then
+    local seen = {}
+    for _, n in ipairs(names) do
+      if not n:find("[\r\n]") and not seen[n] then
+        seen[n] = true
+        f:write(n, "\n")
+      end
+    end
+    f:close()
+    local out = _norns.execute and _norns.execute('sort "' .. tmp .. '"') or ""
+    local r, k = {}, 0
+    for line in tostring(out):gmatch("[^\r\n]+") do
+      k = k + 1
+      if r[line] == nil then r[line] = k end
+    end
+    if k > 0 then rank = r end
+  end
+  if tmp then os.remove(tmp) end
+  return function(a, b)
+    local ra, rb = rank and rank[a], rank and rank[b]
+    if ra and rb then return ra < rb end
+    local la, lb = a:lower(), b:lower()
+    if la ~= lb then return la < lb end
+    return a < b
+  end
+end
+
+--- M38: put the ext folders of a folder listing in the place of their REAL name. the listing has them as "[ext] <name>/" (sorted by that text, so they landed among the "e" names); they are moved
+-- inside the folder group to the place a normal folder called <name> would have, by the same rules as the other folders (util.dir_less). the normal entries do not move. an ext folder and a normal
+-- folder with the same name: the normal folder first, the ext folder right after it (the real folder is the one that was there first, and the order never changes between two listings).
+-- the shown text is not changed (the "[ext] " mark stays), nor the names.
+-- @tparam table list a listing as util.scandir returns it
+-- @tparam function less optional less(a, b) on names without "/" (for tests)
+-- @treturn table the same list, ordered
+util.ext_place = function(list, less)
+  local ext, normal, files, any = {}, {}, {}, false
+  for i, e in ipairs(list) do
+    local real = util.ext_real_name(e)
+    if real then
+      ext[#ext + 1] = {entry = e, name = real, i = i}
+      any = true
+    elseif e:sub(-1) == "/" then
+      normal[#normal + 1] = e
+    else
+      files[#files + 1] = e
+    end
+  end
+  if not any then return list end
+  if not less then
+    local names = {}
+    for _, x in ipairs(ext) do names[#names + 1] = x.name end
+    for _, e in ipairs(normal) do names[#names + 1] = e:sub(1, -2) end
+    less = util.dir_less(names)
+  end
+  -- the ext folders among themselves by real name; a tie keeps the order of the listing
+  table.sort(ext, function(a, b)
+    if less(a.name, b.name) then return true end
+    if less(b.name, a.name) then return false end
+    return a.i < b.i
+  end)
+  local out, e = {}, 1
+  for _, n in ipairs(normal) do
+    local nn = n:sub(1, -2)
+    while e <= #ext and less(ext[e].name, nn) do
+      out[#out + 1] = ext[e].entry
+      e = e + 1
+    end
+    out[#out + 1] = n
+  end
+  while e <= #ext do
+    out[#out + 1] = ext[e].entry
+    e = e + 1
+  end
+  for _, f in ipairs(files) do out[#out + 1] = f end
+  return out
 end
 
 --- check if file exists.

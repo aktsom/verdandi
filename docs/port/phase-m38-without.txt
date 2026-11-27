@@ -1,0 +1,34 @@
+M38 proof: linux/tests/ext_sort_test.lua against lua/lib/util.lua as it was before M38 (git stash of the file).
+
+FAIL	Windows: ext folders sit by their real name, the normal ones keep their order, files last
+  got:  [ext] bass/ [ext] eeee/ [ext] zzz/ a/ b2/ c/ e1/ e2/ zed/ kick.wav snare.wav
+  want: a/ b2/ [ext] bass/ c/ e1/ e2/ [ext] eeee/ zed/ [ext] zzz/ kick.wav snare.wav
+FAIL	Windows: the shown text keeps the mark
+  got:  [ext] zzz/
+  want: [ext] bass/
+FAIL	Linux: ext folders sit by their real name, the normal ones keep their order, files last
+  got:  [ext] bass/ [ext] eeee/ [ext] zzz/ a/ b2/ c/ e1/ e2/ zed/ kick.wav snare.wav
+  want: a/ b2/ [ext] bass/ c/ e1/ e2/ [ext] eeee/ zed/ [ext] zzz/ kick.wav snare.wav
+FAIL	Linux: the shown text keeps the mark
+  got:  [ext] zzz/
+  want: [ext] bass/
+FAIL	digits: an ext folder called 05 comes before 10, 15 between 10 and 1x, 3 after 2
+  got:  10/ 1x/ 2/ [ext] 05/ [ext] 15/ [ext] 3/ [ext] B/ b/
+  want: [ext] 05/ 10/ [ext] 15/ 1x/ 2/ [ext] 3/ [ext] B/ b/
+FAIL	mixed case (byte order of Windows): B before a, bass between a and c
+  got:  [ext] B/ [ext] bass/ a/ c/
+  want: [ext] B/ a/ [ext] bass/ c/
+FAIL	Linux, a locale that folds the case: a, B, bass (the ext one after B), c, Z
+  got:  a/ B/ c/ [ext] bass/ [ext] Z/
+  want: a/ B/ [ext] bass/ c/ [ext] Z/
+FAIL	same name: the normal folder, then the ext entries, in a fixed order
+  got:  [ext] bass/ [ext] bass/ bass/ x/
+  want: bass/ [ext] bass/ [ext] bass/ x/
+FAIL	same name in the middle
+  got:  [ext] bass/ a/ bass/ c/
+  want: a/ bass/ [ext] bass/ c/
+ok  	no ext folder: unchanged
+ok  	only ext folders: by name
+ok  	the EXT FOLDERS page keeps its own sort
+ok  	fileselect lists through util.scandir
+9 failed

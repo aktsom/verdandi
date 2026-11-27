@@ -94,6 +94,7 @@ known() { # name, command...: a failure is expected and recorded
 
 run "lua:devices midi status" lua5.3 linux/tests/devices_midi_test.lua
 run "lua:devices midi busy (M37: a MIDI port that another program holds is said on SYSTEM > DEVICES: the list entry and the title row; nothing when none; no error without the function)" lua5.3 linux/tests/devices_midi_busy_test.lua
+run "lua:ext folders sit by their real name in the file browsers (M38: digits first, case, same name, files last, no ext folder = unchanged, the EXT FOLDERS page untouched; Windows and Linux)" lua5.3 linux/tests/ext_sort_test.lua
 run "midi:busy port guard (M37: the skip list, the non-blocking open and the bounded scan are Linux desktop only: the device build, macOS and Windows keep their code)" bash linux/tests/midi_busy_guard_test.sh
 run "lua:input monitor per mode" lua5.3 linux/tests/input_monitor_test.lua
 run "lua:device window notes" lua5.3 linux/tests/grid_note_test.lua
