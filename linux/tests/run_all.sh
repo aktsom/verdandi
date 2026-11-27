@@ -135,6 +135,17 @@ run "launcher:a second start asks the running Verdandi to raise its window; no a
 # needs libmonome with linux/patches/libmonome-pty-serial.patch (linux/setup-deps.sh)
 cc $CFLAGS "$M/vgrid_test.c" "$P/vgrid_proto.c" "$P/vgrid_device.c" -L/usr/local/lib -lmonome -lpthread \
     -o "$T/vgt" && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid" "$T/vgt"
+# M41 (docs/port/phase-m41.md): the virtual grid window's ROTATE (the device turned in the window: mapping, saved file, drawing, hit test, the fourth button) and shift multi-press (the state machine);
+# the Mac build's picture is the old one; the same through the real libmonome for every size, script rotation and turn of the window
+cc -std=gnu11 -Wall -Wextra -I matron/src/platform/linux linux/tests/vgrid_view_test.c -o "$T/vgv" && run "c:vgrid view (M41: the turn of the plate for 4 rotations and 3 sizes, the saved rotation file also when bad, shift multi-press as event tables)" "$T/vgv"
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I "$P" $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c "$P/vgrid_skin.c" -lm $(pkg-config --libs cairo) -o "$T/vsr_l" \
+    && run "c:vgrid skin turned (M41: units, hit test, drawing at 4 rotations and 3 sizes, the fourth button, the white outline of a pending key, the old picture at rotation 0)" "$T/vsr_l"
+cc -std=gnu11 -Wall -Wextra -I "$P" $(pkg-config --cflags cairo) linux/tests/vgrid_skin_rot_test.c "$P/vgrid_skin.c" -lm $(pkg-config --libs cairo) -o "$T/vsr_m" \
+    && run "c:vgrid skin as the Mac builds it (M41: the picture is the old one, three buttons, no ROTATE)" "$T/vsr_m"
+cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I "$P" -I matron/src/platform/linux -I/usr/local/include $(pkg-config --cflags cairo) linux/tests/vgrid_rot_e2e_test.c "$P/vgrid_device.c" "$P/vgrid_proto.c" \
+    "$P/vgrid_skin.c" -L/usr/local/lib -lmonome -lpthread -lutil -lm $(pkg-config --libs cairo) -o "$T/vre" \
+    && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid rotation through libmonome (M41: leds, hit test and presses agree for 3 sizes x 4 script rotations x 4 turns of the window; quad writes also on the 16 x 16; the multi-press burst reaches the script in order)" "$T/vre"
+run "midi:vgrid guard (M41: ROTATE and the multi-press are Linux desktop only: not in the Mac build, not on Windows)" bash linux/tests/vgrid_view_guard_test.sh
 # libmonome's write to a port that is slow to take data: no message cut in the middle (linux/patches/libmonome-write-retry.patch)
 cc $CFLAGS -I matron/src/platform/macos -I/usr/local/include linux/tests/monome_write_test.c "$P/vgrid_proto.c" -L/usr/local/lib -lmonome \
     -lpthread -o "$T/mwt" && LD_LIBRARY_PATH=/usr/local/lib run "c:monome_write (a stalled serial port, no half message)" "$T/mwt"
