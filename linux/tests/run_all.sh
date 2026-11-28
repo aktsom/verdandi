@@ -1383,6 +1383,38 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         return $bad
     }
     run "$S2NAME" vgrid_slot2_ok
+    # M46 (docs/port/phase-m46.md): the RIGHT mouse button latches a key of the virtual grid down (documented, in the hint line of the window): it stays down after the button is let go, a second right click lets it go
+    # (one key-up), a left click on a latched key lets it go, a key held by the Shift latch is let go by a right click once (no second key-up later), Ctrl held changes nothing for the right button
+    RCNAME="window:virtual grid right click latches a key (stays down, second right click lets go, left click lets go, Shift latch, Ctrl)"
+    vgrid_rclick_scenario() {
+        RC="$(mktemp -d)"
+        ln -s "$REPO" "$RC/norns"
+        mkdir -p "$RC/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/grid_time_probe.lua" "$RC/dust/code/probe/"
+        RCLOG="$T/vgrid-rclick.log"
+        VERDANDI_TEST_HOOKS=1 VP="$REPO/linux/tests/vgrid_pane_check.sh" NORNS_HOME="$RC" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_vgrid_rclick.lua" "$RCLOG" > /dev/null 2>&1
+    }
+    ! wanted "$RCNAME" || vgrid_rclick_scenario
+    vgrid_rclick_ok() {
+        local bad=0 seq
+        seq="$(sed 's/\x1b\[[0-9;]*m//g' "$RCLOG" | awk -F'[\t ]' '/^PROBE gridkey/ { printf "%s,%s,%s ", $3, $4, $5 } /^PROBE mark / { printf "[%s] ", $3 }')"
+        seg() { echo "$seq" | tr ' ' '\n' | awk -v a="[$1]" -v b="[$2]" '{ if ($1 == b) on = 0; if (on && $1 != "") print $1; if ($1 == a) on = 1 }'; }
+        n() { grep -cx "$2" <<< "$1" || true; }
+        grep -aq "PROBE vgrid rclick done" "$RCLOG" || { echo "the probe did not finish"; bad=1; }
+        [ "$(seg start rclick-1 | tr '\n' ' ')" = "5,4,1 " ] || { echo "one right click: not exactly one key-down, and nothing after it (key stays down): $(seg start rclick-1 | tr '\n' ' ')"; bad=1; }
+        [ "$(seg rclick-1 rclick-2 | tr '\n' ' ')" = "5,4,0 " ] || { echo "the second right click: not exactly one key-up: $(seg rclick-1 rclick-2 | tr '\n' ' ')"; bad=1; }
+        [ "$(seg rclick-2 two-latched | tr '\n' ' ')" = "7,4,1 9,4,1 " ] || { echo "two right clicks: not two key-downs that stay: $(seg rclick-2 two-latched | tr '\n' ' ')"; bad=1; }
+        [ "$(seg two-latched plain-left-elsewhere | tr '\n' ' ')" = "13,7,1 13,7,0 " ] || { echo "a plain left click elsewhere touched the latched keys: $(seg two-latched plain-left-elsewhere | tr '\n' ' ')"; bad=1; }
+        [ "$(seg plain-left-elsewhere left-on-latched | tail -1)" = "7,4,0" ] || { echo "a left click on a latched key did not let it go: $(seg plain-left-elsewhere left-on-latched | tr '\n' ' ')"; bad=1; }
+        [ "$(seg left-on-latched right-unlatch-last | tr '\n' ' ')" = "9,4,0 " ] || { echo "the right click on the last latched key: $(seg left-on-latched right-unlatch-last | tr '\n' ' ')"; bad=1; }
+        [ "$(seg right-unlatch-last shift-latched | tr '\n' ' ')" = "11,3,1 " ] || { echo "the Shift latch (M41) did not hold its key: $(seg right-unlatch-last shift-latched | tr '\n' ' ')"; bad=1; }
+        [ "$(seg shift-latched right-on-shift-latched | tr '\n' ' ')" = "11,3,0 " ] || { echo "a right click on a Shift-latched key: not exactly one key-up: $(seg shift-latched right-on-shift-latched | tr '\n' ' ')"; bad=1; }
+        [ "$(seg right-on-shift-latched plain-left-after | tr '\n' ' ')" = "15,8,1 15,8,0 " ] || { echo "the plain left click after it sent a second key-up for the key or something else: $(seg right-on-shift-latched plain-left-after | tr '\n' ' ')"; bad=1; }
+        [ "$(seg plain-left-after right-with-ctrl | tr '\n' ' ')" = "4,6,1 " ] || { echo "a right click with Ctrl held did not latch exactly one key-down: $(seg plain-left-after right-with-ctrl | tr '\n' ' ')"; bad=1; }
+        [ "$(seg right-with-ctrl right-with-ctrl-off | tr '\n' ' ')" = "4,6,0 " ] || { echo "the next right click did not let the key go: $(seg right-with-ctrl right-with-ctrl-off | tr '\n' ' ')"; bad=1; }
+        return $bad
+    }
+    run "$RCNAME" vgrid_rclick_ok
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
     # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend
     run "window:PIN says it cannot when the video driver is not x11 (Wayland has no always-on-top request: state off, button dark, one plain sentence in the log)" linux/tests/pin_unavailable_test.sh
