@@ -1,3 +1,6 @@
+## Windows CI (2026-11-28): windows-m1 fails for a reason outside M42/M43
+- norns.exe is silent on the CI (no audio lines, no console port) on every commit since da01eef5, **also on the code of bac1a4f1 itself** (diagnostic commit f587fb78). Not caused by M42's util.lua (4bc291fa) or M43. The CI environment changed; needs a look by the owner (re-run bac1a4f1's windows-m1 from the Actions page to confirm). The Windows virtual grid stays off; no Windows run has printed the M42 probe lines yet.
+
 ## M43 (Linux desktop only): the virtual grid: Ctrl "stage and fire" chord, and a clean switch real grid <-> virtual grid
 - Done after M42 (separate commits). Note `docs/port/phase-m43.md`, proof on the M41 code `docs/port/phase-m43-without.txt`.
 - Ctrl + click stages keys (dashed blue, nothing sent); Ctrl up fires them in ONE write (the script sees the key-downs 0.01 ms apart in the libmonome test), held 100 ms (`VGV_CHORD_HOLD_MS`), up together; Esc/focus loss clear; works with Shift-held keys. Ctrl + click is no longer the latch (the right button is). Hint line in the window.
