@@ -6,7 +6,7 @@ bad=0
 fail() { echo "FAIL: $*"; bad=1; }
 ok() { echo "ok   $*"; }
 S=matron/src/platform/macos
-grep -q '^#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)$' $S/vgrid_skin.h && grep -q '#define VGRID_ROTATE 1' $S/vgrid_skin.h && ok "VGRID_ROTATE is defined for the Linux desktop only" || fail "VGRID_ROTATE is not behind the Linux desktop guard"
+grep -q '^#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)\( && !defined(VGRID_TEST_NO_ROTATE)\)\?$' $S/vgrid_skin.h && grep -q '#define VGRID_ROTATE 1' $S/vgrid_skin.h && ok "VGRID_ROTATE is defined for the Linux desktop only" || fail "VGRID_ROTATE is not behind the Linux desktop guard"
 # every use of the new names in the shared files is inside an #ifdef VGRID_ROTATE: count the lines that mention them outside
 for f in $S/vgrid_skin.c $S/sdl_bridge.cc; do
     awk -v file="$f" '

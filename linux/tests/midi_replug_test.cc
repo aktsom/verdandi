@@ -306,6 +306,7 @@ void dev_monome_all_led(struct dev_monome *, int8_t, bool) {}
 void dev_monome_refresh(struct dev_monome *) {}
 int dev_monome_leds_off(struct dev_monome *) { return 0; } // M37: device_list.cc calls these two (the test did not link without them since the monome quit code was added)
 void dev_monome_freeze(void) {}
+int dev_monome_copy_leds(struct dev_monome *, struct dev_monome *) { return 0; } // M43: the switch between a real grid and the virtual one (device_list.cc)
 int monome_led_all(monome_t *, unsigned int) { return 0; }
 int jack_midi_in_start(void) {
     while (scan_block) pause(); // a client that does not answer: the first look at the devices cannot finish
