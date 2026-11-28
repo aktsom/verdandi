@@ -5,6 +5,7 @@
 #   vgrid_pane_check.sh down|up|move COLS ROWS ROT C R  the left button down / up / the pointer moves, at that key
 #   vgrid_pane_check.sh button COLS ROWS ROT N          click the button N of the bar (1-3 sizes, 4 ROTATE)
 #   vgrid_pane_check.sh shift down|up                   the shift key (the pointer stays over the window: there is no window manager, the keys go to the window under the pointer)
+#   vgrid_pane_check.sh ctrl down|up                    the Ctrl key (M43: stage and fire)
 #   vgrid_pane_check.sh esc                             the Esc key
 #   vgrid_pane_check.sh focus main|grid                 move the keyboard focus (what a click in another window does)
 #   vgrid_pane_check.sh count NAME                      NAME=<number of windows titled grid>
@@ -64,6 +65,7 @@ button)
     xdotool mouseup 1
     sleep 0.6
     ;;
+ctrl) if [ "$1" = down ]; then xdotool keydown ctrl; else xdotool keyup ctrl; fi ;;
 shift) if [ "$1" = down ]; then xdotool keydown shift; else xdotool keyup shift; fi ;;
 esc) xdotool key Escape ;;
 focus)

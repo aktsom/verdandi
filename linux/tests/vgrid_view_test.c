@@ -214,10 +214,110 @@ static void test_multi(void) {
     CHECK(n == 256 && count_down(a, n, 0) == 256, "256 keys let go in one burst (%d)", n);
 }
 
+
+// M43: Ctrl stage and fire
+static void test_chord(void) {
+    vgv_t m;
+    vgv_act_t a[VGV_MAXACT];
+    int n, consumed;
+
+    // Ctrl held: a click stages (nothing is sent), a second click on a staged key takes it out; Ctrl up fires everything staged in one batch of down = 2
+    vgv_reset(&m);
+    n = vgv_ctrl(&m, 1, a);
+    CHECK(n == 0, "Ctrl down sends nothing");
+    n = vgv_ctrl_click(&m, 1, 1, 1, a, &consumed);
+    CHECK(n == 0 && consumed == 1 && vgv_is_staged(&m, 1, 1), "a Ctrl click stages the key and does not press it");
+    vgv_ctrl_mouse_up(&m, a);
+    vgv_ctrl_click(&m, 3, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    vgv_ctrl_click(&m, 5, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    vgv_ctrl_click(&m, 7, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    vgv_ctrl_click(&m, 5, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a); // out again
+    CHECK(m.n_stage == 3 && !vgv_is_staged(&m, 5, 1), "a second click on a staged key takes it out (3 staged)");
+    vgv_ctrl_click(&m, 9, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    CHECK(m.n_stage == 4, "four staged");
+    n = vgv_ctrl(&m, 0, a);
+    CHECK(n == 4 && count_down(a, n, 2) == 4, "Ctrl up: four key-downs of the chord (down = 2) in one call (%d)", n);
+    CHECK(a[0].x == 1 && a[1].x == 3 && a[2].x == 7 && a[3].x == 9, "in the order they were staged");
+    CHECK(m.n_stage == 0 && m.n_fire == 4, "nothing is staged any more, the chord waits for its release");
+    n = vgv_fire_release(&m, a);
+    CHECK(n == 4 && count_down(a, n, 3) == 4 && a[0].x == 1 && a[3].x == 9, "after the hold time: four key-ups (down = 3), in order");
+    CHECK(m.n_fire == 0, "the chord is done");
+    n = vgv_fire_release(&m, a);
+    CHECK(n == 0, "a second release has nothing to do");
+
+    // Ctrl up with nothing staged does nothing
+    vgv_reset(&m);
+    vgv_ctrl(&m, 1, a);
+    n = vgv_ctrl(&m, 0, a);
+    CHECK(n == 0, "Ctrl up with nothing staged sends nothing");
+
+    // a Ctrl click when Ctrl is not held (the key-up was missed) is a plain click
+    vgv_reset(&m);
+    n = vgv_ctrl_click(&m, 2, 2, 0, a, &consumed);
+    CHECK(n == 0 && consumed == 0 && m.n_stage == 0, "without Ctrl the click is not taken");
+
+    // a drag with Ctrl and the left button stages the keys it crosses (a drag only adds)
+    vgv_reset(&m);
+    vgv_ctrl(&m, 1, a);
+    vgv_ctrl_click(&m, 0, 4, 1, a, &consumed);
+    CHECK(vgv_ctrl_motion(&m, 1, 4) == 1 && vgv_ctrl_motion(&m, 2, 4) == 1 && vgv_ctrl_motion(&m, 2, 4) == 1, "a staging drag is taken");
+    CHECK(m.n_stage == 3, "three staged by the drag (%d)", m.n_stage);
+    n = vgv_ctrl(&m, 0, a); // Ctrl let go with the button still down: the chord waits for the button
+    CHECK(n == 0 && m.n_stage == 3, "Ctrl up with the button down waits for the button");
+    n = vgv_ctrl_mouse_up(&m, a);
+    CHECK(n == 3 && count_down(a, n, 2) == 3, "the button up fires the chord (%d)", n);
+
+    // Esc and focus lost throw the staged keys away and send nothing; a chord that is already fired is not touched
+    vgv_reset(&m);
+    vgv_ctrl(&m, 1, a);
+    vgv_ctrl_click(&m, 1, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    vgv_ctrl_click(&m, 2, 1, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    int used = 0;
+    n = vgv_esc(&m, a, &used);
+    CHECK(used == 1 && n == 0 && m.n_stage == 0, "Esc throws the staged keys away and sends nothing");
+    n = vgv_ctrl(&m, 0, a);
+    CHECK(n == 0, "and Ctrl up afterwards fires nothing");
+    vgv_ctrl(&m, 1, a);
+    vgv_ctrl_click(&m, 4, 4, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    vgv_focus_lost(&m);
+    CHECK(m.n_stage == 0 && !m.ctrl, "focus lost: staged keys gone, Ctrl state reset");
+    n = vgv_ctrl(&m, 0, a);
+    CHECK(n == 0, "the Ctrl key-up that went to another window fires nothing");
+    vgv_ctrl(&m, 1, a);
+    vgv_ctrl_click(&m, 6, 6, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    n = vgv_ctrl(&m, 0, a); // fired: chord in flight
+    vgv_focus_lost(&m);
+    CHECK(m.n_fire == 1, "a chord that is in the air is not cancelled by a focus loss (its timer lets it go)");
+    vgv_rotation_changed(&m);
+    CHECK(m.n_fire == 1, "nor by a turn");
+    vgv_ctrl(&m, 1, a);
+    vgv_ctrl_click(&m, 3, 3, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    vgv_rotation_changed(&m);
+    CHECK(m.n_stage == 0, "a turn throws the staged keys away");
+    vgv_device_gone(&m);
+    CHECK(m.n_fire == 0 && m.n_stage == 0 && m.ctrl == 1, "a replug forgets everything and keeps the Ctrl state");
+
+    // the Shift paths are untouched: shift collect and apply still work with the same machine
+    vgv_reset(&m);
+    vgv_shift(&m, 1, a);
+    vgv_mouse_down(&m, 2, 2, 1, a, &consumed); vgv_mouse_up(&m, a);
+    n = vgv_shift(&m, 0, a);
+    CHECK(n == 1 && a[0].down == 1 && m.n_chord == 1, "Shift: collect, release, hold (as in M41)");
+
+    // the Ctrl chord and a Shift chord together: the held (Shift) keys stay in their own list, the Ctrl chord has its own
+    vgv_ctrl(&m, 1, a);
+    vgv_ctrl_click(&m, 8, 3, 1, a, &consumed); vgv_ctrl_mouse_up(&m, a);
+    n = vgv_ctrl(&m, 0, a);
+    CHECK(n == 1 && a[0].down == 2 && m.n_chord == 1 && m.n_fire == 1, "a Ctrl chord fires while a Shift key stays held");
+    vgv_fire_release(&m, a);
+    CHECK(m.n_chord == 1, "and the held key is still held after the chord let go");
+}
+
 int main(void) {
     test_mapping();
     test_file();
     test_multi();
+    test_chord();
     if (fails) {
         printf("vgrid_view_test: %d failed\n", fails);
         return 1;

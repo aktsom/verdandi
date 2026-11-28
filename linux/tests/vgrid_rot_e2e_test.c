@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "vgrid_device.h"
@@ -32,10 +33,11 @@ static int fails = 0;
 
 static void changed(void *ctx) { (void)ctx; }
 
-typedef struct { int n; int x[512], y[512], z[512]; } events_t;
+typedef struct { int n; int x[512], y[512], z[512]; double t[512]; } events_t;
+static double now_ms(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6; }
 static events_t ev;
-static void on_down(const monome_event_t *e, void *u) { (void)u; if (ev.n < 512) { ev.x[ev.n] = e->grid.x; ev.y[ev.n] = e->grid.y; ev.z[ev.n] = 1; ev.n++; } }
-static void on_up(const monome_event_t *e, void *u) { (void)u; if (ev.n < 512) { ev.x[ev.n] = e->grid.x; ev.y[ev.n] = e->grid.y; ev.z[ev.n] = 0; ev.n++; } }
+static void on_down(const monome_event_t *e, void *u) { (void)u; if (ev.n < 512) { ev.x[ev.n] = e->grid.x; ev.y[ev.n] = e->grid.y; ev.z[ev.n] = 1; ev.t[ev.n] = now_ms(); ev.n++; } }
+static void on_up(const monome_event_t *e, void *u) { (void)u; if (ev.n < 512) { ev.x[ev.n] = e->grid.x; ev.y[ev.n] = e->grid.y; ev.z[ev.n] = 0; ev.t[ev.n] = now_ms(); ev.n++; } }
 
 // events until `want` have come or the time (ms) is up
 static void pump(monome_t *m, int want, int ms) {
@@ -242,12 +244,88 @@ static void test_multi(void) {
     vgrid_close(g);
 }
 
+
+// M43: the Ctrl chord through the device: the window's batch write (vgrid_key_batch) makes the script's key-downs arrive in the same instant, the hold time later the key-ups. the tolerance is
+// CHORD_SPREAD_MS (the whole spread of the four key-downs, from the first to the last, as the script sees them: libmonome's reader and the event handler run in this process; the real norns adds its
+// event queue). the old way (Shift latching, one key at a time) is measured too: it is not a chord
+#define CHORD_SPREAD_MS 20.0
+static void test_chord(void) {
+    vgrid_device_t *g = vgrid_open("virtual grid", 16, 8, changed, NULL);
+    monome_t *m = g ? monome_open(vgrid_path(g)) : NULL;
+    if (!g || !m) { CHECK(0, "chord: cannot open"); return; }
+    monome_register_handler(m, MONOME_BUTTON_DOWN, on_down, NULL);
+    monome_register_handler(m, MONOME_BUTTON_UP, on_up, NULL);
+    vgv_t mp;
+    vgv_act_t a[VGV_MAXACT];
+    int consumed, n;
+    static const int kx[4] = {1, 3, 5, 7};
+
+    // staged with Ctrl: nothing reaches the script
+    vgv_reset(&mp);
+    ev.n = 0;
+    vgv_ctrl(&mp, 1, a);
+    for (int i = 0; i < 4; i++) { vgv_ctrl_click(&mp, kx[i], 2, 1, a, &consumed); vgv_ctrl_mouse_up(&mp, a); }
+    pump(m, 1, 300);
+    CHECK(ev.n == 0, "chord: staged keys send nothing (%d events)", ev.n);
+    // Ctrl up: one batch
+    n = vgv_ctrl(&mp, 0, a);
+    CHECK(n == 4, "chord: Ctrl up fires four keys (%d)", n);
+    uint8_t xy[4][2];
+    for (int i = 0; i < n; i++) { xy[i][0] = a[i].x; xy[i][1] = a[i].y; }
+    double t_fire = now_ms();
+    vgrid_key_batch(g, (const uint8_t (*)[2])xy, n, 1);
+    pump(m, 4, 1000);
+    CHECK(ev.n == 4 && ev.z[0] == 1 && ev.z[1] == 1 && ev.z[2] == 1 && ev.z[3] == 1, "chord: four key-downs reach the script (%d)", ev.n);
+    double spread = ev.n >= 4 ? ev.t[3] - ev.t[0] : 1e9;
+    CHECK(spread < CHORD_SPREAD_MS, "chord: the four key-downs are inside %.0f ms of each other (%.2f ms)", CHORD_SPREAD_MS, spread);
+    CHECK(ev.x[0] == 1 && ev.x[1] == 3 && ev.x[2] == 5 && ev.x[3] == 7, "chord: in the order they were staged");
+    printf("  chord: four key-downs %.2f ms from first to last (tolerance %.0f ms), %.2f ms after the fire\n", spread, CHORD_SPREAD_MS, ev.t[0] - t_fire);
+    // nothing comes up by itself before the hold time
+    usleep((VGV_CHORD_HOLD_MS - 30) * 1000);
+    pump(m, 5, 10);
+    CHECK(ev.n == 4, "chord: the keys are still down just before the hold time is over (%d events)", ev.n);
+    usleep(30 * 1000);
+    n = vgv_fire_release(&mp, a);
+    for (int i = 0; i < n; i++) { xy[i][0] = a[i].x; xy[i][1] = a[i].y; }
+    double t_rel = now_ms();
+    vgrid_key_batch(g, (const uint8_t (*)[2])xy, n, 0);
+    pump(m, 8, 1000);
+    CHECK(ev.n == 8 && ev.z[4] == 0 && ev.z[5] == 0 && ev.z[6] == 0 && ev.z[7] == 0, "chord: four key-ups after the hold time (%d events)", ev.n);
+    double hold = ev.n >= 8 ? ev.t[4] - ev.t[3] : 0, spread_up = ev.n >= 8 ? ev.t[7] - ev.t[4] : 1e9;
+    CHECK(hold >= VGV_CHORD_HOLD_MS - 5, "chord: the keys were down for the hold time (%.1f ms, wanted %d)", hold, VGV_CHORD_HOLD_MS);
+    CHECK(spread_up < CHORD_SPREAD_MS, "chord: the four key-ups are inside %.0f ms of each other (%.2f ms)", CHORD_SPREAD_MS, spread_up);
+    printf("  chord: down for %.1f ms (hold time %d), key-ups %.2f ms apart, %.2f ms after the release call\n", hold, VGV_CHORD_HOLD_MS, spread_up, ev.t[4] - t_rel);
+
+    // the old way: Shift latching, one key at a time with the pauses of a hand (60 ms): not a chord. the downs are spread over the pauses and no key goes up by itself
+    vgv_reset(&mp);
+    ev.n = 0;
+    for (int i = 0; i < 4; i++) {
+        vgv_shift(&mp, 1, a);
+        vgv_mouse_down(&mp, kx[i], 4, 1, a, &consumed); vgv_mouse_up(&mp, a);
+        n = vgv_shift(&mp, 0, a);
+        for (int j = 0; j < n; j++) vgrid_key(g, a[j].x, a[j].y, a[j].down);
+        pump(m, i + 1, 500); // the script handles each key as it comes
+        usleep(60 * 1000);
+    }
+    pump(m, 4, 1000);
+    CHECK(ev.n == 4, "old way: four key-downs (%d)", ev.n);
+    double old_spread = ev.n >= 4 ? ev.t[3] - ev.t[0] : 0;
+    CHECK(old_spread > 120.0, "old way: the downs are spread over the pauses, not a chord (%.1f ms, a chord is under %.0f)", old_spread, CHORD_SPREAD_MS);
+    usleep(300 * 1000);
+    pump(m, 5, 20);
+    CHECK(ev.n == 4, "old way: nothing comes up by itself, the keys stay held (%d events)", ev.n);
+    printf("  old way (Shift latching one by one): the four key-downs span %.1f ms and stay down\n", old_spread);
+    monome_close(m);
+    vgrid_close(g);
+}
+
 int main(void) {
     for (int size = 1; size <= 3; size++) test_agree(size);
     test_quads(1);
     test_quads(2);
     test_quads(3);
     test_multi();
+    test_chord();
     if (fails) {
         printf("vgrid_rot_e2e_test: %d failed\n", fails);
         return 1;

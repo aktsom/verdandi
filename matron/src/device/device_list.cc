@@ -574,6 +574,32 @@ bool dev_list_has_monome(struct dev_monome *md) {
     return found;
 }
 
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+int dev_list_grid_other(const char *path, char *out, size_t n) {
+    int found = 0;
+    pthread_mutex_lock(&lock);
+    for (struct dev_node *dn = dq.head; dn != NULL && !found; dn = dn->next) {
+        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MONOME && dn->d->monome.type == DEVICE_MONOME_TYPE_GRID && dn->d->base.path != NULL && (path == NULL || strcmp(dn->d->base.path, path) != 0)) {
+            snprintf(out, n, "%s", dn->d->base.path);
+            found = 1;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return found;
+}
+
+int dev_list_grid_copy_leds(const char *from_path, const char *to_path) {
+    int done = 0;
+    pthread_mutex_lock(&lock);
+    struct dev_node *a = dev_lookup_path(from_path, NULL), *b = dev_lookup_path(to_path, NULL);
+    if (a != NULL && b != NULL && a->d->base.type == DEV_TYPE_MONOME && b->d->base.type == DEV_TYPE_MONOME) {
+        done = dev_monome_copy_leds(&a->d->monome, &b->d->monome);
+    }
+    pthread_mutex_unlock(&lock);
+    return done;
+}
+#endif
+
 #ifdef NORNS_WINDOWS
 // CI only (VERDANDI_TEST_HOOKS=1, platform/windows/vgrid_device_win.c): a grid whose port is busy. a thread takes the device's write lock and writes until the port does not take any more (the fake grid has stopped reading): it
 // never lets go, so the "all off" of that grid waits for ever and only the time-out of the quit gets past it

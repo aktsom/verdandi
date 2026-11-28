@@ -25,6 +25,8 @@ extern "C" {
 #if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
 #define VGRID_ROTATE 1
 #define VGRID_HELD_PENDING 4
+#define VGRID_HELD_STAGED 8 // M43: staged with Ctrl (a dashed blue outline; nothing is sent until Ctrl is let go)
+#define VGRID_HELD_FIRE 16  // M43: a fired chord is down for its hold time (drawn pressed)
 #endif
 
 // the size switch: 1 = 64, 2 = 128, 3 = 256
