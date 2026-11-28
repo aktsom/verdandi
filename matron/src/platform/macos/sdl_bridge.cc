@@ -1827,22 +1827,48 @@ static void grid_let_go(int c, int r) {
     }
 }
 
+#ifdef VGRID_ROTATE
+// M43: the buttons of the bar (the sizes and ROTATE) act when the button is let go over the same button, as a click does. before, the size changed when the button went DOWN: the window was made
+// again under the pressed button, so that the release went to a window that was gone and SDL kept the button as pressed: the next click on a key was lost (found with openbox)
+static int grid_bar_down = 0;
+#endif
+
 static void grid_button(const SDL_MouseButtonEvent *b) {
+#ifdef VGRID_ROTATE
+    if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONUP && grid_bar_down != 0) {
+        double px, py;
+        pane_pixels(&grid_pane, b->x, b->y, &px, &py);
+        int which = vgrid_skin_hit_size(&grid_geom, px, py), want = grid_bar_down;
+        grid_bar_down = 0;
+        if (which == want) {
+            if (want == 4) {
+                grid_rotate();
+            } else {
+                grid_set_size(want);
+            }
+        }
+        return;
+    }
     if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0) {
         double px, py;
         pane_pixels(&grid_pane, b->x, b->y, &px, &py);
         int size = vgrid_skin_hit_size(&grid_geom, px, py);
-#ifdef VGRID_ROTATE
-        if (size == 4) {
-            grid_rotate();
+        if (size != 0) {
+            grid_bar_down = size;
             return;
         }
-#endif
+    }
+#else
+    if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0) {
+        double px, py;
+        pane_pixels(&grid_pane, b->x, b->y, &px, &py);
+        int size = vgrid_skin_hit_size(&grid_geom, px, py);
         if (size != 0) {
             grid_set_size(size);
             return;
         }
     }
+#endif
     int c, r;
     bool hit = grid_key_at(b->x, b->y, &c, &r);
     bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;

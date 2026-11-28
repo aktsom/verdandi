@@ -14,13 +14,13 @@ cmd="${1:-}"
 shift
 gid() { xdotool search --name '^grid$' 2> /dev/null | head -n 1; }
 geo() { eval "$(xdotool getwindowgeometry --shell "$1" 2> /dev/null)"; }
-# the first click that a window gets from a pointer that came from another window is lost when there is no window manager (SDL has seen no motion and no focus in it yet; the test is the only place
-# without one). a person moves the mouse and clicks: so does the test, with a click on the dead corner of the window (no key, no button) before the real one
+# a person moves the mouse onto the window, then clicks: the test moves the pointer into the window first (the corner), then to the key
 jiggle() {
     xdotool mousemove --window "$1" 3 3
     sleep 0.15
-    # VP_NOCLICK=1: under a real window manager (openbox) there is no need: the test then shows whether the first click on a new window is lost (M43)
-    if [ "${VP_NOCLICK:-0}" != 1 ]; then
+    # M43: the click on the dead corner is only done when VP_DEADCLICK=1 (it was needed before the size and ROTATE buttons acted on the release: the window that was made again under the pressed button
+    # left SDL with a button that seemed pressed and the next click was lost)
+    if [ "${VP_DEADCLICK:-0}" = 1 ]; then
         xdotool mousedown 1
         sleep 0.1
         xdotool mouseup 1
