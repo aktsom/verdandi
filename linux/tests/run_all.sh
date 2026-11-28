@@ -1373,10 +1373,10 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         grep -aq "PROBE grid slot2 done" "$S2LOG" || { echo "the probe did not finish"; bad=1; }
         start="$(grep -a 'PROBE realleds start' "$S2LOG" | head -1 | sed 's/.*realleds start //')"
         [ -n "$start" ] || { echo "the real grid has no picture at the start (the test is not set up)"; bad=1; }
-        grep -aq "PROBE slots start none|monome |none|none real on port 2" "$S2LOG" || { echo "setup: the real grid is not in slot 2: $(grep -a 'PROBE slots start' "$S2LOG")"; bad=1; }
+        grep -aq "PROBE slots start none|fake re|none|none real on port 2" "$S2LOG" || { echo "setup: the real grid is not in slot 2: $(grep -a 'PROBE slots start' "$S2LOG")"; bad=1; }
         for n in 1 2 3 4 5; do
-            grep -aq "PROBE round $n open slots virtual|monome |none|none real on port 2 virt " "$S2LOG" || { echo "round $n open: slots or the real grid's port are wrong: $(grep -a "PROBE round $n open slots" "$S2LOG")"; bad=1; }
-            grep -aq "PROBE round $n closed slots none|monome |none|none real on port 2 virt -1" "$S2LOG" || { echo "round $n closed: slot 1 is not none again or the real grid left slot 2: $(grep -a "PROBE round $n closed slots" "$S2LOG")"; bad=1; }
+            grep -aq "PROBE round $n open slots virtual|fake re|none|none real on port 2 virt " "$S2LOG" || { echo "round $n open: slots or the real grid's port are wrong: $(grep -a "PROBE round $n open slots" "$S2LOG")"; bad=1; }
+            grep -aq "PROBE round $n closed slots none|fake re|none|none real on port 2 virt -1" "$S2LOG" || { echo "round $n closed: slot 1 is not none again or the real grid left slot 2: $(grep -a "PROBE round $n closed slots" "$S2LOG")"; bad=1; }
             [ "$(grep -a "PROBE round $n open realleds" "$S2LOG" | sed 's/.*realleds //')" = "$start" ] || { echo "round $n open: the real grid's picture was changed"; bad=1; }
             [ "$(grep -a "PROBE round $n closed realleds" "$S2LOG" | sed 's/.*realleds //')" = "$start" ] || { echo "round $n closed: the real grid's picture was changed (it is not in slot 1: nothing is copied to it)"; bad=1; }
         done
