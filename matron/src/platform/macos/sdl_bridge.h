@@ -54,6 +54,13 @@ extern void sdl_bridge_show_control(int kind, int n, int value);
 #define SDL_BRIDGE_ARC 2
 #define SDL_BRIDGE_KEYS 3
 extern void sdl_bridge_toggle_window(int which);
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+// M43, tests only (VERDANDI_TEST_HOOKS=1): a second grid that is listed like a real one; its key, its LEDs
+extern int sdl_bridge_test_fake_grid(int on);
+extern void sdl_bridge_test_fake_grid_key(int x, int y, int down);
+extern int sdl_bridge_test_fake_grid_leds(char *out, size_t n);
+extern int sdl_bridge_test_vgrid_leds(char *out, size_t n);
+#endif
 
 // any thread, does not block: what norns' input hears besides the Mac's own input (the MIC
 // button, lua/core/menu.lua): "system" (every other app), an app's bundle id, or NULL. label:
