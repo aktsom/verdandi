@@ -3,6 +3,7 @@
 #   vgrid_pane_check.sh shape NAME                   NAME=<w>x<h> (the window) and NAME_rot=<the saved rotation>
 #   vgrid_pane_check.sh key COLS ROWS ROT C R [mods]    press and let go of the device key (C, R) where the plate turned ROT has it; mods: shift
 #   vgrid_pane_check.sh down|up|move COLS ROWS ROT C R  the left button down / up / the pointer moves, at that key
+#   vgrid_pane_check.sh rclick COLS ROWS ROT C R        M46: a click of the right button at that key (it latches the key down; a second one lets it go)
 #   vgrid_pane_check.sh button COLS ROWS ROT N          click the button N of the bar (1-3 sizes, 4 ROTATE)
 #   vgrid_pane_check.sh shift down|up                   the shift key (the pointer stays over the window: there is no window manager, the keys go to the window under the pointer)
 #   vgrid_pane_check.sh ctrl down|up                    the Ctrl key (M43: stage and fire)
@@ -37,7 +38,7 @@ shape)
     echo "$1_rot=$(tr -d '\n' < "$NORNS_HOME/.vgrid-rotation" 2> /dev/null)" >> "$MARKS"
     ;;
 count) echo "$1=$(xdotool search --name '^grid$' 2> /dev/null | wc -l)" >> "$MARKS" ;;
-key | down | up | move)
+key | down | up | move | rclick)
     id="$(gid)"
     [ -n "$id" ] || exit 0
     geo "$id"
@@ -55,6 +56,7 @@ key | down | up | move)
     down) jiggle "$id" "$x" "$y"; xdotool mousedown 1 ;;
     up) xdotool mousemove --window "$id" "$x" "$y" mouseup 1 ;;
     move) xdotool mousemove --window "$id" "$x" "$y" ;;
+    rclick) jiggle "$id" "$x" "$y"; xdotool mousedown 3; sleep 0.2; xdotool mouseup 3; sleep 0.2 ;; # M46: the right button (the latch)
     esac
     ;;
 button)

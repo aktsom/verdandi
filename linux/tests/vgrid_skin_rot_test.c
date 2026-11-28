@@ -263,11 +263,31 @@ static void test_mac(void) {
 }
 #endif
 
+#ifdef VGRID_ROTATE
+// M46: the hint line says all three ways to hold keys (Shift, Ctrl and the right button, which latches) and fits under the smallest grid (64 keys)
+static void test_hint(void) {
+    CHECK(strstr(VGRID_HINT, "Shift") != NULL && strstr(VGRID_HINT, "Ctrl") != NULL, "the hint names Shift and Ctrl");
+    CHECK(strstr(VGRID_HINT, "Right click") != NULL && strstr(VGRID_HINT, "latch") != NULL, "the hint says that the right click latches a key");
+    int uw, uh;
+    vgrid_skin_units_rot(8, 8, 0, &uw, &uh);
+    cairo_surface_t *sf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, uw, uh);
+    cairo_t *cr = cairo_create(sf);
+    cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 10.5);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, VGRID_HINT, &te);
+    CHECK(te.width <= uw - 36, "the hint fits under the plate of the smallest grid");
+    cairo_destroy(cr);
+    cairo_surface_destroy(sf);
+}
+#endif
+
 int main(void) {
     test_old_picture();
 #ifdef VGRID_ROTATE
     test_geometry();
     test_drawing();
+    test_hint();
 #else
     test_mac();
 #endif

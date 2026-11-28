@@ -345,8 +345,8 @@ void vgrid_skin_draw(cairo_t *cr, const vgrid_geom_t *g, int w, int h,
     draw_switch(cr, g, size);
 #ifdef VGRID_ROTATE
     {
-        // M43: the two modifiers, one small line in the bottom margin
-        const char *hint = "Shift = hold    Ctrl = chord";
+        // M43/M46: the two modifiers and the right button, one small line in the bottom margin
+        const char *hint = VGRID_HINT;
         cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
         cairo_set_font_size(cr, 10.5);
         cairo_text_extents_t te;
