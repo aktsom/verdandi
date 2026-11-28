@@ -1428,6 +1428,13 @@ static vgrid_device_t *vgrid = NULL;
 static vgrid_geom_t grid_geom = {};
 static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
 static int grid_size = 0;                        // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
+
+// the flags that hold a key down (the outlines of a pending or staged key are flags of the drawing only and do not)
+#ifdef VGRID_ROTATE
+#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH | VGRID_HELD_FIRE))
+#else
+#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH))
+#endif
 static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
 static int grid_pending = 0;
 #ifdef VGRID_ROTATE
@@ -1550,13 +1557,6 @@ static void grid_sync_pending(void) {
 static void grid_press(int c, int r);
 
 // what the state machine says: hold a key (down, and it stays like a latched key) or let it go (up, unless the mouse or a latch of its own still holds it)
-// the flags that hold a key down (the outlines of a pending or staged key are flags of the drawing only and do not)
-#ifdef VGRID_ROTATE
-#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH | VGRID_HELD_FIRE))
-#else
-#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH))
-#endif
-
 static Uint32 grid_chord_timer(Uint32 interval, void *unused);
 
 static void grid_do(const vgv_act_t *acts, int n) {

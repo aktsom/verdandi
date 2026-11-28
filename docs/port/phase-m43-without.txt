@@ -34,3 +34,9 @@ linux/tests/vgrid_skin_rot_test.c:219:29: error: 'VGRID_HELD_STAGED' undeclared 
 linux/tests/vgrid_skin_rot_test.c:232:29: error: 'VGRID_HELD_FIRE' undeclared (first use in this function); did you mean 'VGRID_HELD_MOUSE'?
 
 == the headless window test (probe_vgrid_chord.lua) needs _norns.test_fake_grid and the Ctrl handling of M43: with the program of M41 the script gets no chord (a Ctrl click is a latch there) and the virtual grid does not take port 1.
+
+== c:vgrid window code compiles without VGRID_ROTATE (linux/tests/vgrid_no_rotate_build_test.sh) with sdl_bridge.cc of commit 70650caf (the windows-m1 run 46118210907 failed to build norns.exe with exactly this) ==
+matron/src/platform/macos/sdl_bridge.cc:1817:9: error: 'GRID_DOWN_FLAGS' was not declared in this scope
+matron/src/platform/macos/sdl_bridge.cc:1825:9: error: 'GRID_DOWN_FLAGS' was not declared in this scope
+matron/src/platform/macos/sdl_bridge.cc:1943:17: error: 'GRID_DOWN_FLAGS' was not declared in this scope
+FAIL: sdl_bridge.cc does not compile without VGRID_ROTATE

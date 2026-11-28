@@ -37,5 +37,8 @@ The headless test lost the first click on the window that is made again by the s
 - The headless window test `linux/tests/probe_vgrid_chord.lua` (Xvfb, real mouse and keyboard through xdotool, `VERDANDI_TEST_HOOKS=1` for a second pseudo-terminal grid that is listed like a real one): Ctrl stage, fire (four key-downs with the same time in the script, key-ups 102 ms later), a key staged twice, Esc, focus lost, a Shift-latched key staying down, the switch with the picture on each grid, the held key let go at the switch, the real grid's key reaching the script, five more rounds.
 - Under a real window manager: the same probes passed under openbox (installed in this container for the check; it is not part of the repository's setup), including the M41 window test without the dead-corner click and a real focus loss.
 
+## 5. A build error that only the Windows CI could see (and the test that now sees it)
+The first push of M43 (`70650caf`) did not build on Windows: a macro (`GRID_DOWN_FLAGS`) had been moved into the part of `sdl_bridge.cc` that only the Linux desktop build compiles, but `grid_press` and `grid_let_go` outside it use it. The Mac build would have broken the same way. Fixed (the macro is defined for every build), and `linux/tests/vgrid_no_rotate_build_test.sh` builds `sdl_bridge.cc` with `-fsyntax-only` as the Mac and Windows builds see it (`-DVGRID_TEST_NO_ROTATE`, a test-only switch of `vgrid_skin.h`): it fails on `70650caf` with the Windows error and passes now (`phase-m43-without.txt`).
+
 ## Not tested here
 A real grid on USB (the second grid is a pseudo terminal that libmonome opens like one), cheat codes 2 itself (the owner's zilchmos), the owner's window manager. `docs/port/HARDWARE-CHECKLIST.md`.

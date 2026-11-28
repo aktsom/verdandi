@@ -147,6 +147,7 @@ cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I "$P" -I matron/src/platform
     && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid rotation through libmonome (M41: leds, hit test and presses agree for 3 sizes x 4 script rotations x 4 turns of the window; quad writes also on the 16 x 16; the multi-press burst reaches the script in order)" "$T/vre"
 run "lua:grid switch (M43: the virtual grid takes port 1 at once and the real grid takes it back when it goes; keys held on the grid that is left are let go for the script; the grid that takes over is announced; six rounds; no real grid; a real grid plugged in meanwhile)" env NORNS_PLATFORM=linux lua5.3 linux/tests/grid_switch_test.lua
 run "lua:grid switch on the Mac and when the platform is not Linux (M43: nothing changes: the virtual grid joins the list as before)" env NORNS_PLATFORM=macos lua5.3 linux/tests/grid_switch_test.lua
+run "c:vgrid window code compiles without VGRID_ROTATE (M43: the Mac and Windows view of sdl_bridge.cc; the Windows CI found a macro that only the Linux build had)" bash linux/tests/vgrid_no_rotate_build_test.sh
 run "midi:vgrid guard (M41: ROTATE and the multi-press are Linux desktop only: not in the Mac build, not on Windows)" bash linux/tests/vgrid_view_guard_test.sh
 # libmonome's write to a port that is slow to take data: no message cut in the middle (linux/patches/libmonome-write-retry.patch)
 cc $CFLAGS -I matron/src/platform/macos -I/usr/local/include linux/tests/monome_write_test.c "$P/vgrid_proto.c" -L/usr/local/lib -lmonome \
