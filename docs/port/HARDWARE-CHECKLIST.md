@@ -877,3 +877,6 @@ Use cheat codes 2 with the real grid plugged in.
 7. Size and ROTATE: click 64, 128, 256 and ROT: the window changes, the very next click on a key works (it was lost before this change).
 Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
 Cannot be tested here: a real USB grid, cheat codes 2, your window manager.
+
+## M44: the MIDI auto-connect log on a returning virtual MIDI port (laptop, PipeWire)
+- [ ] Reaper with its virtual MIDI output (Clock on), Verdandi started, then quit Reaper and start it again three times (once with Verdandi started before Reaper). After each start: `grep 'midi:' ~/verdandi-home/norns.log | tail`. Look for: after each "is gone" line a "connected" or "reconnected" line with the port name (Client number), and `pw-link -l` showing the link. Note which text the line has: "(it was linked already when seen ...)" means the sound system made the link, plain "connected" means Verdandi did, "could not link ... said n" means `jack_connect` failed and the link still came. Send those lines back.

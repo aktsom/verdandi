@@ -1,3 +1,6 @@
+## M44 (Linux desktop only): the MIDI auto-connect says every link it sees
+- A returning virtual MIDI port (Reaper restarted) got no "connected" line when the link was already there or `jack_connect` had said no (laptop log: one "connected", then three "gone"). Now every link that is seen is said, with the port name; a failing `jack_connect` is said once a minute. Which of the two ways PipeWire does it is **not proven here** (no PipeWire in the container): the new lines say it on the next laptop run. Note `docs/port/phase-m44.md`, proof on the old code `docs/port/phase-m44-without.txt`, test "midi:every link that is seen is said ...". Needs a new Linux tag.
+
 ## Windows CI (2026-11-28): windows-m1 fails for a reason outside M42/M43
 - norns.exe is silent on the CI (no audio lines, no console port) on every commit since da01eef5, **also on the code of bac1a4f1 itself** (diagnostic commit f587fb78). Not caused by M42's util.lua (4bc291fa) or M43. The CI environment changed; needs a look by the owner (re-run bac1a4f1's windows-m1 from the Actions page to confirm). The Windows virtual grid stays off; no Windows run has printed the M42 probe lines yet.
 
