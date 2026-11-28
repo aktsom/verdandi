@@ -1066,6 +1066,26 @@ if command -v jackd > /dev/null; then
         return $bad
     }
     run "midi:default auto-connect of another program's virtual MIDI port (at start, after it was gone, one line each, nothing else linked)" midi_default_ok
+    # M44 (docs/port/phase-m44.md): the owner's laptop (PipeWire) showed "gone" after each quit of Reaper and no line when it came back although the link was there: a link that is
+    # there when Verdandi looks (made by the system, or by a jack_connect that said "no") was silent. now every link that is seen is said, with the port name
+    GLOG="$T/midilink-restored.log"
+    MIDI_SCENARIO=restored "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
+    midi_restored_ok() {
+        local bad=0 n
+        has() { peers "$GLOG.$1" Verdandi:midi_in | grep -qx "$2"; }
+        has back1 "Midi-Bridge:Client-131:(capture_0) Virtual RawMIDI" || { echo "back1: the link is not there (the fake links itself: the test is not set up)"; bad=1; }
+        has back2 "Midi-Bridge:Client-132:(capture_0) Virtual RawMIDI" || { echo "back2: the link is not there"; bad=1; }
+        has back3 "Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI" || { echo "back3: the link is not there (the fake links itself: the test is not set up)"; bad=1; }
+        n="$(grep -ac "midi: Midi-Bridge:Client-.*Virtual RawMIDI is gone" "$GLOG")"
+        [ "$n" = 3 ] || { echo "'gone' lines: $n, 3 expected (three quits)"; bad=1; }
+        [ "$(grep -ac "midi: connected Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI to Verdandi:midi_in" "$GLOG")" = 1 ] || { echo "no 'connected' line for the first link (already there when seen)"; bad=1; }
+        [ "$(grep -ac "midi: connected Midi-Bridge:Client-131:(capture_0) Virtual RawMIDI to Verdandi:midi_in" "$GLOG")" = 1 ] || { echo "no 'connected' line for the port that came back as Client-131"; bad=1; }
+        [ "$(grep -ac "midi: connected Midi-Bridge:Client-132:(capture_0) Virtual RawMIDI to Verdandi:midi_in" "$GLOG")" = 1 ] || { echo "no 'connected' line for the port that came back as Client-132"; bad=1; }
+        [ "$(grep -ac "midi: reconnected Midi-Bridge:Client-128:(capture_0) Virtual RawMIDI to Verdandi:midi_in" "$GLOG")" = 1 ] || { echo "no 'reconnected' line for Client-128 coming back after the others"; bad=1; }
+        [ "$(grep -ac "midi: .*Virtual RawMIDI" "$GLOG")" -le 10 ] || { echo "too many midi lines about the port (a flood)"; bad=1; }
+        return $bad
+    }
+    run "midi:every link that is seen is said, also one the system made (3 quits and returns, port names in the lines)" midi_restored_ok
     GLOG="$T/midilink-default2.log"
     MIDI_SCENARIO=default2 "$REPO/linux/tests/midi_autoconnect_test.sh" "$GLOG" > /dev/null 2>&1
     midi_default2_ok() {

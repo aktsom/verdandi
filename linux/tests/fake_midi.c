@@ -3,6 +3,7 @@
 #include <jack/jack.h>
 #include <jack/midiport.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 static jack_port_t *port;
@@ -30,6 +31,17 @@ int main(int argc, char **argv) {
     }
     jack_set_process_callback(c, process, NULL);
     jack_activate(c);
+    /* M44: FAKE_MIDI_LINK_TO=<input port>: this client links its first port to that port itself, as soon as the port exists (the way a
+     * sound system that restores a link, or a jack_connect that said "no" and linked all the same, behaves for Verdandi's auto-connect) */
+    const char *to = getenv("FAKE_MIDI_LINK_TO");
+    if (to != NULL && to[0] != 0) {
+        for (int i = 0; i < 600; i++) {
+            if (jack_connect(c, jack_port_name(port), to) == 0) {
+                break;
+            }
+            usleep(50000);
+        }
+    }
     for (;;) {
         sleep(1);
     }

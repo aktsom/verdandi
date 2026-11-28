@@ -141,6 +141,7 @@ static std::set<std::string> was_linked;    // ports linked by this worker that 
 static std::set<std::string> said_others;   // the extra sources of the default, said once
 static std::set<std::string> announce_next; // a port that was said to be gone: its next connection is said at once
 static Throttle throttle_gone;
+static Throttle throttle_fail;
 
 static void apply(jack_client_t *c) {
     std::vector<MidiPort> ports;
@@ -227,6 +228,10 @@ static void apply(jack_client_t *c) {
     for (const auto &w : missingFrom(want, linked)) {
         int err = jack_connect(c, w.c_str(), MIDI_IN);
         if (err != 0 && err != EEXIST) {
+            // M44: say it (once a minute per port): a link that the sound system makes although jack_connect said no is then told by the line below on the next look
+            if (throttle_fail.allow(w, now_s())) {
+                fprintf(stderr, "midi: could not link %s to %s (jack_connect said %d); it is tried again\n", w.c_str(), MIDI_IN, err);
+            }
             continue;
         }
         bool again = ever_linked.count(w) > 0;
@@ -241,8 +246,16 @@ static void apply(jack_client_t *c) {
     }
     for (const auto &w : want) {
         for (const auto &l : linked) {
-            if (l == w) {
-                was_linked.insert(w); // linked already (by an earlier run or by hand): its going away is said too
+            if (l == w && was_linked.insert(w).second) {
+                // M44: a wanted port that is linked although this worker did not link it just now (the sound system or a person made the
+                // link, or jack_connect said no and the link came all the same): its going away is said too, and so is its coming. before M44
+                // this case was silent, so a returning port showed "gone" and then nothing although the link was there (laptop, PipeWire).
+                bool again = ever_linked.count(w) > 0;
+                ever_linked.insert(w);
+                bool say_now = announce_next.erase(w) > 0;
+                if (!again || say_now || throttle.allow(w, now_s())) {
+                    fprintf(stderr, "midi: %s %s to %s (it was linked already when seen: the link was not made by this program's jack_connect)\n", again ? "reconnected" : "connected", w.c_str(), MIDI_IN);
+                }
             }
         }
     }

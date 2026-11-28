@@ -17,6 +17,12 @@ case "${MIDI_SCENARIO:-conf}" in
         "$T/fake_midi" "Midi-Bridge" "Client-128:(capture_0) Virtual RawMIDI" &
         "$T/fake_midi" "Other" &
         ;;
+    restored) # M44: as default, but the program links its own port itself (a system that restores the link): Verdandi finds the link there and must still say it
+        export FAKE_MIDI_LINK_TO="Verdandi:midi_in"
+        export NORNS_MIDI_POKE=0 # only the 2 s look: the program has linked itself (within 50 ms) before Verdandi looks
+        "$T/fake_midi" "Midi-Bridge" "Client-128:(capture_0) Virtual RawMIDI" &
+        "$T/fake_midi" "Other" &
+        ;;
     default2) # M39: two programs with a virtual port, a hardware interface and the VirMIDI card: one source linked, nothing else
         "$T/fake_midi" "Midi-Bridge" "Client-128:(capture_0) Virtual RawMIDI" "Client-129:(capture_0) Virtual RawMIDI" "mio:(capture_0) mio MIDI 1" "VirMIDI 1-0:(capture_0) VirMIDI 1-0" &
         ;;
@@ -28,7 +34,7 @@ esac
 sleep 0.5
 # a prefix on the command line of audio.conf: tested through audio.conf in the first scenario, the environment in
 # the other: audio.conf here, the environment variable beats it (scenario "env")
-if [ "${MIDI_SCENARIO:-conf}" = default ] || [ "${MIDI_SCENARIO:-conf}" = default2 ]; then
+if [ "${MIDI_SCENARIO:-conf}" = default ] || [ "${MIDI_SCENARIO:-conf}" = default2 ] || [ "${MIDI_SCENARIO:-conf}" = restored ]; then
     : # no audio.conf line and no variable: the default
 elif [ "${MIDI_SCENARIO:-conf}" = conf ]; then
     # audio.conf; and no wake-ups by port registrations: only the 2 s re-check can repair the cut link
@@ -38,7 +44,7 @@ else
     export NORNS_MIDI_IN_FROM="Fake DAW:;Late DAW"
 fi
 PROBE=probe_midi_link.lua
-case "${MIDI_SCENARIO:-conf}" in default) PROBE=probe_midi_default.lua ;; default2) PROBE=probe_midi_default2.lua ;; esac
+case "${MIDI_SCENARIO:-conf}" in default) PROBE=probe_midi_default.lua ;; restored) PROBE=probe_midi_restored.lua ;; default2) PROBE=probe_midi_default2.lua ;; esac
 NORNS_HOME="$H" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/$PROBE" "$LOG" > /dev/null 2>&1
 for f in "$H"/probe.marks.*; do cp "$f" "$LOG.${f##*.marks.}"; done
 exit 0
