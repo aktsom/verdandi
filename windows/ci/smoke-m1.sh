@@ -893,7 +893,7 @@ run_extdrop() {
 chk_extdrop() {
     local bad=0 out="$M0_OUT/extdrop" p
     cat "$out/probe.txt" 2> /dev/null
-    for p in extdrop-up extdrop-registered extdrop-folder-added extdrop-junction extdrop-file-refused extsort-grouped extdrop-removed; do
+    for p in extdrop-up extdrop-registered extdrop-folder-added extdrop-junction extdrop-file-refused extdrop-removed; do
         has "$out/probe.txt" "PROBE $p ok" "the drop check '$p'" || bad=1
     done
     return "$bad"

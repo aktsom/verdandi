@@ -210,11 +210,7 @@ static void draw_keys(cairo_t *cr, const vgrid_geom_t *g, const uint8_t level[VG
 #endif
             double x = key_x(sc), y = key_y(sr);
             double l = level[r][c] / 15.0 * scale;
-#ifdef VGRID_ROTATE
-            int down = (held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_FIRE)) != 0;
-#else
             int down = (held[r][c] & VGRID_HELD_MOUSE) != 0;
-#endif
             // the cut-out in the plate: a dark seam, heavier at the top
             rounded_rect(cr, x - 1.1, y - 1.1, KEY + 2.2, KEY + 2.2, 5.0);
             cairo_pattern_t *p = cairo_pattern_create_linear(0, y - 1.1, 0, y + KEY + 1.1);
@@ -253,16 +249,6 @@ static void draw_keys(cairo_t *cr, const vgrid_geom_t *g, const uint8_t level[VG
                 cairo_stroke(cr);
             }
 #ifdef VGRID_ROTATE
-            if (held[r][c] & VGRID_HELD_STAGED) {
-                // M43: staged with Ctrl: a dashed blue outline (not the white of Shift, not the orange of a latch)
-                static const double dash[2] = {5.0, 3.0};
-                rounded_rect(cr, x - 3.5, y - 3.5, KEY + 7, KEY + 7, 7);
-                cairo_set_line_width(cr, 2.5);
-                cairo_set_dash(cr, dash, 2, 0);
-                cairo_set_source_rgba(cr, 0.25, 0.65, 1.0, 1.0);
-                cairo_stroke(cr);
-                cairo_set_dash(cr, NULL, 0, 0);
-            }
             if (held[r][c] & VGRID_HELD_PENDING) {
                 // shift multi-press: collected, not sent yet (white, so that it is not taken for a latch)
                 rounded_rect(cr, x - 3.5, y - 3.5, KEY + 7, KEY + 7, 7);
@@ -343,19 +329,5 @@ void vgrid_skin_draw(cairo_t *cr, const vgrid_geom_t *g, int w, int h,
     draw_plate(cr, g);
     draw_keys(cr, g, level, intensity, held);
     draw_switch(cr, g, size);
-#ifdef VGRID_ROTATE
-    {
-        // M43: the two modifiers, one small line in the bottom margin
-        const char *hint = "Shift = hold    Ctrl = chord";
-        cairo_select_font_face(cr, "Helvetica Neue", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-        cairo_set_font_size(cr, 10.5);
-        cairo_text_extents_t te;
-        cairo_text_extents(cr, hint, &te);
-        double hy = MARGIN + plate_h(g->srows) + BAR + 11;
-        cairo_move_to(cr, MARGIN + (plate_w(g->scols) - te.width) / 2 - te.x_bearing, hy);
-        cairo_set_source_rgb(cr, 0.52, 0.54, 0.56);
-        cairo_show_text(cr, hint);
-    }
-#endif
     cairo_restore(cr);
 }

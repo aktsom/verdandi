@@ -140,40 +140,6 @@ void dev_monome_set_rotation(struct dev_monome *md, uint8_t rotation) {
     monome_set_rotation(md->m, (monome_rotate_t)rotation);
 }
 
-static void refresh_raw(struct dev_monome *md);
-#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
-// M43: the LEDs of one grid shown on another (a switch between the real grid and the virtual one). the data is by quad in the script's coordinates; the copy goes key by key for the part the two have in common
-int dev_monome_copy_leds(struct dev_monome *src, struct dev_monome *dst) {
-    if (src == NULL || dst == NULL || src == dst || src->m == NULL || dst->m == NULL || src->type != DEVICE_MONOME_TYPE_GRID || dst->type != DEVICE_MONOME_TYPE_GRID) {
-        return 0;
-    }
-    uint8_t snap[16][16];
-    memset(snap, 0, sizeof snap);
-    pthread_mutex_lock(&src->io);
-    for (int y = 0; y < src->rows && y < 16; y++) {
-        for (int x = 0; x < src->cols && x < 16; x++) {
-            snap[y][x] = src->data[dev_monome_quad_idx(src, (uint8_t)x, (uint8_t)y)][dev_monome_quad_offset((uint8_t)x, (uint8_t)y)];
-        }
-    }
-    pthread_mutex_unlock(&src->io);
-    pthread_mutex_lock(&dst->io);
-    for (uint8_t q = 0; q < dst->quads && q < 4; q++) {
-        memset(dst->data[q], 0, 64);
-        dst->dirty[q] = true;
-    }
-    for (int y = 0; y < dst->rows && y < 16; y++) {
-        for (int x = 0; x < dst->cols && x < 16; x++) {
-            dst->data[dev_monome_quad_idx(dst, (uint8_t)x, (uint8_t)y)][dev_monome_quad_offset((uint8_t)x, (uint8_t)y)] = snap[y][x];
-        }
-    }
-    if (!g_frozen) {
-        refresh_raw(dst);
-    }
-    pthread_mutex_unlock(&dst->io);
-    return 1;
-}
-#endif
-
 // enable/disable grid tilt
 void dev_monome_tilt_enable(struct dev_monome *md, uint8_t sensor) {
     monome_tilt_enable(md->m, sensor);

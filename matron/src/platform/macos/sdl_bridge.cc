@@ -1428,13 +1428,6 @@ static vgrid_device_t *vgrid = NULL;
 static vgrid_geom_t grid_geom = {};
 static uint8_t grid_held[VGRID_MAX][VGRID_MAX];
 static int grid_size = 0;                        // 1-3: 64, 128, 256 (vgrid_sizes); 0 = not read yet
-
-// the flags that hold a key down (the outlines of a pending or staged key are flags of the drawing only and do not)
-#ifdef VGRID_ROTATE
-#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH | VGRID_HELD_FIRE))
-#else
-#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH))
-#endif
 static int grid_mouse_c = -1, grid_mouse_r = -1; // key held by the left button
 static int grid_pending = 0;
 #ifdef VGRID_ROTATE
@@ -1545,11 +1538,6 @@ static void grid_sync_pending(void) {
             } else {
                 grid_held[r][c] &= ~VGRID_HELD_PENDING;
             }
-            if (vgv_is_staged(&grid_multi, c, r)) {
-                grid_held[r][c] |= VGRID_HELD_STAGED;
-            } else {
-                grid_held[r][c] &= ~VGRID_HELD_STAGED;
-            }
         }
     }
 }
@@ -1557,54 +1545,12 @@ static void grid_sync_pending(void) {
 static void grid_press(int c, int r);
 
 // what the state machine says: hold a key (down, and it stays like a latched key) or let it go (up, unless the mouse or a latch of its own still holds it)
-static Uint32 grid_chord_timer(Uint32 interval, void *unused);
-
 static void grid_do(const vgv_act_t *acts, int n) {
     if (vgrid == NULL) {
         return;
     }
-    // M43: a fired chord (down = 2) goes down in ONE write to the device and comes up in one write after VGV_CHORD_HOLD_MS (down = 3). a key that something else holds already (a latch) sends nothing
-    // and is not let go by the chord
-    uint8_t batch[VGV_MAXKEYS][2];
-    int nb = 0, fired = 0;
     for (int i = 0; i < n; i++) {
         int c = acts[i].x, r = acts[i].y;
-        if (acts[i].down == 2) {
-            fired = 1;
-            if (GRID_DOWN_FLAGS(r, c) == 0 && nb < VGV_MAXKEYS) {
-                batch[nb][0] = (uint8_t)c;
-                batch[nb][1] = (uint8_t)r;
-                nb++;
-            }
-            grid_held[r][c] |= VGRID_HELD_FIRE;
-        }
-    }
-    if (nb > 0) {
-        vgrid_key_batch(vgrid, batch, nb, 1);
-    }
-    if (fired) {
-        SDL_AddTimer(VGV_CHORD_HOLD_MS, grid_chord_timer, NULL);
-    }
-    nb = 0;
-    for (int i = 0; i < n; i++) {
-        int c = acts[i].x, r = acts[i].y;
-        if (acts[i].down == 3) {
-            grid_held[r][c] &= ~VGRID_HELD_FIRE;
-            if (GRID_DOWN_FLAGS(r, c) == 0 && nb < VGV_MAXKEYS) {
-                batch[nb][0] = (uint8_t)c;
-                batch[nb][1] = (uint8_t)r;
-                nb++;
-            }
-        }
-    }
-    if (nb > 0) {
-        vgrid_key_batch(vgrid, batch, nb, 0);
-    }
-    for (int i = 0; i < n; i++) {
-        int c = acts[i].x, r = acts[i].y;
-        if (acts[i].down >= 2) {
-            continue;
-        }
         if (acts[i].down) {
             grid_press(c, r);
             grid_held[r][c] |= VGRID_HELD_LATCH;
@@ -1621,25 +1567,6 @@ static void grid_do(const vgv_act_t *acts, int n) {
 static void grid_after_multi(void) {
     grid_sync_pending();
     grid_redraw();
-}
-
-// M43: the hold time of a fired chord is over (a timer thread asks the main thread through an event)
-static Uint32 grid_chord_timer(Uint32 interval, void *unused) {
-    (void)interval;
-    (void)unused;
-    SDL_Event ev;
-    SDL_zero(ev);
-    ev.type = toast_event_type;
-    ev.user.code = 20;
-    SDL_PushEvent(&ev);
-    return 0; // once
-}
-
-static void grid_chord_release(void) {
-    vgv_act_t acts[VGV_MAXACT];
-    int n = vgv_fire_release(&grid_multi, acts);
-    grid_do(acts, n);
-    grid_after_multi();
 }
 #endif
 
@@ -1741,15 +1668,6 @@ static void unplug(vgrid_device_t *g) {
 
 static void toggle_grid(void) {
     if (vgrid != NULL) {
-#ifdef VGRID_ROTATE
-        {
-            // M43: the real grid takes over: what the script has drawn is on it before the virtual grid goes (the vports follow in Lua, core/grid.lua, when the removal arrives)
-            char other[512];
-            if (dev_list_grid_other(vgrid_path(vgrid), other, sizeof other)) {
-                dev_list_grid_copy_leds(vgrid_path(vgrid), other);
-            }
-        }
-#endif
         unplug(vgrid);
         vgrid = NULL;
         pane_close(&grid_pane);
@@ -1792,15 +1710,6 @@ static void toggle_grid(void) {
         arrange_windows();
     }
     plug_in(vgrid, "virtual grid");
-#ifdef VGRID_ROTATE
-    {
-        // M43: the virtual grid takes over: what the script has drawn on the other grid is on it at once
-        char other[512];
-        if (dev_list_grid_other(vgrid_path(vgrid), other, sizeof other)) {
-            dev_list_grid_copy_leds(other, vgrid_path(vgrid));
-        }
-    }
-#endif
     skin.grid_open = 1;
     redraw(true);
     grid_redraw();
@@ -1812,6 +1721,8 @@ static bool grid_key_at(int x, int y, int *c, int *r) {
     return vgrid_skin_hit(&grid_geom, px, py, c, r);
 }
 
+// the flags that hold a key down (the white outline of a pending key, a flag of the drawing only, does not)
+#define GRID_DOWN_FLAGS(r, c) (grid_held[r][c] & (VGRID_HELD_MOUSE | VGRID_HELD_LATCH))
 
 static void grid_press(int c, int r) {
     if (GRID_DOWN_FLAGS(r, c) == 0) {
@@ -1827,48 +1738,22 @@ static void grid_let_go(int c, int r) {
     }
 }
 
-#ifdef VGRID_ROTATE
-// M43: the buttons of the bar (the sizes and ROTATE) act when the button is let go over the same button, as a click does. before, the size changed when the button went DOWN: the window was made
-// again under the pressed button, so that the release went to a window that was gone and SDL kept the button as pressed: the next click on a key was lost (found with openbox)
-static int grid_bar_down = 0;
-#endif
-
 static void grid_button(const SDL_MouseButtonEvent *b) {
-#ifdef VGRID_ROTATE
-    if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONUP && grid_bar_down != 0) {
-        double px, py;
-        pane_pixels(&grid_pane, b->x, b->y, &px, &py);
-        int which = vgrid_skin_hit_size(&grid_geom, px, py), want = grid_bar_down;
-        grid_bar_down = 0;
-        if (which == want) {
-            if (want == 4) {
-                grid_rotate();
-            } else {
-                grid_set_size(want);
-            }
-        }
-        return;
-    }
     if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0) {
         double px, py;
         pane_pixels(&grid_pane, b->x, b->y, &px, &py);
         int size = vgrid_skin_hit_size(&grid_geom, px, py);
-        if (size != 0) {
-            grid_bar_down = size;
+#ifdef VGRID_ROTATE
+        if (size == 4) {
+            grid_rotate();
             return;
         }
-    }
-#else
-    if (b->button == SDL_BUTTON_LEFT && b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0) {
-        double px, py;
-        pane_pixels(&grid_pane, b->x, b->y, &px, &py);
-        int size = vgrid_skin_hit_size(&grid_geom, px, py);
+#endif
         if (size != 0) {
             grid_set_size(size);
             return;
         }
     }
-#endif
     int c, r;
     bool hit = grid_key_at(b->x, b->y, &c, &r);
     bool ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
@@ -1877,27 +1762,6 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
     if (b->button == SDL_BUTTON_LEFT) {
         vgv_act_t acts[VGV_MAXACT];
         bool shift_now = (SDL_GetModState() & KMOD_SHIFT) != 0;
-        if (b->type == SDL_MOUSEBUTTONDOWN && grid_mouse_c < 0 && hit && (ctrl || grid_multi.ctrl)) {
-            // M43: Ctrl held: the click stages the key (a second click on it takes it out), nothing is sent; letting go of Ctrl fires everything staged in one batch
-            int consumed = 0;
-            int n = vgv_ctrl_click(&grid_multi, c, r, ctrl, acts, &consumed);
-            grid_do(acts, n);
-            grid_after_multi();
-            return;
-        }
-        if (b->type == SDL_MOUSEBUTTONUP) {
-            int n = vgv_ctrl_mouse_up(&grid_multi, acts);
-            grid_do(acts, n);
-            if (n > 0) {
-                grid_after_multi();
-            }
-        } else {
-            int n = vgv_ctrl(&grid_multi, ctrl, acts);
-            grid_do(acts, n);
-            if (n > 0) {
-                grid_after_multi();
-            }
-        }
         if (b->type == SDL_MOUSEBUTTONDOWN) {
             if (grid_mouse_c < 0 && hit && !ctrl) {
                 int consumed = 0;
@@ -1933,11 +1797,7 @@ static void grid_button(const SDL_MouseButtonEvent *b) {
             grid_let_go(grid_mouse_c, grid_mouse_r);
             grid_mouse_c = grid_mouse_r = -1;
         }
-#ifdef VGRID_ROTATE
-    } else if (b->button == SDL_BUTTON_RIGHT && b->type == SDL_MOUSEBUTTONDOWN && hit) { // M43: Ctrl + the left button stages a chord; the right button is the latch
-#else
     } else if ((b->button == SDL_BUTTON_RIGHT || ctrl) && b->type == SDL_MOUSEBUTTONDOWN && hit) {
-#endif
         if (grid_held[r][c] & VGRID_HELD_LATCH) {
             grid_held[r][c] &= ~VGRID_HELD_LATCH;
             if (GRID_DOWN_FLAGS(r, c) == 0) {
@@ -1958,15 +1818,6 @@ static bool grid_key_event(const SDL_KeyboardEvent *k) {
     if (k->keysym.scancode == SDL_SCANCODE_LSHIFT || k->keysym.scancode == SDL_SCANCODE_RSHIFT) {
         if (k->repeat == 0) {
             int n = vgv_shift(&grid_multi, (SDL_GetModState() & KMOD_SHIFT) != 0, acts);
-            grid_do(acts, n);
-            grid_after_multi();
-        }
-        return false;
-    }
-    if (k->keysym.scancode == SDL_SCANCODE_LCTRL || k->keysym.scancode == SDL_SCANCODE_RCTRL) {
-        // M43: letting go of Ctrl fires the staged keys (SDL_GetModState is asked as well, with every mouse event)
-        if (k->repeat == 0) {
-            int n = vgv_ctrl(&grid_multi, (SDL_GetModState() & KMOD_CTRL) != 0, acts);
             grid_do(acts, n);
             grid_after_multi();
         }
@@ -2002,19 +1853,6 @@ static void grid_motion(const SDL_MouseMotionEvent *m) {
         if (n > 0) {
             grid_after_multi();
         }
-        n = vgv_ctrl(&grid_multi, (SDL_GetModState() & KMOD_CTRL) != 0, acts);
-        grid_do(acts, n);
-        if (n > 0) {
-            grid_after_multi();
-        }
-        // M43: a staging drag (Ctrl and the left button): the keys it crosses join the staged set, nothing is pressed
-        if (grid_key_at(m->x, m->y, &c, &r) && vgv_ctrl_motion(&grid_multi, c, r)) {
-            grid_after_multi();
-            return;
-        }
-        if (grid_multi.mouse_ctrl) {
-            return;
-        }
         // a collecting drag (shift and the left button): the keys it crosses join the pending set, nothing is pressed
         if (grid_key_at(m->x, m->y, &c, &r) && vgv_motion(&grid_multi, c, r)) {
             grid_after_multi();
@@ -2036,80 +1874,6 @@ static void grid_motion(const SDL_MouseMotionEvent *m) {
     grid_mouse_r = r;
     grid_redraw();
 }
-
-#ifdef VGRID_ROTATE
-// M43, tests only (VERDANDI_TEST_HOOKS=1): a second grid that is listed like a real one (a pseudo terminal that libmonome opens), so that the switch between a real grid and the virtual one can be tried without
-// hardware. the window code never touches it
-static vgrid_device_t *fake_real = NULL;
-static void fake_real_changed(void *ctx) {
-    (void)ctx;
-}
-int sdl_bridge_test_fake_grid(int on) {
-    const char *hooks = getenv("VERDANDI_TEST_HOOKS");
-    if (hooks == NULL || strcmp(hooks, "1") != 0) {
-        return 0;
-    }
-    if (on && fake_real == NULL) {
-        fake_real = vgrid_open("fake real grid", 16, 8, fake_real_changed, NULL);
-        if (fake_real != NULL) {
-            plug_in(fake_real, "fake real grid");
-        }
-    } else if (!on && fake_real != NULL) {
-        unplug(fake_real);
-        fake_real = NULL;
-    }
-    return fake_real != NULL;
-}
-// the lit keys of the VIRTUAL grid (the window's device), the same words
-int sdl_bridge_test_vgrid_leds(char *out, size_t n) {
-    uint8_t level[VGRID_MAX][VGRID_MAX];
-    int intensity, count = 0;
-    out[0] = 0;
-    if (vgrid == NULL) {
-        return -1;
-    }
-    vgrid_levels(vgrid, level, &intensity);
-    size_t used = 0;
-    for (int y = 0; y < 16; y++) {
-        for (int x = 0; x < 16; x++) {
-            if (level[y][x] > 0) {
-                count++;
-                if (used + 16 < n) {
-                    used += (size_t)snprintf(out + used, n - used, "%d,%d=%d ", x, y, level[y][x]);
-                }
-            }
-        }
-    }
-    return count;
-}
-void sdl_bridge_test_fake_grid_key(int x, int y, int down) {
-    if (fake_real != NULL) {
-        vgrid_key(fake_real, x, y, down);
-    }
-}
-// the lit keys of the fake real grid as "x,y=level" words (0-based), at most 64
-int sdl_bridge_test_fake_grid_leds(char *out, size_t n) {
-    uint8_t level[VGRID_MAX][VGRID_MAX];
-    int intensity, count = 0;
-    out[0] = 0;
-    if (fake_real == NULL) {
-        return -1;
-    }
-    vgrid_levels(fake_real, level, &intensity);
-    size_t used = 0;
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 16; x++) {
-            if (level[y][x] > 0) {
-                count++;
-                if (used + 16 < n) {
-                    used += (size_t)snprintf(out + used, n - used, "%d,%d=%d ", x, y, level[y][x]);
-                }
-            }
-        }
-    }
-    return count;
-}
-#endif
 
 //--- virtual arc window (main thread, except arc_changed)
 
@@ -4539,10 +4303,6 @@ void sdl_bridge_run(void) {
                     redraw(false);
                     screen_refresh();
                 }
-#ifdef VGRID_ROTATE
-            } else if (ev.user.code == 20) {
-                grid_chord_release(); // M43: the hold time of a fired chord is over
-#endif
             } else if (ev.user.code == 6) {
                 // Ctrl+C on a colour: the text goes to the system clipboard (SDL: X11 or Wayland, whichever the window runs on)
                 char *text = (char *)ev.user.data1;

@@ -22,12 +22,9 @@ extern "C" {
 
 // the Linux desktop's extras (docs/port/phase-m41.md): the ROTATE button next to the size buttons and the white outline of a key that is pending for shift multi-press. not in the macOS
 // build (this file is shared with it) and not in the Windows build (the virtual grid is off there)
-// (VGRID_TEST_NO_ROTATE: a test builds the code as the Mac and Windows builds see it, on Linux: linux/tests/vgrid_no_rotate_build_test.sh)
-#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS) && !defined(VGRID_TEST_NO_ROTATE)
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
 #define VGRID_ROTATE 1
 #define VGRID_HELD_PENDING 4
-#define VGRID_HELD_STAGED 8 // M43: staged with Ctrl (a dashed blue outline; nothing is sent until Ctrl is let go)
-#define VGRID_HELD_FIRE 16  // M43: a fired chord is down for its hold time (drawn pressed)
 #endif
 
 // the size switch: 1 = 64, 2 = 128, 3 = 256

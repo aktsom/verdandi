@@ -37,11 +37,6 @@ extern void vgrid_unlink(vgrid_device_t *g);
 // a key went down (1) or up (0)
 extern void vgrid_key(vgrid_device_t *g, int x, int y, int down);
 
-#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
-// M43: several keys go down (1) or up (0) in ONE write to the device: xy is n pairs of x, y. a script that reads a gesture from keys that go down at nearly the same moment gets them in one go
-extern void vgrid_key_batch(vgrid_device_t *g, const uint8_t (*xy)[2], int n, int down);
-#endif
-
 // arc: ring n turned by delta (any size; sent in pieces), its push button down (1) or up (0)
 extern void vgrid_enc(vgrid_device_t *g, int n, int delta);
 extern void vgrid_enc_key(vgrid_device_t *g, int n, int down);

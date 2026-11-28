@@ -337,12 +337,6 @@ static int _ext_sync(lua_State *l);
 static int _ext_legacy_list(lua_State *l);
 static int _ext_legacy_remove(lua_State *l);
 static int _ext_test_drop(lua_State *l);
-#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
-static int _test_fake_grid(lua_State *l);
-static int _test_fake_grid_key(lua_State *l);
-static int _test_fake_grid_leds(lua_State *l);
-static int _test_vgrid_leds(lua_State *l);
-#endif
 #endif
 #ifdef NORNS_WINDOWS
 static int _audio_devices(lua_State *l);
@@ -624,12 +618,6 @@ void w_init(void) {
     lua_register_norns("ext_legacy_remove", &_ext_legacy_remove);
     if (getenv("VERDANDI_TEST_HOOKS") != NULL) {
         lua_register_norns("test_drop", &_ext_test_drop); // tests only: a drop on the window without a mouse
-#ifndef NORNS_WINDOWS
-        lua_register_norns("test_fake_grid", &_test_fake_grid); // M43, tests only: a second grid listed like a real one
-        lua_register_norns("test_fake_grid_key", &_test_fake_grid_key);
-        lua_register_norns("test_fake_grid_leds", &_test_fake_grid_leds);
-        lua_register_norns("test_vgrid_leds", &_test_vgrid_leds);
-#endif
     }
 #endif
 #ifdef NORNS_WINDOWS
@@ -4022,36 +4010,6 @@ int _ext_sync(lua_State *l) {
     lua_pushinteger(l, ef_sync(ext_conf().c_str(), ext_audio().c_str()));
     return 1;
 }
-
-#ifndef NORNS_WINDOWS
-/* M43, tests only (VERDANDI_TEST_HOOKS): a second grid that norns lists like a real one (on = true plugs it in, false plugs it out); returns whether it is there */
-int _test_fake_grid(lua_State *l) {
-    lua_pushboolean(l, sdl_bridge_test_fake_grid(lua_toboolean(l, 1)));
-    return 1;
-}
-/* a key of that grid: x, y (0-based), down */
-int _test_fake_grid_key(lua_State *l) {
-    sdl_bridge_test_fake_grid_key((int)luaL_checkinteger(l, 1), (int)luaL_checkinteger(l, 2), lua_toboolean(l, 3));
-    return 0;
-}
-/* the lit keys of that grid: how many (-1: it is not plugged in) and the list as text "x,y=level" */
-int _test_fake_grid_leds(lua_State *l) {
-    char out[2048];
-    int n = sdl_bridge_test_fake_grid_leds(out, sizeof out);
-    lua_pushinteger(l, n);
-    lua_pushstring(l, out);
-    return 2;
-}
-
-/* the lit keys of the virtual grid (the window's device): how many (-1: the window is closed) and the list */
-int _test_vgrid_leds(lua_State *l) {
-    char out[2048];
-    int n = sdl_bridge_test_vgrid_leds(out, sizeof out);
-    lua_pushinteger(l, n);
-    lua_pushstring(l, out);
-    return 2;
-}
-#endif
 
 /* tests only (VERDANDI_TEST_HOOKS): the event the window system sends when a file or folder is dropped on the window */
 int _ext_test_drop(lua_State *l) {

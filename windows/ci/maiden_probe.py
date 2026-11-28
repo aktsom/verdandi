@@ -630,34 +630,6 @@ if os.environ.get("VERDANDI_PROBE") == "extdrop":
         run("_norns.test_drop([[%s]]) print('VT_D2 posted')\n" % lua_path(dfile), "VT_D2", 20); time.sleep(4)
         ok, tail = run("print('VT_L2 ' .. #_norns.ext_list())\n", "VT_L2", 20)
         result("extdrop-file-refused", "VT_L2 1" in tail and not os.path.exists(os.path.join(HOME, "dust", "audio", "dropped-file.wav")) and not os.path.exists(os.path.join(HOME, "dust", "audio", "mac", "dropped-file.wav")) and not os.path.exists(os.path.join(HOME, "dust", "code", "dropped-file.wav")), "a dropped file adds nothing and is not imported or copied: " + tail.strip()[-20:])
-        # M42: the file browsers list the ext folders together at the top, A to Z by their real name, then the normal folders as the platform lists them (docs/port/phase-m42.md). the owner's Windows
-        # listing after M38 had them in the bytes' order ("[ext] cymatics" before "cc2_live-audio"); this asks the real program what _norns.listdir gives and what util.scandir makes of it
-        try:
-            import re
-            for nm in ("cymatics", "01 dropbox samples"):
-                d = os.path.join(src, nm)
-                os.makedirs(d, exist_ok=True)
-                with open(os.path.join(d, "kick.wav"), "wb") as f: f.write(b"RIFF-kick")
-                run("local ok, msg, name = _norns.ext_add([[%s]]) print('VT_ADD ' .. tostring(ok))\n" % lua_path(d), "VT_ADD", 20)
-            for nm in ("cc2_live-audio", "dronecaster"):
-                os.makedirs(os.path.join(HOME, "dust", "audio", nm), exist_ok=True)
-            ok, raw = run("print('VT_RAW ' .. table.concat(_norns.listdir('/home/we/dust/audio/'), '|') .. ' VT_END')\n", "VT_END", 20)
-            ok, scan = run("print('VT_SCAN ' .. table.concat(util.scandir('/home/we/dust/audio/'), '|') .. ' VT_END')\n", "VT_END", 20)
-            mr = re.search(r"VT_RAW (.*?) VT_END", raw or "", re.S)
-            ms = re.search(r"VT_SCAN (.*?) VT_END", scan or "", re.S)
-            rawl = (mr.group(1) if mr else "").split("|")
-            scanl = (ms.group(1) if ms else "").split("|")
-            result("extsort-raw", True, "what _norns.listdir gives: " + " | ".join(rawl))
-            result("extsort-scan", True, "what util.scandir makes of it: " + " | ".join(scanl))
-            exts = [x for x in scanl if x.startswith("[ext] ")]
-            normal = [x for x in scanl if not x.startswith("[ext] ")]
-            grouped = len(exts) >= 3 and scanl[:len(exts)] == exts and exts[0] == "[ext] 01 dropbox samples/" and exts[1] == "[ext] cymatics/" and exts[2].startswith("[ext] Drop M")
-            # the normal entries come in the order the platform gave them (the raw listing without its ext entries)
-            rest_raw = [x for x in rawl if not x.startswith("[ext] ")]
-            same_rest = normal == rest_raw and "cc2_live-audio/" in normal and "dronecaster/" in normal
-            result("extsort-grouped", grouped and same_rest, "ext folders together at the top A to Z, the others as the platform listed them: " + " | ".join(scanl))
-        except Exception as e:
-            result("extsort-grouped", False, "%s" % e)
         ok, tail = run("local ok, text = _norns.ext_remove('[ext] Drop M\\xc3\\xbasica') print('VT_X ' .. tostring(ok))\n", "VT_X", 20)
         result("extdrop-removed", "VT_X true" in tail and not os.path.exists(link) and os.path.exists(os.path.join(folder, "kick.wav")), "removing took away the junction and left the files: " + tail.strip()[-20:])
     except Exception as e:

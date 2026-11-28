@@ -190,84 +190,11 @@ end
 
 _norns.grid = {}
 
--- Linux desktop, M43 (docs/port/phase-m43.md): the switch between a real grid and the virtual grid. until now the virtual grid only joined the list: with a real grid on port 1 it got port 2, and the
--- script stayed on the real grid until the owner chose the device again on SYSTEM > DEVICES > GRID (and the other way round at the next removal). now the virtual grid is the active grid at once
--- (it takes port 1, the grid that had port 1 moves to the virtual grid's place), and when it goes the grid that was active before takes port 1 back; keys that were held on the grid that is left are
--- let go for the script (a key-up for each), the picture the script has drawn is on the grid that takes over (the copy of the LEDs is done in C, matron/src/device/device_monome.cc, before this
--- runs), a grid that is left is dark unless a script listens on its new port, and the script is told again that there is a grid (Grid.add) so that it reads the size again
-local switching = os.getenv("NORNS_PLATFORM") == "linux"
-local guarded_key -- (defined below with the key handler)
-local VIRTUAL = "^virtual grid"
-local held = {} -- [device id] = {["x,y"] = {x, y}}: the keys that are down on each grid (to be let go for the script when its grid is left)
-Grid.switch = nil -- {prev = the name of the grid that had port 1 before the virtual grid took it}
-
-local function is_virtual(g)
-  return g ~= nil and g.name ~= nil and g.name:find(VIRTUAL) ~= nil
-end
-
--- the script hears a key-up for every key that is down on this grid, then the table is empty
-local function let_go(g)
-  local keys = held[g.id]
-  held[g.id] = nil
-  if not keys then return end
-  for _, k in pairs(keys) do
-    if g.key ~= nil then guarded_key("grid key", g.key, k[1], k[2], 0) end
-    if g.port and Grid.vports[g.port] and Grid.vports[g.port].key then guarded_key("grid key", Grid.vports[g.port].key, k[1], k[2], 0) end
-  end
-end
-
--- the virtual grid was added: it is the active grid
-local function take_over(g)
-  local prev = Grid.vports[1].name
-  if prev == g.name then return end
-  local prev_dev
-  for _, d in pairs(Grid.devices) do
-    if d ~= g and d.name == prev then prev_dev = d end
-  end
-  if prev_dev then let_go(prev_dev) end
-  local slot = g.port
-  Grid.vports[1].name = g.name
-  if slot and slot ~= 1 then Grid.vports[slot].name = prev end
-  Grid.switch = {prev = prev}
-  Grid.update_devices()
-  -- the grid that was left: dark, unless a script listens on the port it is on now
-  if prev_dev and prev_dev.port and Grid.vports[prev_dev.port] and Grid.vports[prev_dev.port].key == nil then
-    prev_dev:all(0)
-    prev_dev:refresh()
-  end
-end
-
--- the virtual grid is going: the grid that was active before (else any other grid) takes port 1. returns the grid that took over, or nil
-local function give_back(g)
-  if g.port ~= 1 then return nil end
-  let_go(g)
-  local want = Grid.switch and Grid.switch.prev
-  local target
-  for _, d in pairs(Grid.devices) do
-    if d ~= g and not is_virtual(d) and d.name == want then target = d end
-  end
-  if not target then
-    for _, d in pairs(Grid.devices) do
-      if d ~= g and not is_virtual(d) then target = d; break end
-    end
-  end
-  Grid.switch = nil
-  if target then
-    local slot = target.port
-    Grid.vports[1].name = target.name
-    if slot and slot ~= 1 then Grid.vports[slot].name = "none" end
-  else
-    Grid.vports[1].name = "none"
-  end
-  return target
-end
-
 -- grid add
 _norns.grid.add = function(id, serial, name, dev)
   local g = Grid.new(id,serial,name,dev)
   Grid.devices[id] = g
   Grid.update_devices()
-  if switching and is_virtual(g) then take_over(g) end
   if Grid.add ~= nil then Grid.add(g) end
 end
 
@@ -277,9 +204,6 @@ end
 local desktop = os.getenv("NORNS_PLATFORM") ~= nil
 _norns.grid.remove = function(id)
   local g = Grid.devices[id]
-  local took_over = nil
-  if g and switching and is_virtual(g) then took_over = give_back(g) end
-  if g and switching and not is_virtual(g) then held[id] = nil end
   if g and desktop then
     local vp = g.port and Grid.vports[g.port]
     if vp and vp.remove then
@@ -299,20 +223,14 @@ _norns.grid.remove = function(id)
     end
   end
   Grid.devices[id] = nil
-  held[id] = nil
   Grid.update_devices()
-  -- M43: the grid that took over is announced, so that a script reads its size again
-  if took_over and Grid.devices[took_over.id] == took_over and Grid.add ~= nil then
-    local ok, err = pcall(Grid.add, took_over)
-    if not ok then print("grid.add failed: " .. tostring(err)) end
-  end
 end
 
 -- Linux desktop: an error in a script's key handler (g.key or the vport's key) was only a line in the log, from a key press that then did nothing more (Cheat Codes 2: a pattern recording ended in an
 -- error and the pads were silent afterwards). now it is logged with its traceback, shown on the window for a few seconds (_menu.handler_error, as for the menu's handlers), and the other handler of the
 -- same press still runs. on the device the handlers are called as before
 local guard_keys = os.getenv("NORNS_PLATFORM") ~= nil
-guarded_key = function(what, fn, x, y, s)
+local function guarded_key(what, fn, x, y, s)
   if not guard_keys then return fn(x, y, s) end
   local ok, err = xpcall(fn, function(e) return tostring(e) .. "\n" .. debug.traceback("", 2) end, x, y, s)
   if ok then return end
@@ -323,15 +241,6 @@ end
 -- redefine global grid key input handler
 _norns.grid.key = function(id, x, y, s)
   local g = Grid.devices[id]
-  if g ~= nil and switching then
-    local h = held[id]
-    if s == 1 then
-      if not h then h = {}; held[id] = h end
-      h[x .. "," .. y] = {x, y}
-    elseif h then
-      h[x .. "," .. y] = nil
-    end
-  end
   if g ~= nil then
     if g.key ~= nil then
       guarded_key("grid key", g.key, x, y, s)

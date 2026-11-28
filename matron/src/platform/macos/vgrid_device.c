@@ -170,20 +170,6 @@ void vgrid_key(vgrid_device_t *g, int x, int y, int down) {
     send_bytes(g, m, 3);
 }
 
-#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
-void vgrid_key_batch(vgrid_device_t *g, const uint8_t (*xy)[2], int n, int down) {
-    uint8_t m[3 * 256];
-    int used = 0;
-    for (int i = 0; i < n && used + 3 <= (int)sizeof m; i++) {
-        vgrid_proto_key(xy[i][0], xy[i][1], down, m + used);
-        used += 3;
-    }
-    if (used > 0) {
-        send_bytes(g, m, used);
-    }
-}
-#endif
-
 void vgrid_enc(vgrid_device_t *g, int n, int delta) {
     // one message carries -128..127
     while (delta != 0) {

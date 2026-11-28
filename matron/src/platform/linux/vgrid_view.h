@@ -5,8 +5,6 @@
  *     the device key. the mapping, and the file that keeps the choice ($HOME/.vgrid-rotation: one number 0 to 3)
  *   - shift multi-press: shift collects keys in a pending set (nothing is sent), letting go of shift sends all their key-downs in one burst, the keys then stay held until the next plain
  *     click, Esc or the window closing, which lets them all go in one burst. a state machine that says what to do (vgv_act_t); the window code does it
- *   - M43, Ctrl "stage and fire": while Ctrl is held a click stages a key (nothing is sent); letting go of Ctrl fires all staged keys in one batch (one write to the device), holds them for
- *     VGV_CHORD_HOLD_MS and lets them all go in one batch: a tap of a chord, for gestures that a script reads from keys that go down at nearly the same moment (zilchmos)
  * Linux desktop only (the macOS and Windows builds never include this file).
  */
 
@@ -25,8 +23,6 @@ extern "C" {
 #define VGV_MAXKEYS (VGV_MAX * VGV_MAX)
 // one call gives at most the whole chord released and the whole pending set pressed
 #define VGV_MAXACT (2 * VGV_MAXKEYS)
-// M43: how long a fired chord is held before it is let go (milliseconds). one place to change it
-#define VGV_CHORD_HOLD_MS 100
 
 //---------------------------------------------------------------- rotation
 
@@ -127,8 +123,7 @@ static inline int vgv_save_rot(const char *path, int rot) {
 
 //---------------------------------------------------------------- shift multi-press
 
-// what the window must do: down = 1: hold the key (key-down, and it stays held like a latched key); down = 0: let it go (key-up unless something else holds it);
-// M43: down = 2: a fired chord's key goes down (it is let go again by a down = 3 after VGV_CHORD_HOLD_MS); down = 3: it goes up (unless something else holds it)
+// what the window must do: down = 1: hold the key (key-down, and it stays held like a latched key); down = 0: let it go (key-up unless something else holds it)
 typedef struct {
     uint8_t x, y;
     int down;
@@ -144,20 +139,7 @@ typedef struct {
     int mouse;      // the left button is down on a collecting click or drag
     int apply_wait; // shift was let go while the left button was still down: the burst waits for the button
     int last_c, last_r;
-    // M43: the staged set of Ctrl (drawn with its own outline, nothing is sent), and the keys of a chord that was fired and waits for its release
-    uint8_t stage[VGV_MAX][VGV_MAX];
-    uint8_t stage_order[VGV_MAXKEYS][2];
-    int n_stage;
-    uint8_t fire[VGV_MAXKEYS][2];
-    int n_fire;
-    int ctrl;     // Ctrl is down (as the window last heard)
-    int mouse_ctrl; // the left button is down on a staging click or drag
 } vgv_t;
-
-static inline void vgv_stage_clear(vgv_t *m) {
-    memset(m->stage, 0, sizeof m->stage);
-    m->n_stage = 0;
-}
 
 static inline void vgv_reset(vgv_t *m) {
     memset(m, 0, sizeof *m);
@@ -311,9 +293,8 @@ static inline int vgv_mouse_up(vgv_t *m, vgv_act_t *out) {
 
 // Esc in the grid window: the chord lets go, the pending set is thrown away (nothing sent). *used: 1 when there was something, so that the key is not passed on
 static inline int vgv_esc(vgv_t *m, vgv_act_t *out, int *used) {
-    *used = m->n_chord > 0 || m->n_order > 0 || m->n_stage > 0;
+    *used = m->n_chord > 0 || m->n_order > 0;
     vgv_pend_clear(m);
-    vgv_stage_clear(m);
     m->apply_wait = 0;
     return vgv_release_chord(m, out);
 }
@@ -321,9 +302,6 @@ static inline int vgv_esc(vgv_t *m, vgv_act_t *out, int *used) {
 // the window lost the focus: whatever was pending is thrown away, nothing is sent (the shift key-up may go to another window: no stuck keys). a held chord stays, as a latched key does
 static inline void vgv_focus_lost(vgv_t *m) {
     vgv_pend_clear(m);
-    vgv_stage_clear(m); // M43: staged keys are thrown away, nothing is sent. a chord that is already fired is let go by its own timer
-    m->ctrl = 0;
-    m->mouse_ctrl = 0;
     m->shift = 0;
     m->mouse = 0;
     m->apply_wait = 0;
@@ -333,142 +311,14 @@ static inline void vgv_focus_lost(vgv_t *m) {
 // the rotation changed while keys were pending: the pending set is thrown away, nothing is sent (the keys the user meant are not where they were). a held chord stays: those are device keys
 static inline void vgv_rotation_changed(vgv_t *m) {
     vgv_pend_clear(m);
-    vgv_stage_clear(m);
     m->apply_wait = 0;
 }
 
 // the window closed or the size changed (the device is plugged out and in again): everything goes, nothing is sent (the device is gone, the new one starts with no key down)
 static inline void vgv_device_gone(vgv_t *m) {
-    int shift = m->shift, ctrl = m->ctrl;
+    int shift = m->shift;
     vgv_reset(m);
     m->shift = shift;
-    m->ctrl = ctrl;
-}
-
-
-//---------------------------------------------------------------- M43: Ctrl stage and fire
-
-static inline int vgv_is_staged(const vgv_t *m, int c, int r) {
-    return c >= 0 && r >= 0 && c < VGV_MAX && r < VGV_MAX && m->stage[r][c] != 0;
-}
-
-static inline void vgv_stage_toggle(vgv_t *m, int c, int r, int add_only) {
-    if (c < 0 || r < 0 || c >= VGV_MAX || r >= VGV_MAX) {
-        return;
-    }
-    if (m->stage[r][c]) {
-        if (add_only) {
-            return;
-        }
-        m->stage[r][c] = 0;
-        int j = 0;
-        for (int i = 0; i < m->n_stage; i++) {
-            if (m->stage_order[i][0] == c && m->stage_order[i][1] == r) {
-                continue;
-            }
-            m->stage_order[j][0] = m->stage_order[i][0];
-            m->stage_order[j][1] = m->stage_order[i][1];
-            j++;
-        }
-        m->n_stage = j;
-        return;
-    }
-    if (m->n_stage >= VGV_MAXKEYS) {
-        return;
-    }
-    m->stage[r][c] = 1;
-    m->stage_order[m->n_stage][0] = (uint8_t)c;
-    m->stage_order[m->n_stage][1] = (uint8_t)r;
-    m->n_stage++;
-}
-
-// the staged keys go down together (one batch of down = 2 actions, in the order they were staged); the window lets them go after VGV_CHORD_HOLD_MS with vgv_fire_release
-static inline int vgv_fire(vgv_t *m, vgv_act_t *out) {
-    int n = 0;
-    for (int i = 0; i < m->n_stage; i++) {
-        out[n].x = m->stage_order[i][0];
-        out[n].y = m->stage_order[i][1];
-        out[n].down = 2;
-        n++;
-        if (m->n_fire < VGV_MAXKEYS) {
-            m->fire[m->n_fire][0] = m->stage_order[i][0];
-            m->fire[m->n_fire][1] = m->stage_order[i][1];
-            m->n_fire++;
-        }
-    }
-    vgv_stage_clear(m);
-    return n;
-}
-
-// the fired chord comes up, in one batch (down = 3 actions)
-static inline int vgv_fire_release(vgv_t *m, vgv_act_t *out) {
-    int n = 0;
-    for (int i = 0; i < m->n_fire; i++) {
-        out[n].x = m->fire[i][0];
-        out[n].y = m->fire[i][1];
-        out[n].down = 3;
-        n++;
-    }
-    m->n_fire = 0;
-    return n;
-}
-
-// the state of the Ctrl keys (from a key event or SDL_GetModState). letting go of Ctrl fires what is staged. returns the number of actions
-static inline int vgv_ctrl(vgv_t *m, int ctrl_now, vgv_act_t *out) {
-    ctrl_now = ctrl_now != 0;
-    if (ctrl_now == m->ctrl) {
-        return 0;
-    }
-    m->ctrl = ctrl_now;
-    if (ctrl_now) {
-        return 0;
-    }
-    if (m->mouse_ctrl) {
-        // Ctrl let go with the button still down (a staging drag): the chord fires with the button
-        return 0;
-    }
-    return vgv_fire(m, out);
-}
-
-// the left button went down on (c, r) with Ctrl held: the key is staged, or taken out again if it was staged. *consumed = 1 when the click was a staging click (the window presses nothing)
-static inline int vgv_ctrl_click(vgv_t *m, int c, int r, int ctrl_now, vgv_act_t *out, int *consumed) {
-    int n = vgv_ctrl(m, ctrl_now, out);
-    *consumed = 0;
-    if (!m->ctrl) {
-        return n;
-    }
-    vgv_stage_toggle(m, c, r, 0);
-    m->mouse_ctrl = 1;
-    m->last_c = c;
-    m->last_r = r;
-    *consumed = 1;
-    return n;
-}
-
-// the pointer moved onto (c, r) with the left button down on a staging click: the key joins the staged set (a drag only adds). 1 = taken
-static inline int vgv_ctrl_motion(vgv_t *m, int c, int r) {
-    if (!m->mouse_ctrl) {
-        return 0;
-    }
-    if (m->ctrl && !(c == m->last_c && r == m->last_r)) {
-        m->last_c = c;
-        m->last_r = r;
-        vgv_stage_toggle(m, c, r, 1);
-    }
-    return 1;
-}
-
-// the left button came up after a staging click: if Ctrl was let go meanwhile the chord fires now
-static inline int vgv_ctrl_mouse_up(vgv_t *m, vgv_act_t *out) {
-    if (!m->mouse_ctrl) {
-        return 0;
-    }
-    m->mouse_ctrl = 0;
-    m->last_c = m->last_r = -1;
-    if (!m->ctrl) {
-        return vgv_fire(m, out);
-    }
-    return 0;
 }
 
 #ifdef __cplusplus

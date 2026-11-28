@@ -51,12 +51,6 @@ extern int dev_monome_leds_off(struct dev_monome *md);
 // intensity
 extern void dev_monome_intensity(struct dev_monome *md, uint8_t i);
 
-#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
-// M43 (docs/port/phase-m43.md): the grid that becomes the active one shows what the script has drawn: the LEDs of src are copied to dst (the part both have in common; the rest of dst is dark) and
-// written out. grids only. 1 when done
-extern int dev_monome_copy_leds(struct dev_monome *src, struct dev_monome *dst);
-#endif
-
 // set grid rotation
 extern void dev_monome_set_rotation(struct dev_monome *md, uint8_t val);
 
