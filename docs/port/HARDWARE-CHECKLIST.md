@@ -865,3 +865,15 @@ Cannot be tested here: a real window manager (does the first click on a just-ope
 5. Do it on the Windows PC and on the laptop. If the order on Windows is NOT grouped, send me the lines `extsort-raw` and `extsort-scan` of the windows-m1 report (they show what the program really lists) and a photo of the browser.
 Results: 2 [ ]  3 [ ]  4 [ ]  5 [ ]; notes: ...
 Cannot be tested here: the real Windows browser and your folders.
+
+## M43 (Linux): the virtual grid: Ctrl chord (zilchmos) and the switch between the real grid and the virtual grid - the owner's Linux Mint laptop
+Use cheat codes 2 with the real grid plugged in.
+1. Open the virtual grid (GRID or F6). Look for: the small line "Shift = hold    Ctrl = chord" under the buttons. The virtual grid is the active grid at once: the script's lights (the bank pads) are on the virtual grid and the real grid goes dark; the script answers to the virtual grid.
+2. A chord: hold Ctrl and click two or three keys in a bank's rows (for a zilchmo such as halve rate or hard left, the keys of that gesture in one row of the bank). They get a dashed blue outline and nothing happens yet. Click one of them again: it loses its outline. Let go of Ctrl: the keys go down together for a moment and up together, and the script reacts as it does to a zilchmo on the real grid (the pad's rate halves, the pad goes hard left, ...). Do it several times; a normal click still presses one key.
+3. Esc while keys are staged (blue): they are dropped, nothing happens. Stage keys, click another window (or Alt+Tab), let go of Ctrl there: nothing happens, no key is stuck.
+4. Shift and Ctrl together: Shift-collect two keys and let go (they stay held, orange), then Ctrl-chord two other keys: the held keys stay down while the chord fires.
+5. Switch: close the virtual grid (F6 again, or its window's close button) while the script runs. Look for: the real grid lights with what the script had drawn at once (the same pads), the script answers to the real grid, nothing stuck on either grid, no error in the log (`~/verdandi-home/logs/norns.log`). Open the virtual grid again: it takes over at once with the same picture. Do it five times, also while a pad is held on the virtual grid when you close it: no stuck pad.
+6. With the real grid unplugged: open and close the virtual grid: no error, the script shows its pads on the virtual grid only while it is open.
+7. Size and ROTATE: click 64, 128, 256 and ROT: the window changes, the very next click on a key works (it was lost before this change).
+Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]; notes: ...
+Cannot be tested here: a real USB grid, cheat codes 2, your window manager.

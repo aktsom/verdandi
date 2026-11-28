@@ -1,3 +1,11 @@
+## M43 (Linux desktop only): the virtual grid: Ctrl "stage and fire" chord, and a clean switch real grid <-> virtual grid
+- Done after M42 (separate commits). Note `docs/port/phase-m43.md`, proof on the M41 code `docs/port/phase-m43-without.txt`.
+- Ctrl + click stages keys (dashed blue, nothing sent); Ctrl up fires them in ONE write (the script sees the key-downs 0.01 ms apart in the libmonome test), held 100 ms (`VGV_CHORD_HOLD_MS`), up together; Esc/focus loss clear; works with Shift-held keys. Ctrl + click is no longer the latch (the right button is). Hint line in the window.
+- Switching: the virtual grid takes port 1 at once, the real grid takes it back when it goes; the script's picture is copied to the grid that takes over (C), keys held on the left grid are let go for the script, the real grid is announced again; no real grid: port 1 stays empty, no error. Mac: unchanged (tested).
+- Found on the way: the size buttons recreated the window under the pressed button and the next click was lost (also under openbox); the size and ROTATE buttons now act on the release.
+- Tests: `vgrid_view_test.c`, `vgrid_rot_e2e_test.c` (chord timing, old way), `vgrid_skin_rot_test.c`, `grid_switch_test.lua` (Linux and Mac), headless `probe_vgrid_chord.lua` (a second pseudo-terminal grid as the "real" grid); the M41/M43 headless probes also passed under openbox.
+- Not tested here: a real USB grid, cheat codes 2 zilchmos, the owner's window manager. `docs/port/HARDWARE-CHECKLIST.md`.
+
 ## M42 (Linux and Windows, shared Lua): ext folders together at the top of the file browsers
 - The owner prefers them grouped: all "[ext] <name>" entries at the top, A to Z by real name (EXT FOLDERS page rules), then the normal entries in the platform's order; replaces M38's by-name placing. `util.ext_place`/`util.natural_less` in `lua/lib/util.lua`; the `sort` call of M38 is gone. Note `docs/port/phase-m42.md`, proof `docs/port/phase-m42-without.txt`, test `linux/tests/ext_sort_test.lua`, Windows CI check `extsort-grouped` (it also prints the real `_norns.listdir` listing). Why Windows did not follow M38: not found by reading, see the note.
 - Not tested here: the real Windows browser; `docs/port/HARDWARE-CHECKLIST.md`.
