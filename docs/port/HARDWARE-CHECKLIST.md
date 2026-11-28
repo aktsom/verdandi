@@ -880,3 +880,12 @@ Cannot be tested here: a real USB grid, cheat codes 2, your window manager.
 
 ## M44: the MIDI auto-connect log on a returning virtual MIDI port (laptop, PipeWire)
 - [ ] Reaper with its virtual MIDI output (Clock on), Verdandi started, then quit Reaper and start it again three times (once with Verdandi started before Reaper). After each start: `grep 'midi:' ~/verdandi-home/norns.log | tail`. Look for: after each "is gone" line a "connected" or "reconnected" line with the port name (Client number), and `pw-link -l` showing the link. Note which text the line has: "(it was linked already when seen ...)" means the sound system made the link, plain "connected" means Verdandi did, "could not link ... said n" means `jack_connect` failed and the link still came. Send those lines back.
+
+## M45: the virtual grid never moves the real grid's slot (laptop, real grid, the mod sidvagn)
+- [ ] SYSTEM > DEVICES > GRID: real grid in slot 2, slot 1 "none"; the mod active. Open the virtual grid (GRID or F6), close it, five times; after each press look at the slots on SYSTEM > DEVICES > GRID. Look for: open: slot 1 "virtual grid ...", slot 2 still your real grid; closed: slot 1 "none" again, slot 2 your real grid, the mod keeps its grid the whole time. While it is open the real grid shows what the mod draws on it (nothing is copied to it or from it; a real grid nobody draws on stays on its last picture).
+- [ ] Real grid in slot 1 (slot 2 "none"): open: slot 1 virtual grid, the real grid in slot 2 (dark unless a script listens on port 2); closed: the real grid in slot 1 again, slot 2 "none", the script's picture on it.
+- [ ] Real grid in slot 3: open and close: it stays in slot 3. Unplug and plug the real grid in again while the virtual grid is open: it comes back to the slot it had.
+- [ ] Set slots as you like, open the virtual grid, quit Verdandi, start it again: the slots are as you set them (the virtual grid's slot is not saved).
+
+## M46: the right mouse button on a virtual grid key
+- [ ] Open the virtual grid. Look for the line "Shift = hold    Ctrl = chord    Right click = latch" under the keys. Right click a key: the lit pad on the script's side shows it down and it stays down after you let go; right click it again: it lets go. Latch two keys that way (a hand-made chord), then click one of them with the left button: it lets go.

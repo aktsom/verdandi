@@ -1,0 +1,30 @@
+M45 proof, against the code of M43/M44 (lua/core/grid.lua and the C copy of the LEDs as in abb4a7a6), the owner's case: the real grid in slot 2, slot 1 "none".
+
+== linux/tests/grid_slots_test.lua (NORNS_PLATFORM=linux lua5.3 linux/tests/grid_slots_test.lua) with the old lua/core/grid.lua: 50 checks fail. The first ones: ==
+FAIL 1 on, round 1: the saved settings have slot 1 none and slot 2 the real grid (virtual grid v0, monome 128 m1)
+FAIL 1 on, round 1: no real grid hands its LEDs to the virtual grid (the peer is nil)
+FAIL 1 off, round 1: only slot 1 is cleared, the real grid is still in slot 2 (monome 128 m1|none|none|none)
+FAIL 1 off, round 1: the real grid is on port 2
+FAIL 1 off, round 1: no peer (nil)
+FAIL 1 on, round 2: the saved settings have slot 1 none and slot 2 the real grid (virtual grid v0, monome 128 m1)
+FAIL 1 on, round 2: no real grid hands its LEDs to the virtual grid (the peer is nil)
+FAIL 1 off, round 2: only slot 1 is cleared, the real grid is still in slot 2 (monome 128 m1|none|none|none)
+FAIL 1 off, round 2: the real grid is on port 2
+FAIL 1 off, round 2: no peer (nil)
+FAIL 1 on, round 3: the saved settings have slot 1 none and slot 2 the real grid (virtual grid v0, monome 128 m1)
+FAIL 1 on, round 3: no real grid hands its LEDs to the virtual grid (the peer is nil)
+... (the same for every round and the other cases)
+grid_slots_test: 50 failed
+
+(read: after "off" the slots are "monome 128 m1|none|none|none": the real grid was moved from slot 2 to slot 1 and slot 2 became "none": the owner's report.)
+
+== the real program, headless (run_all.sh, test "window:virtual grid on and off five times with the real grid in slot 2 ..."; probe linux/tests/probe_grid_slot2.lua) with the old lua/core/grid.lua: ==
+FAIL  window:virtual grid on and off five times with the real grid in slot 2 (slot 1 none): the slots stay as set, nothing is written to the real grid (log: tail below)
+        round 4 open: the real grid's picture was changed
+        round 4 closed: the real grid's picture was changed (it is not in slot 1: nothing is copied to it)
+        round 5 closed: slot 1 is not none again or the real grid left slot 2: PROBE round 5 closed slots fake re|none|none|none real on port 1 virt -1
+        round 5 open: the real grid's picture was changed
+        round 5 closed: the real grid's picture was changed (it is not in slot 1: nothing is copied to it)
+Terminated
+
+(round 5 closed: slots 'fake re|none|none|none, real on port 1': the real grid is in slot 1 and slot 2 is none; and the picture on the real grid was overwritten by the copy of the virtual grid's LEDs: it is not in slot 1.)

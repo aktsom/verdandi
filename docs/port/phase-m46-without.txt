@@ -1,0 +1,14 @@
+M46 proof: a right click that stops latching is found by the test.
+
+The code of sdl_bridge.cc was changed on purpose so that the right button no longer latches (the branch `b->button == SDL_BUTTON_RIGHT && DOWN && hit` of the grid window's mouse handler took another button), built, and the headless test run_all.sh "window:virtual grid right click latches a key ..." (probe linux/tests/probe_vgrid_rclick.lua) was run:
+FAIL  window:virtual grid right click latches a key (stays down, second right click lets go, left click lets go, Shift latch, Ctrl) (log: tail below)
+        the right click on the last latched key: 
+        a right click on a Shift-latched key: not exactly one key-up: 
+        the plain left click after it sent a second key-up for the key or something else: 11,3,0 15,8,1 15,8,0 
+        a right click with Ctrl held did not latch exactly one key-down: 
+        the next right click did not let the key go: 
+Terminated
+restored-source
+
+(the first lines of the failure list are cut by the runner's tail of the output; every check of the right button's sequence fails: no key-down at the first right click, no key-up at the second.)
+The code as it is passes: PASS window:virtual grid right click latches a key (stays down, second right click lets go, left click lets go, Shift latch, Ctrl).
