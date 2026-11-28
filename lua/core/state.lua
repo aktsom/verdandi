@@ -160,7 +160,7 @@ state.save_state = function()
     io.write("midi.vports[" .. i .. "].name = '" .. midi.vports[i].name .. "'\n")
   end
   for i=1,4 do
-    io.write("grid.vports[" .. i .. "].name = '" .. grid.vports[i].name .. "'\n")
+    io.write("grid.vports[" .. i .. "].name = '" .. (grid.persistent_name and grid.persistent_name(i) or grid.vports[i].name) .. "'\n")
   end
   for i=1,4 do
     io.write("arc.vports[" .. i .. "].name = '" .. arc.vports[i].name .. "'\n")

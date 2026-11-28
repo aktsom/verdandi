@@ -1359,6 +1359,30 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         return $bad
     }
     run "$VCNAME" vgrid_chord_ok
+    # M45 (docs/port/phase-m45.md): the owner's case in the real program: a real grid in slot 2, slot 1 none; the virtual grid window five times open and closed: the slots stay, the real grid's picture is not touched
+    S2NAME="window:virtual grid on and off five times with the real grid in slot 2 (slot 1 none): the slots stay as set, nothing is written to the real grid"
+    vgrid_slot2_scenario() {
+        S2="$(mktemp -d)"
+        ln -s "$REPO" "$S2/norns"
+        S2LOG="$T/vgrid-slot2.log"
+        VERDANDI_TEST_HOOKS=1 NORNS_HOME="$S2" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_grid_slot2.lua" "$S2LOG" > /dev/null 2>&1
+    }
+    ! wanted "$S2NAME" || vgrid_slot2_scenario
+    vgrid_slot2_ok() {
+        local bad=0 start n
+        grep -aq "PROBE grid slot2 done" "$S2LOG" || { echo "the probe did not finish"; bad=1; }
+        start="$(grep -a 'PROBE realleds start' "$S2LOG" | head -1 | sed 's/.*realleds start //')"
+        [ -n "$start" ] || { echo "the real grid has no picture at the start (the test is not set up)"; bad=1; }
+        grep -aq "PROBE slots start none|monome |none|none real on port 2" "$S2LOG" || { echo "setup: the real grid is not in slot 2: $(grep -a 'PROBE slots start' "$S2LOG")"; bad=1; }
+        for n in 1 2 3 4 5; do
+            grep -aq "PROBE round $n open slots virtual|monome |none|none real on port 2 virt " "$S2LOG" || { echo "round $n open: slots or the real grid's port are wrong: $(grep -a "PROBE round $n open slots" "$S2LOG")"; bad=1; }
+            grep -aq "PROBE round $n closed slots none|monome |none|none real on port 2 virt -1" "$S2LOG" || { echo "round $n closed: slot 1 is not none again or the real grid left slot 2: $(grep -a "PROBE round $n closed slots" "$S2LOG")"; bad=1; }
+            [ "$(grep -a "PROBE round $n open realleds" "$S2LOG" | sed 's/.*realleds //')" = "$start" ] || { echo "round $n open: the real grid's picture was changed"; bad=1; }
+            [ "$(grep -a "PROBE round $n closed realleds" "$S2LOG" | sed 's/.*realleds //')" = "$start" ] || { echo "round $n closed: the real grid's picture was changed (it is not in slot 1: nothing is copied to it)"; bad=1; }
+        done
+        return $bad
+    }
+    run "$S2NAME" vgrid_slot2_ok
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
     # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend
     run "window:PIN says it cannot when the video driver is not x11 (Wayland has no always-on-top request: state off, button dark, one plain sentence in the log)" linux/tests/pin_unavailable_test.sh

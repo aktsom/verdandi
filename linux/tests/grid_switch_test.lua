@@ -100,7 +100,8 @@ check(port_dev(linux and 1 or 2) == 2, "no real grid: the virtual grid is on por
 _norns.grid.key(2, 1, 1, 1)
 unplug_virtual()
 if linux then check(port_dev(1) == nil, "no real grid: port 1 is empty after the virtual grid goes") end
-check(Grid.vports[1].name == "none" or not linux, "no real grid: port 1 is free")
+-- (M45: the real grid is unplugged but its slot setting is still there: it is slot 1 again after the virtual grid, not "none" and not another slot)
+check(Grid.vports[1].name == "monome 128 m1000218" or not linux, "no real grid plugged in: slot 1 holds the setting it had before the virtual grid (" .. tostring(Grid.vports[1].name) .. ")")
 check(errors_logged() == nil, "no error without a real grid: " .. tostring(errors_logged()))
 
 -- a real grid that is plugged in while the virtual grid is active waits on port 2 and takes port 1 when the virtual grid goes

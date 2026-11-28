@@ -23,9 +23,11 @@ extern int dev_list_midi_sweep(void);
 // how many ports of this node are in the list
 extern int dev_list_midi_ports_listed(const char *node);
 #ifndef NORNS_WINDOWS
-// M43 (docs/port/phase-m43.md): a switch between the real grid and the virtual one. the path of the first OTHER grid than the one at `path` (a monome grid in the list: the real grid when the virtual one
-// is asked about, and the other way round); 1 and the path in `out`, or 0 when there is none
-extern int dev_list_grid_other(const char *path, char *out, size_t n);
+// M45 (docs/port/phase-m45.md): the real grid that takes part in the copy of the LEDs at a switch between it and the virtual grid. core/grid.lua tells it (_norns.grid_peer): the grid that is in slot 1 now,
+// or, while the virtual grid is on, the one it pushed out of slot 1; none when slot 1 has no real grid (then nothing is copied either way, a real grid in another slot is never written to)
+extern void dev_list_grid_peer_set(const char *path);
+// 1 and its path in `out` when there is a peer and it is in the list, else 0
+extern int dev_list_grid_peer(char *out, size_t n);
 // the LEDs of the grid at from_path are copied to the grid at to_path and written out (the script's picture appears on the grid that takes over). 1 when both were found
 extern int dev_list_grid_copy_leds(const char *from_path, const char *to_path);
 // M37: the ports that could not be opened (busy: another program has the raw port open), one line "name: reason" each. returns how many

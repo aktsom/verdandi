@@ -575,14 +575,20 @@ bool dev_list_has_monome(struct dev_monome *md) {
 }
 
 #if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
-int dev_list_grid_other(const char *path, char *out, size_t n) {
+// M45: the real grid that Lua says takes part in the copy of the LEDs (core/grid.lua publish_peer): the one that is in slot 1, or, while the virtual grid is on, the one it pushed out of slot 1. none: no copy
+static char grid_peer_path[512];
+void dev_list_grid_peer_set(const char *path) {
+    pthread_mutex_lock(&lock);
+    snprintf(grid_peer_path, sizeof grid_peer_path, "%s", path != NULL ? path : "");
+    pthread_mutex_unlock(&lock);
+}
+
+int dev_list_grid_peer(char *out, size_t n) {
     int found = 0;
     pthread_mutex_lock(&lock);
-    for (struct dev_node *dn = dq.head; dn != NULL && !found; dn = dn->next) {
-        if (dn->d != NULL && dn->d->base.type == DEV_TYPE_MONOME && dn->d->monome.type == DEVICE_MONOME_TYPE_GRID && dn->d->base.path != NULL && (path == NULL || strcmp(dn->d->base.path, path) != 0)) {
-            snprintf(out, n, "%s", dn->d->base.path);
-            found = 1;
-        }
+    if (grid_peer_path[0] != 0 && dev_lookup_path(grid_peer_path, NULL) != NULL) {
+        snprintf(out, n, "%s", grid_peer_path);
+        found = 1;
     }
     pthread_mutex_unlock(&lock);
     return found;

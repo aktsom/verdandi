@@ -186,6 +186,7 @@ function Grid.update_devices()
       end
     end
   end
+  if Grid.publish_peer then Grid.publish_peer() end
 end
 
 _norns.grid = {}
@@ -216,58 +217,102 @@ local function let_go(g)
   end
 end
 
--- the virtual grid was added: it is the active grid
-local function take_over(g)
-  local prev = Grid.vports[1].name
-  if prev == g.name then return end
-  local prev_dev
+-- M45 (docs/port/phase-m45.md): the virtual grid never moves a real grid's slot for good. what it changes (its own slot 1, and the first free slot for the real grid it has pushed out of slot 1) is
+-- written down with the value before ({slot = {set = what the switch wrote, pre = what was there}}), and at the end only these slots are put back, and only those that still hold what the switch wrote
+-- (a slot the owner changed on SYSTEM > DEVICES > GRID in the meantime stays as the owner left it). the saved settings (core/state.lua) get the "pre" values too, so that a restart with the virtual grid on
+-- does not make its slot the saved setting.
+local function slot_names()
+  local t = {}
+  for i = 1, 4 do t[i] = Grid.vports[i].name end
+  return t
+end
+
+-- the name a slot has in the saved settings: what it had before the switch, while the virtual grid is on and the slot still holds what the switch wrote
+function Grid.persistent_name(i)
+  local nm = Grid.vports[i].name
+  local sw = Grid.switch
+  if sw and sw.ov and sw.ov[i] and sw.ov[i].set == nm then return sw.ov[i].pre end
+  return nm
+end
+
+-- the real grid that takes slot 1 back when the virtual grid goes (or that is in slot 1 now, with no virtual grid): its device is told to the C side, which copies the LEDs between it and the virtual grid
+local function publish_peer()
+  if not (switching and _norns.grid_peer) then return end
+  local peer
+  local sw = Grid.switch
+  local want = sw and sw.prev or Grid.vports[1].name
   for _, d in pairs(Grid.devices) do
-    if d ~= g and d.name == prev then prev_dev = d end
+    if not is_virtual(d) and d.name == want then peer = d end
   end
-  if prev_dev then let_go(prev_dev) end
-  local slot = g.port
+  _norns.grid_peer(peer and peer.dev or nil)
+end
+
+Grid.publish_peer = publish_peer
+
+-- the virtual grid was added (pre: the slot names before it was added): it is the active grid, in slot 1
+local function take_over(g, pre)
+  pre = pre or slot_names()
+  for i = 1, 4 do if pre[i] == g.name then pre[i] = "none" end end -- (a saved name of the virtual grid itself is no setting of a real grid)
+  for i = 1, 4 do Grid.vports[i].name = pre[i] end                 -- (undo the autofill of Grid.new)
+  local prev = pre[1]
+  local ov = {}
+  local prev_dev, moved_to
+  if prev ~= "none" then
+    for _, d in pairs(Grid.devices) do
+      if d ~= g and d.name == prev then prev_dev = d end
+    end
+    if prev_dev then let_go(prev_dev) end
+    for i = 2, 4 do -- the grid that was in slot 1 goes to the first free slot (none when all are taken: it has no port until it is back)
+      if Grid.vports[i].name == "none" then
+        Grid.vports[i].name = prev
+        ov[i] = {set = prev, pre = "none"}
+        moved_to = i
+        break
+      end
+    end
+  end
   Grid.vports[1].name = g.name
-  if slot and slot ~= 1 then Grid.vports[slot].name = prev end
-  Grid.switch = {prev = prev}
+  ov[1] = {set = g.name, pre = prev}
+  Grid.switch = {prev = prev ~= "none" and prev or nil, moved_to = moved_to, ov = ov, id = g.id}
   Grid.update_devices()
-  -- the grid that was left: dark, unless a script listens on the port it is on now
+  -- the grid that was pushed out of slot 1: dark, unless a script listens on the port it is on now
   if prev_dev and prev_dev.port and Grid.vports[prev_dev.port] and Grid.vports[prev_dev.port].key == nil then
     prev_dev:all(0)
     prev_dev:refresh()
   end
 end
 
--- the virtual grid is going: the grid that was active before (else any other grid) takes port 1. returns the grid that took over, or nil
+-- the virtual grid is going: its slot goes back to what it was, a real grid it had pushed out of slot 1 is in slot 1 again, nothing else changes. returns the real grid that is in slot 1 again, or nil
 local function give_back(g)
-  if g.port ~= 1 then return nil end
   let_go(g)
-  local want = Grid.switch and Grid.switch.prev
-  local target
-  for _, d in pairs(Grid.devices) do
-    if d ~= g and not is_virtual(d) and d.name == want then target = d end
-  end
-  if not target then
-    for _, d in pairs(Grid.devices) do
-      if d ~= g and not is_virtual(d) then target = d; break end
-    end
-  end
+  local sw = Grid.switch
   Grid.switch = nil
-  if target then
-    local slot = target.port
-    Grid.vports[1].name = target.name
-    if slot and slot ~= 1 then Grid.vports[slot].name = "none" end
+  local target
+  if sw and sw.ov then
+    for i = 4, 1, -1 do -- (the slot the real grid was moved to first, then slot 1)
+      local o = sw.ov[i]
+      if o and Grid.vports[i].name == o.set then Grid.vports[i].name = o.pre end
+    end
+    if sw.prev and Grid.vports[1].name == sw.prev then
+      for _, d in pairs(Grid.devices) do
+        if d ~= g and not is_virtual(d) and d.name == sw.prev then target = d end
+      end
+    end
   else
-    Grid.vports[1].name = "none"
+    for i = 1, 4 do -- (a virtual grid that was never taken over: only its own slot is cleared)
+      if Grid.vports[i].name == g.name then Grid.vports[i].name = "none" end
+    end
   end
   return target
 end
 
 -- grid add
 _norns.grid.add = function(id, serial, name, dev)
+  local pre = switching and is_virtual({name = name .. " " .. serial}) and slot_names() or nil
   local g = Grid.new(id,serial,name,dev)
   Grid.devices[id] = g
   Grid.update_devices()
-  if switching and is_virtual(g) then take_over(g) end
+  if switching and is_virtual(g) then take_over(g, pre) end
   if Grid.add ~= nil then Grid.add(g) end
 end
 

@@ -1743,9 +1743,9 @@ static void toggle_grid(void) {
     if (vgrid != NULL) {
 #ifdef VGRID_ROTATE
         {
-            // M43: the real grid takes over: what the script has drawn is on it before the virtual grid goes (the vports follow in Lua, core/grid.lua, when the removal arrives)
+            // M43/M45: the real grid that takes slot 1 back takes over: what the script has drawn is on it before the virtual grid goes (none when no real grid was in slot 1: a real grid in another slot is not written to) (the vports follow in Lua, core/grid.lua, when the removal arrives)
             char other[512];
-            if (dev_list_grid_other(vgrid_path(vgrid), other, sizeof other)) {
+            if (dev_list_grid_peer(other, sizeof other)) {
                 dev_list_grid_copy_leds(vgrid_path(vgrid), other);
             }
         }
@@ -1794,9 +1794,9 @@ static void toggle_grid(void) {
     plug_in(vgrid, "virtual grid");
 #ifdef VGRID_ROTATE
     {
-        // M43: the virtual grid takes over: what the script has drawn on the other grid is on it at once
+        // M43/M45: the virtual grid takes over slot 1: what the script has drawn on the real grid that was in slot 1 is on it at once (none when slot 1 had no real grid)
         char other[512];
-        if (dev_list_grid_other(vgrid_path(vgrid), other, sizeof other)) {
+        if (dev_list_grid_peer(other, sizeof other)) {
             dev_list_grid_copy_leds(other, vgrid_path(vgrid));
         }
     }

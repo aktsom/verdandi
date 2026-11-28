@@ -338,6 +338,9 @@ static int _ext_legacy_list(lua_State *l);
 static int _ext_legacy_remove(lua_State *l);
 static int _ext_test_drop(lua_State *l);
 #if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+static int _grid_peer(lua_State *l);
+#endif
 static int _test_fake_grid(lua_State *l);
 static int _test_fake_grid_key(lua_State *l);
 static int _test_fake_grid_leds(lua_State *l);
@@ -622,6 +625,9 @@ void w_init(void) {
     lua_register_norns("ext_sync", &_ext_sync);
     lua_register_norns("ext_legacy_list", &_ext_legacy_list);     // M27: the links the old Import made in dust/audio/mac
     lua_register_norns("ext_legacy_remove", &_ext_legacy_remove);
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+    lua_register_norns("grid_peer", &_grid_peer); // M45 (Linux desktop only): the real grid that takes part in the copy of the LEDs (core/grid.lua)
+#endif
     if (getenv("VERDANDI_TEST_HOOKS") != NULL) {
         lua_register_norns("test_drop", &_ext_test_drop); // tests only: a drop on the window without a mouse
 #ifndef NORNS_WINDOWS
@@ -4024,6 +4030,19 @@ int _ext_sync(lua_State *l) {
 }
 
 #ifndef NORNS_WINDOWS
+#if defined(NORNS_LINUX_DESKTOP) && !defined(NORNS_WINDOWS)
+/* M45: _norns.grid_peer(dev or nil): the real grid that takes part in the copy of the LEDs at a switch between it and the virtual grid (docs/port/phase-m45.md) */
+int _grid_peer(lua_State *l) {
+    lua_check_num_args(1);
+    if (lua_islightuserdata(l, 1)) {
+        struct dev_monome *md = (struct dev_monome *)lua_touserdata(l, 1);
+        dev_list_grid_peer_set(md != NULL ? md->dev.path : NULL);
+    } else {
+        dev_list_grid_peer_set(NULL);
+    }
+    return 0;
+}
+#endif
 /* M43, tests only (VERDANDI_TEST_HOOKS): a second grid that norns lists like a real one (on = true plugs it in, false plugs it out); returns whether it is there */
 int _test_fake_grid(lua_State *l) {
     lua_pushboolean(l, sdl_bridge_test_fake_grid(lua_toboolean(l, 1)));
