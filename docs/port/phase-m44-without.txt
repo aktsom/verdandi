@@ -1,0 +1,15 @@
+M44 proof, against the code before M44 (matron/src/platform/linux/midi_autoconnect.cc of 94d8e2a1's parent), headless, fake graph.
+
+Test: linux/tests/run_all.sh, test "midi:every link that is seen is said, also one the system made (3 quits and returns, port names in the lines)"
+(scenario "restored" of linux/tests/midi_autoconnect_test.sh, probe linux/tests/probe_midi_restored.lua): the fake "Midi-Bridge" client links its own port to
+Verdandi:midi_in by itself (the way PipeWire restored the link on the owner's laptop), quits, and comes back three times (Client-131, Client-132, Client-128).
+
+Result on the old code:
+FAIL  midi:every link that is seen is said, also one the system made (3 quits and returns, port names in the lines)
+        no 'connected' line for the first link (already there when seen)
+        no 'connected' line for the port that came back as Client-131
+        no 'connected' line for the port that came back as Client-132
+        no 'reconnected' line for Client-128 coming back after the others
+
+The checks that the links were there after each return and that exactly three "is gone" lines were written passed: this is the owner's log
+(one "connected", then "gone" lines, no line at the returns, the link in place).
