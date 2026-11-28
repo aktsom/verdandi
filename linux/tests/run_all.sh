@@ -145,6 +145,8 @@ cc -std=gnu11 -Wall -Wextra -I "$P" $(pkg-config --cflags cairo) linux/tests/vgr
 cc -std=gnu11 -Wall -Wextra -DNORNS_LINUX_DESKTOP -I "$P" -I matron/src/platform/linux -I/usr/local/include $(pkg-config --cflags cairo) linux/tests/vgrid_rot_e2e_test.c "$P/vgrid_device.c" "$P/vgrid_proto.c" \
     "$P/vgrid_skin.c" -L/usr/local/lib -lmonome -lpthread -lutil -lm $(pkg-config --libs cairo) -o "$T/vre" \
     && LD_LIBRARY_PATH=/usr/local/lib run "c:vgrid rotation through libmonome (M41: leds, hit test and presses agree for 3 sizes x 4 script rotations x 4 turns of the window; quad writes also on the 16 x 16; the multi-press burst reaches the script in order)" "$T/vre"
+run "lua:grid switch (M43: the virtual grid takes port 1 at once and the real grid takes it back when it goes; keys held on the grid that is left are let go for the script; the grid that takes over is announced; six rounds; no real grid; a real grid plugged in meanwhile)" env NORNS_PLATFORM=linux lua5.3 linux/tests/grid_switch_test.lua
+run "lua:grid switch on the Mac and when the platform is not Linux (M43: nothing changes: the virtual grid joins the list as before)" env NORNS_PLATFORM=macos lua5.3 linux/tests/grid_switch_test.lua
 run "midi:vgrid guard (M41: ROTATE and the multi-press are Linux desktop only: not in the Mac build, not on Windows)" bash linux/tests/vgrid_view_guard_test.sh
 # libmonome's write to a port that is slow to take data: no message cut in the middle (linux/patches/libmonome-write-retry.patch)
 cc $CFLAGS -I matron/src/platform/macos -I/usr/local/include linux/tests/monome_write_test.c "$P/vgrid_proto.c" -L/usr/local/lib -lmonome \
@@ -1281,6 +1283,61 @@ if command -v xdotool > /dev/null && command -v convert > /dev/null; then
         return $bad
     }
     run "$VGNAME" vgrid_view_ok
+    # M43 (docs/port/phase-m43.md): Ctrl stage and fire with the real mouse and keyboard, and the switch between a (test) real grid and the virtual grid, on Xvfb. the script prints every key with the time it arrived
+    vgrid_chord_scenario() {
+        CH="$(mktemp -d)"
+        ln -s "$REPO" "$CH/norns"
+        mkdir -p "$CH/dust/code/probe"
+        cp "$REPO/linux/tests/scripts/grid_time_probe.lua" "$CH/dust/code/probe/"
+        CLOG="$T/vgrid-chord.log"
+        VERDANDI_TEST_HOOKS=1 VP="$REPO/linux/tests/vgrid_pane_check.sh" NORNS_HOME="$CH" "$REPO/linux/tests/norns_probe.sh" "$REPO/linux/tests/probe_vgrid_chord.lua" "$CLOG" > /dev/null 2>&1
+    }
+    VCNAME="window:virtual grid Ctrl chord and the switch between a real grid and the virtual grid (staged keys send nothing, Ctrl up: the key-downs in the same instant and the key-ups after the hold time, Esc and focus lost send nothing, a latched key stays down while a chord fires, the virtual grid takes port 1 at once with the picture on it, the real grid takes over again with the picture, no stuck key, announced, five more rounds)"
+    ! wanted "$VCNAME" || vgrid_chord_scenario
+    vgrid_chord_ok() {
+        local bad=0
+        local CLEAN="$T/vgrid-chord.clean"
+        sed 's/\x1b\[[0-9;]*m//g' "$CLOG" > "$CLEAN"
+        # the keys and marks of the log: "x,y,z,t" words and [marks], one line
+        local seq
+        seq="$(sed 's/\x1b\[[0-9;]*m//g' "$CLEAN" | awk -F'[\t ]' '/^PROBE gridkey/ { printf "%s,%s,%s,%s ", $3, $4, $5, $6 } /^PROBE mark / { printf "[%s] ", $3 }')"
+        # between two marks: the words
+        seg() { echo "$seq" | awk -v a="[$1]" -v b="[$2]" '{ on = 0; for (i = 1; i <= NF; i++) { if ($i == b) on = 0; if (on) print $i; if ($i == a) on = 1 } }'; }
+        spread() { awk -F, '{ if (NR == 1 || $4 < lo) lo = $4; if (NR == 1 || $4 > hi) hi = $4 } END { printf "%d", (hi - lo) * 1000 }'; }
+        local fired downs ups
+        fired="$(seg staged fired)"
+        downs="$(echo "$fired" | awk -F, '$3 == 1' )"; ups="$(echo "$fired" | awk -F, '$3 == 0')"
+        [ "$(echo "$downs" | grep -c .)" = 4 ] || { echo "the chord: not four key-downs (got $(echo "$downs" | grep -c .))"; bad=1; }
+        [ "$(echo "$downs" | spread)" -le 30 ] || { echo "the chord: the four key-downs are $(echo "$downs" | spread) ms apart (tolerance 30 ms)"; bad=1; }
+        [ "$(echo "$ups" | grep -c .)" = 4 ] || { echo "the chord: not four key-ups"; bad=1; }
+        [ "$(echo "$ups" | spread)" -le 30 ] || { echo "the chord: the four key-ups are $(echo "$ups" | spread) ms apart"; bad=1; }
+        local hold
+        hold="$(echo "$fired" | awk -F, '$3 == 1 { d = $4 } $3 == 0 && !u { u = $4 } END { printf "%d", (u - d) * 1000 }')"
+        { [ "$hold" -ge 85 ] && [ "$hold" -le 400 ]; } || { echo "the chord: held $hold ms (wanted about 100)"; bad=1; }
+        [ "$(echo "$downs" | awk -F, '{printf "%s,%s ", $1, $2}')" = "3,5 5,5 7,5 9,5 " ] || { echo "the chord: the keys are not the staged ones in order: $(echo "$downs" | awk -F, '{printf "%s,%s ", $1, $2}')"; bad=1; }
+        [ -z "$(seg plain-click staged)" ] || { echo "staging sent something: $(seg plain-click staged | tr '\n' ' ')"; bad=1; }
+        [ "$(seg fired fired-two | awk -F, '$3 == 1' | wc -l)" = 2 ] || { echo "a staged key clicked again was not taken out (two key-downs wanted)"; bad=1; }
+        [ -z "$(seg fired-two after-esc)" ] || { echo "Esc did not clear the staged keys: $(seg fired-two after-esc | tr '\n' ' ')"; bad=1; }
+        [ -z "$(seg after-esc after-focus-lost)" ] || { echo "focus lost did not clear the staged keys: $(seg after-esc after-focus-lost | tr '\n' ' ')"; bad=1; }
+        [ "$(seg fired-with-latch latch-released | awk -F, '$1 == 11 && $3 == 0' | wc -l)" = 1 ] && [ "$(seg latched fired-with-latch | awk -F, '$1 == 11 && $3 == 0' | wc -l)" = 0 ] || { echo "the latched key did not stay down while the chord fired"; bad=1; }
+        # the switch
+        grep -aq "PROBE port1 virtual grid m0000001 port2 fake real grid m0000001" "$CLEAN" || { echo "the virtual grid did not take port 1 at once (and the real grid port 2)"; bad=1; }
+        grep -aq "PROBE virtleds 2,2=15 15,7=9" "$CLEAN" || { echo "the picture was not on the virtual grid when it took over: $(grep -a 'PROBE virtleds' "$CLEAN" | head -1)"; bad=1; }
+        grep -aq "PROBE realleds *$" "$CLEAN" || { echo "the real grid that was left is not dark: $(grep -a 'PROBE realleds' "$CLEAN" | sed -n 2p)"; bad=1; }
+        [ "$(seg held switched-to-real | awk -F, '$1 == 15 && $2 == 7 && $3 == 0' | wc -l)" = 1 ] || { echo "no key-up for the key held on the virtual grid when it was switched off (stuck key)"; bad=1; }
+        grep -aq "PROBE port1 fake real grid m0000001 port2 nil" "$CLEAN" || { echo "the real grid did not take port 1 back"; bad=1; }
+        [ "$(grep -a 'PROBE realleds' "$CLEAN" | tail -1 | sed 's/.*realleds //;s/\x1b.*//')" = "2,2=15 15,7=9 " ] || { echo "the picture is not on the real grid after the switch back: $(grep -a 'PROBE realleds' "$CLEAN" | tail -1)"; bad=1; }
+        [ "$(grep -ac 'PROBE gridadd fake real grid m0000001 16x8 port1=fake real grid' "$CLEAN")" -ge 7 ] || { echo "the real grid was not announced (size 16x8) after each switch back"; bad=1; }
+        local r
+        for r in 1 2 3 4 5; do
+            grep -aq "PROBE round $r open port1 virtual grid m0000001 virt 2 real 0" "$CLEAN" || { echo "round $r: opening: port 1 is not the virtual grid with the picture and a dark real grid"; bad=1; }
+            grep -aq "PROBE round $r closed port1 fake real grid m0000001 virt -1 real 2" "$CLEAN" || { echo "round $r: closing: the real grid does not have port 1 and the picture"; bad=1; }
+        done
+        [ "$(seg switched-to-real real-key | awk -F, '$3 == 1' | wc -l)" = 1 ] || { echo "a key of the real grid did not reach the script after the switch back"; bad=1; }
+        sed 's/\x1b\[[0-9;]*m//g' "$CLEAN" | grep -aE "failed|attempt to|stack traceback|error" | grep -v "ALSA\|SCRIPT ERROR\|load failed\|stdin" | head -3 | grep . && { echo "errors in the log"; bad=1; }
+        return $bad
+    }
+    run "$VCNAME" vgrid_chord_ok
     # M25: the size and place of the main window are kept (<home>/main-window.conf) and put back at the next start, as on Windows; a place that no screen shows is not used, a size above the screen's is cut to it
     # M25: PIN on a desktop that cannot keep a window on top (anything but SDL's x11 driver, Wayland above all): it does not pretend
     run "window:PIN says it cannot when the video driver is not x11 (Wayland has no always-on-top request: state off, button dark, one plain sentence in the log)" linux/tests/pin_unavailable_test.sh

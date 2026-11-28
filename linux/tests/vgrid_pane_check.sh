@@ -19,10 +19,13 @@ geo() { eval "$(xdotool getwindowgeometry --shell "$1" 2> /dev/null)"; }
 jiggle() {
     xdotool mousemove --window "$1" 3 3
     sleep 0.15
-    xdotool mousedown 1
-    sleep 0.1
-    xdotool mouseup 1
-    sleep 0.15
+    # VP_NOCLICK=1: under a real window manager (openbox) there is no need: the test then shows whether the first click on a new window is lost (M43)
+    if [ "${VP_NOCLICK:-0}" != 1 ]; then
+        xdotool mousedown 1
+        sleep 0.1
+        xdotool mouseup 1
+        sleep 0.15
+    fi
     xdotool mousemove --window "$1" "$2" "$3"
     sleep 0.15
 }

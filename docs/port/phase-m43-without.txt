@@ -1,0 +1,36 @@
+M43 proof: the new tests against the code of M41 (commit bac1a4f1).
+
+== lua:grid switch (NORNS_PLATFORM=linux lua5.3 linux/tests/grid_switch_test.lua) with lua/core/grid.lua of M41 ==
+FAIL the virtual grid took port 1 at once (port 1 is device 1)
+FAIL the real grid moved to port 2 (it is device 2)
+FAIL the real grid that was left is dark (nobody listens on port 2)
+FAIL keys of the active grid reach the script ()
+FAIL keys of the grid that is not active do not reach the script on port 1
+FAIL no stuck key: the script heard a key-up for the key that was down ()
+FAIL port 2 is free again
+FAIL the real grid is announced again so that the script reads its size (Grid.add)
+FAIL round 1: the key held on the virtual grid was let go (nil)
+FAIL round 2: the key held on the virtual grid was let go (nil)
+FAIL round 3: the key held on the virtual grid was let go (nil)
+FAIL round 4: the key held on the virtual grid was let go (nil)
+FAIL round 5: the key held on the virtual grid was let go (nil)
+FAIL round 6: the key held on the virtual grid was let go (nil)
+FAIL a key held on the real grid is let go when the virtual grid takes over (7,7,1)
+FAIL no real grid: the virtual grid is on port 1 (Mac: where it was)
+FAIL no real grid: port 1 is free
+FAIL the virtual grid stays active while a real grid is plugged in
+grid_switch_test: 18 failed
+
+== c:vgrid view (the chord machine) ==
+linux/tests/vgrid_view_test.c:235:12: error: 'vgv_t' has no member named 'n_stage'
+linux/tests/vgrid_view_test.c:237:12: error: 'vgv_t' has no member named 'n_stage'
+linux/tests/vgrid_view_test.c:241:12: error: 'vgv_t' has no member named 'n_stage'
+
+== c:vgrid rotation through libmonome (the chord through the device) ==
+linux/tests/vgrid_rot_e2e_test.c:284:13: error: 'VGV_CHORD_HOLD_MS' undeclared (first use in this function)
+
+== c:vgrid skin turned (staged outline, pressed look of a fired chord) ==
+linux/tests/vgrid_skin_rot_test.c:219:29: error: 'VGRID_HELD_STAGED' undeclared (first use in this function); did you mean 'VGRID_HELD_LATCH'?
+linux/tests/vgrid_skin_rot_test.c:232:29: error: 'VGRID_HELD_FIRE' undeclared (first use in this function); did you mean 'VGRID_HELD_MOUSE'?
+
+== the headless window test (probe_vgrid_chord.lua) needs _norns.test_fake_grid and the Ctrl handling of M43: with the program of M41 the script gets no chord (a Ctrl click is a latch there) and the virtual grid does not take port 1.

@@ -214,6 +214,32 @@ static void test_drawing(void) {
             px(&im, x, y, &R, &G, &B);
             CHECK(R > 200 && B < 120, "%dx%d rot %d: a latched key keeps its orange outline: rgb %d %d %d", cols, rows, rot, R, G, B);
             cairo_surface_destroy(im.sf);
+            // M43: a key staged with Ctrl has a dashed blue outline (not white, not orange); a key fired is drawn pressed
+            uint8_t held2[VGRID_MAX][VGRID_MAX] = {{0}};
+            held2[pr][pc] = VGRID_HELD_STAGED;
+            img_t im2;
+            render(&im2, size, rot, level, held2);
+            vgv_to_screen(rot, cols, rows, pc, pr, &sc, &sr);
+            int blue = 0, orange = 0;
+            for (int yy = 0; yy < (int)KEY; yy++) {
+                px(&im2, MARGIN + EDGE + sc * PITCH - 3.5, MARGIN + EDGE + sr * PITCH + yy, &R, &G, &B);
+                if (B > 200 && R < 150) blue++;
+                if (R > 200 && B < 120) orange++;
+            }
+            CHECK(blue >= 10 && orange == 0, "%dx%d rot %d: a staged key has a dashed blue outline (%d blue pixels along its edge)", cols, rows, rot, blue);
+            cairo_surface_destroy(im2.sf);
+            uint8_t held3[VGRID_MAX][VGRID_MAX] = {{0}};
+            held3[pr][pc] = VGRID_HELD_FIRE;
+            img_t im3, im4;
+            render(&im3, size, rot, level, held3);
+            render(&im4, size, rot, level, held);
+            int dr1, dg1, db1, dr2, dg2, db2;
+            double kx = MARGIN + EDGE + sc * PITCH + KEY / 2, ky = MARGIN + EDGE + sr * PITCH + 3;
+            px(&im3, kx, ky, &dr1, &dg1, &db1);
+            px(&im4, kx, ky, &dr2, &dg2, &db2);
+            CHECK(dr1 != dr2 || dg1 != dg2 || db1 != db2, "%dx%d rot %d: a key of a fired chord is drawn pressed", cols, rows, rot);
+            cairo_surface_destroy(im3.sf);
+            cairo_surface_destroy(im4.sf);
         }
     }
 }
