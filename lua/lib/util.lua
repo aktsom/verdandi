@@ -35,98 +35,67 @@ util.scandir = function(directory)
   return util.ext_place(t)
 end
 
---- M38: the real name of an ext folder entry ("[ext] bass/" -> "bass"), nil for any other entry.
+--- M38/M42: the real name of an ext folder entry ("[ext] bass/" -> "bass"), nil for any other entry.
 -- the link name in dust/audio is "[ext] <name>" (platform/common/extfolders.h); a folder shows with a "/" after it.
 util.ext_real_name = function(entry)
   return type(entry) == "string" and entry:match("^%[ext%] (.+)/$") or nil
 end
 
---- M38: how the platform orders the names of a folder: a function less(a, b) for names without the "/".
--- Windows: the native listing sorts the bytes of the names (uppercase before lowercase), so the same here.
--- Linux: `ls` sorts with the locale of the user (case, accents, punctuation); the same `sort` program with the same environment gives the same order, one call for all the names given.
--- when it cannot be asked, the names are compared by the lower case text and then the bytes.
--- @tparam table names every name the order is needed for
-util.dir_less = function(names)
-  if _norns and _norns.listdir then
-    return function(a, b) return a < b end
+-- the order of names on the SYSTEM > EXT FOLDERS page (core/menu/extra.lua, M33): case is ignored; a name is cut into runs of digits and runs of other characters; two digit runs are compared as
+-- numbers (2 before 10; the same number: the shorter run first, so 2 before 02); a digit run comes before a text run (a name that starts with a digit comes before one that starts with a letter);
+-- text runs compare as lower case; a tie ends with the exact text, so the order is always the same
+local function natural_runs(name)
+  local out = {}
+  for digits, text in tostring(name):gmatch("(%d*)(%D*)") do
+    if digits ~= "" then out[#out + 1] = {digit = true, text = digits} end
+    if text ~= "" then out[#out + 1] = {digit = false, text = text:lower()} end
   end
-  local rank
-  local tmp = os.tmpname()
-  local f = tmp and io.open(tmp, "wb")
-  if f then
-    local seen = {}
-    for _, n in ipairs(names) do
-      if not n:find("[\r\n]") and not seen[n] then
-        seen[n] = true
-        f:write(n, "\n")
-      end
-    end
-    f:close()
-    local out = _norns.execute and _norns.execute('sort "' .. tmp .. '"') or ""
-    local r, k = {}, 0
-    for line in tostring(out):gmatch("[^\r\n]+") do
-      k = k + 1
-      if r[line] == nil then r[line] = k end
-    end
-    if k > 0 then rank = r end
-  end
-  if tmp then os.remove(tmp) end
-  return function(a, b)
-    local ra, rb = rank and rank[a], rank and rank[b]
-    if ra and rb then return ra < rb end
-    local la, lb = a:lower(), b:lower()
-    if la ~= lb then return la < lb end
-    return a < b
-  end
+  return out
 end
 
---- M38: put the ext folders of a folder listing in the place of their REAL name. the listing has them as "[ext] <name>/" (sorted by that text, so they landed among the "e" names); they are moved
--- inside the folder group to the place a normal folder called <name> would have, by the same rules as the other folders (util.dir_less). the normal entries do not move. an ext folder and a normal
--- folder with the same name: the normal folder first, the ext folder right after it (the real folder is the one that was there first, and the order never changes between two listings).
--- the shown text is not changed (the "[ext] " mark stays), nor the names.
+--- is a before b in that order? (a copy of core/menu/extra.lua's natural_less: linux/tests/ext_sort_test.lua checks that both give one order)
+util.natural_less = function(a, b)
+  local ra, rb = natural_runs(a), natural_runs(b)
+  for i = 1, math.min(#ra, #rb) do
+    local x, y = ra[i], rb[i]
+    if x.digit ~= y.digit then return x.digit end
+    if x.digit then
+      local nx, ny = tonumber(x.text), tonumber(y.text)
+      if nx ~= ny then return nx < ny end
+      if #x.text ~= #y.text then return #x.text < #y.text end
+    elseif x.text ~= y.text then
+      return x.text < y.text
+    end
+  end
+  if #ra ~= #rb then return #ra < #rb end
+  return tostring(a) < tostring(b)
+end
+
+--- M42: the ext folders of a folder listing go together at the top of the list, A to Z among themselves by their REAL name (the rules of the SYSTEM > EXT FOLDERS page: util.natural_less), with the
+-- "[ext] " mark kept in the shown text. every other entry follows, in the order the platform gave it (as it was before the ext folders were sorted at all). a normal folder with the same name as an ext
+-- folder is a normal entry: it stays where the platform put it. a listing without an ext folder is returned as it is. one place for every file browser (fileselect, the params file picker): util.scandir
 -- @tparam table list a listing as util.scandir returns it
--- @tparam function less optional less(a, b) on names without "/" (for tests)
--- @treturn table the same list, ordered
-util.ext_place = function(list, less)
-  local ext, normal, files, any = {}, {}, {}, false
+-- @treturn table the same list when there is no ext folder, else a new one
+util.ext_place = function(list)
+  local ext, rest = {}, {}
   for i, e in ipairs(list) do
     local real = util.ext_real_name(e)
     if real then
       ext[#ext + 1] = {entry = e, name = real, i = i}
-      any = true
-    elseif e:sub(-1) == "/" then
-      normal[#normal + 1] = e
     else
-      files[#files + 1] = e
+      rest[#rest + 1] = e
     end
   end
-  if not any then return list end
-  if not less then
-    local names = {}
-    for _, x in ipairs(ext) do names[#names + 1] = x.name end
-    for _, e in ipairs(normal) do names[#names + 1] = e:sub(1, -2) end
-    less = util.dir_less(names)
-  end
-  -- the ext folders among themselves by real name; a tie keeps the order of the listing
+  if #ext == 0 then return list end
+  -- among themselves by real name; two with one real name (not possible through the EXT FOLDERS page) keep the order of the listing
   table.sort(ext, function(a, b)
-    if less(a.name, b.name) then return true end
-    if less(b.name, a.name) then return false end
+    if util.natural_less(a.name, b.name) then return true end
+    if util.natural_less(b.name, a.name) then return false end
     return a.i < b.i
   end)
-  local out, e = {}, 1
-  for _, n in ipairs(normal) do
-    local nn = n:sub(1, -2)
-    while e <= #ext and less(ext[e].name, nn) do
-      out[#out + 1] = ext[e].entry
-      e = e + 1
-    end
-    out[#out + 1] = n
-  end
-  while e <= #ext do
-    out[#out + 1] = ext[e].entry
-    e = e + 1
-  end
-  for _, f in ipairs(files) do out[#out + 1] = f end
+  local out = {}
+  for _, x in ipairs(ext) do out[#out + 1] = x.entry end
+  for _, e in ipairs(rest) do out[#out + 1] = e end
   return out
 end
 

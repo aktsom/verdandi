@@ -1,0 +1,44 @@
+M42 proof: linux/tests/ext_sort_test.lua (the new rule) against lua/lib/util.lua as it was after M38 (HEAD bac1a4f1).
+
+FAIL	Windows: the ext folders are together at the top, A to Z, then the normal folders and the files
+  got:  [ext] 01 dropbox samples/ [ext] boss rc 500 looper/ cc2_live-audio/ [ext] cymatics/ dronecaster/ kick.wav
+  want: [ext] 01 dropbox samples/ [ext] boss rc 500 looper/ [ext] cymatics/ cc2_live-audio/ dronecaster/ kick.wav
+FAIL	Windows: a folder called bass is not placed among the a, b2, c ... folders
+  got:  a/ b2/ [ext] bass/ c/ e1/ e2/ [ext] eeee/ zed/ [ext] zzz/ kick.wav snare.wav
+  want: [ext] bass/ [ext] eeee/ [ext] zzz/ a/ b2/ c/ e1/ e2/ zed/ kick.wav snare.wav
+FAIL	Windows: the shown text keeps the mark
+  got:  a/
+  want: [ext] bass/
+FAIL	Linux: the ext folders are together at the top, A to Z, then the normal folders and the files
+  got:  [ext] 01 dropbox samples/ [ext] boss rc 500 looper/ cc2_live-audio/ [ext] cymatics/ dronecaster/ kick.wav
+  want: [ext] 01 dropbox samples/ [ext] boss rc 500 looper/ [ext] cymatics/ cc2_live-audio/ dronecaster/ kick.wav
+FAIL	Linux: a folder called bass is not placed among the a, b2, c ... folders
+  got:  a/ b2/ [ext] bass/ c/ e1/ e2/ [ext] eeee/ zed/ [ext] zzz/ kick.wav snare.wav
+  want: [ext] bass/ [ext] eeee/ [ext] zzz/ a/ b2/ c/ e1/ e2/ zed/ kick.wav snare.wav
+FAIL	Linux: the shown text keeps the mark
+  got:  a/
+  want: [ext] bass/
+FAIL	A to Z inside the group: digits first, numbers as numbers (1a, 2, 02, 10), case ignored (apple, Bass, bass drum, Zebra)
+  got:  [ext] 02 drums/ [ext] 10 loops/ [ext] 1a/ [ext] 2 loops/ [ext] Bass/ [ext] Zebra/ [ext] apple/ [ext] bass drum/ x/
+  want: [ext] 1a/ [ext] 2 loops/ [ext] 02 drums/ [ext] 10 loops/ [ext] apple/ [ext] Bass/ [ext] bass drum/ [ext] Zebra/ x/
+FAIL	names with spaces and accents are one name each
+  got:  [ext] Drum Machines/ [ext] a b c/ [ext] drum kit/ my samples/ [ext] Été/
+  want: [ext] a b c/ [ext] drum kit/ [ext] Drum Machines/ [ext] Été/ my samples/
+FAIL	same name: the ext entry is in the group at the top, the normal folder stays where it was
+  got:  a/ [ext] aaa/ bass/ [ext] bass/ z/
+  want: [ext] aaa/ [ext] bass/ a/ bass/ z/
+FAIL	same name, other case: two normal folders and one ext folder
+  got:  Bass/ bass/ [ext] bass/
+  want: [ext] bass/ Bass/ bass/
+FAIL	the normal entries keep the order the platform gave
+  got:  10/ 2/ Zebra/ apple/ [ext] m/ A.wav b.wav
+  want: [ext] m/ 10/ 2/ Zebra/ apple/ A.wav b.wav
+ok  	no ext folder: unchanged
+ok  	no ext folder: the very same table comes back
+ok  	only ext folders: A to Z
+ok  	one ext folder
+ok  	an empty listing
+lua5.3: linux/tests/ext_sort_test.lua:99: attempt to call a nil value (field 'natural_less')
+stack traceback:
+	linux/tests/ext_sort_test.lua:99: in main chunk
+	[C]: in ?

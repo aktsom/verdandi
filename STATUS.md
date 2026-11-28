@@ -1,3 +1,7 @@
+## M42 (Linux and Windows, shared Lua): ext folders together at the top of the file browsers
+- The owner prefers them grouped: all "[ext] <name>" entries at the top, A to Z by real name (EXT FOLDERS page rules), then the normal entries in the platform's order; replaces M38's by-name placing. `util.ext_place`/`util.natural_less` in `lua/lib/util.lua`; the `sort` call of M38 is gone. Note `docs/port/phase-m42.md`, proof `docs/port/phase-m42-without.txt`, test `linux/tests/ext_sort_test.lua`, Windows CI check `extsort-grouped` (it also prints the real `_norns.listdir` listing). Why Windows did not follow M38: not found by reading, see the note.
+- Not tested here: the real Windows browser; `docs/port/HARDWARE-CHECKLIST.md`.
+
 ## M41 (Linux desktop only): the virtual grid: ROTATE and shift multi-press (stages 1 and 2 of the M40 plan)
 - Note `docs/port/phase-m41.md`, proof on the old code `docs/port/phase-m41-without.txt`. macOS unchanged (all new code behind `VGRID_ROTATE` = `NORNS_LINUX_DESKTOP` and not `NORNS_WINDOWS`; the Mac build's picture is byte-for-byte the old one, tested), Windows virtual grid still off.
 - ROTATE: a fourth button "ROT 0/90/180/270" turns the DEVICE in the window (scripts see nothing new, a script's own `g:rotation` adds on top), saved in `$HOME/.vgrid-rotation`, the window changes shape without unplugging. Measured through libmonome: leds, hit test and presses agree for 3 sizes x 4 script rotations x 4 turns; the 16 x 16 quad offsets are right.

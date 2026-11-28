@@ -856,3 +856,12 @@ Use any script that lights keys and shows held keys. The window probe script `li
 8. Shift+click on a button or the plate edge does what a plain click does.
 Results: 1 [ ]  2 [ ]  3 [ ]  4 [ ]  5 [ ]  6 [ ]  7 [ ]  8 [ ]; notes: ...
 Cannot be tested here: a real window manager (does the first click on a just-opened window get through?), a touch screen, the owner's own scripts.
+
+## M42 (Linux and Windows): ext folders together at the top of the file browsers
+1. Have these folders in dust/audio (any folders with a sample in them) and add these as ext folders in SYSTEM > EXT FOLDERS: `01 dropbox samples`, `cymatics`, and one named `Boss RC 500 looper`. Among your normal folders there are some starting with c and d (for example `cc2_live-audio`, `dronecaster`).
+2. Open a file browser that lists dust/audio (a script's sample chooser, or the tape page's loader). Look for: the three `[ext] ...` folders together at the very top, in A to Z order (`[ext] 01 dropbox samples`, `[ext] Boss RC 500 looper`, `[ext] cymatics`), then your normal folders in the order they were in before (`cc2_live-audio`, `dronecaster`, ...). `[ext] cymatics` is NOT between the c and d folders.
+3. Add an ext folder with the same name as a normal folder (if Verdandi allows it): both are listed, the `[ext]` one in the group at the top.
+4. SYSTEM > EXT FOLDERS: unchanged (ADD FOLDER first, then A to Z).
+5. Do it on the Windows PC and on the laptop. If the order on Windows is NOT grouped, send me the lines `extsort-raw` and `extsort-scan` of the windows-m1 report (they show what the program really lists) and a photo of the browser.
+Results: 2 [ ]  3 [ ]  4 [ ]  5 [ ]; notes: ...
+Cannot be tested here: the real Windows browser and your folders.
